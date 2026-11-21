@@ -15,6 +15,8 @@ pub struct CounterEntry {pub guid:[u32;4],pub current:f32,pub counted_values:Opt
 enum Change {
  Collection{id:i32,before:Option<Option<i64>>,after:Option<Option<i64>>},
  Achievement{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
+ AchievementPair{first:([u32;4],Option<AchievementValue>,Option<AchievementValue>),
+                 second:([u32;4],Option<AchievementValue>,Option<AchievementValue>)},
 }
 
 pub struct Editor {
@@ -108,6 +110,36 @@ impl Editor {
   self.redo.clear();self.revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   Ok(())
  }
+ /// Update a leaf and its completed parent atomically, with exactly one undo entry.
+ /// Every compare-and-swap precondition is checked before modifying either record.
+ pub fn change_achievement_pair(
+  &mut self,
+  first:([u32;4],AchievementValue,AchievementValue),
+  second:([u32;4],AchievementValue,AchievementValue)
+ )->Result<(),Error>{
+  if first.0==second.0{return Err(Error::Duplicate)}
+  let mut replacements=[([0u32;4],None,None);2];
+  for (i,(guid,expected,next)) in [first,second].into_iter().enumerate(){
+   if !achievement::valid(expected)||!achievement::valid(next)||
+    expected==next||self.achievement_value(guid)!=Some(expected){return Err(Error::Schema)}
+   let model=self.slot.index.achievements.iter().find(|m|m.guid==guid).ok_or(Error::Schema)?;
+   let original=achievement::value(model)?;
+   let before=self.achievement_changes.get(&guid).copied();
+   let after=if next==original{None}else{Some(next)};
+   replacements[i]=(guid,before,after);
+  }
+  let next_revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  for (guid,_,after) in replacements{
+   match after{
+    Some(value)=>{self.achievement_changes.insert(guid,value);},
+    None=>{self.achievement_changes.remove(&guid);}
+   }
+  }
+  self.undo.push(Change::AchievementPair{first:replacements[0],second:replacements[1]});
+  if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
+  self.redo.clear();self.revision=next_revision;
+  Ok(())
+ }
  pub fn change_achievement(&mut self,guid:[u32;4],expected:AchievementValue,next:AchievementValue)->Result<(),Error>{
   if !achievement::valid(next) || expected==next || self.achievement_value(guid)!=Some(expected){return Err(Error::Schema)}
   let model=self.slot.index.achievements.iter().find(|m|m.guid==guid).ok_or(Error::Schema)?;
@@ -130,6 +162,14 @@ impl Editor {
    Change::Achievement{guid,before,after}=>{
     match if reverse{before}else{after}{
      Some(v)=>{self.achievement_changes.insert(guid,v);},None=>{self.achievement_changes.remove(&guid);}
+    }
+   }
+   Change::AchievementPair{first,second}=>{
+    for (guid,before,after) in [first,second]{
+     match if reverse{before}else{after}{
+      Some(v)=>{self.achievement_changes.insert(guid,v);},
+      None=>{self.achievement_changes.remove(&guid);}
+     }
     }
    }
   }
