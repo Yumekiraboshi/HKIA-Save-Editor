@@ -12,6 +12,7 @@ export type HistoryRecord={
 };
 export type SaveSnapshot={
  history:HistoryRecord[];
+ historyCheckpoint:Uint8Array;
  version:string; // Source-semver; Rust verifies target schema for future revisions.
  zip:boolean;
  membershipEdit:boolean;
@@ -24,7 +25,7 @@ export type SaveSnapshot={
  achievements:AchievementEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'batch'|'undo'|'redo'|'history-jump'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -91,6 +92,11 @@ export function changeAchievement(guid:AchievementEntry['guid'],beforeValue:Achi
 /** Absolute cursor in one independent tab timeline. Other tab's edits are retained. */
 export function jumpHistory(scope:HistoryScope,target:number):Promise<SaveSnapshot>{
  return rpc('history-jump',{scope,target}) as Promise<SaveSnapshot>;
+}
+/** Rebuild validated native transactions and both tab cursors from an IndexedDB checkpoint. */
+export function restoreHistory(checkpoint:Uint8Array):Promise<SaveSnapshot>{
+ const bytes=checkpoint.slice();
+ return rpc('history-restore',{checkpoint:bytes},[bytes.buffer]) as Promise<SaveSnapshot>;
 }
 export function undo():Promise<SaveSnapshot>{return rpc('undo') as Promise<SaveSnapshot>}
 export function redo():Promise<SaveSnapshot>{return rpc('redo') as Promise<SaveSnapshot>}
