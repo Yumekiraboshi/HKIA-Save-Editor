@@ -20,6 +20,17 @@ This release authorizes **only the exact 18 verified source Item IDs** from `col
 
 **This is a collection-history entry only, not the game's Floorplan item inventory, ownership, cabin layout availability, DLC entitlement or quest reward**. Whether a game load recognizes each manually added collected entry and whether the game will override it is not hardware-verified. Keep a backup before importing edited saves.
 
+## Color variants and shared original-game icons (Steam v3.0.1)
+
+**Known art-fidelity limitation; not a sprite-position, image-loading, or greyscale-CSS error.** The native `InventoryItemDefinitionAsset.UiIcon` pointer is commonly shared by multiple distinct items of different colours. Our audited original Steam v3.0.1 image map contains 10,262 collection-item IDs referencing only 3,855 distinct original UI sprite pointers. In particular, the **5,383 source keys prefixed `item_c_dyeable_` use only 369 distinct native `UiIcon` sprites**. The image ZIP packs correctly preserve that shared source artwork, but they **do not render the game's actual dye/palette/material colours**.
+
+One reproducible original-game example is the Imagination Celebration archer hat:
+- Ice Cream: item ID `704486536`, source key `item_c_dyeable_icarcherhat_icecream`
+- Orange: item ID `585726126`, source key `item_c_dyeable_icarcherhat_orange`
+- Both resolve to the **exact same** native Sprite PathID `7834849297367771244` and the exact same shipped `collections_group_events.zip` image position (sheet 2, cell 59). The same is true for the Archer Outfit Ice Cream `1286846063` versus Orange `935642973` (native Sprite PathID `4470433174330146938`, sheet 10, cell 103).
+
+The Unity definition bundle contains dye and palette terminology, including `DyeReference`, `PaletteDefinition` and `_PaletteColor1`–`_PaletteColor5`, but **the exact per-item dye assignments and the native image-shader recolour pipeline have not been verified**. Guessing CSS colour filters from English/Japanese item names would create misleading artwork. Until a source-verified recolour pipeline is implemented, the editor displays the shared original icon and a localized disclosure for source-dyeable collection items. **Different names/IDs and collection-history entries remain fully distinct.** Source asset extraction itself remains a lossless copy of each unique game-authored sprite, not a separate rendered icon for each colourway.
+
 ## Source-verified Floorplans (18/18; 16 languages; genuine artwork)
 
 All 18 `collection_group_floorplans` items now use source-pinned labels from the user's Steam v3.0.1 Babel table 300. The direct source `InventoryItemDefinitionAsset.Id` from the decoded collection/image map is paired with the uniquely matching original English Babel `Floorplan` title and its same 64-bit string ID across **all 16 game locales**, including native Japanese strings such as `小さな部屋の間取り図` and `広い部屋の間取り図`. This crosswalk is in `src/floorplan-names.ts`; the complete 16×18 string vectors are checked with source-computed SHA-256 digests in `tests/floorplan-source-names.test.mjs`. It does not claim to resolve the remaining 1,597 unnamed catalog items.

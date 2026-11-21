@@ -75,6 +75,7 @@ export const messages={
     "autosaveFailed": "再読み込み時の復元用データを保存できません。編集中のセーブを書き出してください。",
     "progressHint": "収集履歴の参考値（親アイテム単位）。ゲーム内達成率・所持数とは異なる場合があります。",
     "imagesUnavailable": "アイテム画像を読み込めませんでした。画像以外の編集は引き続き利用できます。",
+    "sharedDyeableIcon": "色違いのアイテムは、ゲーム原本で同じ共通アイコンを使用しています。画像は実際の色を示しません。色はアイテム名で確認してください。",
     "moreItems": "続きを表示",
     "localDraft": "編集中の内容は、このブラウザ内に自動保存されます。"
   },
@@ -154,6 +155,7 @@ export const messages={
     "autosaveFailed": "Could not store the recovery draft. Download an edited save before refreshing.",
     "progressHint": "Collection-history estimate by parent item. This may differ from in-game completion and ownership.",
     "imagesUnavailable": "Item images could not be loaded. Editing remains available.",
+    "sharedDyeableIcon": "Color variants share a single icon in the game source. The icon does not show the actual color; use the item name to distinguish variants.",
     "moreItems": "Load more",
     "localDraft": "Your editing session is stored locally in this browser."
   }

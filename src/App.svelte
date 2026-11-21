@@ -237,6 +237,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  const showingGlobalCollectionSearch=$derived(Boolean(query.trim())&&!collectionSearchDrilldown);
  const collectionSearchResults=$derived(searchAllCollectionItems((catalog as Catalog|null)?.items??[],query,locale,nameFor));
  const visibleItems=$derived(matching.slice(0,visibleLimit));
+ const hasSharedDyeableIcon=$derived(matching.some(item=>item[1].startsWith('item_c_dyeable_')));
  $effect(()=>{
   const el=loadMoreSentinel;
   const count=showingGlobalCollectionSearch?collectionSearchResults.length:matching.length;
@@ -904,6 +905,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
     {/if}
    </div>
    {#if !snapshot.membershipEdit}<div class="compact-hint">{copy.noMembership}</div>{/if}
+   {#if hasSharedDyeableIcon}<p class="shared-dyeable-icon-note" role="note">{copy.sharedDyeableIcon}</p>{/if}
    <div class="item-grid">
     {#each visibleItems as item (item[0])}
      {@const tick=recorded[String(item[0])]}
