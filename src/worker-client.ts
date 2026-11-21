@@ -17,7 +17,7 @@ export type SaveSnapshot={
  achievements:AchievementEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'achievement'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'achievement'|'achievement-pair'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -44,6 +44,12 @@ export async function openSave(file:File):Promise<SaveSnapshot>{
 }
 export function changeCollection(itemId:number,expected:bigint|null,next:bigint|null):Promise<SaveSnapshot>{
  return rpc('change',{itemId,expected,next}) as Promise<SaveSnapshot>;
+}
+/** CAS-validated atomic leaf+parent change; both revert with one Undo. */
+export function changeAchievementPair(first:AchievementPatch,second:AchievementPatch):Promise<SaveSnapshot>{
+ return rpc('achievement-pair',{
+  achievementPatches:[workerAchievementPatch(first),workerAchievementPatch(second)]
+ }) as Promise<SaveSnapshot>;
 }
 export function changeAchievement(guid:AchievementEntry['guid'],beforeValue:AchievementValue,afterValue:AchievementValue):Promise<SaveSnapshot>{
  return rpc('achievement',{
