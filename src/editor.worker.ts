@@ -49,9 +49,22 @@ function snapshot(e:Engine){
  const b=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
  const v=new DataView(b.buffer,b.byteOffset,b.byteLength);
  if(b.byteLength<17)throw Error('セーブ一覧の応答が不正です。');
- const version=b[0]===1?'3.0.0':b[0]===2?'3.0.1':null;
  const count=v.getUint32(13,true);
- if(!version||count>1_000_000||b.length!==17+count*12)throw Error('セーブ一覧の形式が不正です。');
+ if(count>1_000_000||b.length<17+count*12)throw Error('セーブ一覧の形式が不正です。');
+ const end=17+count*12;
+ let version=b[0]===1?'3.0.0':b[0]===2?'3.0.1':null;
+ if(b[0]===3){
+  const n=b[end];
+  if(!n||n>24||b.length!==end+1+n)throw Error('セーブ一覧の形式が不正です。');
+  const label=new TextDecoder('utf-8',{fatal:true}).decode(b.subarray(end+1));
+  const parts=label.split('.');
+  if(parts.length!==3||parts.some(p=>!/^[0-9]{1,2}$/.test(p)||(p.length>1&&p.startsWith('0'))||
+   Number(p)>99))throw Error('セーブ一覧の形式が不正です。');
+  const [major,minor,patch]=parts.map(Number);
+  if(major<3||(major===3&&minor===0&&patch<=1))throw Error('セーブ一覧の形式が不正です。');
+  version=label;
+ }else if(b.length!==end)throw Error('セーブ一覧の形式が不正です。');
+ if(!version)throw Error('セーブ一覧の形式が不正です。');
  const entries:Array<[number,bigint]>=[];
  for(let i=0;i<count;i++){const p=17+i*12;entries.push([v.getInt32(p,true),v.getBigInt64(p+4,true)]);}
  if(e.hkia_achievement_snapshot()!==0)throw Error('実績の取得に失敗しました。');

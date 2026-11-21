@@ -5,8 +5,41 @@ use std::{collections::HashSet,ops::Range};
 const PREFIX:[u8;32]=[0x13,0x5b,0x4a,0xa4,0xf7,0x02,0xa4,0x5d,0x1c,0xc5,0x62,0xae,0xb5,0xa3,0x86,0xed,0x5d,0x17,0xe1,0xfd,0x58,0x8f,0x42,0x4d,0xcf,0xc5,0x9d,0x2e,0x14,0x0c,0xf5,0x97];
 const MAGIC:[u8;32]=[0xa1,0xa2,0xf8,0x33,0x3c,0x66,0xec,0x45,0x5b,0xaa,0x2d,0xfc,0x63,0x25,0xc2,0x43,0x7a,0x77,0x9c,0x99,0x06,0xee,0xcf,0xf0,0xc0,0x22,0xe5,0xf6,0xb6,0xca,0x73,0xb8];
 #[derive(Debug,Clone,Copy,PartialEq,Eq)]
-pub enum Version { V300,V301 }
-impl Version {pub fn as_str(self)->&'static str{match self{Self::V300=>"3.0.0",Self::V301=>"3.0.1"}}}
+pub enum Version { V300,V301,Forward{major:u8,minor:u8,patch:u8} }
+impl Version {
+ pub fn parse(label:&str)->Result<Self,Error>{
+  match label{
+   "3.0.0"=>return Ok(Self::V300),
+   "3.0.1"=>return Ok(Self::V301),
+   _=>{}
+  }
+  // Strict canonical numeric triplets. A future label alone never authorizes
+  // edits: the complete original schema walk and writer roundtrip must pass.
+  let parts:Vec<_>=label.split('.').collect();
+  if parts.len()!=3{return Err(Error::Version)}
+  let mut v=[0u8;3];
+  for (i,part) in parts.into_iter().enumerate(){
+   if part.is_empty()||part.len()>2||(part.len()>1&&part.starts_with('0'))||
+    !part.bytes().all(|c|c.is_ascii_digit()){return Err(Error::Version)}
+   v[i]=part.parse().map_err(|_|Error::Version)?;
+  }
+  if (v[0],v[1],v[2])<=(3,0,1){return Err(Error::Version)}
+  Ok(Self::Forward{major:v[0],minor:v[1],patch:v[2]})
+ }
+ pub fn as_str(self)->String{
+  match self{
+   Self::V300=>"3.0.0".into(),
+   Self::V301=>"3.0.1".into(),
+   Self::Forward{major,minor,patch}=>format!("{major}.{minor}.{patch}")
+  }
+ }
+ fn number(self)->i128{
+  match self{
+   Self::V300=>30000,Self::V301=>30001,
+   Self::Forward{major,minor,patch}=>major as i128*10000+minor as i128*100+patch as i128
+  }
+ }
+}
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub struct BlockSpan {pub compressed:Range<usize>,pub decoded:Range<usize>}
 #[derive(Debug)]
@@ -15,9 +48,8 @@ fn header(raw:&[u8])->Result<Version,Error>{
     let mut c=Cursor::new(raw);
     if c.array()?!=8{return Err(Error::Schema)}
     for _ in 0..4{c.int(0,u32::MAX as i128)?;}
-    let version=match c.token()?{Token::Str("3.0.0")=>Version::V300,Token::Str("3.0.1")=>Version::V301,_=>return Err(Error::Version)};
-    let expected=if version==Version::V300{30000}else{30001};
-    if c.int(0,999999)?!=expected{return Err(Error::Version)}
+    let version=match c.token()?{Token::Str(label)=>Version::parse(label)?,_=>return Err(Error::Version)};
+    if c.int(0,999999)?!=version.number(){return Err(Error::Version)}
     if c.array()?!=2{return Err(Error::Schema)} c.timestamp()?;c.int(-840,840)?;c.int(0,u64::MAX as i128)?;
     let n=c.map()?;if n>256{return Err(Error::Budget)}
     let mut keys=HashSet::new();

@@ -86,10 +86,17 @@ impl Editor {
  }
  fn compatible(slot:&ReadSlot)->bool{
   let n=slot.index.collection_version.as_ref().map(|v|v.number);
-  n==Some(match slot.envelope.version{Version::V300=>83,Version::V301=>87})
-   &&slot.index.collection_map.is_some()
+  let compatible_version=match slot.envelope.version{
+   Version::V300=>n==Some(83),
+   Version::V301=>n==Some(87),
+   // Future content revisions may change the collection revision number
+   // even while all target field layouts remain byte-compatible.
+   // read_slot() already enforces the complete typed native schema walk.
+   Version::Forward{..}=>n.is_some_and(|v|v>=87)
+  };
+  compatible_version&&slot.index.collection_map.is_some()
  }
- pub fn version(&self)->&'static str {self.slot.envelope.version.as_str()}
+ pub fn version(&self)->String {self.slot.envelope.version.as_str()}
  pub fn source_bytes(&self)->usize {self.original.len()}
  pub fn revision(&self)->u32 {self.revision}
  pub fn is_zip(&self)->bool {self.zip.is_some()}
