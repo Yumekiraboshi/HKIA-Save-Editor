@@ -96,3 +96,24 @@ test('native Babel v5000 extractor produces mapped labels without copying unrela
   assert.ok(!JSON.stringify(fr).includes('Dialogue non utilisé'));
  }finally{rmSync(temp,{recursive:true,force:true})}
 });
+
+test('all native Babel packs provide the same verified item keys in sixteen locales',()=>{
+ const index=JSON.parse(readFileSync(new URL('../public/locales/index.json',import.meta.url),'utf8'));
+ assert.equal(index.schema,'HKIA.BabelLocaleIndex.1');
+ assert.deepEqual([...index.available].sort(),locales.supportedLocales.map(x=>x.code).sort());
+ const mapping=JSON.parse(readFileSync(new URL('../public/locales/item-keys.json',import.meta.url),'utf8'));
+ assert.equal(mapping.schema,'HKIA.BabelItemKeys.1');
+ assert.equal(Object.keys(mapping.keys).length,8568);
+ const keys=new Set(Object.values(mapping.keys));
+ assert.equal(keys.size,8568);
+ for(const locale of index.available){
+  const pack=JSON.parse(readFileSync(new URL('../public/locales/'+locale+'.json',import.meta.url),'utf8'));
+  assert.equal(pack.schema,'HKIA.BabelStrings.1');
+  assert.equal(pack.locale,locale);
+  assert.equal(Object.keys(pack.strings).length,keys.size,locale);
+  for(const [key,value] of Object.entries(pack.strings)){
+   assert.ok(keys.has(key),locale+' '+key);
+   assert.ok(typeof value==='string'&&value.trim(),locale+' empty translation');
+  }
+ }
+});
