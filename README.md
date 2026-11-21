@@ -72,3 +72,14 @@ The extractor parses the native locale-ID-aware gzip-capable Babel format and ge
 **Deployment coverage:** native Babel table-300 text has been matched by unique English string to 8,568 of the 10,262 catalog items; all 16 localized dictionaries for these records are shipped. The remaining 79 ambiguous/unmatched named entries and 1,615 entries without verified catalog names retain existing fallback or remain hidden. Core UI labels are translated in 16 locales; remaining editor-authored UI copy falls back to English. This is not yet a guarantee that every editor string is translated.
 
 The achievement detail index is built from the archived v3.0.1 UnityFS-derived source index; the application does not publish game definition binaries, original player saves or third-party icons. Full in-game description text and achievement artwork are not redistributed; the source description IDs remain available for a rights-cleared extraction workflow. This metadata is version-specific and does not prove synchronization or reward-grant semantics.
+
+The game source defines 720 localized achievement-description string IDs and 100 entries without a description ID. For a **private, local-only** extraction of those 720 descriptions per chosen language, use:
+
+```sh
+python3 scripts/extract-babel-items.py --babel-dir /path/to/Babel \\
+  --achievement-index public/achievement-index.json \\
+  --achievement-facts-index public/achievement-facts-index.json \\
+  --achievement-descriptions-out /path/outside/website/private-achievement-descriptions
+```
+
+The extractor verifies the source GUID crosswalk and completeness per locale, refuses writing description exports inside `public/`, and does not commit or publish the game-authored sentences. Description text remains excluded from the public website until redistribution rights are reviewed. Item names and already-published achievement titles remain separate.
