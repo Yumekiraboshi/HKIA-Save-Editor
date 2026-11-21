@@ -35,9 +35,10 @@ export function planCategoryParentCompletion(
  let latest:[bigint,number]|null=null;
  let completeDates=0;
  for(const childGuid of group.children){
-  const child=byGuid.get(childGuid);
-  if(!child)return null;
-  const value=childGuid===guid?editedNext:child.value;
+  // The last child may not have an AchievementModel until this very edit.
+  // All *other* members must still have real saved records.
+  const value=childGuid===guid?editedNext:byGuid.get(childGuid)?.value;
+  if(!value)return null;
   if(!value.complete)return null;
   if(value.completed){
    const [seconds,nanos]=value.completed;
