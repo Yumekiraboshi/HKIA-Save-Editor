@@ -147,7 +147,7 @@ async function run(){
  await achievement.click();
  await page.locator('.achievement-item-grid button.achievement-toggle[aria-pressed="true"]').first().waitFor();
  let steps=await countHistory(page,2);
- assert.match(await steps.nth(1).getAttribute('class')??'','active');
+ assert.match(await steps.nth(1).getAttribute('class')??'',/active/);
  await page.locator('.history-menu > summary').click(); // close without altering state
 
  // Persist both redo-only Collections changes and one applied achievement.
@@ -174,13 +174,13 @@ async function run(){
  await page.reload({waitUntil:'networkidle'});
  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
  steps=await countHistory(page,3);
- assert.match(await steps.nth(0).getAttribute('class')??'','active');
+ assert.match(await steps.nth(0).getAttribute('class')??'',/active/);
  await steps.nth(1).click(); // redo one collection entry after recovery
  assert.equal(await page.locator('.bar-actions button[title="Undo"]').isDisabled(),false);
 
  await chooseTab(page,1);
  steps=await countHistory(page,2);
- assert.match(await steps.nth(1).getAttribute('class')??'','active');
+ assert.match(await steps.nth(1).getAttribute('class')??'',/active/);
  await steps.nth(0).click(); // independently undo saved achievement
  await chooseTab(page,0);
  assert.equal(await page.locator('.bar-actions button[title="Undo"]').isDisabled(),false,
