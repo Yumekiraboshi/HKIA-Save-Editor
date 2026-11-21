@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import ts from 'typescript';
+import {fileURLToPath} from 'node:url';
+import {build} from 'esbuild';
 
 const source=readFileSync(new URL('../src/draft-store.ts',import.meta.url),'utf8');
-const compiled=ts.transpileModule(source,{
- compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}
-}).outputText;
-const store=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
+const {outputFiles}=await build({
+ entryPoints:[fileURLToPath(new URL('../src/draft-store.ts',import.meta.url))],
+ bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'
+});
+const store=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 
 test('record changes preserve exact 100-nanosecond tick strings',()=>{
  const original=new Map([[23,638000000000000001n],[42,999999999999999999n]]);
