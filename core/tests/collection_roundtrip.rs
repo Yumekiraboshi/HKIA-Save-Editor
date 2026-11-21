@@ -1,0 +1,122 @@
+
+use hkia_save_core::{archive::{ZipIndex,crc32,SLOT,ACCOUNT},collection::Editor,read_slot};
+fn cat(v:&[&[u8]])->Vec<u8>{v.concat()}
+fn u(n:u32)->Vec<u8>{let mut r=vec![0xce];r.extend(n.to_be_bytes());r}
+fn f(n:f32)->Vec<u8>{let mut r=vec![0xca];r.extend(n.to_be_bytes());r}
+fn l(n:i64)->Vec<u8>{let mut r=vec![0xd3];r.extend(n.to_be_bytes());r}
+fn arr(a:Vec<Vec<u8>>)->Vec<u8>{
+ assert!(a.len()<16);
+ let mut b=vec![0x90|a.len()as u8];for x in a {b.extend(x)}b
+}
+fn map(a:Vec<(Vec<u8>,Vec<u8>)>)->Vec<u8>{
+ assert!(a.len()<16);
+ let mut b=vec![0x80|a.len()as u8];for (k,v) in a {b.extend(k);b.extend(v)}b
+}
+fn guid(a:[u32;4])->Vec<u8>{let mut b=Vec::new();for x in a{b.extend(u(x))}b}
+fn doc(tag:u8,value:Vec<u8>)->Vec<u8>{arr(vec![vec![tag],value])}
+fn synthetic_payload(version:&str)->Vec<u8>{
+ let v=doc(18,arr(vec![vec![0],u(if version=="3.0.0"{83}else{87}),{
+  let mut s=vec![0xa0|version.len()as u8];s.extend(version.as_bytes());s
+ }]));
+ let a=doc(16,arr(vec![vec![1],guid([1,0,0,1]),arr(vec![vec![0xc2],f(1.0),vec![0xc0]])]));
+ let c=doc(17,arr(vec![vec![1],guid([1,0,0,2]),arr(vec![f(2.0),vec![0xc0],vec![0x90]])]));
+ let key1=map(vec![(vec![2],l(638000000000000001)),(vec![3],l(9))]);
+ let trait_collection=doc(39,arr(vec![map(vec![]),key1]));
+ let obj=doc(32,arr(vec![vec![3],guid([0,0,0,3]),vec![0],arr(vec![trait_collection])]));
+ arr(vec![vec![0],vec![4],arr(vec![v,a,c,obj])])
+}
+fn literal(s:&[u8])->Vec<u8>{
+ let mut b=vec![(s.len().min(15)as u8)<<4];
+ if s.len()>=15{
+  let mut n=s.len()-15;
+  while n>=255{b.push(255);n-=255}
+  b.push(n as u8);
+ }
+ b.extend(s);b
+}
+fn slot(version:&str)->Vec<u8>{
+ let payload=synthetic_payload(version);
+ let prefix:[u8;32]=[0x13,0x5b,0x4a,0xa4,0xf7,0x02,0xa4,0x5d,0x1c,0xc5,0x62,0xae,0xb5,0xa3,0x86,0xed,0x5d,0x17,0xe1,0xfd,0x58,0x8f,0x42,0x4d,0xcf,0xc5,0x9d,0x2e,0x14,0x0c,0xf5,0x97];
+ let magic:[u8;32]=[0xa1,0xa2,0xf8,0x33,0x3c,0x66,0xec,0x45,0x5b,0xaa,0x2d,0xfc,0x63,0x25,0xc2,0x43,0x7a,0x77,0x9c,0x99,0x06,0xee,0xcf,0xf0,0xc0,0x22,0xe5,0xf6,0xb6,0xca,0x73,0xb8];
+ let mut b=prefix.to_vec();b.push(0x98);
+ for _ in 0..4{b.extend(u(0))}
+ b.push(0xa0|version.len()as u8);b.extend(version.as_bytes());
+ b.extend(u(if version=="3.0.0"{30000}else{30001}));
+ b.extend([0x92,0xd6,0xff]);b.extend(1_750_000_000u32.to_be_bytes());b.push(0);
+ b.push(0);b.push(0x80);b.push(0x90);b.extend([0x91,9]);
+ b.extend(magic);
+ let compressed=literal(&payload);
+ b.extend([0x92,0xc8,0,3,98,0xcd]);
+ b.extend((payload.len() as u16).to_be_bytes());
+ b.push(0xc6);b.extend((compressed.len() as u32).to_be_bytes());b.extend(compressed);
+ b
+}
+fn put16(v:&mut Vec<u8>,n:u16){v.extend(n.to_le_bytes())}
+fn put32(v:&mut Vec<u8>,n:u32){v.extend(n.to_le_bytes())}
+fn zip(slot:&[u8])->Vec<u8>{
+ let mut b=Vec::new();let mut central=Vec::new();
+ for (name,data) in [(SLOT,slot),(ACCOUNT,b"{}".as_slice()),("opaque.bin",b"opaque") ]{
+  let name=name.as_bytes();let crc=crc32(data);let pos=b.len() as u32;
+  put32(&mut b,0x04034b50);put16(&mut b,20);put16(&mut b,0);put16(&mut b,0);
+  put16(&mut b,0);put16(&mut b,0);put32(&mut b,crc);put32(&mut b,data.len()as u32);
+  put32(&mut b,data.len()as u32);put16(&mut b,name.len()as u16);put16(&mut b,0);
+  b.extend(name);b.extend(data);
+  put32(&mut central,0x02014b50);put16(&mut central,20);put16(&mut central,20);
+  put16(&mut central,0);put16(&mut central,0);put16(&mut central,0);put16(&mut central,0);
+  put32(&mut central,crc);put32(&mut central,data.len()as u32);put32(&mut central,data.len()as u32);
+  put16(&mut central,name.len()as u16);put16(&mut central,0);put16(&mut central,0);
+  put16(&mut central,0);put16(&mut central,0);put32(&mut central,0);put32(&mut central,pos);
+  central.extend(name);
+ }
+ let off=b.len()as u32;let len=central.len()as u32;
+ b.extend(central);put32(&mut b,0x06054b50);for _ in 0..2{put16(&mut b,0)}
+ put16(&mut b,3);put16(&mut b,3);put32(&mut b,len);put32(&mut b,off);put16(&mut b,0);
+ b
+}
+#[test]
+fn synthetic_slot_time_undo_redo_remove_add(){
+ for v in ["3.0.0","3.0.1"]{
+  let source=slot(v);let original=source.clone();
+  let raw=read_slot(&source).unwrap();
+  assert_eq!(raw.index.collections.len(),2);
+  let mut e=Editor::open(source).unwrap();
+  assert_eq!(e.entries().len(),2);
+  assert!(!e.dirty());
+  assert!(e.export().is_err());
+  assert!(e.change(2,Some(111),Some(222)).is_err());
+  e.change(2,Some(638000000000000001),Some(638000000000010001)).unwrap();
+  assert!(e.can_undo());assert!(!e.can_redo());
+  let changed=e.export().unwrap();assert_ne!(changed,original);
+  assert_eq!(Editor::open(changed).unwrap().value(2),Some(638000000000010001));
+  assert!(e.undo());assert!(!e.dirty());assert!(e.redo());assert!(e.dirty());
+  e.change(3,Some(9),None).unwrap();
+  let no3=Editor::open(e.export().unwrap()).unwrap();
+  assert_eq!(no3.value(3),None);
+  if v=="3.0.1"{
+   e.change(216433,None,Some(638000000000000000)).unwrap();
+   let added=Editor::open(e.export().unwrap()).unwrap();
+   assert_eq!(added.value(216433),Some(638000000000000000));
+   assert_eq!(added.value(3),None);
+  }
+  assert_eq!(original,slot(v));
+ }
+}
+#[test]
+fn synthetic_archive_other_members_byte_exact(){
+ let source=zip(&slot("3.0.1"));
+ let z=ZipIndex::parse(&source).unwrap();
+ let mut editor=Editor::open(source.clone()).unwrap();
+ editor.change(2,Some(638000000000000001),Some(638000000010000001)).unwrap();
+ let result=editor.export().unwrap();let next=ZipIndex::parse(&result).unwrap();
+ for (a,b) in z.entries.iter().zip(&next.entries){
+  assert_eq!(a.name,b.name);
+  if a.name!=SLOT{
+   assert_eq!(&source[a.local.clone()],&result[b.local.clone()]);
+   assert_eq!(z.extract(&source,z.entries.iter().position(|i|i.name==a.name).unwrap()).unwrap(),
+              next.extract(&result,next.entries.iter().position(|i|i.name==b.name).unwrap()).unwrap());
+  }
+ }
+ assert_eq!(Editor::open(result).unwrap().value(2),Some(638000000010000001));
+ assert_eq!(Editor::open(source.clone()).unwrap().value(2),Some(638000000000000001));
+ let mut corrupt=source;corrupt[45]^=0x80;assert!(Editor::open(corrupt).is_err());
+}
