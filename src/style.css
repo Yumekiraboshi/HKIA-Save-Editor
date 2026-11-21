@@ -238,7 +238,15 @@
 :root[dir="rtl"] .history-popover{right:auto;left:0}
 @media(max-width:730px){
  .file-action{width:40px;padding:0 4px}
- .history-popover{right:-75px}
+ /* A history popover anchored to the small SVG button can extend beyond the
+    viewport on narrow screens. On mobile, use the viewport instead of the
+    button as the containing block, including in right-to-left locales. */
+ .history-popover,
+ :root[dir="rtl"] .history-popover{
+  position:fixed;top:106px;left:14px;right:14px;
+  width:min(350px,calc(100vw - 28px));max-width:none;
+  max-height:calc(100dvh - 120px);margin-inline:auto
+ }
  .header-select{gap:3px}
  .select-icon{width:14px;height:14px}
 }
