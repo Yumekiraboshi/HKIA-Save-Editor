@@ -41,6 +41,51 @@ pub extern "C" fn hkia_change(id:i32,expected_present:u32,expected_ticks:i64,nex
   }
  })
 }
+
+#[no_mangle]
+pub extern "C" fn hkia_achievement_change(
+ g0:u32,g1:u32,g2:u32,g3:u32,
+ before_complete:u32,before_progress:f32,before_seconds:i64,before_nanos:u32,before_has_date:u32,
+ after_complete:u32,after_progress:f32,after_seconds:i64,after_nanos:u32,after_has_date:u32,
+)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  if before_complete>1||after_complete>1||before_has_date>1||after_has_date>1{return 1}
+  let before=hkia_save_core::achievement::AchievementValue{
+   complete:before_complete==1,current:before_progress,
+   completed:if before_has_date==1{Some((before_seconds,before_nanos))}else{None},
+  };
+  let after=hkia_save_core::achievement::AchievementValue{
+   complete:after_complete==1,current:after_progress,
+   completed:if after_has_date==1{Some((after_seconds,after_nanos))}else{None},
+  };
+  match a.editor.as_mut().map(|e|e.change_achievement([g0,g1,g2,g3],before,after)){
+   Some(Ok(()))=>0,_=>1,
+  }
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_achievement_snapshot()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref() else{return 1};
+  let rows=e.achievements();
+  if rows.len()>1_000_000{return 1}
+  let mut bytes=Vec::with_capacity(4+rows.len()*34);
+  bytes.extend((rows.len()as u32).to_le_bytes());
+  for row in rows {
+   for g in row.guid {bytes.extend(g.to_le_bytes());}
+   bytes.push(u8::from(row.value.complete));
+   bytes.extend(row.value.current.to_bits().to_le_bytes());
+   bytes.push(u8::from(row.value.completed.is_some()));
+   let (secs,nanos)=row.value.completed.unwrap_or((0,0));
+   bytes.extend(secs.to_le_bytes());
+   bytes.extend(nanos.to_le_bytes());
+  }
+  a.reply=bytes;0
+ })
+}
+
 #[no_mangle]
 pub extern "C" fn hkia_undo()->u32{
  STATE.with(|s|{let mut a=s.borrow_mut();a.reply.clear();a.output.clear();match a.editor.as_mut(){Some(e)=>if e.undo(){0}else{1},None=>1}})
