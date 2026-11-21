@@ -145,7 +145,7 @@ async function run(){
  await achievement.click();
  await page.locator('.achievement-item-grid button.achievement-toggle[aria-pressed="true"]').first().waitFor();
  let steps=await countHistory(page,2);
- assert.equal(await steps.nth(1).getAttribute('class')?.includes('active'),true);
+ assert.match(await steps.nth(1).getAttribute('class')??'','active');
  await page.locator('.history-menu > summary').click(); // close without altering state
 
  // Persist both redo-only Collections changes and one applied achievement.
@@ -165,7 +165,7 @@ async function run(){
    };
    g.onerror=()=>{d.close();resolve(false)};
   };
- }),{timeout:20_000});
+ }),null,{timeout:20_000});
  const before=await localDraft(page);
  assert.deepEqual(before,{changes:0,achievements:1,count:3,applied:1});
 
