@@ -256,7 +256,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   observer.observe(el);
   return ()=>observer.disconnect();
  });
- const unnamed=$derived((catalog as Catalog | null)?.items.filter((x:Item)=>!nameFor(x)).length??0);
+ const unnamed=$derived((catalog as Catalog|null)?.items.filter((x:Item)=>!x[5]&&!x[6]&&!verifiedFloorplanName(x[0],locale)).length??0);
  function describeError(e:unknown){const raw=e instanceof Error?e.message:String(e);return editorErrors[locale==='ja'?'ja':'en'][raw]??(locale==='ja'?(raw||copy.unknown):copy.unknown);}
  function setLanguage(v:LanguagePref){
   languagePref=v;try{localStorage.setItem('hkia-display-locale',v)}catch{}
