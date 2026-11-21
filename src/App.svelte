@@ -6,6 +6,7 @@
  import {achievementCopy} from './achievement-ui';
  import {compactAchievementCopy} from './achievement-compact-ui';
  import {toggleAchievementState} from './achievement-quick';
+ import {achievementProgressTarget} from './achievement-progress';
  import {achievementFactsCopy} from './achievement-facts-ui';
  import {loadAchievementFacts,counterIndex,type AchievementFactsIndex} from './achievement-facts';
  import {joinAchievementCatalog} from './achievement-catalog';
@@ -617,6 +618,10 @@
      {#each achievementRows.slice(0,achievementLimit) as item (item.guid)}
       {@const art=achievementCategoryAtlas?.bySaveGuid.get(item.guid)}
       {@const title=achievementName(item.guid,item.index)}
+      {@const progressGoal=achievementProgressTarget(
+       achievementGroupHierarchy?.byGuid.get(item.guid)?.children.length??null,
+       achievementFacts.get(item.guid)?.threshold??null
+      )}
       <article class="item-tile achievement-tile" class:is-recorded={item.row?.value.complete===true} class:achievement-group-parent={achievementGroupSelection===item.guid}>
        <button type="button" class="item-toggle achievement-toggle"
         aria-pressed={item.row?.value.complete}
@@ -631,12 +636,17 @@
          {/if}
         </span>
         <span class="item-name">{title}</span>
-        <span class="item-status" class:has={item.row?.value.complete===true}>
-         {item.row?(item.row.value.complete?'✓ '+achCopy.completed:achCopy.incomplete):achCopy.missing}
+        <span class="item-status achievement-compact-status" class:has={item.row?.value.complete===true}>
+         {#if !item.row}
+          {achCopy.missing}
+         {:else if item.row.value.complete}
+          ✓ {achCopy.completed}
+         {:else if progressGoal!==null}
+          {achCopy.progress}: {item.row.value.current.toLocaleString(locale)} / {progressGoal.toLocaleString(locale)}
+         {:else}
+          {achCopy.incomplete}
+         {/if}
         </span>
-        {#if item.row && !item.row.value.complete && item.row.value.current>0}
-         <span class="achievement-compact-progress">{achCopy.progress}: {item.row.value.current.toLocaleString(locale)}</span>
-        {/if}
        </button>
        {#if item.row}
         <button type="button" class="date-button achievement-dialog-button"
