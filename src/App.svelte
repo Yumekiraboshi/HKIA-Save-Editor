@@ -678,17 +678,33 @@
    </details>
    <dialog class="achievement-dialog" bind:this={achievementDialogEl} onclose={onAchievementDialogClosed} oncancel={e=>{if(busy)e.preventDefault()}}>
     {#if editingAchievement}
-     {@const facts=achievementFacts.get(achievementGuid(editingAchievement.guid))}
+     {@const editingSaveGuid=achievementGuid(editingAchievement.guid)}
+     {@const facts=achievementFacts.get(editingSaveGuid)}
+     {@const dialogIndividualArt=achievementIndividualAtlas?.bySaveGuid.get(editingSaveGuid)}
+     {@const dialogCategoryArt=achievementCategoryAtlas?.bySaveGuid.get(editingSaveGuid)}
      {@const linkedCounter=facts?gameCounters.get(facts.counterGuid):null}
      <form class="achievement-form" onsubmit={e=>{e.preventDefault();void saveAchievement()}}>
       <div class="date-dialog-heading">
        <h2>{editingAchievement.value.complete?compactCopy.date:compactCopy.details}</h2>
        <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeAchievement}>×</button>
       </div>
-      <strong class="achievement-edit-name">{editingAchievementTitle}</strong>
-      <span class="achievement-dialog-status" class:achieved={editingAchievement.value.complete}>
-       {editingAchievement.value.complete?'✓ '+achCopy.completed:achCopy.incomplete}
-      </span>
+      <div class="date-dialog-item achievement-dialog-item">
+       <span class="date-dialog-art" aria-hidden="true">
+        {#if dialogIndividualArt}
+         <span class="achievement-individual-sprite" style:background-image={`url("${achievementIndividualAtlas?.url}")`} style:background-position={`${dialogIndividualArt.x} ${dialogIndividualArt.y}`}></span>
+        {:else if dialogCategoryArt}
+         <span class="achievement-category-sprite" style:background-image={`url("${achievementCategoryAtlas?.url}")`} style:background-position={`${dialogCategoryArt.x} ${dialogCategoryArt.y}`}></span>
+        {:else}
+         <span class="item-art-empty">✧</span>
+        {/if}
+       </span>
+       <div class="date-dialog-detail">
+        <strong class="achievement-edit-name">{editingAchievementTitle}</strong>
+        <span class="achievement-dialog-status" class:achieved={editingAchievement.value.complete}>
+         {editingAchievement.value.complete?'✓ '+achCopy.completed:achCopy.incomplete}
+        </span>
+       </div>
+      </div>
       {#if editingAchievement.value.complete}
        <label class="date-dialog-field">
         <span>{achCopy.completedAt}</span>
