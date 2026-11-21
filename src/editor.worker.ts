@@ -121,9 +121,13 @@ function snapshot(e:Engine){
    applied:applied===1,paired:paired===1,
    itemId:scope===0?itemId:null,guid:scope===1?guid:null});
  }
- if(e.hkia_history_checkpoint()!==0)throw Error('HISTORY_CHECKPOINT_FAILED');
- const checkpoint=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
- if(checkpoint.length<16||checkpoint.length>128*1024)throw Error('HISTORY_CHECKPOINT_INVALID');
+ // A large legacy session may exceed the bounded replay limit.
+ // Keep edits and net-diff autosave functional instead of failing snapshot().
+ let checkpoint:Uint8Array|null=null;
+ if(e.hkia_history_checkpoint()===0){
+  const saved=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+  if(saved.length>=16&&saved.length<=128*1024)checkpoint=saved;
+ }
  return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,achievements,counters,history,historyCheckpoint:checkpoint};
 }
 function validAchievement(v:AchievementValue):boolean{
