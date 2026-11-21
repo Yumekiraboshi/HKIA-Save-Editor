@@ -1,10 +1,14 @@
-type Action = 'open'|'snapshot'|'change'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
-type Request = { id:number; action:Action; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}> };
+type Action = 'open'|'snapshot'|'change'|'achievement'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
+type AchievementValue = {complete:boolean;current:number;completed:[bigint,number]|null};
+type AchievementPatch = {guid:number[];before:AchievementValue;after:AchievementValue};
+type Request = { id:number; action:Action; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementPatch[];guid?:number[];beforeValue?:AchievementValue;afterValue?:AchievementValue };
 type Transport = { postMessage(data:unknown, transfer?:Transferable[]):void; onmessage:((event:MessageEvent<Request>)=>void)|null };
 type Engine = {
  memory:WebAssembly.Memory;
  hkia_stage(n:number):number; hkia_open():number;
  hkia_change(id:number,expectedPresent:number,old:bigint,nextPresent:number,value:bigint):number;
+ hkia_achievement_change(g0:number,g1:number,g2:number,g3:number,bc:number,bp:number,bs:bigint,bn:number,bh:number,ac:number,ap:number,as:bigint,an:number,ah:number):number;
+ hkia_achievement_snapshot():number;
  hkia_undo():number; hkia_redo():number; hkia_reset():number;
  hkia_snapshot():number; hkia_export():number; hkia_clear():void;
  hkia_reply_ptr():number; hkia_reply_len():number;
@@ -37,7 +41,33 @@ function snapshot(e:Engine){
  if(!version||count>1_000_000||b.length!==17+count*12)throw Error('セーブ一覧の形式が不正です。');
  const entries:Array<[number,bigint]>=[];
  for(let i=0;i<count;i++){const p=17+i*12;entries.push([v.getInt32(p,true),v.getBigInt64(p+4,true)]);}
- return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries};
+ if(e.hkia_achievement_snapshot()!==0)throw Error('実績の取得に失敗しました。');
+ const a=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+ if(a.byteLength<4)throw Error('実績データの形式が不正です。');
+ const d=new DataView(a.buffer,a.byteOffset,a.byteLength);
+ const total=d.getUint32(0,true);
+ if(total>100000||a.length!==4+total*34)throw Error('実績データの形式が不正です。');
+ const achievements:Array<{guid:[number,number,number,number];value:AchievementValue}>=[];
+ for(let i=0;i<total;i++){
+  const p=4+i*34;
+  const guid:[number,number,number,number]=[d.getUint32(p,true),d.getUint32(p+4,true),d.getUint32(p+8,true),d.getUint32(p+12,true)];
+  const complete=a[p+16]===1;
+  const current=d.getFloat32(p+17,true);
+  const hasDate=a[p+21];
+  if(a[p+16]>1||hasDate>1)throw Error('実績データの形式が不正です。');
+  const completed=hasDate===1?[d.getBigInt64(p+22,true),d.getUint32(p+30,true)] as [bigint,number]:null;
+  achievements.push({guid,value:{complete,current,completed}});
+ }
+ return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,achievements};
+}
+function validAchievement(v:AchievementValue):boolean{
+ return !!v&&typeof v.complete==='boolean'&&typeof v.current==='number'&&Number.isFinite(v.current)&&v.current>=0&&
+ (v.completed===null||(Array.isArray(v.completed)&&v.completed.length===2&&typeof v.completed[0]==='bigint'&&
+ v.completed[0]>=0n&&v.completed[0]<=253402300799n&&Number.isInteger(v.completed[1])&&v.completed[1]>=0&&v.completed[1]<1_000_000_000));
+}
+function changeAchievement(e:Engine,guid:number[]|undefined,before:AchievementValue|undefined,after:AchievementValue|undefined):boolean{
+ if(!Array.isArray(guid)||guid.length!==4||guid.some(n=>!Number.isInteger(n)||n<0||n>0xffffffff)||!before||!after||!validAchievement(before)||!validAchievement(after))return false;
+ return e.hkia_achievement_change(...guid as [number,number,number,number],Number(before.complete),before.current,before.completed?.[0]??0n,before.completed?.[1]??0,Number(before.completed!==null),Number(after.complete),after.current,after.completed?.[0]??0n,after.completed?.[1]??0,Number(after.completed!==null))===0;
 }
 async function execute(r:Request):Promise<unknown>{
  const e=await getEngine();
@@ -59,9 +89,14 @@ async function execute(r:Request):Promise<unknown>{
    if(e.hkia_change(r.itemId,a===null?0:1,a??0n,b===null?0:1,b??0n)!==0)throw Error('変更できませんでした。元の値か編集条件が一致しません。');
    return snapshot(e);
   }
+  case 'achievement':{
+   if(!changeAchievement(e,r.guid,r.beforeValue,r.afterValue))throw Error('実績を変更できませんでした。編集条件を確認してください。');
+   return snapshot(e);
+  }
   case 'batch':{
    const patches=r.patches;
-   if(!Array.isArray(patches)||patches.length>20000)throw Error('DRAFT_INVALID');
+   const achievements=r.achievementPatches??[];
+   if(!Array.isArray(patches)||patches.length>20000||!Array.isArray(achievements)||achievements.length>10000)throw Error('DRAFT_INVALID');
    for(const p of patches){
     if(!Number.isInteger(p.id)||p.id<=0||p.id>2147483647){
      e.hkia_reset();throw Error('DRAFT_INVALID');
@@ -70,6 +105,9 @@ async function execute(r:Request):Promise<unknown>{
     if(e.hkia_change(p.id,before===null?0:1,before??0n,after===null?0:1,after??0n)!==0){
      e.hkia_reset();throw Error('DRAFT_CONFLICT');
     }
+   }
+   for(const p of achievements){
+    if(!changeAchievement(e,p.guid,p.before,p.after)){e.hkia_reset();throw Error('DRAFT_CONFLICT');}
    }
    return snapshot(e);
   }
