@@ -35,8 +35,8 @@ test('unknown-version saved GUIDs remain readable and editable rather than disap
 });
 
 test('absent source entries are UNKNOWN, not incomplete, and cannot open editor',()=>{
- assert.match(app,/achievementFilter==='missing'/);
- assert.match(app,/if\(achievementFilter==='incomplete'&&\(!x\.row\|\|x\.row\.value\.complete\)\)/);
+ assert.match(app,/\{#if !item\.row\}/);
+ assert.doesNotMatch(app,/achievementFilter/);
  assert.match(app,/{#if item\.row}/);
  assert.match(app,/achCopy\.missing/);
  assert.match(app,/if\(item\.row\)void openAchievement/);
