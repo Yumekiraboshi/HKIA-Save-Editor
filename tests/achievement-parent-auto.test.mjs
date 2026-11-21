@@ -10,7 +10,7 @@ async function compiled(path){
   bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
  return import('data:text/javascript;base64,'+Buffer.from(r.outputFiles[0].text).toString('base64'));
 }
-const {planCategoryParentCompletion}=await compiled('../src/achievement-parent-auto.ts');
+const {planCategoryParentCompletion,planMissingCategoryParentCompletion}=await compiled('../src/achievement-parent-auto.ts');
 const {decodeAchievementGroups}=await compiled('../src/achievement-groups.ts');
 const indexData=JSON.parse(read('../public/achievement-index.json'));
 const index=new Map(indexData.records.map(([guid,key,titleId])=>[guid,{key,titleId}]));
@@ -102,4 +102,52 @@ test('both UI edit paths use a single parent/child WASM transaction and do not m
  assert.doesNotMatch(app,/load\(file:File\)[\s\S]{0,500}planCategoryParentCompletion\(/);
  const gui=read('../src/achievement-compact-ui.ts');
  assert.match(gui,/最後の日時をコピー/);
+});
+
+test('missing source-defined category is created only when all child records become complete',()=>{
+ const single=hierarchy.groups.find(g=>g.children.length===1);
+ assert.ok(single);
+ const child=words(single.children[0]),date=[1750000500n,123456700];
+ const done=value(true,1,date);
+ const planned=planMissingCategoryParentCompletion(hierarchy,[],child,done);
+ assert.deepEqual(planned,{guid:words(single.guid),after:{complete:true,current:1,completed:date}});
+ assert.equal(planCategoryParentCompletion(hierarchy,[],child,done),null,'existing-parent planner never invents before value');
+ assert.equal(planMissingCategoryParentCompletion(hierarchy,[],child,value(false,0)),null);
+ assert.equal(planMissingCategoryParentCompletion(hierarchy,[row(single.guid,true,1,date)],child,done),null);
+ assert.equal(planMissingCategoryParentCompletion(hierarchy,[row(single.guid,false,0)],child,done),null,
+  'existing parent must use CAS update path');
+ const multiple=hierarchy.groups.find(g=>g.children.length>2);
+ assert.ok(multiple);
+ assert.equal(planMissingCategoryParentCompletion(hierarchy,[],words(multiple.children[0]),done),null,
+  'missing siblings never silently count as completed');
+});
+
+test('missing parent exact timestamp and 100ns precision follow latest saved child, without guessing absent dates',()=>{
+ const children=oldRows.slice(1).map(r=>({...r,value:{...r.value}}));
+ const plan=planMissingCategoryParentCompletion(hierarchy,children,last.guid,edited);
+ assert.deepEqual(plan.guid,words(example.guid));
+ assert.equal(plan.after.current,example.children.length);
+ assert.deepEqual(plan.after.completed,[1750000002n,987654300]);
+ const withUnknown=children.map((row,i)=>i===0?
+  {...row,value:{...row.value,completed:null}}:row);
+ const nullDate=planMissingCategoryParentCompletion(hierarchy,withUnknown,last.guid,edited);
+ assert.ok(nullDate);
+ assert.equal(nullDate.after.completed,null);
+ assert.deepEqual(children,oldRows.slice(1),'planner has no save mutation side effects');
+});
+
+test('missing-parent Rust/WASM transaction is wired to both existing and absent final-child UI paths',()=>{
+ const app=read('../src/App.svelte'),client=read('../src/worker-client.ts');
+ const worker=read('../src/editor.worker.ts'),wasm=read('../wasm/src/lib.rs');
+ const core=read('../core/src/collection.rs'),keys=read('../core/src/achievement_keys.rs');
+ assert.match(app,/planMissingCategoryParentCompletion\(achievementGroupHierarchy,snapshot\?\.achievements\?\?\[\],live\.guid,next\)/);
+ assert.match(app,/completeChildWithNewParent\(\{guid:live\.guid,before:live\.value,after:next\},missingParent\)/);
+ assert.match(app,/completeChildWithNewParent\(\{guid,before:null,after:next\},missingParent\)/);
+ assert.match(client,/rpc\('achievement-parent-create'/);
+ assert.match(worker,/case 'achievement-parent-create'/);
+ assert.match(worker,/hkia_achievement_parent_create\(\.\.\.args\)/);
+ assert.match(wasm,/pub extern "C" fn hkia_achievement_parent_create/);
+ assert.match(core,/pub fn complete_child_and_create_parent/);
+ assert.match(core,/Change::AchievementParentNew/);
+ assert.match(keys,/PARENT_SIZES/);
 });

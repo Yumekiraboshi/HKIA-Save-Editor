@@ -1,7 +1,7 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeAchievement,createAchievement,createAchievementWithParent,changeAchievementPair,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch} from './worker-client';
- import {planCategoryParentCompletion} from './achievement-parent-auto';
+ import {openSave,changeCollection,createAchievement,createAchievementWithParent,completeChildWithNewParent,changeAchievement,changeAchievementPair,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch} from './worker-client';
+ import {planCategoryParentCompletion,planMissingCategoryParentCompletion} from './achievement-parent-auto';
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
  import {diffAchievements,decodeAchievementDraft} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -502,6 +502,9 @@
    const child:AchievementPatch={guid:live.guid,before:live.value,after:next};
    return changeAchievementPair(child,parent);
   }
+  const missingParent=planMissingCategoryParentCompletion(achievementGroupHierarchy,snapshot?.achievements??[],live.guid,next);
+  if(missingParent&&snapshot?.version==='3.0.1')
+   return completeChildWithNewParent({guid:live.guid,before:live.value,after:next},missingParent);
   return changeAchievement(live.guid,live.value,next);
  }
  /** An absent saved AchievementModel means 0/X in the game UI.
@@ -526,7 +529,10 @@
    }else{
     const guid=item.guid.split(':').map(word=>parseInt(word,16)) as AchievementEntry['guid'];
     const parent=planCategoryParentCompletion(achievementGroupHierarchy,snapshot.achievements,guid,next);
-    update(await (parent?createAchievementWithParent(guid,next,parent):createAchievement(guid,next)));
+    const missingParent=parent?null:planMissingCategoryParentCompletion(achievementGroupHierarchy,snapshot.achievements,guid,next);
+    update(await (parent?createAchievementWithParent(guid,next,parent):
+     missingParent?completeChildWithNewParent({guid,before:null,after:next},missingParent):
+     createAchievement(guid,next)));
    }
    await persistDraft();
   }catch(e){error=describeError(e)}

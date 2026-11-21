@@ -17,6 +17,7 @@ enum Change {
  Achievement{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
  AchievementCreated{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
  AchievementCreatedPair{guid:[u32;4],value:AchievementValue,parent:([u32;4],Option<AchievementValue>,Option<AchievementValue>)},
+ AchievementParentNew{child:([u32;4],bool,Option<AchievementValue>,Option<AchievementValue>),parent:([u32;4],AchievementValue)},
  AchievementPair{first:([u32;4],bool,Option<AchievementValue>,Option<AchievementValue>),
                  second:([u32;4],bool,Option<AchievementValue>,Option<AchievementValue>)},
 }
@@ -153,6 +154,57 @@ impl Editor {
   if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
   self.redo.clear();self.revision=revision;Ok(())
  }
+ /// Complete the last child (existing or absent) and create a missing
+ /// source-defined parent. Preflight both before any write; one Undo covers both.
+ pub fn complete_child_and_create_parent(
+  &mut self,child:[u32;4],expected:Option<AchievementValue>,next:AchievementValue,
+  parent:[u32;4],parent_next:AchievementValue
+ )->Result<(),Error>{
+  if self.slot.envelope.version!=Version::V301||
+   crate::achievement_keys::parent_of_v301(child)!=Some(parent)||
+   self.achievement_value(parent).is_some()||
+   self.achievement_value(child)!=expected||
+   expected==Some(next)||!achievement::valid(next)||!next.complete||
+   !achievement::valid(parent_next)||!parent_next.complete||
+   self.slot.index.documents+self.achievement_created.len()+usize::from(expected.is_none())+1>1_000_000
+   {return Err(Error::Schema)}
+  let total=crate::achievement_keys::parent_size_v301(parent).ok_or(Error::Schema)?;
+  if parent_next.current!=total as f32{return Err(Error::Schema)}
+  let mut seen=0usize;
+  let mut latest:Option<(i64,u32)>=None;
+  let mut all_dated=true;
+  for row in self.achievements(){
+   if crate::achievement_keys::parent_of_v301(row.guid)!=Some(parent){continue}
+   let state=if row.guid==child{next}else{row.value};
+   if !state.complete{return Err(Error::Schema)}
+   seen+=1;
+   if let Some(d)=state.completed{
+    if latest.is_none_or(|v|d>v){latest=Some(d)}
+   }else{all_dated=false}
+  }
+  if expected.is_none(){
+   seen+=1;
+   if let Some(d)=next.completed{
+    if latest.is_none_or(|v|d>v){latest=Some(d)}
+   }else{all_dated=false}
+  }
+  let expected_date=if all_dated{latest}else{None};
+  if seen!=total||parent_next.completed!=expected_date{return Err(Error::Schema)}
+  let created=expected.is_none()||self.achievement_created.contains_key(&child);
+  let (before,after)=if created{
+   (self.achievement_created.get(&child).copied(),Some(next))
+  }else{
+   let original=achievement::value(self.slot.index.achievements.iter().find(|m|m.guid==child).ok_or(Error::Schema)?)?;
+   (self.achievement_changes.get(&child).copied(),if next==original{None}else{Some(next)})
+  };
+  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let values=if created{&mut self.achievement_created}else{&mut self.achievement_changes};
+  match after{Some(v)=>{values.insert(child,v);},None=>{values.remove(&child);}}
+  self.achievement_created.insert(parent,parent_next);
+  self.undo.push(Change::AchievementParentNew{child:(child,created,before,after),parent:(parent,parent_next)});
+  if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
+  self.redo.clear();self.revision=revision;Ok(())
+ }
  /// Update a leaf and its completed parent atomically, with exactly one undo entry.
  /// Every compare-and-swap precondition is checked before modifying either record.
  pub fn change_achievement_pair(
@@ -230,6 +282,13 @@ impl Editor {
     match if reverse{before}else{after}{
      Some(v)=>{self.achievement_changes.insert(pg,v);},None=>{self.achievement_changes.remove(&pg);}
     }
+   }
+   Change::AchievementParentNew{child:(guid,created,before,after),parent:(pg,value)}=>{
+    let map=if created{&mut self.achievement_created}else{&mut self.achievement_changes};
+    match if reverse{before}else{after}{
+     Some(v)=>{map.insert(guid,v);},None=>{map.remove(&guid);}
+    }
+    if reverse{self.achievement_created.remove(&pg);}else{self.achievement_created.insert(pg,value);}
    }
    Change::AchievementPair{first,second}=>{
     for (guid,created,before,after) in [first,second]{
@@ -342,7 +401,7 @@ fn mp_array_header(n:usize,out:&mut Vec<u8>)->Result<(),Error>{
 }
 fn mp_u32(n:u32,out:&mut Vec<u8>){out.push(0xce);out.extend(n.to_be_bytes());}
 fn encode_achievement_document(id:u32,guid:[u32;4],value:AchievementValue)->Result<Vec<u8>,Error>{
- if id>i32::MAX as u32||!achievement::valid(value)||value.complete!=value.completed.is_some(){return Err(Error::Schema)}
+ if id>i32::MAX as u32||!achievement::valid(value){return Err(Error::Schema)}
  let mut out=vec![0x92,0x10,0x93]; // IDocument Union(16) -> AchievementModel[Id,Hash128,AchievementData]
  mp_u32(id,&mut out);
  // Hash128 is FOUR consecutively encoded UInt32 tokens, not a nested array.

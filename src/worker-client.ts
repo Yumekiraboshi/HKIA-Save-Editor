@@ -18,7 +18,7 @@ export type SaveSnapshot={
  achievements:AchievementEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-pair'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -61,6 +61,18 @@ export function createAchievementWithParent(guid:AchievementEntry['guid'],value:
  return rpc('achievement-create-parent',{
   guid:workerAchievementGuid(guid),afterValue:workerAchievementValue(value),
   achievementPatches:[workerAchievementPatch(parent)]
+ }) as Promise<SaveSnapshot>;
+}
+/** A saved or newly-created final child and missing native category parent
+ * are committed as one atomic Rust/WASM transaction and one Undo step. */
+export function completeChildWithNewParent(
+ child:AchievementDraftPatch,parent:{guid:AchievementEntry['guid'];after:AchievementValue}
+):Promise<SaveSnapshot>{
+ return rpc('achievement-parent-create',{
+  achievementPatches:[
+   workerAchievementDraftPatch(child),
+   workerAchievementDraftPatch({guid:parent.guid,before:null,after:parent.after})
+  ]
  }) as Promise<SaveSnapshot>;
 }
 export function changeAchievement(guid:AchievementEntry['guid'],beforeValue:AchievementValue,afterValue:AchievementValue):Promise<SaveSnapshot>{
