@@ -52,6 +52,17 @@ export function changeAchievementPair(first:AchievementPatch,second:AchievementP
   achievementPatches:[workerAchievementPatch(first),workerAchievementPatch(second)]
  }) as Promise<SaveSnapshot>;
 }
+/** Source-index-verified previously missing saved achievement: created only on user action. */
+export function createAchievement(guid:AchievementEntry['guid'],afterValue:AchievementValue):Promise<SaveSnapshot>{
+ return rpc('achievement-create',{guid:workerAchievementGuid(guid),afterValue:workerAchievementValue(afterValue)}) as Promise<SaveSnapshot>;
+}
+/** Missing last child + existing parent update are atomic and one-step undoable. */
+export function createAchievementWithParent(guid:AchievementEntry['guid'],value:AchievementValue,parent:AchievementPatch):Promise<SaveSnapshot>{
+ return rpc('achievement-create-parent',{
+  guid:workerAchievementGuid(guid),afterValue:workerAchievementValue(value),
+  achievementPatches:[workerAchievementPatch(parent)]
+ }) as Promise<SaveSnapshot>;
+}
 export function changeAchievement(guid:AchievementEntry['guid'],beforeValue:AchievementValue,afterValue:AchievementValue):Promise<SaveSnapshot>{
  return rpc('achievement',{
   guid:workerAchievementGuid(guid),
