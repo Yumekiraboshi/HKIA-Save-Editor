@@ -3,6 +3,7 @@ import {workerAchievementGuid,workerAchievementValue,workerAchievementPatch,work
 export type AchievementValue={complete:boolean;current:number;completed:[bigint,number]|null};
 export type AchievementEntry={guid:[number,number,number,number];value:AchievementValue};
 export type AchievementPatch={guid:[number,number,number,number];before:AchievementValue;after:AchievementValue};
+export type AchievementDraftPatch={guid:[number,number,number,number];before:AchievementValue|null;after:AchievementValue};
 export type CounterEntry={guid:[number,number,number,number];current:number;countedValues:number|null;countedGuids:number};
 export type SaveSnapshot={
  version:'3.0.0'|'3.0.1';
