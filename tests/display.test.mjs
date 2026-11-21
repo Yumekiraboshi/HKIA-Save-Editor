@@ -21,7 +21,7 @@ test('game taxonomy is complete and sorted',()=>{
  }
  for(const item of catalog.items)assert.ok(groupIds.has(item[3]));
 });
-test('source IDs remain internal; only matched bilingual labels can be listed',()=>{
+test('source catalog IDs remain exact and unknown names use clearly marked placeholders',()=>{
  const ids=new Set;
  let matched=0,unknown=0;
  for(const item of catalog.items){
@@ -35,8 +35,9 @@ test('source IDs remain internal; only matched bilingual labels can be listed',(
  }
  assert.ok(matched>8000);
  assert.ok(unknown>0);
- assert.match(component,/!nameFor\(item\)/);
- assert.match(component,/nameFor\(item\)\.toLocaleLowerCase\(\)/);
+ assert.doesNotMatch(component,/!nameFor\(item\)/);
+ assert.match(component,/filterCollectionItems\(/);
+ assert.match(component,/collectionDisplayName\(/);
  assert.doesNotMatch(component,/\{item\[0\]\}|\{item\[1\]\}|\{item\[2\]\}/);
 });
 test('header commands, local recovery, image tiles and continuous listing have real handlers',()=>{

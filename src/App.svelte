@@ -24,7 +24,7 @@
  import {loadIconPack,type IconPack} from './icon-packs';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
- import {searchAllCollectionItems} from './collection-search';
+ import {searchAllCollectionItems,collectionDisplayName,filterCollectionItems} from './collection-search';
  type Item=CollectionItem;
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
@@ -228,19 +228,10 @@
   return catalog.groups
    .map(g=>({row:g,count:owned.get(g[0])?.size??0,total:totals.get(g[0])?.size??0}));
  });
- const matching=$derived.by(()=>{
-  if(!catalog||!selectedGroup||!activeSubgroup)return [] as Item[];
-  const q=query.trim().toLocaleLowerCase();
-  const filtered=catalog.items.filter(item=>{
-   if(item[3]!==selectedGroup||item[2]!==activeSubgroup||!nameFor(item))return false;
-   if(!showVariants&&item[0]!==item[7])return false;
-   const has=showVariants?recorded[String(item[0])]!==undefined:(families[String(item[7]||item[0])]?.length??0)>0;
-   if(filter==='recorded'&&!has||filter==='unrecorded'&&has)return false;
-   return !q||nameFor(item).toLocaleLowerCase().includes(q)||item[5]?.toLocaleLowerCase().includes(q)||item[6]?.toLocaleLowerCase().includes(q);
-  });
-  filtered.sort((a,b)=>nameFor(a).localeCompare(nameFor(b),locale));
-  return filtered;
- });
+ const matching=$derived(filterCollectionItems(
+  (catalog as Catalog|null)?.items??[],selectedGroup,activeSubgroup,
+  recorded,families,showVariants,filter,query,locale,nameFor
+ ));
  const showingGlobalCollectionSearch=$derived(Boolean(query.trim())&&!collectionSearchDrilldown);
  const collectionSearchResults=$derived(searchAllCollectionItems((catalog as Catalog|null)?.items??[],query,locale,nameFor));
  const visibleItems=$derived(matching.slice(0,visibleLimit));
@@ -287,7 +278,9 @@
   // pending game-original group title crosswalk.
   return locale==='ja'&&g[0]==='collection_group_citytown'?'都市の町':locale==='ja'?g[1]:g[2];
  }
- function nameFor(item:Item){return gameLabels.names[String(item[0])]??(locale==='ja'?item[6]??item[5]:item[5]??item[6])??''}
+ function nameFor(item:Item){
+  return collectionDisplayName(item,gameLabels.names[String(item[0])],locale==='ja',copy.unverifiedItem);
+ }
  function jumpToCollectionItem(item:Item){
   // Search always covers all collection groups. Selecting a result restores
   // the real category/subcategory editor, including its original art pack.
