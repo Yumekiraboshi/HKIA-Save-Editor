@@ -146,6 +146,7 @@ export const messages={
     "localDraft": "Your editing session is stored locally in this browser."
   }
 } as const;
+export type Locale='ja'|'en';
 export const editorErrors={
   "ja": {
     "WASMファイルを取得できません。": "処理エンジンを読み込めませんでした。",

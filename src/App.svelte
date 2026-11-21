@@ -34,7 +34,7 @@
  let iconPack:IconPack|null=$state(null);
  let iconEpoch=0;
  let iconError=$state(false);
- let loadMoreSentinel:HTMLDivElement|undefined;
+ let loadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
  let languagePref:LanguagePref=$state('auto');
  let browserLanguage:Locale=$state('ja');
  let themePref:ThemePref=$state('system');
@@ -187,20 +187,20 @@
  async function change(id:number,next:bigint|null){
   if(!snapshot||busy)return;
   const prev=recorded[String(id)]??null;
-  busy=true;error='';notice='';
+  busy=true;error='';
   try{update(await changeCollection(id,prev,next));editId=null;await persistDraft();}
   catch(e){error=describeError(e)}
   finally{busy=false}
  }
  async function actHistory(which:'undo'|'redo'){
-  if(!snapshot||busy)return;busy=true;error='';notice='';
+  if(!snapshot||busy)return;busy=true;error='';
   try{update(await (which==='undo'?undo():redo()));editId=null;await persistDraft();}
   catch(e){error=e instanceof Error?e.message:copy.unknown}
   finally{busy=false}
  }
  async function saveEdited(){
   if(!snapshot?.dirty||busy)return;
-  busy=true;error='';notice='';if(fileMenu)fileMenu.open=false;
+  busy=true;error='';if(fileMenu)fileMenu.open=false;
   try{
    const bytes=await exportSave();
    const copied=new Uint8Array(bytes.length);copied.set(bytes);
@@ -218,7 +218,7 @@
  async function closeSave(){
   if(!snapshot||busy)return;
   if(snapshot.dirty&&!confirm(copy.discard))return;
-  busy=true;error='';notice='';
+  busy=true;error='';
   try{await draftWrites.catch(()=>{});await forgetLocalDraft();await clear();snapshot=null;original=null;recorded={};baseline=new Map();goHome();draftReady=true;draftWarning=false;}
   catch(e){error=e instanceof Error?e.message:copy.unknown}
   finally{busy=false}
