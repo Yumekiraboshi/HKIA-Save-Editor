@@ -12,24 +12,29 @@ const [quick,copy]=await Promise.all([imported('../src/achievement-quick.ts'),im
 const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
 const css=readFileSync(new URL('../src/style.css',import.meta.url),'utf8');
 
-test('one click completes an existing achievement and sets an exact UTC millisecond timestamp without inventing progress',()=>{
+test('one click earns a source-defined achievement at its exact goal and time',()=>{
  const before={complete:false,current:2.25,completed:null};
- const after=quick.toggleAchievementState(before,1795251723456);
- assert.deepEqual(after,{complete:true,current:2.25,completed:[1795251723n,456000000]});
+ const after=quick.toggleAchievementState(before,1795251723456,10);
+ assert.deepEqual(after,{complete:true,current:10,completed:[1795251723n,456000000]});
  assert.deepEqual(before,{complete:false,current:2.25,completed:null});
- assert.equal(quick.toggleAchievementState({complete:false,current:0,completed:null},0).completed[0],0n);
- assert.throws(()=>quick.toggleAchievementState(before,-1),/ACH_QUICK_TOGGLE_INVALID/);
- assert.throws(()=>quick.toggleAchievementState(before,Number.NaN),/ACH_QUICK_TOGGLE_INVALID/);
- assert.throws(()=>quick.toggleAchievementState({...before,current:-1},Date.now()),/ACH_QUICK_TOGGLE_INVALID/);
+ assert.equal(quick.toggleAchievementState({complete:false,current:0,completed:null},0,1).current,1);
+ assert.throws(()=>quick.toggleAchievementState(before,-1,10),/ACH_QUICK_TOGGLE_INVALID/);
+ assert.throws(()=>quick.toggleAchievementState(before,Number.NaN,10),/ACH_QUICK_TOGGLE_INVALID/);
+ assert.throws(()=>quick.toggleAchievementState({...before,current:-1},Date.now(),10),/ACH_QUICK_TOGGLE_INVALID/);
+ assert.throws(()=>quick.toggleAchievementState(before,Date.now(),0),/ACH_QUICK_TOGGLE_INVALID/);
 });
 
-test('a second click clears the completion date but preserves exact saved CurrentValue and prior source snapshot',()=>{
+test('revoking completion keeps partial progress but clamps overflow below goal; Undo retains saved snapshot',()=>{
  const source={complete:true,current:12.5,completed:[1795251723n,123456700]};
- const changed=quick.toggleAchievementState(source,1800000000000);
- assert.deepEqual(changed,{complete:false,current:12.5,completed:null});
+ const changed=quick.toggleAchievementState(source,1800000000000,10);
+ assert.deepEqual(changed,{complete:false,current:9,completed:null});
  assert.deepEqual(source,{complete:true,current:12.5,completed:[1795251723n,123456700]});
- const once=quick.toggleAchievementState(changed,1795251723456);
- assert.deepEqual(once,{complete:true,current:12.5,completed:[1795251723n,456000000]});
+ const once=quick.toggleAchievementState(changed,1795251723456,10);
+ assert.deepEqual(once,{complete:true,current:10,completed:[1795251723n,456000000]});
+ assert.equal(quick.toggleAchievementState({complete:true,current:3,completed:null},Date.now(),10).current,3);
+ assert.equal(quick.toggleAchievementState({complete:true,current:1,completed:null},Date.now(),1).current,0);
+ assert.equal(quick.toggleAchievementState(source,1800000000000).current,source.current,'unknown source goal must not be invented');
+ assert.equal(quick.toggleAchievementState(changed,1795251723456).current,changed.current,'unknown source goal must not be invented');
 });
 
 test('collection-like achievement cards use one click, a separate date popup, and do not fabricate missing records',()=>{
@@ -43,19 +48,20 @@ test('collection-like achievement cards use one click, a separate date popup, an
    'if(item.row)void quickToggleAchievement(item.row)',
    'if(item.row)void openAchievement(item.row',
    'disabled={busy||!item.row}',
-   'toggleAchievementState(live.value,Date.now())',
+   'toggleAchievementState(live.value,Date.now(),target)',
    'changeAchievement(live.guid,live.value,next)',
    'await persistDraft()',
    'bind:this={achievementDialogEl}',
    'bind:value={achievementDate}',
-   'bind:value={achievementProgress}',
-   'class="achievement-modal-advanced"',
    'class="achievement-modal-source"',
    'compactCopy.scope'
  ])assert.ok(app.includes(mark),mark);
  assert.ok(!app.includes('class="achievement-card"'));
  assert.ok(!app.includes('achievementComplete=row.value.complete'));
  assert.ok(!app.includes('class="achievement-check"'));
+ assert.doesNotMatch(app,/achievementProgress|inputmode="decimal"/);
+ assert.match(app,/current:selected\.value\.current,completed/);
+ assert.match(app,/\{#if editingAchievement\.value\.complete\}[\s\S]*?<button type="submit" class="primary"/);
  assert.ok(css.includes('.achievement-item-grid'));
  assert.ok(css.includes('.achievement-dialog-button')||css.includes('.item-tile .date-button'));
 });
@@ -73,7 +79,7 @@ test('one-click and popup controls are localized to all 16 game locales',()=>{
  const locales=['ar','de','en','en-GB','es','fr','fr-CA','it','ja','ko','nl','pt-BR','ru','tr','zh-Hans','zh-Hant'];
  for(const locale of locales){
   const data=copy.compactAchievementCopy(locale);
-  for(const key of ['unlock','relock','date','details','advanced','source','scope']){
+  for(const key of ['unlock','relock','date','details','source','scope']){
    assert.equal(typeof data[key],'string');
    assert.ok(data[key].trim(),locale+' '+key);
   }
