@@ -80,6 +80,6 @@ export type ChangeRequest={id:number;before:bigint|null;after:bigint|null};
 export function applyDraft(patches:ChangeRequest[],achievementPatches:AchievementDraftPatch[]=[]):Promise<SaveSnapshot>{
  return rpc('batch',{
   patches:patches.map(workerCollectionPatch),
-  achievementPatches:achievementPatches.map(workerAchievementPatch)
+  achievementPatches:achievementPatches.map(workerAchievementDraftPatch)
  }) as Promise<SaveSnapshot>;
 }
