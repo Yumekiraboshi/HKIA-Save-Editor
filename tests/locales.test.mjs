@@ -50,7 +50,9 @@ test('native Babel v5000 extractor produces mapped labels without copying unrela
    {id:300n,table:300,en:'Blue Fairy Outfit',ja:'青い妖精の服',fr:'Tenue de fée bleue'},
    {id:301n,table:300,en:'Sakura Cheesecake',ja:'桜のチーズケーキ',fr:'Cheesecake sakura'},
    {id:302n,table:300,en:'Duplicate',ja:'重複A',fr:'Doublon A'},
-   {id:303n,table:300,en:'Duplicate',ja:'重複B',fr:'Doublon B'}
+   {id:303n,table:300,en:'Duplicate',ja:'重複B',fr:'Doublon B'},
+   {id:304n,table:300,en:'Wear the Blue Fairy Outfit',ja:'青い妖精の服を着る',fr:'Porter la tenue de fée bleue'},
+   {id:305n,table:300,en:'Bake a Sakura Cheesecake',ja:'桜のチーズケーキを作る',fr:'Préparer un cheesecake sakura'}
   ];
   for(const locale of ['en','ja','fr']){
    const dir=join(source,locale);mkdirSync(dir,{recursive:true});
@@ -83,13 +85,20 @@ test('native Babel v5000 extractor produces mapped labels without copying unrela
   ];
   const catalog=join(temp,'catalog.json');writeFileSync(catalog,JSON.stringify({items}));
   const achindex=join(temp,'achievement-index.json'),achout=join(temp,'achievements');
+  const factsindex=join(temp,'achievement-facts-index.json'),descriptionsOut=join(temp,'private-descriptions');
   writeFileSync(achindex,JSON.stringify({schema:'HKIA.AchievementKeyIndex.1',records:[
    ['00000001:00000002:00000003:00000004','achievement_BlueFairy','300'],
    ['00000001:00000002:00000003:00000005','achievement_SakuraCake','301']
   ]}));
+  writeFileSync(factsindex,JSON.stringify({schema:'HKIA.AchievementFacts.1',version:'3.0.1',records:[
+   ['00000001:00000002:00000003:00000004','304','00000001:00000002:00000003:00000006','GameCounterManualDefinition',1,null,null,0,false,0,1],
+   ['00000001:00000002:00000003:00000005','305','00000001:00000002:00000003:00000007','GameCounterManualDefinition',1,null,null,0,false,0,2]
+  ]}));
   const script=new URL('../scripts/extract-babel-items.py',import.meta.url).pathname;
   const p=spawnSync('python3',[script,'--babel-dir',source,'--catalog',catalog,'--out',out,
-   '--achievement-index',achindex,'--achievement-out',achout,'--locales','en,ja,fr'],{encoding:'utf8'});
+   '--achievement-index',achindex,'--achievement-out',achout,
+   '--achievement-facts-index',factsindex,'--achievement-descriptions-out',descriptionsOut,
+   '--locales','en,ja,fr'],{encoding:'utf8'});
   assert.equal(p.status,0,p.stderr);
   const keys=JSON.parse(readFileSync(join(out,'item-keys.json'),'utf8'));
   assert.deepEqual(keys.keys,{'10':'300','20':'301'});
@@ -106,6 +115,15 @@ test('native Babel v5000 extractor produces mapped labels without copying unrela
   }
   const achievementsJa=JSON.parse(readFileSync(join(achout,'ja.json'),'utf8'));
   assert.deepEqual(achievementsJa.strings,{'300':'青い妖精の服','301':'桜のチーズケーキ'});
+  const descriptionsJa=JSON.parse(readFileSync(join(descriptionsOut,'ja.json'),'utf8'));
+  assert.deepEqual(descriptionsJa.strings,{'304':'青い妖精の服を着る','305':'桜のチーズケーキを作る'});
+  const forbidden=new URL('../public/__forbidden_private_achievements__',import.meta.url).pathname;
+  const bad=spawnSync('python3',[script,'--babel-dir',source,'--catalog',catalog,'--out',out,
+   '--achievement-index',achindex,'--achievement-out',achout,
+   '--achievement-facts-index',factsindex,'--achievement-descriptions-out',forbidden,
+   '--locales','en'],{encoding:'utf8'});
+  assert.notEqual(bad.status,0);
+  assert.match(bad.stderr,/description output must not be inside the public website tree/);
   assert.ok(!JSON.stringify(fr).includes('Dialogue non utilisé'));
  }finally{rmSync(temp,{recursive:true,force:true})}
 });
