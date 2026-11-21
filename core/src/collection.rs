@@ -188,7 +188,8 @@ impl Editor {
     if latest.is_none_or(|v|d>v){latest=Some(d)}
    }else{all_dated=false}
   }
-  if seen!=total||parent_next.completed!=if all_dated{latest}else{None}{return Err(Error::Schema)}
+  let expected_date=if all_dated{latest}else{None};
+  if seen!=total||parent_next.completed!=expected_date{return Err(Error::Schema)}
   let created=expected.is_none()||self.achievement_created.contains_key(&child);
   let (before,after)=if created{
    (self.achievement_created.get(&child).copied(),Some(next))
@@ -400,7 +401,7 @@ fn mp_array_header(n:usize,out:&mut Vec<u8>)->Result<(),Error>{
 }
 fn mp_u32(n:u32,out:&mut Vec<u8>){out.push(0xce);out.extend(n.to_be_bytes());}
 fn encode_achievement_document(id:u32,guid:[u32;4],value:AchievementValue)->Result<Vec<u8>,Error>{
- if id>i32::MAX as u32||!achievement::valid(value)||value.complete!=value.completed.is_some(){return Err(Error::Schema)}
+ if id>i32::MAX as u32||!achievement::valid(value){return Err(Error::Schema)}
  let mut out=vec![0x92,0x10,0x93]; // IDocument Union(16) -> AchievementModel[Id,Hash128,AchievementData]
  mp_u32(id,&mut out);
  // Hash128 is FOUR consecutively encoded UInt32 tokens, not a nested array.
