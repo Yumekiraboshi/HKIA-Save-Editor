@@ -135,3 +135,16 @@
 .achievement-fact-list dd{margin:0;color:var(--ink);overflow-wrap:anywhere}
 .achievement-reward{margin:10px 0 0;line-height:1.6;color:var(--ink);overflow-wrap:anywhere}
 .achievement-caution{margin:8px 0 0;font-size:11px;line-height:1.6;color:var(--muted)}
+
+
+/* Game-source hierarchy: root -> 63 categories -> 757 individual achievements. */
+.achievement-group-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 16px}
+.achievement-group-heading h2{font-size:16px;font-weight:750;margin:0}
+.achievement-group-grid{margin-bottom:16px}
+.achievement-group-card{min-height:130px;gap:8px}
+.achievement-group-card .achievement-status{margin-top:auto}
+.achievement-group-note{font-size:11px;line-height:1.7;color:var(--muted);margin:14px 0 24px}
+.achievement-group-back{margin:0 0 9px}
+.achievement-group-parent{border-color:color-mix(in srgb,var(--accent),var(--line) 55%)}
+.achievement-parent-label{font-size:10px;font-weight:700;color:var(--accent);letter-spacing:.01em}
+@media(max-width:730px){.achievement-group-heading{align-items:flex-start}.achievement-group-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.achievement-group-card{padding:12px;min-height:140px}}
