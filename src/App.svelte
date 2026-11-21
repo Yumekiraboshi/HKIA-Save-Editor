@@ -34,7 +34,6 @@
  const EPOCH=621355968000000000n;
  const ICONS=import.meta.env.BASE_URL+'icons/';
  let activeTool:Tool=$state('collections');
- let achievementFilter:'all'|'completed'|'incomplete'|'missing'=$state('all');
  let achievementQuery=$state('');
  let achievementIndex:AchievementIndex=$state(new Map());
  let achievementGroupHierarchy:AchievementHierarchy|null=$state(null);
@@ -44,12 +43,12 @@
  let achievementImagesStarted=false;
  let achievementImagesEpoch=0;
  let achievementGroupSelection:string|null=$state(null);
- let achievementShowAll=$state(false);
  let achievementFacts:AchievementFactsIndex=$state(new Map());
  let achievementFactsEpoch=0;
  let achievementTitles:AchievementTitles=$state({});
  let achievementTitleEpoch=0;
  let achievementLimit=$state(BATCH_SIZE);
+ let achievementLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
  let editingAchievement:AchievementEntry|null=$state(null);
  let editingAchievementTitle=$state('');
  let achievementDialogEl:HTMLDialogElement|undefined=$state();
@@ -66,6 +65,7 @@
  let selectedSubgroup:string|null=$state(null);
  let showVariants=$state(false);
  let query=$state('');
+ let collectionSearchDrilldown=$state(false);
  let filter:Filter=$state('all');
  let visibleLimit=$state(BATCH_SIZE);
  let editId:number|null=$state(null);
@@ -112,9 +112,6 @@
   achievementGroupSelection==='__unmapped'?unmappedAchievementRows:groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows,achievementFacts):
   sourceOrderedAchievementRows);
  const achievementRows=$derived(groupScopedAchievementRows.filter(x=>{
-  if(achievementFilter==='completed'&&!x.row?.value.complete)return false;
-  if(achievementFilter==='incomplete'&&(!x.row||x.row.value.complete))return false;
-  if(achievementFilter==='missing'&&x.row!==null)return false;
   const q=achievementQuery.trim().toLocaleLowerCase();
   if(!q)return true;
   const meta=achievementIndex.get(x.guid);
@@ -244,12 +241,36 @@
   filtered.sort((a,b)=>nameFor(a).localeCompare(nameFor(b),locale));
   return filtered;
  });
+ const showingGlobalCollectionSearch=$derived(Boolean(query.trim())&&!collectionSearchDrilldown);
+ const collectionSearchResults=$derived.by(()=>{
+  const q=query.trim().toLocaleLowerCase();
+  if(!catalog||!q)return [] as Item[];
+  return catalog.items.filter(item=>{
+   const label=nameFor(item);
+   return Boolean(label)&&(
+    label.toLocaleLowerCase().includes(q)||
+    (item[5]??'').toLocaleLowerCase().includes(q)||
+    (item[6]??'').toLocaleLowerCase().includes(q)
+   );
+  }).sort((a,b)=>nameFor(a).localeCompare(nameFor(b),locale)||a[0]-b[0]);
+ });
  const visibleItems=$derived(matching.slice(0,visibleLimit));
  $effect(()=>{
   const el=loadMoreSentinel;
-  if(!el||!activeSubgroup||typeof IntersectionObserver==='undefined')return;
+  const count=showingGlobalCollectionSearch?collectionSearchResults.length:matching.length;
+  if(!el||typeof IntersectionObserver==='undefined')return;
   const observer=new IntersectionObserver(entries=>{
-   if(entries.some(x=>x.isIntersecting))visibleLimit=Math.min(visibleLimit+BATCH_SIZE,matching.length);
+   if(entries.some(x=>x.isIntersecting))visibleLimit=Math.min(visibleLimit+BATCH_SIZE,count);
+  },{rootMargin:'720px 0px'});
+  observer.observe(el);
+  return ()=>observer.disconnect();
+ });
+ $effect(()=>{
+  const el=achievementLoadMoreSentinel;
+  if(!el||typeof IntersectionObserver==='undefined')return;
+  const observer=new IntersectionObserver(entries=>{
+   if(entries.some(x=>x.isIntersecting))
+    achievementLimit=Math.min(achievementLimit+BATCH_SIZE,achievementRows.length);
   },{rootMargin:'720px 0px'});
   observer.observe(el);
   return ()=>observer.disconnect();
@@ -263,11 +284,7 @@
   themePref=v;try{localStorage.setItem('hkia-display-theme',v)}catch{}
  }
  function showAchievementGroup(guid:string|null){
-  achievementGroupSelection=guid;achievementShowAll=false;achievementFilter='all';achievementQuery='';
-  achievementLimit=BATCH_SIZE;
- }
- function showEveryAchievement(){
-  achievementGroupSelection=null;achievementShowAll=true;achievementFilter='all';achievementQuery='';
+  achievementGroupSelection=guid;achievementQuery='';
   achievementLimit=BATCH_SIZE;
  }
  function achievementName(guid:string,index:number):string{
@@ -277,25 +294,35 @@
  }
  function titleFor(g:Group){return locale==='ja'?g[1]:g[2]}
  function nameFor(item:Item){return gameLabels.names[String(item[0])]??(locale==='ja'?item[6]??item[5]:item[5]??item[6])??''}
+ function jumpToCollectionItem(item:Item){
+  // Search always covers all collection groups. Selecting a result restores
+  // the real category/subcategory editor, including its original art pack.
+  selectedGroup=item[3];selectedSubgroup=item[2];
+  showVariants=item[0]!==item[7];
+  query=nameFor(item);collectionSearchDrilldown=true;
+  filter='all';visibleLimit=BATCH_SIZE;editId=null;error='';
+  void fetchImages(item[3]);
+  void persistDraft();
+ }
  function selectCategory(key:string){
   selectedGroup=key;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
-  query='';filter='all';editId=null;error='';
+  query='';collectionSearchDrilldown=false;filter='all';editId=null;error='';
   void fetchImages(key);
   void persistDraft();
  }
  function selectSubcategory(key:string){
   if(!selectedGroup||!subgroups.some(sub=>sub.key===key))return;
-  selectedSubgroup=key;showVariants=false;visibleLimit=BATCH_SIZE;query='';filter='all';editId=null;error='';
+  selectedSubgroup=key;showVariants=false;visibleLimit=BATCH_SIZE;query='';collectionSearchDrilldown=false;filter='all';editId=null;error='';
   if(iconPack?.group!==selectedGroup&&iconLoadingGroup!==selectedGroup)void fetchImages(selectedGroup);
   void persistDraft();
  }
  function goSubcategories(){
-  selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';filter='all';
+  selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';collectionSearchDrilldown=false;filter='all';
   if(snapshot)void persistDraft();
  }
  function goHome(){
   activeTool='collections';selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
-  editId=null;query='';filter='all';iconEpoch++;iconLoadingGroup=null;iconPack?.dispose();iconPack=null;iconError=false;
+  editId=null;query='';collectionSearchDrilldown=false;filter='all';iconEpoch++;iconLoadingGroup=null;iconPack?.dispose();iconPack=null;iconError=false;
   if(snapshot)void persistDraft();
  }
  function askFile(){if(busy||!restored)return;fileMenu&&(fileMenu.open=false);fileInput?.click();}
@@ -335,6 +362,7 @@
     });
     const achievementPatches=decodeAchievementDraft(draft.achievementPatches,s.achievements);
     const session=patches.length||achievementPatches.length?await applyDraft(patches,achievementPatches):s;
+   collectionSearchDrilldown=false;query='';
     original=draft.file;baseline=originalRows;achievementBaseline=s.achievements;update(session);
     selectedGroup=draft.ui.group;selectedSubgroup=draft.ui.subgroup;
     if(draft.ui.group)void fetchImages(draft.ui.group);
@@ -365,7 +393,7 @@
    await draftWrites.catch(()=>{});
    const session=await openSave(file);
    original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;update(session);
-   selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';filter='all';
+   selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';collectionSearchDrilldown=false;filter='all';
    iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;
    try{await saveOriginalLocally(file);draftReady=true;draftWarning=false}
    catch{draftReady=false;draftWarning=true}
@@ -613,25 +641,18 @@
    {#if achievementImagesFailed}
     <p class="compact-hint" role="status">{achCopy.imagesUnavailable}</p>
    {/if}
-   {#if achievementGroupHierarchy && (achievementGroupSelection!==null||achievementShowAll)}
+   {#if achievementGroupHierarchy && achievementGroupSelection!==null}
     <button type="button" class="back-link achievement-group-back" onclick={()=>showAchievementGroup(null)}>‹ {groupCopy.back}</button>
    {/if}
    <div class="section-heading"><h1>{achievementGroupHierarchy&&achievementGroupSelection!==null?
     achievementGroupSelection==='__unmapped'?groupCopy.uncategorized:achievementName(achievementGroupSelection,0):
-    achievementShowAll?groupCopy.showAll:achCopy.title}</h1><span class="category-count">{achCopy.completed}: {sourceOrderedAchievementRows.filter(r=>r.row?.value.complete===true).length.toLocaleString(locale)} / {sourceOrderedAchievementRows.filter(r=>r.row!==null).length.toLocaleString(locale)} · {achCopy.missing}: {sourceOrderedAchievementRows.filter(r=>r.row===null).length.toLocaleString(locale)}</span></div>
+    achCopy.title}</h1><span class="category-count">{achCopy.completed}: {sourceOrderedAchievementRows.filter(r=>r.row?.value.complete===true).length.toLocaleString(locale)} / {sourceOrderedAchievementRows.filter(r=>r.row!==null).length.toLocaleString(locale)} · {achCopy.missing}: {sourceOrderedAchievementRows.filter(r=>r.row===null).length.toLocaleString(locale)}</span></div>
    <div class="collection-controls">
-    <label class="search-field"><span class="search-symbol" aria-hidden="true">⌕</span><input type="search" bind:value={achievementQuery} placeholder={achCopy.search} aria-label={achCopy.search}/></label>
-    <div class="status-filter" role="group" aria-label={achCopy.title}>
-     <button type="button" class:active={achievementFilter==='all'} onclick={()=>{achievementFilter='all';achievementLimit=BATCH_SIZE}}>{copy.all}</button>
-     <button type="button" class:active={achievementFilter==='completed'} onclick={()=>{achievementFilter='completed';achievementLimit=BATCH_SIZE}}>{achCopy.completed}</button>
-     <button type="button" class:active={achievementFilter==='incomplete'} onclick={()=>{achievementFilter='incomplete';achievementLimit=BATCH_SIZE}}>{achCopy.incomplete}</button>
-     <button type="button" class:active={achievementFilter==='missing'} onclick={()=>{achievementFilter='missing';achievementLimit=BATCH_SIZE}}>{achCopy.missing}</button>
-    </div>
+    <label class="search-field"><span class="search-symbol" aria-hidden="true">⌕</span><input type="search" bind:value={achievementQuery} oninput={()=>achievementLimit=BATCH_SIZE} placeholder={achCopy.search} aria-label={achCopy.search}/></label>
    </div>
-   {#if achievementGroupHierarchy && achievementGroupSelection===null && !achievementShowAll && !achievementQuery.trim() && achievementFilter==='all'}
+   {#if achievementGroupHierarchy && achievementGroupSelection===null && !achievementQuery.trim()}
     <div class="achievement-group-heading">
      <h2>{groupCopy.categories}</h2>
-     <button type="button" class="variation-button" onclick={showEveryAchievement}>{groupCopy.showAll}</button>
     </div>
     <div class="category-grid achievement-category-grid">
      {#each achievementGroupSummaries as stat (stat.guid)}
@@ -707,7 +728,12 @@
     </div>
     {#if achievementRows.length===0}<p class="empty-result">{copy.none}</p>{/if}
     {#if achievementRows.length>achievementLimit}
-     <div class="load-marker"><button type="button" onclick={()=>achievementLimit=Math.min(achievementLimit+BATCH_SIZE,achievementRows.length)}>{copy.moreItems}</button></div>
+     <div class="load-marker" bind:this={achievementLoadMoreSentinel}>
+      {#if typeof IntersectionObserver==='undefined'}
+       <button type="button" onclick={()=>achievementLimit=Math.min(achievementLimit+BATCH_SIZE,achievementRows.length)}>{copy.moreItems}</button>
+      {/if}
+     </div>
+    {/if}
     {/if}
    {/if}
    <details class="data-note achievement-info-note">
