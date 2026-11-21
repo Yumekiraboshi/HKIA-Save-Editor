@@ -170,6 +170,6 @@ test('all 63 saved category records are hidden from individual cards while remai
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  assert.match(app,/class:is-recorded=\{stat\.parentComplete===true\}/);
  assert.match(app,/stat\.parentComplete===true\} · ✓/);
- assert.match(app,/sourceOrderedAchievementRows\.filter\(r=>r\.row\?\.value\.complete===true\)/);
+ assert.doesNotMatch(app,/sourceOrderedAchievementRows\.filter\(r=>r\.row\?\.value\.complete===true\)/,'redundant page summary is intentionally removed');
  assert.doesNotMatch(app,/class:achievement-group-parent=/);
 });
