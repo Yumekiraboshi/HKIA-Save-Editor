@@ -534,7 +534,7 @@
       {#if item.row}
        <span class="achievement-progress">{achCopy.progress}: {item.row.value.current.toLocaleString(locale)}</span>
        {#if item.row.value.completed}<span class="achievement-progress">{achCopy.completedAt}: {new Date(Number(item.row.value.completed[0])*1000+Math.floor(item.row.value.completed[1]/1_000_000)).toLocaleString(locale)}</span>{/if}
-       <button type="button" class="achievement-edit" disabled={busy} onclick={e=>void openAchievement(item.row!,e.currentTarget,item.index)}>{achCopy.edit}</button>
+       <button type="button" class="achievement-edit" disabled={busy} onclick={e=>{if(item.row)void openAchievement(item.row,e.currentTarget,item.index)}}>{achCopy.edit}</button>
       {/if}
      </article>
     {/each}
