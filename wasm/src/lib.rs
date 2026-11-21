@@ -87,6 +87,27 @@ pub extern "C" fn hkia_achievement_snapshot()->u32{
 }
 
 #[no_mangle]
+pub extern "C" fn hkia_counter_snapshot()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref() else{return 1};
+  let counters=e.counters();
+  if counters.len()>100_000{return 1}
+  let mut bytes=Vec::with_capacity(4+counters.len()*28);
+  bytes.extend((counters.len()as u32).to_le_bytes());
+  for row in counters {
+   let count=match row.counted_values {None=>-1i32,Some(n)=>match i32::try_from(n){Ok(n)=>n,Err(_)=>return 1}};
+   let guids=match u32::try_from(row.counted_guids){Ok(n)=>n,Err(_)=>return 1};
+   for g in row.guid{bytes.extend(g.to_le_bytes());}
+   bytes.extend(row.current.to_bits().to_le_bytes());
+   bytes.extend(count.to_le_bytes());
+   bytes.extend(guids.to_le_bytes());
+  }
+  a.reply=bytes;0
+ })
+}
+
+#[no_mangle]
 pub extern "C" fn hkia_undo()->u32{
  STATE.with(|s|{let mut a=s.borrow_mut();a.reply.clear();a.output.clear();match a.editor.as_mut(){Some(e)=>if e.undo(){0}else{1},None=>1}})
 }

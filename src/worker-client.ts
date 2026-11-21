@@ -1,6 +1,7 @@
 export type AchievementValue={complete:boolean;current:number;completed:[bigint,number]|null};
 export type AchievementEntry={guid:[number,number,number,number];value:AchievementValue};
 export type AchievementPatch={guid:[number,number,number,number];before:AchievementValue;after:AchievementValue};
+export type CounterEntry={guid:[number,number,number,number];current:number;countedValues:number|null;countedGuids:number};
 export type SaveSnapshot={
  version:'3.0.0'|'3.0.1';
  zip:boolean;
@@ -12,6 +13,7 @@ export type SaveSnapshot={
  bytes:number;
  entries:Array<[number,bigint]>;
  achievements:AchievementEntry[];
+ counters:CounterEntry[];
 };
 type Action='open'|'snapshot'|'change'|'achievement'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};

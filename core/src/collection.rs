@@ -1,6 +1,7 @@
 use crate::{archive::{ZipIndex,SLOT,ACCOUNT,MAX_ARCHIVE,crc32},envelope::Version,read_slot,ReadSlot,Error,MAX_INPUT,MAX_DECODED,MAX_BLOCK,MAX_BLOCKS,decode_block};
 use crate::wire::{Cursor,Token};
 use crate::achievement::{self,AchievementValue,AchievementEntry};
+use crate::native::ModelState;
 use std::{collections::{HashMap,HashSet},ops::Range};
 
 const MAX_TICKS:i64=3_155_378_975_999_999_999;
@@ -8,6 +9,8 @@ const MAX_UNDO:usize=256;
 
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub struct Entry {pub id:i32,pub ticks:i64}
+#[derive(Clone,Copy,Debug,PartialEq)]
+pub struct CounterEntry {pub guid:[u32;4],pub current:f32,pub counted_values:Option<usize>,pub counted_guids:usize}
 #[derive(Clone,Copy,Debug)]
 enum Change {
  Collection{id:i32,before:Option<Option<i64>>,after:Option<Option<i64>>},
@@ -75,6 +78,14 @@ impl Editor {
   self.slot.index.achievements.iter().filter_map(|model|{
    let value=self.achievement_changes.get(&model.guid).copied().or_else(||achievement::value(model).ok())?;
    Some(AchievementEntry{guid:model.guid,value})
+  }).collect()
+ }
+ pub fn counters(&self)->Vec<CounterEntry>{
+  self.slot.index.counters.iter().filter_map(|model|match &model.state{
+   ModelState::Counter{current,counted_values,counted_guids}=>Some(CounterEntry{
+    guid:model.guid,current:*current,counted_values:*counted_values,counted_guids:*counted_guids,
+   }),
+   _=>None,
   }).collect()
  }
  pub fn achievement_value(&self,guid:[u32;4])->Option<AchievementValue>{
