@@ -59,7 +59,7 @@ def babel_strings(folder):
         raise ValueError(f"incomplete Babel sections: {name}")
     return entries
 
-def extract(catalog, root, output, locales):
+def extract(catalog, root, output, locales, achievement_index=None, achievement_output=None):
     items = json.loads(catalog.read_text(encoding="utf-8"))["items"]
     en = babel_strings(root / "en")
     by_value = defaultdict(set)
@@ -79,6 +79,17 @@ def extract(catalog, root, output, locales):
     if not item_keys:
         raise ValueError("no unambiguous item-name matches in Babel files")
     selected = {int(key) for key in item_keys.values()}
+    achievement_ids = None
+    if achievement_index is not None:
+        source = json.loads(achievement_index.read_text(encoding="utf-8"))
+        records = source.get("records")
+        if source.get("schema") != "HKIA.AchievementKeyIndex.1" or not isinstance(records, list):
+            raise ValueError("unsupported achievement index")
+        achievement_ids = {int(row[2]) for row in records if isinstance(row, list)
+                           and len(row) == 3 and str(row[2]).isdigit()}
+        if len(achievement_ids) != len(records) or not achievement_ids:
+            raise ValueError("invalid or repeated achievement title ID")
+        achievement_output.mkdir(parents=True, exist_ok=True)
     output.mkdir(parents=True, exist_ok=True)
     names = {"schema": "HKIA.BabelItemKeys.1", "source": "unique exact English Babel string match, not definition-ID verification", "keys": item_keys}
     (output / "item-keys.json").write_text(json.dumps(names, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
@@ -88,6 +99,18 @@ def extract(catalog, root, output, locales):
         entries = {str(key): values[key] for key in sorted(selected) if key in values and values[key].strip()}
         record = {"schema": "HKIA.BabelStrings.1", "locale": locale, "strings": entries}
         (output / f"{locale}.json").write_text(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+        if achievement_ids is not None:
+            titles = {str(key): values[key] for key in sorted(achievement_ids)
+                      if key in values and values[key].strip()}
+            if len(titles) != len(achievement_ids):
+                raise ValueError(f"missing achievement title translations: {locale} "
+                                 f"{len(titles)}/{len(achievement_ids)}")
+            achievement_record = {"schema": "HKIA.AchievementTitles.1",
+                                  "locale": locale, "strings": titles}
+            (achievement_output / f"{locale}.json").write_text(
+                json.dumps(achievement_record, ensure_ascii=False, separators=(",", ":")) + "\n",
+                encoding="utf-8")
+            print(f"{locale}: {len(titles)} source-pinned achievement titles")
         available.append(locale)
         print(f"{locale}: {len(entries)}/{len(selected)} shared name strings")
     index = {"schema": "HKIA.BabelLocaleIndex.1", "available": available}
@@ -100,11 +123,15 @@ def main():
     parser.add_argument("--catalog", default="public/catalog.json", type=Path)
     parser.add_argument("--out", default="public/locales", type=Path)
     parser.add_argument("--locales", default=",".join(LOCALES))
+    parser.add_argument("--achievement-index", type=Path,
+                        help="verified source achievement GUID-to-title ID crosswalk")
+    parser.add_argument("--achievement-out", default="public/achievement-locales", type=Path)
     args = parser.parse_args()
     locales = args.locales.split(",")
     if not locales or any(locale not in LOCALES for locale in locales) or len(set(locales)) != len(locales):
         parser.error("invalid or duplicate locale")
-    extract(args.catalog, args.babel_dir, args.out, locales)
+    extract(args.catalog, args.babel_dir, args.out, locales,
+            args.achievement_index, args.achievement_out)
 
 if __name__ == "__main__":
     main()
