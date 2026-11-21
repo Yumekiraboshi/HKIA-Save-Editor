@@ -278,14 +278,18 @@ pub extern "C" fn hkia_snapshot()->u32{
   let Some(e)=a.editor.as_ref() else{return 1};
   let rows=e.entries();
   if rows.len()>1_000_000{return 1}
-  let mut bytes=Vec::with_capacity(17+rows.len()*12);
-  bytes.push(if e.version()=="3.0.0"{1}else{2});
+  let version=e.version();
+  let version_flag=if version=="3.0.0"{1}else if version=="3.0.1"{2}else{3};
+  if version_flag==3&&version.len()>24{return 1}
+  let mut bytes=Vec::with_capacity(17+rows.len()*12+if version_flag==3{1+version.len()}else{0});
+  bytes.push(version_flag);
   bytes.push(u8::from(e.is_zip()) | (u8::from(e.can_change_membership())<<1));bytes.push(u8::from(e.dirty()));
   bytes.push(u8::from(e.can_undo()));bytes.push(u8::from(e.can_redo()));
   bytes.extend(e.revision().to_le_bytes());
   bytes.extend((e.source_bytes()as u32).to_le_bytes());
   bytes.extend((rows.len()as u32).to_le_bytes());
   for row in rows {bytes.extend(row.id.to_le_bytes());bytes.extend(row.ticks.to_le_bytes());}
+  if version_flag==3 {bytes.push(version.len() as u8);bytes.extend(version.as_bytes());}
   a.reply=bytes;0
  })
 }
