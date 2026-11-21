@@ -1,6 +1,6 @@
 export const messages={
   "ja": {
-    "brand": "夢綺羅星",
+    "brand": "HKIA Save Editor",
     "toolCollection": "コレクション",
     "openFile": "セーブを開く",
     "file": "ファイル",
@@ -78,7 +78,7 @@ export const messages={
     "localDraft": "編集中の内容は、このブラウザ内に自動保存されます。"
   },
   "en": {
-    "brand": "Yumekiraboshi",
+    "brand": "HKIA Save Editor",
     "toolCollection": "Collections",
     "openFile": "Open save",
     "file": "File",
