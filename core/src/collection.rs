@@ -368,7 +368,7 @@ impl Editor {
   self.restore_change(&change,false);self.undo.push(change);
   self.revision=self.revision.wrapping_add(1);true
  }
- pub fn reset(&mut self){self.changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.retain(|change|change.scope()!=HistoryScope::Achievements);self.revision=self.revision.wrapping_add(1)}
+ pub fn reset(&mut self){self.changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
  pub fn export(&self)->Result<Vec<u8>,Error>{
   if !self.dirty(){return Err(Error::Schema)}
   let original_payload=&self.slot.envelope.decoded;
