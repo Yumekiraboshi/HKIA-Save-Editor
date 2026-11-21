@@ -69,7 +69,7 @@ test('UI implements subgroup navigation and does not hide individual variation c
  assert.match(component,/selectedSubgroup=draft\.ui\.subgroup/);
  const store=readFileSync(new URL('../src/draft-store.ts',import.meta.url),'utf8');
  assert.match(store,/const subgroup=typeof state\?\.ui\?\.subgroup/);
- assert.match(store,/return \{file:actualFile,patches,ui:\{group,subgroup\}\}/);
+ assert.match(store,/return \{file:actualFile,patches,achievementPatches,ui:\{group,subgroup\}\}/);
 });
 
 test('each subcategory has an actual representative parent image in its group',()=>{
