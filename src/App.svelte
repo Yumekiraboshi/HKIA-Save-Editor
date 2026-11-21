@@ -575,7 +575,6 @@
    <div class="section-heading"><h1>{achievementGroupHierarchy&&achievementGroupSelection!==null?
     achievementGroupSelection==='__unmapped'?groupCopy.uncategorized:achievementName(achievementGroupSelection,0):
     achievementShowAll?groupCopy.showAll:achCopy.title}</h1><span class="category-count">{achCopy.completed}: {snapshot.achievements.filter(a=>a.value.complete).length.toLocaleString(locale)} / {snapshot.achievements.length.toLocaleString(locale)} · {achCopy.missing}: {sourceAchievementRows.filter(r=>r.row===null).length.toLocaleString(locale)}</span></div>
-   <p class="achievement-note">{achCopy.notice}</p>
    <div class="collection-controls">
     <label class="search-field"><span class="search-symbol" aria-hidden="true">⌕</span><input type="search" bind:value={achievementQuery} placeholder={achCopy.search} aria-label={achCopy.search}/></label>
     <div class="status-filter" role="group" aria-label={achCopy.title}>
@@ -590,99 +589,124 @@
      <h2>{groupCopy.categories}</h2>
      <button type="button" class="variation-button" onclick={showEveryAchievement}>{groupCopy.showAll}</button>
     </div>
-    <div class="subcategory-grid achievement-group-grid">
+    <div class="category-grid achievement-category-grid">
      {#each achievementGroupSummaries as stat (stat.guid)}
       {@const art=achievementCategoryAtlas?.bySaveGuid.get(stat.guid)}
-      <button type="button" class="subcategory-card achievement-group-card" onclick={()=>showAchievementGroup(stat.guid)}>
-       {#if art}
-        <span class="achievement-category-art" aria-hidden="true">
+      <button type="button" class="category-card achievement-category-card" onclick={()=>showAchievementGroup(stat.guid)}>
+       <span class="category-image achievement-category-art" aria-hidden="true">
+        {#if art}
          <span class="achievement-category-sprite" style:background-image={`url("${achievementCategoryAtlas?.url}")`} style:background-position={`${art.x} ${art.y}`}></span>
-        </span>
-       {:else}
-        <span class="achievement-category-art achievement-category-placeholder" aria-hidden="true">✦</span>
-       {/if}
-       <span class="subcategory-label">{achievementName(stat.guid,0)}</span>
-       <span class="subcategory-count">{stat.completed.toLocaleString(locale)} {achCopy.completed} / {stat.total.toLocaleString(locale)} {groupCopy.memberCount}</span>
-       <span class="subcategory-count">{stat.recorded.toLocaleString(locale)} {groupCopy.savedMembers} · {stat.missing.toLocaleString(locale)} {achCopy.missing}</span>
-       <span class:achieved={stat.parentComplete===true} class="achievement-status">{stat.parentComplete===true?achCopy.completed:stat.parentComplete===false?achCopy.incomplete:achCopy.missing}</span>
+        {:else}
+         <span class="achievement-category-placeholder" aria-hidden="true">✧</span>
+        {/if}
+       </span>
+       <span class="category-label">{achievementName(stat.guid,0)}</span>
+       <span class="category-count" title={groupCopy.groupNote}>{stat.completed.toLocaleString(locale)} / {stat.total.toLocaleString(locale)}</span>
       </button>
      {/each}
      {#if unmappedAchievementRows.length}
-      <button type="button" class="subcategory-card achievement-group-card" onclick={()=>showAchievementGroup('__unmapped')}>
-       <span class="subcategory-label">{groupCopy.uncategorized}</span>
-       <span class="subcategory-count">{unmappedAchievementRows.length.toLocaleString(locale)} {groupCopy.savedMembers}</span>
+      <button type="button" class="category-card achievement-category-card" onclick={()=>showAchievementGroup('__unmapped')}>
+       <span class="category-image achievement-category-placeholder" aria-hidden="true">✧</span>
+       <span class="category-label">{groupCopy.uncategorized}</span>
+       <span class="category-count">{unmappedAchievementRows.length.toLocaleString(locale)}</span>
       </button>
      {/if}
     </div>
-    <p class="achievement-group-note">{groupCopy.groupNote}</p>
    {:else}
-   <div class="achievement-grid">
-    {#each achievementRows.slice(0,achievementLimit) as item (item.index)}
-     <article class="achievement-card" class:achievement-group-parent={achievementGroupSelection===item.guid}>
-      <div>
-       {#if achievementCategoryAtlas?.bySaveGuid.get(item.guid)}
-        {@const art=achievementCategoryAtlas.bySaveGuid.get(item.guid)!}
-        <span class="achievement-category-art achievement-category-art-small" aria-hidden="true">
-         <span class="achievement-category-sprite" style:background-image={`url("${achievementCategoryAtlas.url}")`} style:background-position={`${art.x} ${art.y}`}></span>
+    <div class="item-grid achievement-grid achievement-item-grid">
+     {#each achievementRows.slice(0,achievementLimit) as item (item.guid)}
+      {@const art=achievementCategoryAtlas?.bySaveGuid.get(item.guid)}
+      {@const title=achievementName(item.guid,item.index)}
+      <article class="item-tile achievement-tile" class:is-recorded={item.row?.value.complete===true} class:achievement-group-parent={achievementGroupSelection===item.guid}>
+       <button type="button" class="item-toggle achievement-toggle"
+        aria-pressed={item.row?.value.complete}
+        aria-label={item.row?(item.row.value.complete?compactCopy.relock:compactCopy.unlock)+': '+title:achCopy.missing+': '+title}
+        title={item.row?(item.row.value.complete?compactCopy.relock:compactCopy.unlock):achCopy.missing}
+        disabled={busy||!item.row} onclick={()=>{if(item.row)void quickToggleAchievement(item.row)}}>
+        <span class="item-art achievement-item-art" aria-hidden="true">
+         {#if art}
+          <span class="achievement-category-sprite" style:background-image={`url("${achievementCategoryAtlas?.url}")`} style:background-position={`${art.x} ${art.y}`}></span>
+         {:else}
+          <span class="item-art-empty">✧</span>
+         {/if}
         </span>
-       {/if}
-       {#if achievementGroupHierarchy?.byGuid.has(item.guid)}
-        <span class="achievement-parent-label">{groupCopy.groupRecord}</span>
-       {/if}
-       <strong>{achievementName(item.guid,item.index)}</strong>
-       {#if item.row}
-        <span class:achieved={item.row.value.complete} class="achievement-status">{item.row.value.complete?'✓ '+achCopy.completed:achCopy.incomplete}</span>
-       {:else}
-        <span class="achievement-status">{achCopy.missing}</span>
-       {/if}
-      </div>
-      {#if item.row}
-       <span class="achievement-progress">{achCopy.progress}: {item.row.value.current.toLocaleString(locale)}</span>
-       {#if item.row.value.completed}<span class="achievement-progress">{achCopy.completedAt}: {new Date(Number(item.row.value.completed[0])*1000+Math.floor(item.row.value.completed[1]/1_000_000)).toLocaleString(locale)}</span>{/if}
-      {/if}
-      {#if achievementFacts.get(item.guid)}
-       {@const facts=achievementFacts.get(item.guid)!}
-       {@const linkedCounter=gameCounters.get(facts.counterGuid)}
-       <details class="achievement-fact-details">
-        <summary>{factCopy.condition}</summary>
-        <dl class="achievement-fact-list">
-         <dt>{factCopy.counterKind}</dt><dd>{facts.counterKind.replace(/^GameCounter|Definition$/g,'')}</dd>
-         <dt>{factCopy.threshold}</dt><dd>{facts.threshold.toLocaleString(locale)}</dd>
-         <dt>{factCopy.savedCounter}</dt><dd>{linkedCounter?linkedCounter.current.toLocaleString(locale):factCopy.noCounter}</dd>
-        </dl>
-        {#if facts.groupCondition}<p class="achievement-caution">{factCopy.group}</p>{/if}
-        {#if facts.hasDlcCondition}<p class="achievement-caution">{factCopy.dlc}</p>{/if}
-        {#if facts.rewardQuantity>0}
-         <p class="achievement-reward">🎁 {factCopy.reward}: {facts.rewardId===null?facts.rewardKey:rewardsById.get(facts.rewardId)??facts.rewardKey} × {facts.rewardQuantity.toLocaleString(locale)}</p>
-         <p class="achievement-caution">{factCopy.receiptUnverified}</p>
-        {:else}
-         <p class="achievement-caution">{factCopy.noReward}</p>
+        <span class="item-name">{title}</span>
+        <span class="item-status" class:has={item.row?.value.complete===true}>
+         {item.row?(item.row.value.complete?'✓ '+achCopy.completed:achCopy.incomplete):achCopy.missing}
+        </span>
+        {#if item.row && !item.row.value.complete && item.row.value.current>0}
+         <span class="achievement-compact-progress">{achCopy.progress}: {item.row.value.current.toLocaleString(locale)}</span>
         {/if}
-       </details>
-      {/if}
-      {#if item.row}
-       <button type="button" class="achievement-edit" disabled={busy} onclick={e=>{if(item.row)void openAchievement(item.row,e.currentTarget,item.index)}}>{achCopy.edit}</button>
-      {/if}
-     </article>
-    {/each}
-   </div>
-   {#if achievementRows.length===0}<p class="empty-result">{copy.none}</p>{/if}
-   {#if achievementRows.length>achievementLimit}
-    <div class="load-marker"><button type="button" onclick={()=>achievementLimit=Math.min(achievementLimit+BATCH_SIZE,achievementRows.length)}>{copy.moreItems}</button></div>
+       </button>
+       {#if item.row}
+        <button type="button" class="date-button achievement-dialog-button"
+         title={item.row.value.complete?compactCopy.date:compactCopy.details}
+         aria-label={(item.row.value.complete?compactCopy.date:compactCopy.details)+': '+title}
+         disabled={busy} onclick={e=>{if(item.row)void openAchievement(item.row,e.currentTarget,item.index)}>
+         {item.row.value.complete?'◷':'⋯'}
+        </button>
+       {/if}
+      </article>
+     {/each}
+    </div>
+    {#if achievementRows.length===0}<p class="empty-result">{copy.none}</p>{/if}
+    {#if achievementRows.length>achievementLimit}
+     <div class="load-marker"><button type="button" onclick={()=>achievementLimit=Math.min(achievementLimit+BATCH_SIZE,achievementRows.length)}>{copy.moreItems}</button></div>
+    {/if}
    {/if}
-   {/if}
+   <details class="data-note achievement-info-note">
+    <summary>{copy.showAbout}</summary>
+    <p>{compactCopy.scope}</p>
+    <p>{groupCopy.groupNote}</p>
+   </details>
    <dialog class="achievement-dialog" bind:this={achievementDialogEl} onclose={onAchievementDialogClosed} oncancel={e=>{if(busy)e.preventDefault()}}>
     {#if editingAchievement}
+     {@const facts=achievementFacts.get(achievementGuid(editingAchievement.guid))}
+     {@const linkedCounter=facts?gameCounters.get(facts.counterGuid):null}
      <form class="achievement-form" onsubmit={e=>{e.preventDefault();void saveAchievement()}}>
-      <div class="date-dialog-heading"><h2>{achCopy.edit}</h2><button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeAchievement}>×</button></div>
+      <div class="date-dialog-heading">
+       <h2>{editingAchievement.value.complete?compactCopy.date:compactCopy.details}</h2>
+       <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeAchievement}>×</button>
+      </div>
       <strong class="achievement-edit-name">{editingAchievementTitle}</strong>
-      <label class="achievement-check"><input type="checkbox" bind:checked={achievementComplete}/>{achCopy.completed}</label>
-      <label class="date-dialog-field"><span>{achCopy.progress}</span><input type="text" inputmode="decimal" required bind:value={achievementProgress}/></label>
-      {#if achievementComplete}
-       <label class="date-dialog-field"><span>{achCopy.completedAt}</span><input type="datetime-local" step="1" required bind:value={achievementDate}/></label>
+      <span class="achievement-dialog-status" class:achieved={editingAchievement.value.complete}>
+       {editingAchievement.value.complete?'✓ '+achCopy.completed:achCopy.incomplete}
+      </span>
+      {#if editingAchievement.value.complete}
+       <label class="date-dialog-field">
+        <span>{achCopy.completedAt}</span>
+        <input type="datetime-local" step="1" required bind:value={achievementDate} oninput={()=>achievementValidation=''}/>
+       </label>
       {/if}
+      <details class="achievement-modal-advanced">
+       <summary>{compactCopy.advanced}</summary>
+       <label class="date-dialog-field">
+        <span>{achCopy.progress}</span>
+        <input type="text" inputmode="decimal" required bind:value={achievementProgress} oninput={()=>achievementValidation=''}/>
+       </label>
+       {#if facts}
+        <details class="achievement-modal-source">
+         <summary>{compactCopy.source}</summary>
+         <dl class="achievement-fact-list">
+          <dt>{factCopy.counterKind}</dt><dd>{facts.counterKind.replace(/^GameCounter|Definition$/g,'')}</dd>
+          <dt>{factCopy.threshold}</dt><dd>{facts.threshold.toLocaleString(locale)}</dd>
+          <dt>{factCopy.savedCounter}</dt><dd>{linkedCounter?linkedCounter.current.toLocaleString(locale):factCopy.noCounter}</dd>
+         </dl>
+         {#if facts.groupCondition}<p class="achievement-caution">{factCopy.group}</p>{/if}
+         {#if facts.hasDlcCondition}<p class="achievement-caution">{factCopy.dlc}</p>{/if}
+         {#if facts.rewardQuantity>0}
+          <p class="achievement-reward">🎁 {factCopy.reward}: {facts.rewardId===null?facts.rewardKey:rewardsById.get(facts.rewardId)??facts.rewardKey} × {facts.rewardQuantity.toLocaleString(locale)}</p>
+          <p class="achievement-caution">{factCopy.receiptUnverified}</p>
+         {/if}
+        </details>
+       {/if}
+      </details>
+      <p class="achievement-modal-scope">{compactCopy.scope}</p>
       {#if achievementValidation}<p class="date-dialog-error" role="alert">{achievementValidation}</p>{/if}
-      <div class="date-dialog-actions"><button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeAchievement}>{copy.cancel}</button><button type="submit" class="primary" disabled={busy}>{achCopy.save}</button></div>
+      <div class="date-dialog-actions">
+       <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeAchievement}>{copy.cancel}</button>
+       <button type="submit" class="primary" disabled={busy}>{achCopy.save}</button>
+      </div>
      </form>
     {/if}
    </dialog>
