@@ -1,5 +1,5 @@
 export type DraftPatch={id:number;before:string|null;after:string|null};
-export type DraftUi={group:string|null};
+export type DraftUi={group:string|null;subgroup:string|null};
 export type LocalDraft={file:File;patches:DraftPatch[];ui:DraftUi};
 const DB_NAME='hkia-editor-local-session';
 const BASE='source-save';
@@ -65,7 +65,8 @@ export async function restoreLocalDraft():Promise<LocalDraft|null>{
   const state=changes.result as {version?:number;patches?:DraftPatch[];ui?:DraftUi}|undefined;
   const patches=safePatches(state?.patches??[]);
   const group=typeof state?.ui?.group==='string'&&state.ui.group.length<128?state.ui.group:null;
-  return {file:actualFile,patches,ui:{group}};
+  const subgroup=typeof state?.ui?.subgroup==='string'&&state.ui.subgroup.length<128?state.ui.subgroup:null;
+  return {file:actualFile,patches,ui:{group,subgroup}};
  }finally{db.close()}
 }
 export async function saveOriginalLocally(file:File):Promise<void>{
@@ -74,7 +75,7 @@ export async function saveOriginalLocally(file:File):Promise<void>{
   const tx=db.transaction([BASE,EDITS],'readwrite');
   const finished=complete(tx);
   tx.objectStore(BASE).put(file,KEY);
-  tx.objectStore(EDITS).put({version:VERSION,patches:[],ui:{group:null}},KEY);
+  tx.objectStore(EDITS).put({version:VERSION,patches:[],ui:{group:null,subgroup:null}},KEY);
   await finished;
  }finally{db.close()}
 }
