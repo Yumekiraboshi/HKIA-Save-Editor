@@ -7,7 +7,7 @@
  import {achievementFactsCopy} from './achievement-facts-ui';
  import {loadAchievementFacts,counterIndex,type AchievementFactsIndex} from './achievement-facts';
  import {joinAchievementCatalog} from './achievement-catalog';
- import {loadAchievementGroups,groupRows,ungroupedRows,groupSummaries as summarizeAchievementGroups,type AchievementHierarchy} from './achievement-groups';
+ import {loadAchievementGroups,groupRows,ungroupedRows,nativeAchievementOrder,groupSummaries as summarizeAchievementGroups,type AchievementHierarchy} from './achievement-groups';
  import {achievementGroupCopy} from './achievement-group-ui';
  import {loadAchievementIndex,achievementGuid,readableSourceKey,type AchievementIndex} from './achievement-index';
  import {loadAchievementTitles,type AchievementTitles} from './achievement-localization';
@@ -96,9 +96,10 @@
  const sourceAchievementRows=$derived(joinAchievementCatalog(achievementIndex,(snapshot as SaveSnapshot|null)?.achievements??[]));
  const achievementGroupSummaries=$derived(achievementGroupHierarchy?summarizeAchievementGroups(achievementGroupHierarchy,sourceAchievementRows):[]);
  const unmappedAchievementRows=$derived(achievementGroupHierarchy?ungroupedRows(achievementGroupHierarchy,sourceAchievementRows):[]);
+ const sourceOrderedAchievementRows=$derived(nativeAchievementOrder(achievementGroupHierarchy,sourceAchievementRows,achievementFacts));
  const groupScopedAchievementRows=$derived(achievementGroupHierarchy&&achievementGroupSelection?
-  achievementGroupSelection==='__unmapped'?unmappedAchievementRows:groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows):
-  sourceAchievementRows);
+  achievementGroupSelection==='__unmapped'?unmappedAchievementRows:groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows,achievementFacts):
+  sourceOrderedAchievementRows);
  const achievementRows=$derived(groupScopedAchievementRows.filter(x=>{
   if(achievementFilter==='completed'&&!x.row?.value.complete)return false;
   if(achievementFilter==='incomplete'&&(!x.row||x.row.value.complete))return false;
