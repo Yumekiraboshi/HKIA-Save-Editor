@@ -734,7 +734,6 @@
       {/if}
      </div>
     {/if}
-    {/if}
    {/if}
    <details class="data-note achievement-info-note">
     <summary>{copy.showAbout}</summary>
@@ -808,7 +807,43 @@
      </form>
     {/if}
    </dialog>
-  {:else if !selectedGroup}
+  {:else}
+   <div class="collection-controls collection-search-controls">
+    <label class="search-field">
+     <span class="search-symbol" aria-hidden="true">⌕</span>
+     <input type="search" placeholder={copy.search} aria-label={copy.search} bind:value={query}
+      oninput={()=>{collectionSearchDrilldown=false;visibleLimit=BATCH_SIZE}}/>
+    </label>
+   </div>
+   {#if showingGlobalCollectionSearch}
+    {#if !catalog}
+     <p class="empty-result">{copy.busy}</p>
+    {:else}
+     <div class="collection-search-result-count" role="status">{collectionSearchResults.length.toLocaleString(locale)} {copy.items}</div>
+     <div class="collection-search-results">
+      {#each collectionSearchResults.slice(0,visibleLimit) as item (item[0])}
+       {@const resultGroup=catalog.groups.find(g=>g[0]===item[3])}
+       <button type="button" class="collection-search-result" onclick={()=>jumpToCollectionItem(item)}>
+        <span class="collection-search-result-text">
+         <span class="collection-search-result-name">{nameFor(item)}</span>
+         <span class="collection-search-result-context">
+          {resultGroup?titleFor(resultGroup):copy.collections} / {subcategoryLabel(item[2],locale)}
+         </span>
+        </span>
+        <span class="collection-search-result-chevron" aria-hidden="true">›</span>
+       </button>
+      {/each}
+     </div>
+     {#if collectionSearchResults.length===0}<p class="empty-result">{copy.none}</p>{/if}
+     {#if collectionSearchResults.length>visibleLimit}
+      <div class="load-marker" bind:this={loadMoreSentinel}>
+       {#if typeof IntersectionObserver==='undefined'}
+        <button type="button" onclick={()=>visibleLimit=Math.min(visibleLimit+BATCH_SIZE,collectionSearchResults.length)}>{copy.moreItems}</button>
+       {/if}
+      </div>
+     {/if}
+    {/if}
+   {:else if !selectedGroup}
    {#if !catalog}
     <div class="empty-result">{copy.busy}</div>
    {:else}
@@ -852,10 +887,6 @@
     <h1>{group?titleFor(group):copy.collections}{#if subgroups.length>1}<span class="subsection-divider"> / </span>{subcategoryLabel(activeSubgroup,locale)}{/if}</h1>
    </div>
    <div class="collection-controls">
-    <label class="search-field">
-     <span class="search-symbol" aria-hidden="true">⌕</span>
-     <input type="search" placeholder={copy.search} aria-label={copy.search} bind:value={query} oninput={()=>visibleLimit=BATCH_SIZE}/>
-    </label>
     <div class="status-filter" role="group" aria-label="Status">
      <button type="button" class:active={filter==='all'} onclick={()=>{filter='all';visibleLimit=BATCH_SIZE}}>{copy.all}</button>
      <button type="button" class:active={filter==='unrecorded'} onclick={()=>{filter='unrecorded';visibleLimit=BATCH_SIZE}}>{copy.unrecorded}</button>
@@ -899,9 +930,12 @@
    {#if matching.length===0}<p class="empty-result">{copy.none}</p>{/if}
    {#if iconError}<p class="compact-hint">{copy.imagesUnavailable}</p>{/if}
    {#if visibleItems.length<matching.length}
-    <div class="load-marker" bind:this={loadMoreSentinel} aria-label={copy.moreItems}>
-     <button type="button" onclick={()=>visibleLimit=Math.min(visibleLimit+BATCH_SIZE,matching.length)}>{copy.moreItems}</button>
+    <div class="load-marker" bind:this={loadMoreSentinel}>
+     {#if typeof IntersectionObserver==='undefined'}
+      <button type="button" onclick={()=>visibleLimit=Math.min(visibleLimit+BATCH_SIZE,matching.length)}>{copy.moreItems}</button>
+     {/if}
     </div>
+   {/if}
    {/if}
   {/if}
  </main>
