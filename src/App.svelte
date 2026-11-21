@@ -1,14 +1,15 @@
 <script lang="ts">
  import {onMount} from 'svelte';
- import {openSave,changeCollection,undo,redo,exportSave,clear,type SaveSnapshot} from './worker-client';
+ import {openSave,changeCollection,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot} from './worker-client';
+ import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
  import {messages,editorErrors,type Locale} from './ui-copy';
- type Item=[number,string,string,string,number,string|null,string|null];
+ type Item=[number,string,string,string,number,string|null,string|null,number];
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
  type Filter='all'|'recorded'|'unrecorded';
  type LanguagePref='auto'|Locale;
  type ThemePref='system'|'light'|'dark';
- const PAGE_SIZE=24;
+ const BATCH_SIZE=40;
  const EPOCH=621355968000000000n;
  const MAX_TICKS=3155378975999999999n;
  const ICONS=import.meta.env.BASE_URL+'icons/';
@@ -19,12 +20,17 @@
  let selectedGroup:string|null=$state(null);
  let query=$state('');
  let filter:Filter=$state('all');
- let page=$state(0);
+ let visibleLimit=$state(BATCH_SIZE);
  let editId:number|null=$state(null);
  let dateValue=$state('');
  let busy=$state(false);
  let error=$state('');
- let notice=$state('');
+ let restored=$state(false);
+ let draftWarning=$state(false);
+ let draftReady=$state(false);
+ let baseline=new Map<number,bigint>();
+ let draftWrites:Promise<void>=Promise.resolve();
+ let loadMoreSentinel:HTMLDivElement|undefined;
  let languagePref:LanguagePref=$state('auto');
  let browserLanguage:Locale=$state('ja');
  let themePref:ThemePref=$state('system');
@@ -49,6 +55,9 @@
   prefersDark=media.matches;
   const listener=(e:MediaQueryListEvent)=>prefersDark=e.matches;
   media.addEventListener?.('change',listener);
+  void restoreSession();
+  const beforeUnload=(e:BeforeUnloadEvent)=>{if(snapshot?.dirty&&(!draftReady||busy)){e.preventDefault();e.returnValue='';}};
+  window.addEventListener('beforeunload',beforeUnload);
   fetch(import.meta.env.BASE_URL+'catalog.json')
    .then(r=>r.ok?r.json():Promise.reject(Error('Collection catalog unavailable')))
    .then((v:Catalog)=>{
@@ -56,22 +65,29 @@
     catalog=v;
    })
    .catch(e=>error=describeError(e));
-  return ()=>media.removeEventListener?.('change',listener);
+  return ()=>{media.removeEventListener?.('change',listener);window.removeEventListener('beforeunload',beforeUnload)};
  });
  $effect(()=>{
   if(typeof document!=='undefined'){document.documentElement.lang=locale;document.documentElement.dataset.theme=actualTheme;}
  });
  const categories=$derived.by(()=>{
   if(!catalog)return [];
-  const counts=new Map<string,number>();
+  const totals=new Map<string,Set<number>>();
+  const owned=new Map<string,Set<number>>();
   for(const item of catalog.items){
-   if(recorded[String(item[0])]!==undefined)counts.set(item[3],(counts.get(item[3])??0)+1);
+   const key=item[3],parent=item[7]||item[0];
+   if(!totals.has(key))totals.set(key,new Set());
+   totals.get(key)!.add(parent);
+   if(recorded[String(item[0])]!==undefined){
+    if(!owned.has(key))owned.set(key,new Set());
+    owned.get(key)!.add(parent);
+   }
   }
-  return catalog.groups.filter(g=>g[3]===0||(counts.get(g[0])??0)>0)
-   .map(g=>({row:g,count:counts.get(g[0])??0}));
+  return catalog.groups.filter(g=>g[3]===0||(owned.get(g[0])?.size??0)>0)
+   .map(g=>({row:g,count:owned.get(g[0])?.size??0,total:totals.get(g[0])?.size??0}));
  });
- const visibleItems=$derived.by(()=>{
-  if(!catalog||!selectedGroup)return {rows:[] as Item[],total:0,page:0,pages:1};
+ const matching=$derived.by(()=>{
+  if(!catalog||!selectedGroup)return [] as Item[];
   const q=query.trim().toLocaleLowerCase();
   const filtered=catalog.items.filter(item=>{
    if(item[3]!==selectedGroup||!item[5]||!item[6])return false;
@@ -80,9 +96,17 @@
    return !q||item[5]!.toLocaleLowerCase().includes(q)||item[6]!.toLocaleLowerCase().includes(q);
   });
   filtered.sort((a,b)=>String(locale==='ja'?a[6]:a[5]).localeCompare(String(locale==='ja'?b[6]:b[5]),locale));
-  const pages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
-  const effective=Math.min(page,pages-1);
-  return {rows:filtered.slice(effective*PAGE_SIZE,(effective+1)*PAGE_SIZE),total:filtered.length,page:effective,pages};
+  return filtered;
+ });
+ const visibleItems=$derived(matching.slice(0,visibleLimit));
+ $effect(()=>{
+  const el=loadMoreSentinel;
+  if(!el||!selectedGroup||typeof IntersectionObserver==='undefined')return;
+  const observer=new IntersectionObserver(entries=>{
+   if(entries.some(x=>x.isIntersecting))visibleLimit=Math.min(visibleLimit+BATCH_SIZE,matching.length);
+  },{rootMargin:'720px 0px'});
+  observer.observe(el);
+  return ()=>observer.disconnect();
  });
  const unnamed=$derived((catalog as Catalog | null)?.items.filter((x:Item)=>!x[5]||!x[6]).length??0);
  function describeError(e:unknown){const raw=e instanceof Error?e.message:String(e);return editorErrors[locale][raw]??(locale==='ja'?(raw||copy.unknown):copy.unknown);}
@@ -94,39 +118,69 @@
  }
  function titleFor(g:Group){return locale==='ja'?g[1]:g[2]}
  function nameFor(item:Item){return (locale==='ja'?item[6]:item[5])??''}
- function selectCategory(key:string){selectedGroup=key;page=0;query='';filter='all';editId=null;error='';}
- function goHome(){selectedGroup=null;page=0;editId=null;query='';filter='all';}
- function askFile(){fileMenu&&(fileMenu.open=false);fileInput?.click();}
+ function selectCategory(key:string){selectedGroup=key;visibleLimit=BATCH_SIZE;query='';filter='all';editId=null;error='';void persistDraft();}
+ function goHome(){selectedGroup=null;visibleLimit=BATCH_SIZE;editId=null;query='';filter='all';if(snapshot)void persistDraft();}
+ function askFile(){if(busy||!restored)return;fileMenu&&(fileMenu.open=false);fileInput?.click();}
+ function update(s:SaveSnapshot){snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));}
+ function persistDraft():Promise<void>{
+  if(!original)return Promise.resolve();
+  const patches=diffPatches(baseline,recorded);
+  const ui={group:selectedGroup};
+  const job=draftWrites.catch(()=>{}).then(()=>saveDraftChanges(patches,ui));
+  draftWrites=job;
+  return job.then(()=>{draftReady=true;draftWarning=false},()=>{draftReady=false;draftWarning=true});
+ }
+ async function restoreSession(){
+  busy=true;
+  try{
+   const draft=await restoreLocalDraft();
+   if(draft){
+    const s=await openSave(draft.file);
+    const originalRows=new Map(s.entries);
+    const patches=draft.patches.map(p=>{
+     const before=p.before===null?null:BigInt(p.before);
+     const after=p.after===null?null:BigInt(p.after);
+     if((originalRows.get(p.id)??null)!==before)throw Error('DRAFT_CONFLICT');
+     return {id:p.id,before,after};
+    });
+    const session=patches.length?await applyDraft(patches):s;
+    original=draft.file;baseline=originalRows;update(session);
+    selectedGroup=draft.ui.group;
+   }
+   draftReady=true;
+  }catch(e){draftReady=false;draftWarning=true;error=describeError(e)}
+  finally{busy=false;restored=true}
+ }
  function downloadFile(file:Blob,filename:string){
   const url=URL.createObjectURL(file);
   const link=document.createElement('a');link.href=url;link.download=filename;document.body.append(link);link.click();link.remove();
   window.setTimeout(()=>URL.revokeObjectURL(url),60000);
  }
  async function load(file:File){
-  if(busy)return;
+  if(busy||!restored)return;
   if(snapshot?.dirty&&!confirm(copy.discard))return;
-  busy=true;error='';notice='';
-  snapshot=null;original=null;recorded={};goHome();
+  busy=true;error='';snapshot=null;original=null;recorded={};baseline=new Map();selectedGroup=null;visibleLimit=BATCH_SIZE;editId=null;
   try{
    if(file.size>60*1024*1024||file.size===0)throw Error(copy.typeIssue);
-   const s=await openSave(file);
-   snapshot=s;original=file;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));
-   goHome();notice=copy.loaded;
+   await draftWrites.catch(()=>{});
+   const session=await openSave(file);
+   original=file;baseline=new Map(session.entries);update(session);
+   try{await saveOriginalLocally(file);draftReady=true;draftWarning=false}
+   catch{draftReady=false;draftWarning=true}
   }catch(e){error=describeError(e)}
   finally{busy=false}
  }
- function update(s:SaveSnapshot){snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));}
  async function change(id:number,next:bigint|null){
   if(!snapshot||busy)return;
   const prev=recorded[String(id)]??null;
   busy=true;error='';notice='';
-  try{update(await changeCollection(id,prev,next));editId=null;}
+  try{update(await changeCollection(id,prev,next));editId=null;await persistDraft();}
   catch(e){error=describeError(e)}
   finally{busy=false}
  }
  async function actHistory(which:'undo'|'redo'){
   if(!snapshot||busy)return;busy=true;error='';notice='';
-  try{update(await (which==='undo'?undo():redo()));editId=null}
+  try{update(await (which==='undo'?undo():redo()));editId=null;await persistDraft();}
   catch(e){error=e instanceof Error?e.message:copy.unknown}
   finally{busy=false}
  }
@@ -139,19 +193,19 @@
    const suffix=snapshot.zip?'.zip':'.save';
    const base=(original?.name??'HKIA-save').replace(/\.(zip|save|dat)$/i,'').replace(/[^a-zA-Z0-9_.-]/g,'_');
    downloadFile(new Blob([copied.buffer],{type:snapshot.zip?'application/zip':'application/octet-stream'}),base+'-edited'+suffix);
-   notice=copy.exported;
+   
   }catch(e){error=e instanceof Error?e.message:copy.unknown}
   finally{busy=false}
  }
  function backup(){
   if(!original)return;if(fileMenu)fileMenu.open=false;
-  downloadFile(original,original.name);notice=copy.backedUp;
+  downloadFile(original,original.name);
  }
  async function closeSave(){
   if(!snapshot||busy)return;
   if(snapshot.dirty&&!confirm(copy.discard))return;
   busy=true;error='';notice='';
-  try{await clear();snapshot=null;original=null;recorded={};goHome();}
+  try{await draftWrites.catch(()=>{});await forgetLocalDraft();await clear();snapshot=null;original=null;recorded={};baseline=new Map();goHome();draftReady=true;draftWarning=false;}
   catch(e){error=e instanceof Error?e.message:copy.unknown}
   finally{busy=false}
  }
@@ -170,7 +224,7 @@
   if(t<1n||t>MAX_TICKS)throw Error(copy.fileError);
   return t;
  }
- function jumpPage(value:string){const target=Number(value);if(Number.isFinite(target)&&Number.isInteger(target))page=Math.min(Math.max(0,target-1),visibleItems.pages-1);}
+ 
  function editDate(id:number){
   const old=recorded[String(id)];
   if(old===undefined)return;
