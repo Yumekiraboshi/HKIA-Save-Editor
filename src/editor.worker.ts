@@ -1,8 +1,8 @@
-type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'batch'|'undo'|'redo'|'history-jump'|'reset'|'export'|'clear';
+type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type AchievementValue = {complete:boolean;current:number;completed:[bigint,number]|null};
 type AchievementPatch = {guid:number[];before:AchievementValue;after:AchievementValue};
 type AchievementDraftPatch = {guid:number[];before:AchievementValue|null;after:AchievementValue};
-type Request = { id:number; action:Action; scope?:'collections'|'achievements'; target?:number; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];guid?:number[];beforeValue?:AchievementValue;afterValue?:AchievementValue };
+type Request = { id:number; action:Action; checkpoint?:Uint8Array; scope?:'collections'|'achievements'; target?:number; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];guid?:number[];beforeValue?:AchievementValue;afterValue?:AchievementValue };
 type Transport = { postMessage(data:unknown, transfer?:Transferable[]):void; onmessage:((event:MessageEvent<Request>)=>void)|null };
 type Engine = {
  memory:WebAssembly.Memory;
@@ -22,7 +22,7 @@ type Engine = {
  ):number;
  hkia_achievement_snapshot():number;
  hkia_counter_snapshot():number;
- hkia_undo():number; hkia_redo():number; hkia_reset():number; hkia_history_snapshot():number; hkia_history_jump(scope:number,target:number):number;
+ hkia_undo():number; hkia_redo():number; hkia_reset():number; hkia_history_snapshot():number; hkia_history_jump(scope:number,target:number):number; hkia_history_checkpoint():number; hkia_history_restore():number;
  hkia_snapshot():number; hkia_export():number; hkia_clear():void;
  hkia_reply_ptr():number; hkia_reply_len():number;
  hkia_output_ptr():number; hkia_output_len():number;
@@ -121,7 +121,10 @@ function snapshot(e:Engine){
    applied:applied===1,paired:paired===1,
    itemId:scope===0?itemId:null,guid:scope===1?guid:null});
  }
- return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,achievements,counters,history};
+ if(e.hkia_history_checkpoint()!==0)throw Error('HISTORY_CHECKPOINT_FAILED');
+ const checkpoint=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+ if(checkpoint.length<16||checkpoint.length>128*1024)throw Error('HISTORY_CHECKPOINT_INVALID');
+ return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,achievements,counters,history,historyCheckpoint:checkpoint};
 }
 function validAchievement(v:AchievementValue):boolean{
  return !!v&&typeof v.complete==='boolean'&&typeof v.current==='number'&&Number.isFinite(v.current)&&v.current>=0&&
@@ -253,6 +256,16 @@ async function execute(r:Request):Promise<unknown>{
     if(e.hkia_history_jump(r.scope==='collections'?0:1,r.target)!==0)throw Error('HISTORY_JUMP_CONFLICT');
     return snapshot(e);
    }
+  case 'history-restore':{
+   const checkpoint=r.checkpoint;
+   if(!(checkpoint instanceof Uint8Array)||checkpoint.byteLength<16||
+    checkpoint.byteLength>128*1024)throw Error('HISTORY_CHECKPOINT_INVALID');
+   const p=e.hkia_stage(checkpoint.byteLength);
+   if(p===0||p+checkpoint.byteLength>e.memory.buffer.byteLength)throw Error('HISTORY_CHECKPOINT_INVALID');
+   new Uint8Array(e.memory.buffer,p,checkpoint.byteLength).set(checkpoint);
+   if(e.hkia_history_restore()!==0)throw Error('HISTORY_RESTORE_INVALID');
+   return snapshot(e);
+  }
   case 'reset':if(e.hkia_reset()!==0)throw Error('セーブが読み込まれていません。');return snapshot(e);
   case 'export':{
    if(e.hkia_export()!==0)throw Error('書き出し後の再検証に失敗しました。データは出力していません。');
