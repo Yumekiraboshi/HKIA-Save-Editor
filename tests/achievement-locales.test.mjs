@@ -67,5 +67,5 @@ test('UI loads only the active achievement language with stale response guard',(
  assert.match(app,/loadAchievementTitles\(current,import\.meta\.env\.BASE_URL,index\)/);
  assert.match(app,/epoch===achievementTitleEpoch/);
  assert.match(app,/achievementTitles\[meta\.titleId\]/);
- assert.match(app,/achievementName\(item\.row,item\.index\)/);
+ assert.match(app,/achievementName\(item\.guid,item\.index\)/);
 });

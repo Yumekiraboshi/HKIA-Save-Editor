@@ -26,5 +26,5 @@ test('820 verified source keys map to distinct four-word save GUIDs without play
 
 test('achievement UI searches sourced internal keys and prefers a localized title when available',()=>{
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
- for(const token of ['loadAchievementIndex(','achievementGuid(','readableSourceKey(','achievementQuery','achievementName(item.row,item.index)','gameLabels.strings[meta.titleId]'])assert.ok(app.includes(token),token);
+ for(const token of ['loadAchievementIndex(','achievementGuid(','readableSourceKey(','achievementQuery','achievementName(item.guid,item.index)','gameLabels.strings[meta.titleId]'])assert.ok(app.includes(token),token);
 });

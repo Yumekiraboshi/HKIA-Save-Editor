@@ -18,7 +18,7 @@ test('sixteen game locales have readable achievement controls',()=>{
  const locales=['ar','de','en','en-GB','es','fr','fr-CA','it','ja','ko','nl','pt-BR','ru','tr','zh-Hans','zh-Hant'];
  for(const locale of locales){
   const t=labels.achievementCopy(locale);
-  for(const key of ['title','completed','incomplete','progress','completedAt','edit','save','unknown','notice','invalid'])
+  for(const key of ['title','completed','incomplete','missing','progress','completedAt','edit','save','unknown','notice','invalid'])
    assert.ok(typeof t[key]==='string'&&t[key].trim(),locale+' '+key);
  }
  assert.equal(labels.achievementCopy('ja').title,'アチーブメント');
