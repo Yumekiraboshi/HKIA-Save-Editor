@@ -291,6 +291,10 @@
   showVariants=item[0]!==item[7];
   query=nameFor(item);collectionSearchDrilldown=true;
   filter='all';visibleLimit=BATCH_SIZE;editId=null;error='';
+  // Ensure even a late-ranked homonymous result is actually visible when opened.
+  const position=matching.findIndex(x=>x[0]===item[0]);
+  if(position>=0)visibleLimit=Math.ceil((position+1)/BATCH_SIZE)*BATCH_SIZE;
+  void tick().then(()=>document.getElementById('collection-item-'+item[0])?.scrollIntoView({block:'center'}));
   void fetchImages(item[3]);
   void persistDraft();
  }
@@ -899,7 +903,7 @@
      {@const mayAdd=snapshot.membershipEdit && snapshot.version===catalog?.version && item[4]===0}
      {@const mayToggle=showVariants?(direct?snapshot.membershipEdit:mayAdd):(recordIds.length===0?mayAdd:recordIds.length===1&&direct&&snapshot.membershipEdit)}
      {@const sprite=iconPack?.group===selectedGroup?iconPack.entries[String(item[0])]:undefined}
-     <article class="item-tile" class:is-recorded={has}>
+     <article class="item-tile" id={'collection-item-'+item[0]} class:is-recorded={has}>
       <button type="button" class="item-toggle" aria-pressed={has} aria-label={(has?copy.unsetRecorded:copy.setRecorded)+': '+nameFor(item)}
        title={mayToggle?(has?copy.unsetRecorded:copy.setRecorded):!showVariants&&recordIds.length>0?copy.variantsToEdit:copy.unsafe} disabled={busy||!mayToggle}
        onclick={()=>void change(item[0],direct?null:EPOCH+BigInt(Date.now())*10000n)}>
