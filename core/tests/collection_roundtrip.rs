@@ -35,8 +35,8 @@ fn literal(s:&[u8])->Vec<u8>{
  }
  b.extend(s);b
 }
-fn slot(version:&str)->Vec<u8>{
- let payload=synthetic_payload(version);
+fn slot(version:&str)->Vec<u8>{slot_from_payload(version,synthetic_payload(version))}
+fn slot_from_payload(version:&str,payload:Vec<u8>)->Vec<u8>{
  let prefix:[u8;32]=[0x13,0x5b,0x4a,0xa4,0xf7,0x02,0xa4,0x5d,0x1c,0xc5,0x62,0xae,0xb5,0xa3,0x86,0xed,0x5d,0x17,0xe1,0xfd,0x58,0x8f,0x42,0x4d,0xcf,0xc5,0x9d,0x2e,0x14,0x0c,0xf5,0x97];
  let magic:[u8;32]=[0xa1,0xa2,0xf8,0x33,0x3c,0x66,0xec,0x45,0x5b,0xaa,0x2d,0xfc,0x63,0x25,0xc2,0x43,0x7a,0x77,0x9c,0x99,0x06,0xee,0xcf,0xf0,0xc0,0x22,0xe5,0xf6,0xb6,0xca,0x73,0xb8];
  let mut b=prefix.to_vec();b.push(0x98);
@@ -214,4 +214,67 @@ fn category_child_and_parent_atomic_change_with_single_undo_and_no_partial_confl
    assert!(editor.can_undo());
   }
  }
+}
+
+#[test]
+fn verified_new_achievement_creation_v301_raw_and_zip_roundtrips_without_other_changes(){
+ use hkia_save_core::achievement::AchievementValue;
+ // Original source-guid key from v3.0.1 achievement index (not synthetic).
+ let guid=[13220480,1299065047,2812061598,2966187300];
+ let done=AchievementValue{complete:true,current:1.0,completed:Some((1_750_000_000,123_456_700))};
+ for zipped in [false,true] {
+  let raw=slot("3.0.1");
+  let original=if zipped{zip(&raw)}else{raw};
+  let mut editor=Editor::open(original.clone()).unwrap();
+  let source=read_slot(&raw).unwrap();
+  assert_eq!(source.index.documents,5);
+  assert!(source.index.root_documents_span.is_some());
+  assert_eq!(editor.achievements().len(),2);
+  assert!(editor.create_achievement([0,0,0,0],done).is_err());
+  assert!(editor.create_achievement([1,0,0,1],done).is_err());
+  assert!(editor.create_achievement(guid,AchievementValue{complete:true,completed:None,..done}).is_err());
+  assert!(!editor.dirty());
+  editor.create_achievement(guid,done).unwrap();
+  assert_eq!(editor.achievement_value(guid),Some(done));
+  assert_eq!(editor.achievements().len(),3);
+  assert!(editor.create_achievement(guid,done).is_err());
+  let bytes=editor.export().unwrap();
+  let parsed=Editor::open(bytes.clone()).unwrap();
+  assert_eq!(parsed.achievement_value(guid),Some(done));
+  let decoded=if zipped {
+   let z=ZipIndex::parse(&bytes).unwrap();
+   z.extract(&bytes,z.entries.iter().position(|x|x.name==SLOT).unwrap()).unwrap()
+  } else {bytes};
+  let src=read_slot(&decoded).unwrap();
+  assert_eq!(src.index.documents,6);
+  assert_eq!(src.index.achievements.len(),3);
+  assert_eq!(src.index.achievements[2].id,3); // max previous tag16 ID 2 + 1
+  assert_eq!(src.index.achievements[2].guid,guid);
+  assert!(editor.undo());assert!(editor.achievement_value(guid).is_none());assert!(!editor.dirty());
+  assert!(editor.redo());assert_eq!(editor.achievement_value(guid),Some(done));
+  assert!(editor.undo());assert_eq!(editor.achievements().len(),2);
+  assert_eq!(editor.source_bytes(),original.len()); // untouched source remains recoverable
+ }
+ let mut old=Editor::open(slot("3.0.0")).unwrap();
+ assert!(old.create_achievement(guid,done).is_err());
+ assert_eq!(old.achievements().len(),2);
+}
+
+#[test]
+fn creation_followed_by_uncomplete_edit_has_one_undo_per_step_and_exports_as_incomplete(){
+ use hkia_save_core::achievement::AchievementValue;
+ let guid=[13220480,1299065047,2812061598,2966187300];
+ let done=AchievementValue{complete:true,current:1.0,completed:Some((1_750_000_001,0))};
+ let undone=AchievementValue{complete:false,current:0.0,completed:None};
+ let mut editor=Editor::open(slot("3.0.1")).unwrap();
+ editor.create_achievement(guid,done).unwrap();
+ editor.change_achievement(guid,done,undone).unwrap();
+ assert_eq!(editor.achievement_value(guid),Some(undone));
+ let exported=editor.export().unwrap();
+ assert_eq!(Editor::open(exported).unwrap().achievement_value(guid),Some(undone));
+ assert!(editor.undo());assert_eq!(editor.achievement_value(guid),Some(done));
+ assert!(editor.undo());assert_eq!(editor.achievement_value(guid),None);
+ assert!(editor.redo());assert_eq!(editor.achievement_value(guid),Some(done));
+ assert!(editor.redo());assert_eq!(editor.achievement_value(guid),Some(undone));
+ editor.reset();assert_eq!(editor.achievement_value(guid),None);
 }
