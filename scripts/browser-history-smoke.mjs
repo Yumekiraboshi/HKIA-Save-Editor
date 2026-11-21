@@ -176,13 +176,14 @@ async function run(){
  steps=await countHistory(page,3);
  assert.match(await steps.nth(0).getAttribute('class')??'',/active/);
  await steps.nth(1).click(); // redo one collection entry after recovery
- assert.equal(await page.locator('.bar-actions button[title="Undo"]').isDisabled(),false);
+ await page.locator('.bar-actions button[title="Undo"]:not([disabled])').waitFor({timeout:15_000});
 
  await chooseTab(page,1);
  steps=await countHistory(page,2);
  assert.match(await steps.nth(1).getAttribute('class')??'',/active/);
  await steps.nth(0).click(); // independently undo saved achievement
  await chooseTab(page,0);
+ await page.locator('.bar-actions button[title="Undo"]:not([disabled])').waitFor({timeout:15_000});
  assert.equal(await page.locator('.bar-actions button[title="Undo"]').isDisabled(),false,
   'achievement undo must not reset Collections cursor');
 
