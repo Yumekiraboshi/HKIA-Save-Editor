@@ -788,7 +788,7 @@
      </button>
     {/each}
    </div>
-  {:else}
+  {:else if snapshot}
    <div class="section-heading with-back">
     <button type="button" class="back-link" onclick={subgroups.length>1?goSubcategories:goHome}>‹ {subgroups.length>1?copy.backSubcategories:copy.back}</button>
     <h1>{group?titleFor(group):copy.collections}{#if subgroups.length>1}<span class="subsection-divider"> / </span>{subcategoryLabel(activeSubgroup,locale)}{/if}</h1>
