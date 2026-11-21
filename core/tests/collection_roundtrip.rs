@@ -498,3 +498,104 @@ fn completed_parent_date_sync_is_atomic_cas_checked_and_one_step_undoable_in_raw
   }
  }
 }
+
+
+#[test]
+fn tab_scoped_history_jumps_preserve_interleaved_edits_and_independent_redo_branches(){
+ use hkia_save_core::achievement::AchievementValue;
+ use hkia_save_core::collection::HistoryScope::{Collections,Achievements};
+ for version in ["3.0.0","3.0.1"]{
+  for zipped in [false,true]{
+   let raw=slot(version);
+   let input=if zipped{zip(&raw)}else{raw};
+   let mut e=Editor::open(input).unwrap();
+   let id=2;let original=638000000000000001i64;
+   let first=original+100;let second=original+200;
+   let guid=[1,0,0,1];
+   let base=AchievementValue{complete:false,current:1.0,completed:None};
+   let done=AchievementValue{complete:true,current:2.0,completed:Some((1_750_000_000,123_456_700))};
+   let dated=AchievementValue{completed:Some((1_750_000_010,987_654_300)),..done};
+   assert!(e.history().is_empty());
+   assert!(!e.jump_history(Collections,1));
+   e.change(id,Some(original),Some(first)).unwrap();
+   e.change_achievement(guid,base,done).unwrap();
+   e.change(id,Some(first),Some(second)).unwrap();
+   e.change_achievement(guid,done,dated).unwrap();
+   let timeline=e.history();
+   assert_eq!(timeline.len(),4);
+   assert_eq!(timeline.iter().map(|r|r.scope).collect::<Vec<_>>(),
+    vec![Collections,Achievements,Collections,Achievements]);
+   assert!(timeline.iter().all(|r|r.applied));
+   assert_eq!(timeline[0].item_id,id);
+   assert_eq!(timeline[1].guid,guid);
+   assert!(!e.jump_history(Collections,3));
+   assert_eq!(e.value(id),Some(second));
+   assert!(e.jump_history(Collections,0));
+   assert_eq!(e.value(id),Some(original));
+   assert_eq!(e.achievement_value(guid),Some(dated));
+   assert_eq!(e.history().iter().filter(|x|x.scope==Collections&&x.applied).count(),0);
+   assert_eq!(e.history().iter().filter(|x|x.scope==Collections&&!x.applied).count(),2);
+   assert!(e.jump_history(Achievements,1));
+   assert_eq!(e.achievement_value(guid),Some(done));
+   assert_eq!(e.value(id),Some(original));
+   assert!(e.jump_history(Collections,1));
+   assert_eq!(e.value(id),Some(first));
+   assert_eq!(e.achievement_value(guid),Some(done));
+   assert!(e.jump_history(Achievements,2));
+   assert_eq!(e.achievement_value(guid),Some(dated));
+   assert!(e.jump_history(Collections,0));
+   // New achievement edit may prune only achievement redo; collection redo survives.
+   e.change_achievement(guid,dated,base).unwrap();
+   assert!(e.jump_history(Collections,2));
+   assert_eq!(e.value(id),Some(second));
+   assert_eq!(e.achievement_value(guid),Some(base));
+   assert!(e.jump_history(Achievements,0));
+   assert_eq!(e.achievement_value(guid),Some(base));
+   // New collection edit preserves both achievement-redo entries.
+   e.change(id,Some(second),Some(original+500)).unwrap();
+   assert!(e.jump_history(Achievements,2));
+   assert_eq!(e.achievement_value(guid),Some(done));
+   assert_eq!(e.value(id),Some(original+500));
+   let opened=Editor::open(e.export().unwrap()).unwrap();
+   assert_eq!(opened.achievement_value(guid),Some(done));
+   assert_eq!(opened.value(id),Some(original+500));
+   assert!(!e.jump_history(Achievements,300));
+   assert_eq!(e.achievement_value(guid),Some(done));
+   e.reset();
+   assert!(e.history().is_empty());
+   assert!(!e.can_undo());
+   assert!(!e.can_redo());
+   assert!(!e.dirty());
+  }
+ }
+}
+
+#[test]
+fn native_pair_is_one_achievement_history_step_and_never_rewinds_collections(){
+ use hkia_save_core::achievement::AchievementValue;
+ use hkia_save_core::collection::HistoryScope::{Collections,Achievements};
+ let mut e=Editor::open(slot("3.0.1")).unwrap();
+ let child=[1,0,0,1];let parent=[2,0,0,1];
+ let old_child=AchievementValue{complete:false,current:1.0,completed:None};
+ let old_parent=AchievementValue{complete:false,current:2.0,completed:None};
+ let done_child=AchievementValue{complete:true,current:1.0,completed:Some((1_750_000_000,0))};
+ let done_parent=AchievementValue{complete:true,current:2.0,completed:Some((1_750_000_000,0))};
+ e.change(2,Some(638000000000000001),Some(638000000000000100)).unwrap();
+ e.change_achievement_pair(
+  (child,old_child,done_child),(parent,old_parent,done_parent)
+ ).unwrap();
+ let history=e.history();
+ assert_eq!(history.len(),2);
+ assert_eq!(history[0].scope,Collections);
+ assert_eq!(history[1].scope,Achievements);
+ assert!(history[1].paired);
+ assert_eq!(history[1].guid,child);
+ assert!(e.jump_history(Achievements,0));
+ assert_eq!(e.achievement_value(child),Some(old_child));
+ assert_eq!(e.achievement_value(parent),Some(old_parent));
+ assert_eq!(e.value(2),Some(638000000000000100));
+ assert!(e.jump_history(Achievements,1));
+ assert_eq!(e.achievement_value(child),Some(done_child));
+ assert_eq!(e.achievement_value(parent),Some(done_parent));
+ assert_eq!(e.value(2),Some(638000000000000100));
+}
