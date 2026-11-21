@@ -220,6 +220,32 @@ pub extern "C" fn hkia_counter_snapshot()->u32{
  })
 }
 
+/// Bounded local-only native operation journal for IndexedDB recovery.
+#[no_mangle]
+pub extern "C" fn hkia_history_checkpoint()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  match editor.history_checkpoint(){
+   Ok(bytes) if bytes.len()<=128*1024=>{a.reply=bytes;0},
+   _=>1
+  }
+ })
+}
+/// Restore an untrusted checkpoint staged through hkia_stage. Rust rebuilds
+/// the full history against the original save atomically, using native CAS.
+#[no_mangle]
+pub extern "C" fn hkia_history_restore()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  let checkpoint=std::mem::take(&mut a.stage);
+  if checkpoint.len()>128*1024{return 1}
+  match a.editor.as_mut().map(|editor|editor.restore_history(&checkpoint)){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+
 /// Native per-tab timeline with applied and redoable events (4+23*N bytes).
 #[no_mangle]
 pub extern "C" fn hkia_history_snapshot()->u32{
