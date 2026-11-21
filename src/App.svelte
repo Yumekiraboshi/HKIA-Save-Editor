@@ -495,7 +495,7 @@
      <form class="achievement-form" onsubmit={e=>{e.preventDefault();void saveAchievement()}}>
       <div class="date-dialog-heading"><h2>{achCopy.edit}</h2><button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={()=>editingAchievement=null}>×</button></div>
       <label class="achievement-check"><input type="checkbox" bind:checked={achievementComplete}/>{achCopy.completed}</label>
-      <label class="date-dialog-field"><span>{achCopy.progress}</span><input type="number" min="0" step="any" required bind:value={achievementProgress}/></label>
+      <label class="date-dialog-field"><span>{achCopy.progress}</span><input type="text" inputmode="decimal" required bind:value={achievementProgress}/></label>
       {#if achievementComplete}
        <label class="date-dialog-field"><span>{achCopy.completedAt}</span><input type="datetime-local" step="1" required bind:value={achievementDate}/></label>
       {/if}
