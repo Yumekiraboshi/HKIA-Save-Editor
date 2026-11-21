@@ -50,9 +50,9 @@ pub extern "C" fn hkia_achievement_create(
 )->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
-  if complete!=1||has_date!=1{return 1}
+  if complete>1||has_date>1||complete!=has_date{return 1}
   let value=hkia_save_core::achievement::AchievementValue{
-   complete:true,current:progress,completed:Some((seconds,nanos))
+   complete:complete==1,current:progress,completed:if has_date==1{Some((seconds,nanos))}else{None}
   };
   match a.editor.as_mut().map(|e|e.create_achievement([g0,g1,g2,g3],value)){
    Some(Ok(()))=>0,_=>1
