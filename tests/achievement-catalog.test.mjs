@@ -34,10 +34,10 @@ test('unknown-version saved GUIDs remain readable and editable rather than disap
  assert.throws(()=>joinAchievementCatalog(index,[extra,extra]),/ACH_DUPLICATE_SAVE_GUID/);
 });
 
-test('absent source entries are UNKNOWN, not incomplete, and cannot open editor',()=>{
- assert.match(app,/\{#if !item\.row\}/);
+test('absent source entries display 0/goal and can be created only from verified source keys',()=>{
+ assert.match(app,/\(item\.row\?\.value\.current\?\?0\)\.toLocaleString\(locale\)/);
  assert.doesNotMatch(app,/achievementFilter/);
- assert.match(app,/{#if item\.row}/);
- assert.match(app,/achCopy\.missing/);
+ assert.match(app,/createAchievement\(guid,next\)/);
+ assert.match(app,/snapshot\.version!=='3\.0\.1'/);
  assert.match(app,/if\(item\.row\)void openAchievement/);
 });
