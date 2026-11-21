@@ -132,8 +132,10 @@ async function run(){
  const collectionSteps=await countHistory(page,3);
  assert.equal(await collectionSteps.filter({has:page.locator('.history-step')}).count(),3);
  await collectionSteps.nth(0).click();
+ // goToHistory() persists to IndexedDB before clearing busy. The click returns
+ // before that asynchronous transaction is complete, so wait for stable state.
+ await page.locator('.bar-actions button[title="Redo"]:not([disabled])').waitFor({timeout:15_000});
  assert.equal(await page.locator('.bar-actions button[title="Undo"]').isDisabled(),true);
- assert.equal(await page.locator('.bar-actions button[title="Redo"]').isDisabled(),false);
 
  // The synthetic unknown GUIDs must remain editable in the ungrouped category.
  await chooseTab(page,1);
