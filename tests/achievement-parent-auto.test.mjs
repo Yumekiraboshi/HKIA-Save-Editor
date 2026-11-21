@@ -10,7 +10,7 @@ async function compiled(path){
   bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
  return import('data:text/javascript;base64,'+Buffer.from(r.outputFiles[0].text).toString('base64'));
 }
-const {planCategoryParentCompletion,planMissingCategoryParentCompletion}=await compiled('../src/achievement-parent-auto.ts');
+const {planCategoryParentCompletion,planMissingCategoryParentCompletion,planCategoryParentRevocation}=await compiled('../src/achievement-parent-auto.ts');
 const {decodeAchievementGroups}=await compiled('../src/achievement-groups.ts');
 const indexData=JSON.parse(read('../public/achievement-index.json'));
 const index=new Map(indexData.records.map(([guid,key,titleId])=>[guid,{key,titleId}]));
@@ -150,4 +150,56 @@ test('missing-parent Rust/WASM transaction is wired to both existing and absent 
  assert.match(core,/pub fn complete_child_and_create_parent/);
  assert.match(core,/Change::AchievementParentNew/);
  assert.match(keys,/PARENT_SIZES/);
+});
+
+test('relocking one source child atomically revokes an earned category without changing siblings',()=>{
+ const source=hierarchy.groups.find(g=>g.children.length>2);
+ assert.ok(source);
+ const stamp=[1750000300n,123456700];
+ const saved=[
+  row(source.guid,true,source.children.length,stamp),
+  ...source.children.map(g=>row(g,true,1,stamp))
+ ];
+ const before=saved[1].value;
+ const after=value(false,0,null);
+ const planned=planCategoryParentRevocation(hierarchy,saved,saved[1].guid,before,after);
+ assert.ok(planned);
+ assert.deepEqual(planned.guid,words(source.guid));
+ assert.deepEqual(planned.before,saved[0].value);
+ assert.deepEqual(planned.after,{complete:false,current:source.children.length-1,completed:null});
+ assert.deepEqual(saved[0].value,value(true,source.children.length,stamp),'planning never mutates source parent');
+ assert.deepEqual(saved[1].value,before,'planning never mutates the original child');
+});
+
+test('parent revocation respects saved child membership, existing state and stale progress',()=>{
+ const source=hierarchy.groups.find(g=>g.children.length>2);
+ const stamp=[1750000300n,0];
+ const children=source.children.map((g,i)=>row(g,i<2,1,i<2?stamp:null));
+ const parent=row(source.guid,true,source.children.length,stamp);
+ const saved=[parent,...children];
+ const before=children[0].value;
+ const after=value(false,0,null);
+ const p=planCategoryParentRevocation(hierarchy,saved,children[0].guid,before,after);
+ assert.equal(p.after.current,1,'only the one remaining complete sibling counts');
+ const lower=[{...parent,value:value(true,0,stamp)},...children];
+ assert.equal(planCategoryParentRevocation(hierarchy,lower,children[0].guid,before,after).after.current,0,
+  'never increase an inconsistent original parent progress value');
+ assert.equal(planCategoryParentRevocation(hierarchy,saved,children[0].guid,value(false,0),after),null);
+ assert.equal(planCategoryParentRevocation(hierarchy,saved,children[0].guid,before,value(true,1,stamp)),null);
+ assert.equal(planCategoryParentRevocation(hierarchy,saved,words(source.guid),before,after),null);
+ assert.equal(planCategoryParentRevocation(null,saved,children[0].guid,before,after),null);
+ assert.equal(planCategoryParentRevocation(hierarchy,saved.slice(1),children[0].guid,before,after),null);
+ assert.equal(planCategoryParentRevocation(hierarchy,[{...parent,value:value(false,0)},...children],children[0].guid,before,after),null);
+ assert.throws(()=>planCategoryParentRevocation(hierarchy,[...saved,saved[0]],children[0].guid,before,after),/ACH_GROUP_DUPLICATE/);
+});
+
+test('relocking uses the existing atomic pair RPC, is v3.0.1 gated and preserves a single undo',()=>{
+ const app=read('../src/App.svelte');
+ assert.match(app,/snapshot\?\.version==='3\.0\.1'\?planCategoryParentRevocation\(/);
+ assert.match(app,/if\(revocation\)return changeAchievementPair\(\{guid:live\.guid,before:live\.value,after:next\},revocation\)/);
+ assert.match(app,/update\(await changeAchievementWithParent\(live,next\)\)/);
+ const backend=read('../core/src/collection.rs');
+ assert.match(backend,/Change::AchievementPair/);
+ assert.match(backend,/pub fn change_achievement_pair/);
+ assert.match(backend,/self\.undo\.push\(Change::AchievementPair/);
 });
