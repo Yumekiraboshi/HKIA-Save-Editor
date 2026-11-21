@@ -115,6 +115,7 @@ pub mod archive;
 mod deflate;
 pub mod digest;
 pub mod collection;
+pub mod achievement;
 mod catalog;
 #[derive(Debug)]
 pub struct ReadSlot { pub envelope: envelope::Envelope, pub index: native::NativeIndex }
