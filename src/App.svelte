@@ -642,7 +642,7 @@
         <button type="button" class="date-button achievement-dialog-button"
          title={item.row.value.complete?compactCopy.date:compactCopy.details}
          aria-label={(item.row.value.complete?compactCopy.date:compactCopy.details)+': '+title}
-         disabled={busy} onclick={e=>{if(item.row)void openAchievement(item.row,e.currentTarget,item.index)}>
+         disabled={busy} onclick={e=>{if(item.row)void openAchievement(item.row,e.currentTarget,item.index)}}>
          {item.row.value.complete?'◷':'⋯'}
         </button>
        {/if}
