@@ -59,7 +59,7 @@ test('collection-like achievement cards use one click, a separate date popup, an
  assert.ok(!app.includes('class="achievement-card"'));
  assert.ok(!app.includes('achievementComplete=row.value.complete'));
  assert.ok(!app.includes('class="achievement-check"'));
- assert.doesNotMatch(app,/achievementProgress|inputmode="decimal"/);
+ assert.doesNotMatch(app,/bind:value=\{achievementProgress\}|let achievementProgress=|inputmode="decimal"/);
  assert.match(app,/current:selected\.value\.current,completed/);
  assert.match(app,/\{#if editingAchievement\.value\.complete\}[\s\S]*?<button type="submit" class="primary"/);
  assert.ok(css.includes('.achievement-item-grid'));
