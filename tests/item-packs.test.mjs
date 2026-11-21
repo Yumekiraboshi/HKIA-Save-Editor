@@ -59,7 +59,7 @@ test('all collection groups ship genuine mapped item thumbnails in lazy ZIP pack
 });
 test('all item icons are local assets; no external requests',()=>{
  const c=readFileSync(new URL('../src/icon-packs.ts',import.meta.url),'utf8');
- assert.match(c,/BASE_URL|base\+'item-packs'/);
+ assert.ok(c.includes("fetch(base+'item-packs/'"));
  assert.match(c,/URL\.revokeObjectURL/);
  assert.doesNotMatch(c,/raw\.githubusercontent\.com/);
 });
