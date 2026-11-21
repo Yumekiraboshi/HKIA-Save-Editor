@@ -12,6 +12,14 @@ The same local recovery draft can restore additions using a `before:null` compar
 
 Collection items already use `GameCollectionsTraitModel` history dictionary membership. Missing items are displayed as `0 / 1` (and entirely unrecorded categories as `0 / X`); on v3.0.1, adding a source-eligible item inserts the item's ID with a timestamp, with undo/redo and export roundtrip verification. Version, deprecated-history and source allowlist gates remain in place. This is collection history, not proof of inventory ownership.
 
+## Floorplans collection-history editing (v3.0.1; 18 source-defined IDs)
+
+The game's collection definition for `collection_furniture_floorplans` is marked hidden and belongs to a DLC-referenced group. The previous UI disallowed all flagged entries (`item[4] !== 0`), and the Rust `eligible_for_new_history` source allowlist omitted all 18 Floorplans IDs. Consequently, the previous localization and artwork fixes did **not** enable clicking those items.
+
+This release authorizes **only the exact 18 verified source Item IDs** from `collection_group_floorplans` for a user-triggered `GameCollectionsTraitModel.CollectablesCollectedTime` dictionary history addition on a compatible **v3.0.1** save. The full Rust allowlist, v3.0.1 gate, existing dictionary and deprecated-history structural checks, timestamp bounds and CAS preconditions remain authoritative. The UI's mirror predicate permits these precise IDs irrespective of the generic source restriction flag, with the existing click, Undo/Redo, timestamp edit and Save export flows; no other flagged group becomes eligible. Native tests exercise all 18 additions together, ZIP/raw export roundtrip, map-header size change from 2 to 20 entries, removal, Undo/Redo and unsupported versions.
+
+**This is a collection-history entry only, not the game's Floorplan item inventory, ownership, cabin layout availability, DLC entitlement or quest reward**. Whether a game load recognizes each manually added collected entry and whether the game will override it is not hardware-verified. Keep a backup before importing edited saves.
+
 ## Source-verified Floorplans (18/18; 16 languages; genuine artwork)
 
 All 18 `collection_group_floorplans` items now use source-pinned labels from the user's Steam v3.0.1 Babel table 300. The direct source `InventoryItemDefinitionAsset.Id` from the decoded collection/image map is paired with the uniquely matching original English Babel `Floorplan` title and its same 64-bit string ID across **all 16 game locales**, including native Japanese strings such as `小さな部屋の間取り図` and `広い部屋の間取り図`. This crosswalk is in `src/floorplan-names.ts`; the complete 16×18 string vectors are checked with source-computed SHA-256 digests in `tests/floorplan-source-names.test.mjs`. It does not claim to resolve the remaining 1,597 unnamed catalog items.
@@ -56,7 +64,7 @@ The 3.0.1 collection membership IDs were joined against a separately sourced ite
 - Achievement details now use a verified **820/820 source-definition facts index** (720 description string IDs, 820 counter definitions, 264 positive item-reward definitions). The optional popup shows source thresholds, actual saved **GameCounterModel** values where present, item reward definitions, and DLC/group flags in all 16 UI languages. Missing counters remain UNKNOWN; source thresholds alone never imply completion, reward ownership or reward receipt. The counter snapshot is read-only and never modified.
 - Changes are limited to **collection history (Key1)** and existing **AchievementModel** state fields (completion, goal-bounded progress on toggles, completion date). Achievement/GameCounter linkages, quest/reward unlocks, inventory, DLC entitlements, and other linked systems are **not** modified. In-game synchronization of achievement changes is not proven.
 - An existing legacy Key0 map blocks add/remove; editing an existing saved timestamp remains available.
-- New v3.0.1 history additions are further gated in Rust to confirmed collection IDs without identified DLC/event group restrictions.
+- New v3.0.1 history additions are gated in Rust to confirmed collection IDs; **the exact 18 source-pinned Floorplan IDs are an explicit limited exception**, writing collection history only, without DLC entitlement/ownership changes. Other DLC/event restrictions remain enforced.
 - Synthetic native Save and ZIP tests, achievement mutation/undo/re-export/reopen tests, compiled WASM save roundtrip, Svelte/TypeScript checks and page builds run in CI. **Real-game acceptance and the behavior of edited genuine saves remain unverified.**
 - Keep an untouched backup before testing edited saves.
 
