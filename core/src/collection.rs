@@ -136,7 +136,7 @@ impl Editor {
   &mut self,guid:[u32;4],value:AchievementValue,
   parent:[u32;4],expected:AchievementValue,next:AchievementValue
  )->Result<(),Error>{
-  if guid==parent||self.slot.envelope.version!=Version::V301||
+  if guid==parent||crate::achievement_keys::parent_of_v301(guid)!=Some(parent)||self.slot.envelope.version!=Version::V301||
    !crate::achievement_keys::known_v301(guid)||!achievement::valid(value)||
    self.achievement_value(guid).is_some()||!value.complete||value.completed.is_none()||
    !achievement::valid(expected)||!achievement::valid(next)||expected==next||
