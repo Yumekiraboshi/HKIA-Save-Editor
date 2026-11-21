@@ -48,11 +48,11 @@ test('incomplete achievement uses a single A/B footer instead of an extra row; c
  assert.match(app,/achievementGroupHierarchy\?\.byGuid\.get\(item\.guid\)\?\.children\.length\?\?null/);
  assert.match(app,/achievementFacts\.get\(item\.guid\)\?\.threshold\?\?null/);
  assert.match(app,/class="item-status achievement-compact-status"/);
- assert.match(app, /\{achCopy\.progress\}: \{item\.row\.value\.current\.toLocaleString\(locale\)\} \/ \{progressGoal\.toLocaleString\(locale\)\}/);
+ assert.match(app, /\{achCopy\.progress\}: \{\(item\.row\?\.value\.current\?\?0\)\.toLocaleString\(locale\)\} \/ \{progressGoal\.toLocaleString\(locale\)\}/);
  const content=app.slice(app.indexOf('class="item-grid achievement-grid achievement-item-grid"'),app.indexOf('<dialog class="achievement-dialog"'));
  assert.doesNotMatch(content,/achievement-compact-progress|\{achCopy\.incomplete\}[\s\S]*<span class="achievement-compact-progress"/);
- assert.match(content, /\{:else if item\.row\.value\.complete\}/);
- assert.match(content, /\{achCopy\.missing\}/);
+ assert.match(content, /\{#if item\.row\?\.value\.complete\}/);
+ assert.match(content, /\{\(item\.row\?\.value\.current\?\?0\)\.toLocaleString\(locale\)\}/);
 });
 test('completed, incomplete, and missing achievement cards all have matching fixed heights in desktop and mobile',()=>{
  assert.match(css,/\.achievement-tile\{height:224px;min-height:224px\}/);
