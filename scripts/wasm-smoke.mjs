@@ -17,8 +17,9 @@ const ver='3.0.1';
 const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
 const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
 const achievement=doc(16,arr([1],hash(1,0,0,1),arr([0xc2],f32(1),[0xc0])));
+const parentAchievement=doc(16,arr([2],hash(2,0,0,1),arr([0xc2],f32(2),[0xc0])));
 const counter=doc(17,arr([1],hash(1,0,0,2),arr(f32(2),[0xc0],[0x90])));
-const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(ver))),achievement,counter,object));
+const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(ver))),achievement,parentAchievement,counter,object));
 const prefix=Uint8Array.from('135b4aa4f702a45d1cc562aeb5a386ed5d17e1fd588f424dcfc59d2e140cf597'.match(/../g).map(x=>parseInt(x,16)));
 const magic=Uint8Array.from('a1a2f8333c66ec455baa2dfc6325c2437a779c9906eecff0c022e5f6b6ca73b8'.match(/../g).map(x=>parseInt(x,16)));
 const literalLen=model.length-15;const lit=[0xf0];let remaining=literalLen;while(remaining>=255){lit.push(255);remaining-=255}lit.push(remaining);
@@ -42,7 +43,7 @@ function snapshot(){
 }
 load(slot);
 assert.equal(e.hkia_achievement_snapshot(),0);
-assert.equal(e.hkia_reply_len(),38);
+assert.equal(e.hkia_reply_len(),72);
 const ag=[1,0,0,1];
 assert.equal(e.hkia_achievement_change(...ag,0,1,0n,0,0,1,2,1750000000n,123456700,1),0);
 assert.equal(e.hkia_achievement_change(...ag,0,1,0n,0,0,1,2,1750000000n,123456700,1),1);
@@ -51,12 +52,36 @@ const achievementOutput=new Uint8Array(e.memory.buffer,e.hkia_output_ptr(),e.hki
 e.hkia_clear();load(achievementOutput);
 assert.equal(e.hkia_achievement_snapshot(),0);
 const achBytes=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
-assert.equal(achBytes.getUint32(0,true),1);
+assert.equal(achBytes.getUint32(0,true),2);
 assert.equal(achBytes.getUint8(20),1);
 assert.equal(achBytes.getFloat32(21,true),2);
 assert.equal(achBytes.getUint8(25),1);
 assert.equal(achBytes.getBigInt64(26,true),1750000000n);
 assert.equal(achBytes.getUint32(34,true),123456700);
+e.hkia_clear();load(slot);
+// An existing parent and its last child change together or not at all.
+assert.ok(e.hkia_achievement_pair_change,'missing atomic two-achievement ABI');
+const childArgs=[1,0,0,1,0,1,0n,0,0,1,1,1750000000n,123456700,1];
+const parentArgs=[2,0,0,1,0,2,0n,0,0,1,2,1750000000n,123456700,1];
+assert.equal(e.hkia_achievement_pair_change(...childArgs,...[2,0,0,1,0,999,0n,0,0,1,2,1750000000n,123456700,1]),1,'stale parent fails entire pair');
+assert.equal(snapshot().dirty,0);
+assert.equal(e.hkia_achievement_pair_change(...childArgs,...parentArgs),0);
+function states(){
+ assert.equal(e.hkia_achievement_snapshot(),0);
+ const buf=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+ assert.equal(buf.getUint32(0,true),2);
+ return [buf.getUint8(20),buf.getUint8(54)];
+}
+assert.deepEqual(states(),[1,1]);
+assert.equal(e.hkia_undo(),0);
+assert.deepEqual(states(),[0,0]);
+assert.equal(e.hkia_undo(),1,'one undo rolls back both achievements');
+assert.equal(e.hkia_redo(),0);
+assert.deepEqual(states(),[1,1]);
+assert.equal(e.hkia_export(),0);
+const pairOutput=new Uint8Array(e.memory.buffer,e.hkia_output_ptr(),e.hkia_output_len()).slice();
+e.hkia_clear();load(pairOutput);
+assert.deepEqual(states(),[1,1]);
 e.hkia_clear();load(slot);
 assert.equal(snapshot().entries.get(2),638000000000000001n);
 assert.equal(e.hkia_change(2,1,638000000000000001n,1,638000000010000001n),0);
@@ -74,4 +99,4 @@ assert.equal(snapshot().entries.get(2),638000000010000001n);
 assert.equal(snapshot().entries.get(315822),638000000000000000n);
 assert.equal(e.hkia_export(),2);
 e.hkia_clear();
-console.log('Rust/WASM ABI synthetic open/change/CAS/allowlist/undo/redo/export/reopen PASS');
+console.log('Rust/WASM ABI synthetic open/change/atomic-parent-pair/CAS/allowlist/undo/redo/export/reopen PASS');
