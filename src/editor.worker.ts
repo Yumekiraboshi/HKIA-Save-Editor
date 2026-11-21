@@ -9,6 +9,7 @@ type Engine = {
  hkia_change(id:number,expectedPresent:number,old:bigint,nextPresent:number,value:bigint):number;
  hkia_achievement_change(g0:number,g1:number,g2:number,g3:number,bc:number,bp:number,bs:bigint,bn:number,bh:number,ac:number,ap:number,as:bigint,an:number,ah:number):number;
  hkia_achievement_snapshot():number;
+ hkia_counter_snapshot():number;
  hkia_undo():number; hkia_redo():number; hkia_reset():number;
  hkia_snapshot():number; hkia_export():number; hkia_clear():void;
  hkia_reply_ptr():number; hkia_reply_len():number;
@@ -58,7 +59,21 @@ function snapshot(e:Engine){
   const completed=hasDate===1?[d.getBigInt64(p+22,true),d.getUint32(p+30,true)] as [bigint,number]:null;
   achievements.push({guid,value:{complete,current,completed}});
  }
- return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,achievements};
+ if(e.hkia_counter_snapshot()!==0)throw Error('COUNTER_SNAPSHOT_FAILED');
+ const raw=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+ if(raw.length<4)throw Error('COUNTER_SNAPSHOT_INVALID');
+ const view=new DataView(raw.buffer,raw.byteOffset,raw.byteLength);
+ const counterCount=view.getUint32(0,true);
+ if(counterCount>100000||raw.length!==4+counterCount*28)throw Error('COUNTER_SNAPSHOT_INVALID');
+ const counters:Array<{guid:[number,number,number,number];current:number;countedValues:number|null;countedGuids:number}>=[];
+ for(let i=0;i<counterCount;i++){
+  const offset=4+i*28;
+  const guid:[number,number,number,number]=[view.getUint32(offset,true),view.getUint32(offset+4,true),view.getUint32(offset+8,true),view.getUint32(offset+12,true)];
+  const current=view.getFloat32(offset+16,true),countedValues=view.getInt32(offset+20,true),countedGuids=view.getUint32(offset+24,true);
+  if(!Number.isFinite(current)||countedValues< -1||countedGuids>1000000)throw Error('COUNTER_SNAPSHOT_INVALID');
+  counters.push({guid,current,countedValues:countedValues===-1?null:countedValues,countedGuids});
+ }
+ return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,achievements,counters};
 }
 function validAchievement(v:AchievementValue):boolean{
  return !!v&&typeof v.complete==='boolean'&&typeof v.current==='number'&&Number.isFinite(v.current)&&v.current>=0&&
