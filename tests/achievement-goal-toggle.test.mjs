@@ -57,7 +57,7 @@ test('achievement detail popup no longer accepts arbitrary progress or changes i
  assert.doesNotMatch(app,/bind:value=\{achievementProgress\}|let achievementProgress=|inputmode="decimal"/);
  assert.doesNotMatch(ui,/進捗を調整|Adjust saved progress|Edit progress and date/);
  assert.match(app,/const next:AchievementValue=\{complete:selected\.value\.complete,current:selected\.value\.current,completed\}/);
- assert.match(app,/toggleAchievementState\(live\.value,Date\.now\(\),target\)/);
+ assert.match(app,/toggleAchievementState\(prior,Date\.now\(\),target\)/);
  assert.match(app,/achievementProgressTarget\(/);
  assert.match(app,/\{#if facts\}\s*<details class="achievement-modal-source">/);
  assert.match(app,/linkedCounter\?linkedCounter\.current\.toLocaleString/);
