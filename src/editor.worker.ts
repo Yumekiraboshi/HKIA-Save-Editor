@@ -54,9 +54,9 @@ async function execute(r:Request):Promise<unknown>{
   }
   case 'snapshot':return snapshot(e);
   case 'change':{
-   if(!Number.isInteger(r.itemId)||r.itemId!<=0||r.itemId!>2147483647)throw Error('ItemIdが不正です。');
+   if(typeof r.itemId!=='number'||!Number.isInteger(r.itemId)||r.itemId<=0||r.itemId>2147483647)throw Error('ItemIdが不正です。');
    const a=r.expected??null,b=r.next??null;
-   if(e.hkia_change(r.itemId!,a===null?0:1,a??0n,b===null?0:1,b??0n)!==0)throw Error('変更できませんでした。元の値か編集条件が一致しません。');
+   if(e.hkia_change(r.itemId,a===null?0:1,a??0n,b===null?0:1,b??0n)!==0)throw Error('変更できませんでした。元の値か編集条件が一致しません。');
    return snapshot(e);
   }
   case 'undo':if(e.hkia_undo()!==0)throw Error('戻せる変更がありません。');return snapshot(e);

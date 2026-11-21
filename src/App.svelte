@@ -46,7 +46,7 @@
   return {total:filtered.length,pages,page:safe,items:filtered.slice(safe*PAGE,(safe+1)*PAGE)};
  });
  const ownedCount=$derived(Object.keys(history).length);
- const canGrant=$derived(Boolean(snapshot&&catalog&&snapshot.version===catalog.version));
+ const canGrant=$derived(Boolean((snapshot as SaveSnapshot | null)?.version && (snapshot as SaveSnapshot | null)?.version===(catalog as Catalog | null)?.version));
  function humanize(s:string){
   return s.replace(/^(collections_group_|collection_group_|collection_|item_)/,'').replaceAll('_',' ').replace(/([a-z])([A-Z])/g,'$1 $2');
  }
