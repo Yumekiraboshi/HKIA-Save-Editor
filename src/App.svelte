@@ -225,7 +225,7 @@
     owned.get(key)!.add(parent);
    }
   }
-  return catalog.groups.filter(g=>g[3]===0||(owned.get(g[0])?.size??0)>0)
+  return catalog.groups
    .map(g=>({row:g,count:owned.get(g[0])?.size??0,total:totals.get(g[0])?.size??0}));
  });
  const matching=$derived.by(()=>{
@@ -924,7 +924,7 @@
         {/if}
        </span>
        <span class="item-name">{nameFor(item)}</span>
-       <span class="item-status" class:has={has}>{has?'✓ '+copy.recorded:copy.unrecorded}</span>
+       <span class="item-status" class:has={has}>{has?'✓ '+copy.recorded:copy.unrecorded+' · 0 / 1'}</span>
       </button>
       {#if direct}<button type="button" class="date-button" title={copy.editDate} aria-label={copy.editDate+': '+nameFor(item)} disabled={busy} onclick={e=>void editDate(item[0],e.currentTarget)}>◷</button>{/if}
      </article>
