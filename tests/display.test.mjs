@@ -35,8 +35,8 @@ test('source IDs remain internal; only matched bilingual labels can be listed',(
  }
  assert.ok(matched>8000);
  assert.ok(unknown>0);
- assert.match(component,/!item\[5\]\|\|!item\[6\]/);
- assert.match(component,/item\[5\]!\.toLocaleLowerCase\(\)/);
+ assert.match(component,/!nameFor\(item\)/);
+ assert.match(component,/nameFor\(item\)\.toLocaleLowerCase\(\)/);
  assert.doesNotMatch(component,/\{item\[0\]\}|\{item\[1\]\}|\{item\[2\]\}/);
 });
 test('header commands, local recovery, image tiles and continuous listing have real handlers',()=>{

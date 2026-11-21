@@ -49,3 +49,21 @@ npm run build
 ```
 
 Unofficial tool. Not affiliated with Sunblink, Sanrio or the game's publishers.
+
+## Languages and shared game text
+
+The language selector offers all 16 Babel locales present in the supplied game assets: `ar`, `de`, `en`, `en-GB`, `es`, `fr`, `fr-CA`, `it`, `ja`, `ko`, `nl`, `pt-BR`, `ru`, `tr`, `zh-Hans`, `zh-Hant`. Browser language matching, remembered selection and Arabic right-to-left layout are supported. Common editor actions have language-specific labels; remaining editor-owned copy falls back to English until reviewed translations are available.
+
+The game text system is shared across tools. The editor accepts on-demand Babel string dictionaries keyed by native 64-bit string ID, with a separate item-to-string crosswalk. A future Achievements tab can use the same ID-based dictionaries without duplicating images or game text. Only the selected locale is fetched.
+
+To build the item dictionaries locally, put the legally obtained Babel language folders directly under `<BABEL_DIR>/`, e.g. `<BABEL_DIR>/ja/ja.manifest`, `ja.100.txt`, `ja.200.txt`, `ja.300.txt`, and run:
+
+```sh
+python3 scripts/extract-babel-items.py --babel-dir /path/to/Babel
+npm test
+npm run build
+```
+
+The extractor parses the native locale-ID-aware gzip-capable Babel format and generates `public/locales/item-keys.json` plus a compact dictionary for each of the 16 locales. It only maps an item if its catalog English name matches **one unique** native English Babel string key, leaving ambiguous or unverified names to fallback; exact English text matching is not proof of the item's source localization key. It does not publish the full game's dialogue tables.
+
+**Deployment coverage:** native Babel table-300 text has been matched by unique English string to 8,568 of the 10,262 catalog items; all 16 localized dictionaries for these records are shipped. The remaining 79 ambiguous/unmatched named entries and 1,615 entries without verified catalog names retain existing fallback or remain hidden. Core UI labels are translated in 16 locales; remaining editor-authored UI copy falls back to English. This is not yet a guarantee that every editor string is translated.

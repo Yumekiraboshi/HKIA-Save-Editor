@@ -100,3 +100,8 @@
 .date-dialog-cancel{background:var(--hover);color:var(--ink)}
 @media(max-width:730px){.subcategory-card{min-height:193px;padding:12px 8px}.subcategory-art{width:100px;height:103px}.date-dialog-inner{padding:17px;gap:17px}.date-dialog-actions{gap:7px}.date-dialog-actions button{padding:10px 11px}}
 @media(max-width:390px){.date-dialog-actions .date-dialog-spacer{display:none}.date-dialog-actions{justify-content:space-between}}
+
+:root[dir="rtl"] .item-tile .date-button{right:auto;left:5px}
+:root[dir="rtl"] .file-menu .menu-popover{right:auto;left:0}
+:root[dir="rtl"] .date-dialog{direction:rtl}
+:root[dir="rtl"] .header-select select{direction:rtl}
