@@ -655,3 +655,146 @@ fn forward_compatibility_rejects_malformed_versions_and_version_metadata_disagre
  assert!(Editor::open(slot_from_payload("3.0.2",bad)).is_err(),
   "incorrect future target types must fail before write");
 }
+
+
+#[test]
+fn restored_history_checkpoint_keeps_tab_cursors_redo_order_and_native_state(){
+ use hkia_save_core::achievement::AchievementValue;
+ use hkia_save_core::collection::HistoryScope::{Collections,Achievements};
+ let id=2;let original_ticks=638000000000000001i64;let first_ticks=original_ticks+100;
+ let second_ticks=original_ticks+200;let guid=[1,0,0,1];
+ let base=AchievementValue{complete:false,current:1.0,completed:None};
+ let done=AchievementValue{complete:true,current:1.0,completed:Some((1_750_000_000,123_456_700))};
+ let dated=AchievementValue{completed:Some((1_750_000_010,987_654_300)),..done};
+ for version in ["3.0.0","3.0.1","3.0.4"]{
+  for zipped in [false,true]{
+   let raw=slot(version);let input=if zipped{zip(&raw)}else{raw};
+   let mut e=Editor::open(input.clone()).unwrap();
+   let pristine=e.history_checkpoint().unwrap();
+   assert_eq!(&pristine[..8],b"HKIAHS01");assert_eq!(pristine.len(),16);
+   e.change(id,Some(original_ticks),Some(first_ticks)).unwrap();
+   e.change_achievement(guid,base,done).unwrap();
+   e.change(id,Some(first_ticks),Some(second_ticks)).unwrap();
+   e.change_achievement(guid,done,dated).unwrap();
+   // Interleaved and differently scoped redos are kept in native stack order.
+   assert!(e.jump_history(Achievements,1));
+   assert!(e.jump_history(Collections,1));
+   let expected=e.history();
+   let checkpoint=e.history_checkpoint().unwrap();
+   assert_ne!(checkpoint,pristine);
+   let mut restored=Editor::open(input.clone()).unwrap();
+   restored.restore_history(&checkpoint).unwrap();
+   assert_eq!(restored.history(),expected);
+   assert_eq!(restored.history_checkpoint().unwrap(),checkpoint);
+   assert_eq!(restored.value(id),Some(first_ticks));
+   assert_eq!(restored.achievement_value(guid),Some(done));
+   assert!(restored.jump_history(Collections,2));
+   assert_eq!(restored.value(id),Some(second_ticks));
+   assert_eq!(restored.achievement_value(guid),Some(done));
+   assert!(restored.jump_history(Achievements,2));
+   assert_eq!(restored.achievement_value(guid),Some(dated));
+   let reread=Editor::open(restored.export().unwrap()).unwrap();
+   assert_eq!(reread.achievement_value(guid),Some(dated));
+   assert_eq!(reread.value(id),Some(second_ticks));
+   // Restored redo branches survive even when both tab edits net to zero.
+   assert!(e.jump_history(Collections,0));
+   assert!(e.jump_history(Achievements,0));
+   assert!(!e.dirty());assert!(!e.can_undo());assert!(e.can_redo());
+   let zero=e.history_checkpoint().unwrap();
+   let mut undo_only=Editor::open(input).unwrap();
+   undo_only.restore_history(&zero).unwrap();
+   assert_eq!(undo_only.history(),e.history());
+   assert_eq!(undo_only.history_checkpoint().unwrap(),zero);
+   assert!(!undo_only.dirty());
+   assert!(undo_only.jump_history(Collections,2));
+   assert!(undo_only.jump_history(Achievements,2));
+   assert_eq!(undo_only.value(id),Some(second_ticks));
+   assert_eq!(undo_only.achievement_value(guid),Some(dated));
+  }
+ }
+}
+
+#[test]
+fn native_checkpoint_replays_source_verified_achievement_creation_and_grouped_parent_edits(){
+ use hkia_save_core::achievement::AchievementValue;
+ use hkia_save_core::collection::HistoryScope::Achievements;
+ let new_guid=[13220480,1299065047,2812061598,2966187300];
+ let original=slot("3.0.1");let mut editor=Editor::open(original.clone()).unwrap();
+ let done=AchievementValue{complete:true,current:1.0,completed:Some((1_750_000_000,123_456_700))};
+ let undone=AchievementValue{complete:false,current:0.0,completed:None};
+ editor.create_achievement(new_guid,done).unwrap();
+ editor.change_achievement(new_guid,done,undone).unwrap();
+ let leaf=[1,0,0,1];let parent=[2,0,0,1];
+ let base_child=AchievementValue{complete:false,current:1.0,completed:None};
+ let base_parent=AchievementValue{complete:false,current:2.0,completed:None};
+ let done_parent=AchievementValue{complete:true,current:2.0,completed:done.completed};
+ editor.change_achievement_pair((leaf,base_child,done),(parent,base_parent,done_parent)).unwrap();
+ assert!(editor.jump_history(Achievements,2));
+ let checkpoint=editor.history_checkpoint().unwrap();
+ let mut recovered=Editor::open(original.clone()).unwrap();
+ recovered.restore_history(&checkpoint).unwrap();
+ assert_eq!(recovered.history_checkpoint().unwrap(),checkpoint);
+ assert_eq!(recovered.achievement_value(new_guid),Some(undone));
+ assert_eq!(recovered.achievement_value(leaf),Some(base_child));
+ assert_eq!(recovered.achievement_value(parent),Some(base_parent));
+ assert_eq!(recovered.history().len(),3);
+ assert!(recovered.history()[2].paired);
+ assert!(!recovered.history()[2].applied);
+ assert!(recovered.jump_history(Achievements,3));
+ assert_eq!(recovered.achievement_value(leaf),Some(done));
+ assert_eq!(recovered.achievement_value(parent),Some(done_parent));
+ assert_eq!(Editor::open(recovered.export().unwrap()).unwrap().achievement_value(new_guid),Some(undone));
+}
+
+#[test]
+fn native_checkpoint_replays_missing_parent_creation_as_one_reversible_step(){
+ use hkia_save_core::achievement::AchievementValue;
+ use hkia_save_core::collection::HistoryScope::Achievements;
+ let parent=[0x3aad9063,0x467141c3,0x0e4a9888,0xed6f034e];
+ let child=[0x7a4030d3,0x4113e55e,0x8cb9a6a2,0xc866d13e];
+ let done=AchievementValue{complete:true,current:1.0,completed:Some((1_750_000_000,123_456_700))};
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
+  let mut editor=Editor::open(input.clone()).unwrap();
+  editor.complete_child_and_create_parent(child,None,done,parent,done).unwrap();
+  assert!(editor.jump_history(Achievements,0));
+  let journal=editor.history_checkpoint().unwrap();
+  let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&journal).unwrap();
+  assert_eq!(restored.history_checkpoint().unwrap(),journal);
+  assert_eq!(restored.history().len(),1);
+  assert!(restored.history()[0].paired);
+  assert_eq!(restored.achievement_value(child),None);
+  assert_eq!(restored.achievement_value(parent),None);
+  assert!(restored.jump_history(Achievements,1));
+  assert_eq!(restored.achievement_value(child),Some(done));
+  assert_eq!(restored.achievement_value(parent),Some(done));
+ }
+}
+
+#[test]
+fn checkpoint_recovery_rejects_corrupted_stale_or_trailing_data_atomically(){
+ let original=slot("3.0.1");
+ let mut editor=Editor::open(original.clone()).unwrap();
+ editor.change(2,Some(638000000000000001),Some(638000000000000100)).unwrap();
+ let journal=editor.history_checkpoint().unwrap();
+ for damaged in [
+  {let mut d=journal.clone();d[0]^=0xff;d},
+  {let mut d=journal.clone();d[8..12].copy_from_slice(&257u32.to_le_bytes());d},
+  {let mut d=journal.clone();d[12..16].copy_from_slice(&255u32.to_le_bytes());d},
+  {let mut d=journal.clone();d.push(0);d},
+  {let mut d=journal.clone();d.truncate(d.len()-1);d},
+  {let mut d=journal.clone();d[16]=99;d},
+  {let mut d=journal.clone();d[17..21].copy_from_slice(&12345i32.to_le_bytes());d},
+ ]{
+  let mut candidate=Editor::open(original.clone()).unwrap();
+  let pristine=candidate.history_checkpoint().unwrap();
+  assert!(candidate.restore_history(&damaged).is_err());
+  assert_eq!(candidate.history_checkpoint().unwrap(),pristine);
+  assert!(!candidate.dirty());assert!(!candidate.can_redo());
+ }
+ // Do not replace existing user changes when an untrusted checkpoint arrives.
+ let before=editor.history_checkpoint().unwrap();
+ assert!(editor.restore_history(&before).is_err());
+ assert_eq!(editor.history_checkpoint().unwrap(),before);
+}
