@@ -123,7 +123,7 @@ impl Editor {
  pub fn create_achievement(&mut self,guid:[u32;4],value:AchievementValue)->Result<(),Error>{
   if self.slot.envelope.version!=Version::V301||
    !crate::achievement_keys::known_v301(guid)||!achievement::valid(value)||
-   self.achievement_value(guid).is_some()||!value.complete||value.completed.is_none()||
+   self.achievement_value(guid).is_some()||value.complete!=value.completed.is_some()||
    self.slot.index.documents+self.achievement_created.len()>=1_000_000{return Err(Error::Schema)}
   let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   self.achievement_created.insert(guid,value);
@@ -342,7 +342,7 @@ fn mp_array_header(n:usize,out:&mut Vec<u8>)->Result<(),Error>{
 }
 fn mp_u32(n:u32,out:&mut Vec<u8>){out.push(0xce);out.extend(n.to_be_bytes());}
 fn encode_achievement_document(id:u32,guid:[u32;4],value:AchievementValue)->Result<Vec<u8>,Error>{
- if id>i32::MAX as u32||!achievement::valid(value)||!value.complete||value.completed.is_none(){return Err(Error::Schema)}
+ if id>i32::MAX as u32||!achievement::valid(value)||value.complete!=value.completed.is_some(){return Err(Error::Schema)}
  let mut out=vec![0x92,0x10,0x93]; // IDocument Union(16) -> AchievementModel[Id,Hash128,AchievementData]
  mp_u32(id,&mut out);
  // Hash128 is FOUR consecutively encoded UInt32 tokens, not a nested array.
