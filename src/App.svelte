@@ -24,7 +24,7 @@
  let achievementFilter:'all'|'completed'|'incomplete'=$state('all');
  let achievementLimit=$state(BATCH_SIZE);
  let editingAchievement:AchievementEntry|null=$state(null);
- let achievementDialogEl:HTMLDialogElement;
+ let achievementDialogEl:HTMLDialogElement|undefined=$state();
  let achievementReturnFocus:HTMLElement|null=null;
  let achievementProgress=$state('');
  let achievementComplete=$state(false);
@@ -72,7 +72,7 @@
  const achCopy=$derived(achievementCopy(locale));
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
- const achievementRows=$derived((snapshot?.achievements??[]).map((row,index)=>({row,index:index+1})).filter(x=>
+ const achievementRows=$derived(((snapshot as SaveSnapshot|null)?.achievements??[]).map((row:AchievementEntry,index:number)=>({row,index:index+1})).filter(x=>
   achievementFilter==='all'||(achievementFilter==='completed'?x.row.value.complete:!x.row.value.complete)));
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
  const subgroups=$derived(selectedGroup?listSubcategories((catalog as Catalog|null)?.items??[],selectedGroup,recorded,locale):[]);
