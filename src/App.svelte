@@ -24,6 +24,7 @@
  import {loadIconPack,type IconPack} from './icon-packs';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
+ import {searchAllCollectionItems} from './collection-search';
  type Item=CollectionItem;
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
@@ -242,18 +243,7 @@
   return filtered;
  });
  const showingGlobalCollectionSearch=$derived(Boolean(query.trim())&&!collectionSearchDrilldown);
- const collectionSearchResults=$derived.by(()=>{
-  const q=query.trim().toLocaleLowerCase();
-  if(!catalog||!q)return [] as Item[];
-  return catalog.items.filter(item=>{
-   const label=nameFor(item);
-   return Boolean(label)&&(
-    label.toLocaleLowerCase().includes(q)||
-    (item[5]??'').toLocaleLowerCase().includes(q)||
-    (item[6]??'').toLocaleLowerCase().includes(q)
-   );
-  }).sort((a,b)=>nameFor(a).localeCompare(nameFor(b),locale)||a[0]-b[0]);
- });
+ const collectionSearchResults=$derived(catalog?searchAllCollectionItems(catalog.items,query,locale,nameFor):[] as Item[]);
  const visibleItems=$derived(matching.slice(0,visibleLimit));
  $effect(()=>{
   const el=loadMoreSentinel;
