@@ -24,7 +24,7 @@ test('topbar and HTML identity refer to HKIA Save Editor, never the parent proje
  assert.equal((copy.match(/"brand": "HKIA Save Editor"/g)??[]).length,2);
  assert.match(app,/<span class="brand-name">\{copy\.brand\}<\/span>/);
  assert.match(html,/<title>HKIA Save Editor<\/title>/);
- assert.match(app,/'HKIA Save Editor'<\/title>/);
+ assert.match(app,/'HKIA Save Editor'\}<\/title>/);
  for(const content of [app,html,copy]){
   assert.doesNotMatch(content,/夢綺羅星|Yumekiraboshi/);
  }
