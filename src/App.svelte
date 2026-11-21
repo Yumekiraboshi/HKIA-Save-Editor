@@ -5,7 +5,8 @@
  import {messages,editorErrors,type Locale} from './ui-copy';
  import {loadIconPack,type IconPack} from './icon-packs';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
- type Item=[number,string,string,string,number,string|null,string|null,number];
+ import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
+ type Item=CollectionItem;
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
  type Filter='all'|'recorded'|'unrecorded';
@@ -19,6 +20,8 @@
  let original:File|null=$state(null);
  let recorded:Record<string,bigint>=$state({});
  let selectedGroup:string|null=$state(null);
+ let selectedSubgroup:string|null=$state(null);
+ let showVariants=$state(false);
  let query=$state('');
  let filter:Filter=$state('all');
  let visibleLimit=$state(BATCH_SIZE);
@@ -46,6 +49,10 @@
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
+ const subgroups=$derived(catalog&&selectedGroup?listSubcategories(catalog.items,selectedGroup,recorded,locale):[]);
+ const activeSubgroup=$derived(subgroups.length===1?subgroups[0].key:subgroups.some(s=>s.key===selectedSubgroup)?selectedSubgroup:null);
+ const families=$derived(catalog?recordedFamilies(catalog.items,recorded):{} as Record<string,number[]>);
+ const hasVariants=$derived(Boolean(catalog&&selectedGroup&&activeSubgroup&&catalog.items.some(item=>item[3]===selectedGroup&&item[2]===activeSubgroup&&item[0]!==item[7])));
 
  onMount(()=>{
   browserLanguage=(navigator.languages.find(l=>l.toLowerCase().startsWith('ja')||l.toLowerCase().startsWith('en'))??navigator.language??'ja').toLowerCase().startsWith('en')?'en':'ja';
@@ -91,11 +98,12 @@
    .map(g=>({row:g,count:owned.get(g[0])?.size??0,total:totals.get(g[0])?.size??0}));
  });
  const matching=$derived.by(()=>{
-  if(!catalog||!selectedGroup)return [] as Item[];
+  if(!catalog||!selectedGroup||!activeSubgroup)return [] as Item[];
   const q=query.trim().toLocaleLowerCase();
   const filtered=catalog.items.filter(item=>{
-   if(item[3]!==selectedGroup||!item[5]||!item[6])return false;
-   const has=recorded[String(item[0])]!==undefined;
+   if(item[3]!==selectedGroup||item[2]!==activeSubgroup||!item[5]||!item[6])return false;
+   if(!showVariants&&item[0]!==item[7])return false;
+   const has=showVariants?recorded[String(item[0])]!==undefined:(families[String(item[7]||item[0])]?.length??0)>0;
    if(filter==='recorded'&&!has||filter==='unrecorded'&&has)return false;
    return !q||item[5]!.toLocaleLowerCase().includes(q)||item[6]!.toLocaleLowerCase().includes(q);
   });
@@ -105,7 +113,7 @@
  const visibleItems=$derived(matching.slice(0,visibleLimit));
  $effect(()=>{
   const el=loadMoreSentinel;
-  if(!el||!selectedGroup||typeof IntersectionObserver==='undefined')return;
+  if(!el||!activeSubgroup||typeof IntersectionObserver==='undefined')return;
   const observer=new IntersectionObserver(entries=>{
    if(entries.some(x=>x.isIntersecting))visibleLimit=Math.min(visibleLimit+BATCH_SIZE,matching.length);
   },{rootMargin:'720px 0px'});
@@ -122,8 +130,28 @@
  }
  function titleFor(g:Group){return locale==='ja'?g[1]:g[2]}
  function nameFor(item:Item){return (locale==='ja'?item[6]:item[5])??''}
- function selectCategory(key:string){selectedGroup=key;visibleLimit=BATCH_SIZE;query='';filter='all';editId=null;error='';void fetchImages(key);void persistDraft();}
- function goHome(){selectedGroup=null;visibleLimit=BATCH_SIZE;editId=null;query='';filter='all';iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;if(snapshot)void persistDraft();}
+ function selectCategory(key:string){
+  selectedGroup=key;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
+  query='';filter='all';editId=null;error='';
+  const rows=catalog?.items.filter(item=>item[3]===key)??[];
+  if(rows.length>0&&rows.every(item=>item[2]===rows[0][2]))void fetchImages(key);
+  void persistDraft();
+ }
+ function selectSubcategory(key:string){
+  if(!selectedGroup||!subgroups.some(sub=>sub.key===key))return;
+  selectedSubgroup=key;showVariants=false;visibleLimit=BATCH_SIZE;query='';filter='all';editId=null;error='';
+  void fetchImages(selectedGroup);void persistDraft();
+ }
+ function goSubcategories(){
+  selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';filter='all';
+  iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;
+  if(snapshot)void persistDraft();
+ }
+ function goHome(){
+  selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
+  editId=null;query='';filter='all';iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;
+  if(snapshot)void persistDraft();
+ }
  function askFile(){if(busy||!restored)return;fileMenu&&(fileMenu.open=false);fileInput?.click();}
  async function fetchImages(key:string){
   const epoch=++iconEpoch;
@@ -138,7 +166,7 @@
  function persistDraft():Promise<void>{
   if(!original)return Promise.resolve();
   const patches=diffPatches(baseline,recorded);
-  const ui={group:selectedGroup};
+  const ui={group:selectedGroup,subgroup:selectedSubgroup};
   const job=draftWrites.catch(()=>{}).then(()=>saveDraftChanges(patches,ui));
   draftWrites=job;
   return job.then(()=>{draftReady=true;draftWarning=false},()=>{draftReady=false;draftWarning=true});
@@ -158,7 +186,7 @@
     });
     const session=patches.length?await applyDraft(patches):s;
     original=draft.file;baseline=originalRows;update(session);
-    selectedGroup=draft.ui.group;
+    selectedGroup=draft.ui.group;selectedSubgroup=draft.ui.subgroup;
     if(draft.ui.group)void fetchImages(draft.ui.group);
    }
    draftReady=true;
@@ -177,13 +205,15 @@
   const priorBaseline=baseline;
   const priorRecorded=recorded;
   const priorGroup=selectedGroup;
+  const priorSubgroup=selectedSubgroup;
+  const priorVariants=showVariants;
   busy=true;error='';
   try{
    if(file.size>60*1024*1024||file.size===0)throw Error(copy.typeIssue);
    await draftWrites.catch(()=>{});
    const session=await openSave(file);
    original=file;baseline=new Map(session.entries);update(session);
-   selectedGroup=null;visibleLimit=BATCH_SIZE;editId=null;query='';filter='all';
+   selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';filter='all';
    iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;
    try{await saveOriginalLocally(file);draftReady=true;draftWarning=false}
    catch{draftReady=false;draftWarning=true}
@@ -199,11 +229,11 @@
      }));
      const previous=patches.length?await applyDraft(patches):opened;
      original=priorFile;baseline=priorBaseline;update(previous);
-     selectedGroup=priorGroup;visibleLimit=BATCH_SIZE;
+     selectedGroup=priorGroup;selectedSubgroup=priorSubgroup;showVariants=priorVariants;visibleLimit=BATCH_SIZE;
      if(priorGroup&&(!iconPack||iconPack.group!==priorGroup))void fetchImages(priorGroup);
     }catch{
      original=null;snapshot=null;recorded={};baseline=new Map();
-     selectedGroup=null;iconEpoch++;iconPack?.dispose();iconPack=null;
+     selectedGroup=null;selectedSubgroup=null;showVariants=false;iconEpoch++;iconPack?.dispose();iconPack=null;
     }
    }
    error=reason;
@@ -342,10 +372,23 @@
      <p>{copy.verifiedNames}: {(catalog.items.length-unnamed).toLocaleString(locale)} / {copy.unverifiedNames}: {unnamed.toLocaleString(locale)}</p>
     </details>
    {/if}
-  {:else}
+  {:else if !activeSubgroup}
    <div class="section-heading with-back">
     <button type="button" class="back-link" onclick={goHome}>‹ {copy.back}</button>
     <h1>{group?titleFor(group):copy.collections}</h1>
+   </div>
+   <div class="subcategory-grid">
+    {#each subgroups as sub (sub.key)}
+     <button type="button" class="subcategory-card" onclick={()=>selectSubcategory(sub.key)}>
+      <span class="subcategory-label">{subcategoryLabel(sub.key,locale)}</span>
+      <span class="subcategory-count" title={copy.progressHint}>{sub.count.toLocaleString(locale)} / {sub.total.toLocaleString(locale)}</span>
+     </button>
+    {/each}
+   </div>
+  {:else}
+   <div class="section-heading with-back">
+    <button type="button" class="back-link" onclick={subgroups.length>1?goSubcategories:goHome}>‹ {subgroups.length>1?copy.backSubcategories:copy.back}</button>
+    <h1>{group?titleFor(group):copy.collections}{#if subgroups.length>1}<span class="subsection-divider"> / </span>{subcategoryLabel(activeSubgroup,locale)}{/if}</h1>
    </div>
    <div class="collection-controls">
     <label class="search-field">
@@ -357,19 +400,27 @@
      <button type="button" class:active={filter==='unrecorded'} onclick={()=>{filter='unrecorded';visibleLimit=BATCH_SIZE}}>{copy.unrecorded}</button>
      <button type="button" class:active={filter==='recorded'} onclick={()=>{filter='recorded';visibleLimit=BATCH_SIZE}}>{copy.recorded}</button>
     </div>
+    {#if hasVariants}
+     <button type="button" class="variation-button" class:active={showVariants} aria-pressed={showVariants}
+      onclick={()=>{showVariants=!showVariants;visibleLimit=BATCH_SIZE;editId=null}}>
+      {showVariants?copy.hideVariants:copy.showVariants}
+     </button>
+    {/if}
    </div>
    {#if !snapshot.membershipEdit}<div class="compact-hint">{copy.noMembership}</div>{/if}
    <div class="item-grid">
     {#each visibleItems as item (item[0])}
      {@const tick=recorded[String(item[0])]}
-     {@const has=tick!==undefined}
+     {@const direct=tick!==undefined}
+     {@const recordIds=families[String(item[7]||item[0])]??[]}
+     {@const has=showVariants?direct:recordIds.length>0}
      {@const mayAdd=snapshot.membershipEdit && snapshot.version===catalog?.version && item[4]===0}
-     {@const mayToggle=has?snapshot.membershipEdit:mayAdd}
+     {@const mayToggle=showVariants?(direct?snapshot.membershipEdit:mayAdd):(recordIds.length===0?mayAdd:recordIds.length===1&&direct&&snapshot.membershipEdit)}
      {@const sprite=iconPack?.group===selectedGroup?iconPack.entries[String(item[0])]:undefined}
      <article class="item-tile" class:is-recorded={has}>
       <button type="button" class="item-toggle" aria-pressed={has} aria-label={(has?copy.unsetRecorded:copy.setRecorded)+': '+nameFor(item)}
-       title={mayToggle?(has?copy.unsetRecorded:copy.setRecorded):copy.unsafe} disabled={busy||!mayToggle}
-       onclick={()=>void change(item[0],has?null:EPOCH+BigInt(Date.now())*10000n)}>
+       title={mayToggle?(has?copy.unsetRecorded:copy.setRecorded):!showVariants&&recordIds.length>0?copy.variantsToEdit:copy.unsafe} disabled={busy||!mayToggle}
+       onclick={()=>void change(item[0],direct?null:EPOCH+BigInt(Date.now())*10000n)}>
        <span class="item-art" aria-hidden="true">
         {#if sprite}
          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
@@ -380,8 +431,8 @@
        <span class="item-name">{nameFor(item)}</span>
        <span class="item-status" class:has={has}>{has?'✓ '+copy.recorded:copy.unrecorded}</span>
       </button>
-      {#if has}<button type="button" class="date-button" title={copy.editDate} aria-label={copy.editDate+': '+nameFor(item)} disabled={busy} onclick={()=>editDate(item[0])}>◷</button>{/if}
-      {#if editId===item[0] && has}
+      {#if direct}<button type="button" class="date-button" title={copy.editDate} aria-label={copy.editDate+': '+nameFor(item)} disabled={busy} onclick={()=>editDate(item[0])}>◷</button>{/if}
+      {#if editId===item[0] && direct}
        <div class="date-panel">
         <label>{copy.editDate}<input type="datetime-local" step="1" bind:value={dateValue}/></label>
         <div><button type="button" class="primary" disabled={busy||!dateValue} onclick={applyDate}>{copy.apply}</button><button type="button" onclick={()=>editId=null}>{copy.cancel}</button></div>
