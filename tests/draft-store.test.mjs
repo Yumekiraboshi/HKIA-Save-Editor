@@ -41,8 +41,33 @@ test('draft validation rejects malformed identities and duplicated records',()=>
 test('restoration code keeps source and changes separate and clears both on close',()=>{
  assert.match(source,/transaction\(\[BASE,EDITS\],'readwrite'\)/);
  assert.match(source,/objectStore\(BASE\)\.put\(file,KEY\)/);
- assert.match(source,/objectStore\(EDITS\)\.put\(\{version:VERSION,patches:savedPatches,achievementPatches:savedAchievements,ui:savedUi\},KEY\)/);
+ assert.match(source,/objectStore\(EDITS\)\.put\(\{version:VERSION,patches:savedPatches,achievementPatches:savedAchievements,ui:savedUi,historyCheckpoint:savedHistory\},KEY\)/);
  assert.match(source,/cloneStoredAchievementPatches\(achievementPatches\)/);
  assert.match(source,/objectStore\(BASE\)\.delete\(KEY\)/);
  assert.match(source,/objectStore\(EDITS\)\.delete\(KEY\)/);
+});
+
+
+test('local native history checkpoints are cloned losslessly and invalid payloads fall back safely',()=>{
+ const valid=new Uint8Array(16);
+ valid.set(new TextEncoder().encode('HKIAHS01'));
+ assert.deepEqual(store.safeHistoryCheckpoint(valid),valid);
+ const copy=store.safeHistoryCheckpoint(valid);
+ assert.ok(copy);
+ assert.notEqual(copy,valid);
+ copy[0]=0;
+ assert.equal(valid[0],72,'IndexDB must never retain a mutable Svelte/worker buffer');
+ for(const invalid of [
+  null,{},new Uint8Array(0),new Uint8Array(15),new Uint8Array(128*1024+1),
+  Uint8Array.from(valid, (x,i)=>i===0?0:x),
+  Uint8Array.from(valid, (x,i)=>i===8?1:i===12?2:x),
+  Uint8Array.from(valid, (x,i)=>i===8?1:x) // structurally bounded but incomplete; Rust must reject
+ ]){
+  const result=store.safeHistoryCheckpoint(invalid);
+  if(invalid instanceof Uint8Array&&invalid[8]===1&&invalid[12]===0&&invalid[0]===72){
+   assert.ok(result,'native verifier rejects truncated operations on replay, not IDB reader');
+  }else assert.equal(result,null);
+ }
+ assert.match(source,/safeHistoryCheckpoint\(state\?\.historyCheckpoint\)/);
+ assert.match(source,/if\(historyCheckpoint!==null&&!savedHistory\)throw Error\('HISTORY_CHECKPOINT_INVALID'\)/);
 });
