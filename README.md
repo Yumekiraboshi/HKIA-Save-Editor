@@ -4,6 +4,16 @@
 
 A browser-local collection-history and achievement-state editor for Hello Kitty Island Adventure. Collection browsing uses the game's 25 collection groups rather than a flat ItemId list.
 
+## Automatic achievement-category completion
+
+Each of the **63 native categories** is an independent saved achievement with its own source GUID. Its **757 child achievements** are grouped by the game-defined `GameCounterAchievementsDefinition` links.
+
+When a user completes the final saved child through the achievement grid (or edits a completed child's progress/date), the editor also completes that category **only when** every native child has a saved, completed achievement record and the parent itself has an incomplete saved record. Both records are changed through a single atomic Rust/WASM operation, with compare-and-swap validation and a single Undo/Redo step. An existing completed parent's history is never rewritten or automatically reverted.
+
+The parent timestamp is copied **exactly** (seconds plus 100ns-resolution nanoseconds) from the latest completed child when all children have known completion timestamps. If any child timestamp is absent, the parent is completed with `CompletedTime=null` rather than inventing a historical time. The parent `CurrentValue` is set to the number of native direct children; unknown/missing achievement records are **never created**. No changes occur merely from opening a save.
+
+**Scope limitation:** these edits change only the existing achievement documents. Separate game counters (`GameCounterModel`), reward grant state, and external platform achievements are **not** synchronized; the runtime may recompute category state on game load, and this behavior is not hardware-verified. Treat the date as an editor-derived consistency rule, not a verified historical parent unlock event.
+
 ## Interface
 
 - Game-derived collection categories, with 25 local category images and their real sub-collections from each item's collection ID. Subcategory cards reuse representative local item sprites.
