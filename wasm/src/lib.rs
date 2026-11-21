@@ -42,6 +42,52 @@ pub extern "C" fn hkia_change(id:i32,expected_present:u32,expected_ticks:i64,nex
  })
 }
 
+// Source-validated, version-gated new AchievementModel (Union 16).
+#[no_mangle]
+pub extern "C" fn hkia_achievement_create(
+ g0:u32,g1:u32,g2:u32,g3:u32,
+ complete:u32,progress:f32,seconds:i64,nanos:u32,has_date:u32
+)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  if complete>1||has_date>1||complete!=has_date{return 1}
+  let value=hkia_save_core::achievement::AchievementValue{
+   complete:complete==1,current:progress,completed:if has_date==1{Some((seconds,nanos))}else{None}
+  };
+  match a.editor.as_mut().map(|e|e.create_achievement([g0,g1,g2,g3],value)){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+// Create the missing last child and complete an existing parent in one Undo.
+#[no_mangle]
+pub extern "C" fn hkia_achievement_create_parent(
+ g0:u32,g1:u32,g2:u32,g3:u32,
+ complete:u32,progress:f32,seconds:i64,nanos:u32,has_date:u32,
+ p0:u32,p1:u32,p2:u32,p3:u32,
+ before_complete:u32,before_progress:f32,before_seconds:i64,before_nanos:u32,before_has_date:u32,
+ after_complete:u32,after_progress:f32,after_seconds:i64,after_nanos:u32,after_has_date:u32
+)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  if complete!=1||has_date!=1||[before_complete,before_has_date,after_complete,after_has_date].iter().any(|&x|x>1){return 1}
+  let child=hkia_save_core::achievement::AchievementValue{
+   complete:true,current:progress,completed:Some((seconds,nanos))
+  };
+  let before=hkia_save_core::achievement::AchievementValue{
+   complete:before_complete==1,current:before_progress,
+   completed:if before_has_date==1{Some((before_seconds,before_nanos))}else{None}
+  };
+  let after=hkia_save_core::achievement::AchievementValue{
+   complete:after_complete==1,current:after_progress,
+   completed:if after_has_date==1{Some((after_seconds,after_nanos))}else{None}
+  };
+  match a.editor.as_mut().map(|e|e.create_achievement_with_parent([g0,g1,g2,g3],child,[p0,p1,p2,p3],before,after)){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+
 #[no_mangle]
 pub extern "C" fn hkia_achievement_change(
  g0:u32,g1:u32,g2:u32,g3:u32,

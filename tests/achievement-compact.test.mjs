@@ -37,7 +37,7 @@ test('revoking completion keeps partial progress but clamps overflow below goal;
  assert.equal(quick.toggleAchievementState(changed,1795251723456).current,changed.current,'unknown source goal must not be invented');
 });
 
-test('collection-like achievement cards use one click, a separate date popup, and do not fabricate missing records',()=>{
+test('collection-like achievement cards create source-defined absent records on user click and keep a separate date popup',()=>{
  for(const mark of [
    'class="category-grid achievement-category-grid"',
    'class="category-card achievement-category-card"',
@@ -45,10 +45,10 @@ test('collection-like achievement cards use one click, a separate date popup, an
    'class="item-tile achievement-tile"',
    'class="item-toggle achievement-toggle"',
    'class="date-button achievement-dialog-button"',
-   'if(item.row)void quickToggleAchievement(item.row)',
+   'onclick={()=>void quickToggleAchievement(item)}',
    'if(item.row)void openAchievement(item.row',
-   'disabled={busy||!item.row}',
-   'toggleAchievementState(live.value,Date.now(),target)',
+   'disabled={busy||(!item.row&&(snapshot.version',
+   'toggleAchievementState(prior,Date.now(),target)',
    'changeAchievement(live.guid,live.value,next)',
    'await persistDraft()',
    'bind:this={achievementDialogEl}',

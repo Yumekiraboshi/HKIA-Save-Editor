@@ -15,8 +15,10 @@ pub struct CounterEntry {pub guid:[u32;4],pub current:f32,pub counted_values:Opt
 enum Change {
  Collection{id:i32,before:Option<Option<i64>>,after:Option<Option<i64>>},
  Achievement{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
- AchievementPair{first:([u32;4],Option<AchievementValue>,Option<AchievementValue>),
-                 second:([u32;4],Option<AchievementValue>,Option<AchievementValue>)},
+ AchievementCreated{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
+ AchievementCreatedPair{guid:[u32;4],value:AchievementValue,parent:([u32;4],Option<AchievementValue>,Option<AchievementValue>)},
+ AchievementPair{first:([u32;4],bool,Option<AchievementValue>,Option<AchievementValue>),
+                 second:([u32;4],bool,Option<AchievementValue>,Option<AchievementValue>)},
 }
 
 pub struct Editor {
@@ -28,6 +30,7 @@ pub struct Editor {
  entries:Vec<Entry>,
  changes:HashMap<i32,Option<i64>>,
  achievement_changes:HashMap<[u32;4],AchievementValue>,
+ achievement_created:HashMap<[u32;4],AchievementValue>,
  undo:Vec<Change>,
  redo:Vec<Change>,
  revision:u32,
@@ -52,7 +55,7 @@ impl Editor {
    if base.insert(row.id,row.ticks).is_some(){return Err(Error::Duplicate)}
    entries.push(Entry{id:row.id,ticks:row.ticks});
   }
-  Ok(Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),achievement_changes:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0})
+  Ok(Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0})
  }
  fn compatible(slot:&ReadSlot)->bool{
   let n=slot.index.collection_version.as_ref().map(|v|v.number);
@@ -77,10 +80,14 @@ impl Editor {
   match self.changes.get(&id){Some(v)=>*v,None=>self.base.get(&id).copied()}
  }
  pub fn achievements(&self)->Vec<AchievementEntry>{
-  self.slot.index.achievements.iter().filter_map(|model|{
+  let mut rows:Vec<AchievementEntry>=self.slot.index.achievements.iter().filter_map(|model|{
    let value=self.achievement_changes.get(&model.guid).copied().or_else(||achievement::value(model).ok())?;
    Some(AchievementEntry{guid:model.guid,value})
-  }).collect()
+  }).collect();
+  let mut added:Vec<_>=self.achievement_created.iter()
+   .map(|(&guid,&value)|AchievementEntry{guid,value}).collect();
+  added.sort_by_key(|r|r.guid);
+  rows.extend(added);rows
  }
  pub fn counters(&self)->Vec<CounterEntry>{
   self.slot.index.counters.iter().filter_map(|model|match &model.state{
@@ -91,9 +98,10 @@ impl Editor {
   }).collect()
  }
  pub fn achievement_value(&self,guid:[u32;4])->Option<AchievementValue>{
-  self.achievement_changes.get(&guid).copied().or_else(||self.slot.index.achievements.iter().find(|m|m.guid==guid).and_then(|m|achievement::value(m).ok()))
+  self.achievement_created.get(&guid).copied().or_else(||self.achievement_changes.get(&guid).copied())
+   .or_else(||self.slot.index.achievements.iter().find(|m|m.guid==guid).and_then(|m|achievement::value(m).ok()))
  }
- pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.achievement_changes.is_empty()}
+ pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
  pub fn can_undo(&self)->bool {!self.undo.is_empty()}
  pub fn can_redo(&self)->bool {!self.redo.is_empty()}
  pub fn can_change_membership(&self)->bool {self.slot.index.deprecated_map.is_some() && self.slot.index.deprecated_count==0 && self.slot.index.deprecated.is_empty()}
@@ -110,6 +118,41 @@ impl Editor {
   self.redo.clear();self.revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   Ok(())
  }
+ /// Create a v3.0.1 source-defined, previously absent achievement document.
+ /// The IDocument tag 16 model is materialized on export. No read/open mutation.
+ pub fn create_achievement(&mut self,guid:[u32;4],value:AchievementValue)->Result<(),Error>{
+  if self.slot.envelope.version!=Version::V301||
+   !crate::achievement_keys::known_v301(guid)||!achievement::valid(value)||
+   self.achievement_value(guid).is_some()||value.complete!=value.completed.is_some()||
+   self.slot.index.documents+self.achievement_created.len()>=1_000_000{return Err(Error::Schema)}
+  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  self.achievement_created.insert(guid,value);
+  self.undo.push(Change::AchievementCreated{guid,before:None,after:Some(value)});
+  if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
+  self.redo.clear();self.revision=revision;Ok(())
+ }
+ /// Missing last child plus an existing parent must not be a partial mutation.
+ pub fn create_achievement_with_parent(
+  &mut self,guid:[u32;4],value:AchievementValue,
+  parent:[u32;4],expected:AchievementValue,next:AchievementValue
+ )->Result<(),Error>{
+  if guid==parent||crate::achievement_keys::parent_of_v301(guid)!=Some(parent)||self.slot.envelope.version!=Version::V301||
+   !crate::achievement_keys::known_v301(guid)||!achievement::valid(value)||
+   self.achievement_value(guid).is_some()||!value.complete||value.completed.is_none()||
+   !achievement::valid(expected)||!achievement::valid(next)||expected==next||
+   self.achievement_value(parent)!=Some(expected)||
+   self.slot.index.documents+self.achievement_created.len()>=1_000_000{return Err(Error::Schema)}
+  let model=self.slot.index.achievements.iter().find(|m|m.guid==parent).ok_or(Error::Schema)?;
+  let original=achievement::value(model)?;
+  let before=self.achievement_changes.get(&parent).copied();
+  let after=if next==original{None}else{Some(next)};
+  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  self.achievement_created.insert(guid,value);
+  match after{Some(v)=>{self.achievement_changes.insert(parent,v);},None=>{self.achievement_changes.remove(&parent);}}
+  self.undo.push(Change::AchievementCreatedPair{guid,value,parent:(parent,before,after)});
+  if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
+  self.redo.clear();self.revision=revision;Ok(())
+ }
  /// Update a leaf and its completed parent atomically, with exactly one undo entry.
  /// Every compare-and-swap precondition is checked before modifying either record.
  pub fn change_achievement_pair(
@@ -118,21 +161,26 @@ impl Editor {
   second:([u32;4],AchievementValue,AchievementValue)
  )->Result<(),Error>{
   if first.0==second.0{return Err(Error::Duplicate)}
-  let mut replacements=[([0u32;4],None,None);2];
+  let mut replacements=[([0u32;4],false,None,None);2];
   for (i,(guid,expected,next)) in [first,second].into_iter().enumerate(){
    if !achievement::valid(expected)||!achievement::valid(next)||
     expected==next||self.achievement_value(guid)!=Some(expected){return Err(Error::Schema)}
-   let model=self.slot.index.achievements.iter().find(|m|m.guid==guid).ok_or(Error::Schema)?;
-   let original=achievement::value(model)?;
-   let before=self.achievement_changes.get(&guid).copied();
-   let after=if next==original{None}else{Some(next)};
-   replacements[i]=(guid,before,after);
+   let created=self.achievement_created.contains_key(&guid);
+   let (before,after)=if created{
+    (self.achievement_created.get(&guid).copied(),Some(next))
+   }else{
+    let model=self.slot.index.achievements.iter().find(|m|m.guid==guid).ok_or(Error::Schema)?;
+    let original=achievement::value(model)?;
+    (self.achievement_changes.get(&guid).copied(),if next==original{None}else{Some(next)})
+   };
+   replacements[i]=(guid,created,before,after);
   }
   let next_revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
-  for (guid,_,after) in replacements{
+  for (guid,created,_,after) in replacements{
+   let values=if created{&mut self.achievement_created}else{&mut self.achievement_changes};
    match after{
-    Some(value)=>{self.achievement_changes.insert(guid,value);},
-    None=>{self.achievement_changes.remove(&guid);}
+    Some(value)=>{values.insert(guid,value);},
+    None=>{values.remove(&guid);}
    }
   }
   self.undo.push(Change::AchievementPair{first:replacements[0],second:replacements[1]});
@@ -142,6 +190,14 @@ impl Editor {
  }
  pub fn change_achievement(&mut self,guid:[u32;4],expected:AchievementValue,next:AchievementValue)->Result<(),Error>{
   if !achievement::valid(next) || expected==next || self.achievement_value(guid)!=Some(expected){return Err(Error::Schema)}
+  if let Some(&before)=self.achievement_created.get(&guid){
+   let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+   self.achievement_created.insert(guid,next);
+   self.undo.push(Change::AchievementCreated{guid,before:Some(before),after:Some(next)});
+   if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
+   self.redo.clear();self.revision=revision;
+   return Ok(())
+  }
   let model=self.slot.index.achievements.iter().find(|m|m.guid==guid).ok_or(Error::Schema)?;
   let original=achievement::value(model)?;
   let before=self.achievement_changes.get(&guid).copied();
@@ -164,11 +220,22 @@ impl Editor {
      Some(v)=>{self.achievement_changes.insert(guid,v);},None=>{self.achievement_changes.remove(&guid);}
     }
    }
+   Change::AchievementCreated{guid,before,after}=>{
+    match if reverse{before}else{after}{
+     Some(v)=>{self.achievement_created.insert(guid,v);},None=>{self.achievement_created.remove(&guid);}
+    }
+   }
+   Change::AchievementCreatedPair{guid,value,parent:(pg,before,after)}=>{
+    if reverse{self.achievement_created.remove(&guid);}else{self.achievement_created.insert(guid,value);}
+    match if reverse{before}else{after}{
+     Some(v)=>{self.achievement_changes.insert(pg,v);},None=>{self.achievement_changes.remove(&pg);}
+    }
+   }
    Change::AchievementPair{first,second}=>{
-    for (guid,before,after) in [first,second]{
+    for (guid,created,before,after) in [first,second]{
+     let values=if created{&mut self.achievement_created}else{&mut self.achievement_changes};
      match if reverse{before}else{after}{
-      Some(v)=>{self.achievement_changes.insert(guid,v);},
-      None=>{self.achievement_changes.remove(&guid);}
+      Some(v)=>{values.insert(guid,v);},None=>{values.remove(&guid);}
      }
     }
    }
@@ -184,7 +251,7 @@ impl Editor {
   self.restore_change(&change,false);self.undo.push(change);
   self.revision=self.revision.wrapping_add(1);true
  }
- pub fn reset(&mut self){self.changes.clear();self.achievement_changes.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
+ pub fn reset(&mut self){self.changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
  pub fn export(&self)->Result<Vec<u8>,Error>{
   if !self.dirty(){return Err(Error::Schema)}
   let original_payload=&self.slot.envelope.decoded;
@@ -201,7 +268,39 @@ impl Editor {
     patches.extend(achievement::replacements(model,*value)?);
    }
   }
-  let (next_payload,first)=achievement::splice(original_payload,patches)?;
+  // First patch existing token spans, then use a fresh schema walk to insert
+  // new IDocuments into DbRoot's original documents array. The array header
+  // and byte offsets can shift when existing timestamps change width.
+  let (intermediate,first)=if patches.is_empty(){
+   (original_payload.clone(),original_payload.len())
+  }else{achievement::splice(original_payload,patches)?};
+  let (next_payload,first)=if self.achievement_created.is_empty(){
+   (intermediate,first)
+  }else{
+   let index=crate::native::index_native(&intermediate,self.slot.envelope.version)?;
+   let span=index.root_documents_span.clone().ok_or(Error::Schema)?;
+   let mut cursor=Cursor::new(&intermediate[span.clone()]);
+   let count=cursor.array()?;
+   if count!=index.documents||count+self.achievement_created.len()>1_000_000{return Err(Error::Schema)}
+   let insertion=index.achievements.last().ok_or(Error::Schema)?.fields[2].bytes.end;
+   let head_end=span.start+cursor.pos;
+   if insertion<head_end||insertion>span.end{return Err(Error::Schema)}
+   let mut added:Vec<_>=self.achievement_created.iter().collect();
+   added.sort_by_key(|(&guid,_)|guid);
+   let max_id=index.achievements.iter().map(|x|x.id).max().ok_or(Error::Schema)?;
+   let max_new=max_id.checked_add(u32::try_from(added.len()).map_err(|_|Error::Overflow)?).ok_or(Error::Overflow)?;
+   if max_new>i32::MAX as u32{return Err(Error::Schema)}
+   let mut replacement=Vec::new();
+   mp_array_header(count+added.len(),&mut replacement)?;
+   replacement.extend_from_slice(&intermediate[head_end..insertion]);
+   for (i,(&guid,&value)) in added.into_iter().enumerate(){
+    let id=max_id+(i as u32)+1;
+    replacement.extend(encode_achievement_document(id,guid,value)?);
+   }
+   replacement.extend_from_slice(&intermediate[insertion..span.end]);
+   let (result,created_at)=achievement::splice(&intermediate,vec![(span,replacement)])?;
+   (result,first.min(created_at))
+  };
   if next_payload==*original_payload{return Err(Error::Schema)}
   let new_slot=encode_slot(&self.slot_raw,&self.slot,&next_payload,first)?;
   let reread=read_slot(&new_slot)?;
@@ -232,6 +331,28 @@ impl Editor {
   Ok(candidate)
  }
 
+}
+
+fn mp_array_header(n:usize,out:&mut Vec<u8>)->Result<(),Error>{
+ if n>1_000_000{return Err(Error::Budget)}
+ if n<16{out.push(0x90|n as u8)}
+ else if n<=u16::MAX as usize{out.push(0xdc);out.extend((n as u16).to_be_bytes());}
+ else{out.push(0xdd);out.extend((n as u32).to_be_bytes());}
+ Ok(())
+}
+fn mp_u32(n:u32,out:&mut Vec<u8>){out.push(0xce);out.extend(n.to_be_bytes());}
+fn encode_achievement_document(id:u32,guid:[u32;4],value:AchievementValue)->Result<Vec<u8>,Error>{
+ if id>i32::MAX as u32||!achievement::valid(value)||value.complete!=value.completed.is_some(){return Err(Error::Schema)}
+ let mut out=vec![0x92,0x10,0x93]; // IDocument Union(16) -> AchievementModel[Id,Hash128,AchievementData]
+ mp_u32(id,&mut out);
+ // Hash128 is FOUR consecutively encoded UInt32 tokens, not a nested array.
+ for word in guid{mp_u32(word,&mut out);}
+ out.push(0x93);out.push(if value.complete{0xc3}else{0xc2});
+ out.push(0xca);out.extend(value.current.to_bits().to_be_bytes());
+ if let Some((seconds,nanos))=value.completed{
+  out.extend([0xc7,12,0xff]);out.extend(nanos.to_be_bytes());out.extend(seconds.to_be_bytes());
+ }else{out.push(0xc0)}
+ Ok(out)
 }
 
 fn mp_map_len(n:usize)->Result<Vec<u8>,Error>{

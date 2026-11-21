@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeAchievement,changeAchievementPair,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch} from './worker-client';
+ import {openSave,changeCollection,changeAchievement,createAchievement,createAchievementWithParent,changeAchievementPair,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch} from './worker-client';
  import {planCategoryParentCompletion} from './achievement-parent-auto';
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
  import {diffAchievements,decodeAchievementDraft} from './achievement-draft';
@@ -10,7 +10,7 @@
  import {achievementProgressTarget} from './achievement-progress';
  import {achievementFactsCopy} from './achievement-facts-ui';
  import {loadAchievementFacts,counterIndex,type AchievementFactsIndex} from './achievement-facts';
- import {joinAchievementCatalog} from './achievement-catalog';
+ import {joinAchievementCatalog,type AchievementListRow} from './achievement-catalog';
  import {loadAchievementGroups,groupRows,ungroupedRows,nativeAchievementOrder,groupSummaries as summarizeAchievementGroups,type AchievementHierarchy} from './achievement-groups';
  import {achievementGroupCopy} from './achievement-group-ui';
  import {loadAchievementCategoryAtlas,type CategoryIconAtlas} from './achievement-category-icons';
@@ -225,7 +225,7 @@
     owned.get(key)!.add(parent);
    }
   }
-  return catalog.groups.filter(g=>g[3]===0||(owned.get(g[0])?.size??0)>0)
+  return catalog.groups
    .map(g=>({row:g,count:owned.get(g[0])?.size??0,total:totals.get(g[0])?.size??0}));
  });
  const matching=$derived.by(()=>{
@@ -281,7 +281,12 @@
   if(!meta)return achCopy.unknown+' '+index.toLocaleString(locale);
   return achievementTitles[meta.titleId]??gameLabels.strings[meta.titleId]??readableSourceKey(meta.key);
  }
- function titleFor(g:Group){return locale==='ja'?g[1]:g[2]}
+ function titleFor(g:Group){
+  // Owner verified the in-game Japanese label; source manifest has an older
+  // community-translation string. Other categories retain their current names
+  // pending game-original group title crosswalk.
+  return locale==='ja'&&g[0]==='collection_group_citytown'?'都市の町':locale==='ja'?g[1]:g[2];
+ }
  function nameFor(item:Item){return gameLabels.names[String(item[0])]??(locale==='ja'?item[6]??item[5]:item[5]??item[6])??''}
  function jumpToCollectionItem(item:Item){
   // Search always covers all collection groups. Selecting a result restores
@@ -499,20 +504,30 @@
   }
   return changeAchievement(live.guid,live.value,next);
  }
- async function quickToggleAchievement(row:AchievementEntry){
+ /** An absent saved AchievementModel means 0/X in the game UI.
+  * Only clicking a verified source-defined tile creates a new Union(16) model.
+  * v3.0.0 creation is gated until its exact version-specific source is verified.
+  */
+ async function quickToggleAchievement(item:AchievementListRow){
   if(!snapshot||busy)return;
-  const live=snapshot.achievements.find(x=>achievementGuid(x.guid)===achievementGuid(row.guid));
-  if(!live)return;
+  const live=snapshot.achievements.find(x=>achievementGuid(x.guid)===item.guid);
+  if(!live&&(snapshot.version!=='3.0.1'||!achievementIndex.has(item.guid)))return;
   busy=true;error='';
   try{
-   const guid=achievementGuid(live.guid);
    const target=achievementProgressTarget(
-    achievementGroupHierarchy?.byGuid.get(guid)?.children.length??null,
-    achievementFacts.get(guid)?.threshold??null
+    achievementGroupHierarchy?.byGuid.get(item.guid)?.children.length??null,
+    achievementFacts.get(item.guid)?.threshold??null
    );
-   if(target===null&&achievementIndex.has(guid)){error=achCopy.goalUnavailable;return;}
-   const next=toggleAchievementState(live.value,Date.now(),target);
-   update(await changeAchievementWithParent(live,next));
+   if(target===null&&achievementIndex.has(item.guid)){error=achCopy.goalUnavailable;return;}
+   const prior:AchievementValue=live?.value??{complete:false,current:0,completed:null};
+   const next=toggleAchievementState(prior,Date.now(),target);
+   if(live){
+    update(await changeAchievementWithParent(live,next));
+   }else{
+    const guid=item.guid.split(':').map(word=>parseInt(word,16)) as AchievementEntry['guid'];
+    const parent=planCategoryParentCompletion(achievementGroupHierarchy,snapshot.achievements,guid,next);
+    update(await (parent?createAchievementWithParent(guid,next,parent):createAchievement(guid,next)));
+   }
    await persistDraft();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -683,10 +698,11 @@
       )}
       <article class="item-tile achievement-tile" class:is-recorded={item.row?.value.complete===true}>
        <button type="button" class="item-toggle achievement-toggle"
-        aria-pressed={item.row?.value.complete}
-        aria-label={item.row?(item.row.value.complete?compactCopy.relock:compactCopy.unlock)+': '+title:achCopy.missing+': '+title}
-        title={item.row?(item.row.value.complete?compactCopy.relock:compactCopy.unlock):achCopy.missing}
-        disabled={busy||!item.row} onclick={()=>{if(item.row)void quickToggleAchievement(item.row)}}>
+        aria-pressed={item.row?.value.complete??false}
+        aria-label={(item.row?.value.complete?compactCopy.relock:compactCopy.unlock)+': '+title}
+        title={item.row?.value.complete?compactCopy.relock:compactCopy.unlock}
+        disabled={busy||(!item.row&&(snapshot.version!=='3.0.1'||!achievementIndex.has(item.guid)))}
+        onclick={()=>void quickToggleAchievement(item)}>
         <span class="item-art achievement-item-art" aria-hidden="true">
          {#if individualArt}
           <span class="achievement-individual-sprite" style:background-image={`url("${achievementIndividualAtlas?.url}")`} style:background-position={`${individualArt.x} ${individualArt.y}`}></span>
@@ -698,12 +714,10 @@
         </span>
         <span class="item-name">{title}</span>
         <span class="item-status achievement-compact-status" class:has={item.row?.value.complete===true}>
-         {#if !item.row}
-          {achCopy.missing}
-         {:else if item.row.value.complete}
+         {#if item.row?.value.complete}
           ✓ {achCopy.completed}
          {:else if progressGoal!==null}
-          {achCopy.progress}: {item.row.value.current.toLocaleString(locale)} / {progressGoal.toLocaleString(locale)}
+          {achCopy.progress}: {(item.row?.value.current??0).toLocaleString(locale)} / {progressGoal.toLocaleString(locale)}
          {:else}
           {achCopy.incomplete}
          {/if}
@@ -910,7 +924,7 @@
         {/if}
        </span>
        <span class="item-name">{nameFor(item)}</span>
-       <span class="item-status" class:has={has}>{has?'✓ '+copy.recorded:copy.unrecorded}</span>
+       <span class="item-status" class:has={has}>{has?'✓ '+copy.recorded:copy.unrecorded+' · 0 / 1'}</span>
       </button>
       {#if direct}<button type="button" class="date-button" title={copy.editDate} aria-label={copy.editDate+': '+nameFor(item)} disabled={busy} onclick={e=>void editDate(item[0],e.currentTarget)}>◷</button>{/if}
      </article>

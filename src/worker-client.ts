@@ -1,8 +1,9 @@
-import {workerAchievementGuid,workerAchievementValue,workerAchievementPatch,workerCollectionPatch} from './achievement-worker-payload';
+import {workerAchievementGuid,workerAchievementValue,workerAchievementPatch,workerAchievementDraftPatch,workerCollectionPatch} from './achievement-worker-payload';
 
 export type AchievementValue={complete:boolean;current:number;completed:[bigint,number]|null};
 export type AchievementEntry={guid:[number,number,number,number];value:AchievementValue};
 export type AchievementPatch={guid:[number,number,number,number];before:AchievementValue;after:AchievementValue};
+export type AchievementDraftPatch={guid:[number,number,number,number];before:AchievementValue|null;after:AchievementValue};
 export type CounterEntry={guid:[number,number,number,number];current:number;countedValues:number|null;countedGuids:number};
 export type SaveSnapshot={
  version:'3.0.0'|'3.0.1';
@@ -17,7 +18,7 @@ export type SaveSnapshot={
  achievements:AchievementEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'achievement'|'achievement-pair'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-pair'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -51,6 +52,17 @@ export function changeAchievementPair(first:AchievementPatch,second:AchievementP
   achievementPatches:[workerAchievementPatch(first),workerAchievementPatch(second)]
  }) as Promise<SaveSnapshot>;
 }
+/** Source-index-verified previously missing saved achievement: created only on user action. */
+export function createAchievement(guid:AchievementEntry['guid'],afterValue:AchievementValue):Promise<SaveSnapshot>{
+ return rpc('achievement-create',{guid:workerAchievementGuid(guid),afterValue:workerAchievementValue(afterValue)}) as Promise<SaveSnapshot>;
+}
+/** Missing last child + existing parent update are atomic and one-step undoable. */
+export function createAchievementWithParent(guid:AchievementEntry['guid'],value:AchievementValue,parent:AchievementPatch):Promise<SaveSnapshot>{
+ return rpc('achievement-create-parent',{
+  guid:workerAchievementGuid(guid),afterValue:workerAchievementValue(value),
+  achievementPatches:[workerAchievementPatch(parent)]
+ }) as Promise<SaveSnapshot>;
+}
 export function changeAchievement(guid:AchievementEntry['guid'],beforeValue:AchievementValue,afterValue:AchievementValue):Promise<SaveSnapshot>{
  return rpc('achievement',{
   guid:workerAchievementGuid(guid),
@@ -65,9 +77,9 @@ export function exportSave():Promise<Uint8Array>{return rpc('export') as Promise
 export function clear():Promise<unknown>{return rpc('clear')}
 
 export type ChangeRequest={id:number;before:bigint|null;after:bigint|null};
-export function applyDraft(patches:ChangeRequest[],achievementPatches:AchievementPatch[]=[]):Promise<SaveSnapshot>{
+export function applyDraft(patches:ChangeRequest[],achievementPatches:AchievementDraftPatch[]=[]):Promise<SaveSnapshot>{
  return rpc('batch',{
   patches:patches.map(workerCollectionPatch),
-  achievementPatches:achievementPatches.map(workerAchievementPatch)
+  achievementPatches:achievementPatches.map(workerAchievementDraftPatch)
  }) as Promise<SaveSnapshot>;
 }

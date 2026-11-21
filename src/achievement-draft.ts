@@ -1,7 +1,7 @@
-import type {AchievementEntry,AchievementPatch,AchievementValue} from './worker-client';
+import type {AchievementEntry,AchievementDraftPatch,AchievementValue} from './worker-client';
 
 export type StoredValue={complete:boolean;current:number;completed:[string,number]|null};
-export type StoredPatch={guid:[number,number,number,number];before:StoredValue;after:StoredValue};
+export type StoredPatch={guid:[number,number,number,number];before:StoredValue|null;after:StoredValue};
 const guidKey=(guid:readonly number[])=>guid.join(':');
 const same=(a:AchievementValue,b:AchievementValue)=>
  a.complete===b.complete&&Object.is(a.current,b.current)&&
@@ -28,12 +28,13 @@ export function diffAchievements(baseline:readonly AchievementEntry[],current:re
  const result:StoredPatch[]=[];
  for(const row of current){
   const previous=originals.get(guidKey(row.guid));
-  if(!previous)throw Error('DRAFT_INVALID');
-  if(!same(previous.value,row.value))result.push({
-   guid:[row.guid[0],row.guid[1],row.guid[2],row.guid[3]],before:store(previous.value),after:store(row.value)
+  if(!previous||!same(previous.value,row.value))result.push({
+   guid:[row.guid[0],row.guid[1],row.guid[2],row.guid[3]],before:previous?store(previous.value):null,after:store(row.value)
   });
  }
- if(current.length!==baseline.length)throw Error('DRAFT_INVALID');
+ if(current.length<baseline.length)throw Error('DRAFT_INVALID');
+ const seen=new Set(current.map(x=>guidKey(x.guid)));
+ if(seen.size!==current.length||baseline.some(b=>!seen.has(guidKey(b.guid))))throw Error('DRAFT_INVALID');
  return result;
 }
 /**
@@ -51,28 +52,28 @@ export function cloneStoredAchievementPatches(patches:readonly StoredPatch[]):St
  return patches.map(p=>{
   if(!p||!Array.isArray(p.guid)||p.guid.length!==4||
    p.guid.some((n:unknown)=>typeof n!=='number'||!Number.isInteger(n)||n<0||n>0xffffffff)||
-   !valid(p.before)||!valid(p.after))throw Error('DRAFT_INVALID');
+   !(p.before===null||valid(p.before))||!valid(p.after))throw Error('DRAFT_INVALID');
   const guid:[number,number,number,number]=[p.guid[0],p.guid[1],p.guid[2],p.guid[3]];
   const key=guidKey(guid);
   if(seen.has(key))throw Error('DRAFT_INVALID');
   seen.add(key);
-  return {guid,before:cloneValue(p.before),after:cloneValue(p.after)};
+  return {guid,before:p.before===null?null:cloneValue(p.before),after:cloneValue(p.after)};
  });
 }
 
-export function decodeAchievementDraft(value:unknown,baseline:readonly AchievementEntry[]):AchievementPatch[]{
+export function decodeAchievementDraft(value:unknown,baseline:readonly AchievementEntry[]):AchievementDraftPatch[]{
  if(!Array.isArray(value)||value.length>10000)throw Error('DRAFT_INVALID');
  const originals=new Map(baseline.map(a=>[guidKey(a.guid),a]));
- const seen=new Set<string>();const patches:AchievementPatch[]=[];
+ const seen=new Set<string>();const patches:AchievementDraftPatch[]=[];
  for(const unknownPatch of value){
   if(!unknownPatch||typeof unknownPatch!=='object')throw Error('DRAFT_INVALID');
   const p=unknownPatch as StoredPatch;
   if(!Array.isArray(p.guid)||p.guid.length!==4||p.guid.some(n=>!Number.isInteger(n)||n<0||n>0xffffffff)||
-   !valid(p.before)||!valid(p.after))throw Error('DRAFT_INVALID');
+   !(p.before===null||valid(p.before))||!valid(p.after))throw Error('DRAFT_INVALID');
   const key=guidKey(p.guid),source=originals.get(key);
-  if(seen.has(key)||!source||!same(source.value,restore(p.before)))throw Error('DRAFT_CONFLICT');
+  if(seen.has(key)||(p.before===null?Boolean(source):!source||!same(source.value,restore(p.before))))throw Error('DRAFT_CONFLICT');
   seen.add(key);
-  patches.push({guid:p.guid,before:restore(p.before),after:restore(p.after)});
+  patches.push({guid:p.guid,before:p.before===null?null:restore(p.before),after:restore(p.after)});
  }
  return patches;
 }

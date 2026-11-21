@@ -1,4 +1,4 @@
-import type {AchievementEntry,AchievementPatch,AchievementValue,ChangeRequest} from './worker-client';
+import type {AchievementEntry,AchievementPatch,AchievementDraftPatch,AchievementValue,ChangeRequest} from './worker-client';
 
 /**
  * Svelte 5 $state creates deep Proxies. Web Worker postMessage uses structuredClone,
@@ -20,6 +20,13 @@ export function workerAchievementPatch(patch:AchievementPatch):AchievementPatch{
  return {
   guid:workerAchievementGuid(patch.guid),
   before:workerAchievementValue(patch.before),
+  after:workerAchievementValue(patch.after)
+ };
+}
+export function workerAchievementDraftPatch(patch:AchievementDraftPatch):AchievementDraftPatch{
+ return {
+  guid:workerAchievementGuid(patch.guid),
+  before:patch.before===null?null:workerAchievementValue(patch.before),
   after:workerAchievementValue(patch.after)
  };
 }
