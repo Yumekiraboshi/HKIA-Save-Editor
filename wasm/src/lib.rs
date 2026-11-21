@@ -42,6 +42,36 @@ pub extern "C" fn hkia_change(id:i32,expected_present:u32,expected_ticks:i64,nex
  })
 }
 
+/// Last source-defined child completion + absent parent creation in one
+/// fully validated Rust transaction, including one-step Undo/Redo.
+#[no_mangle]
+pub extern "C" fn hkia_achievement_parent_create(
+ c0:u32,c1:u32,c2:u32,c3:u32,
+ before_present:u32,bc:u32,bp:f32,bs:i64,bn:u32,bh:u32,
+ ac:u32,ap:f32,as_:i64,an:u32,ah:u32,
+ p0:u32,p1:u32,p2:u32,p3:u32,
+ pc:u32,pp:f32,ps:i64,pn:u32,ph:u32
+)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  if [before_present,bc,bh,ac,ah,pc,ph].iter().any(|&x|x>1){return 1}
+  let before=if before_present==1{
+   Some(hkia_save_core::achievement::AchievementValue{
+    complete:bc==1,current:bp,completed:if bh==1{Some((bs,bn))}else{None}
+   })
+  }else{None};
+  let next=hkia_save_core::achievement::AchievementValue{
+   complete:ac==1,current:ap,completed:if ah==1{Some((as_,an))}else{None}
+  };
+  let parent=hkia_save_core::achievement::AchievementValue{
+   complete:pc==1,current:pp,completed:if ph==1{Some((ps,pn))}else{None}
+  };
+  match a.editor.as_mut().map(|e|
+   e.complete_child_and_create_parent([c0,c1,c2,c3],before,next,[p0,p1,p2,p3],parent)
+  ){Some(Ok(()))=>0,_=>1}
+ })
+}
+
 // Source-validated, version-gated new AchievementModel (Union 16).
 #[no_mangle]
 pub extern "C" fn hkia_achievement_create(
