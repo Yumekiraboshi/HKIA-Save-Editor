@@ -148,3 +148,15 @@
 .achievement-group-parent{border-color:color-mix(in srgb,var(--accent),var(--line) 55%)}
 .achievement-parent-label{font-size:10px;font-weight:700;color:var(--accent);letter-spacing:.01em}
 @media(max-width:730px){.achievement-group-heading{align-items:flex-start}.achievement-group-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.achievement-group-card{padding:12px;min-height:140px}}
+
+
+/* Original Steam 3.0.1 achievement-category artwork, source GUID matched 63/63.
+   Eight-by-eight Sprite atlas, reference-order aligned. */
+.achievement-group-card{align-items:center;text-align:center;justify-content:flex-start;gap:7px;min-height:205px}
+.achievement-group-card .subcategory-label{width:100%;font-size:12px}
+.achievement-group-card .achievement-status{align-self:center}
+.achievement-category-art{width:98px;height:98px;display:block;flex:none}
+.achievement-category-sprite{display:block;width:100%;height:100%;background-repeat:no-repeat;background-size:800% 800%;image-rendering:auto}
+.achievement-category-placeholder{display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:34px;opacity:.3}
+.achievement-category-art-small{width:58px;height:58px;margin:0 0 8px}
+@media(max-width:730px){.achievement-group-card{min-height:188px;gap:6px}.achievement-category-art{width:82px;height:82px}.achievement-category-art-small{width:50px;height:50px}.achievement-group-card .subcategory-label{font-size:11px}}
