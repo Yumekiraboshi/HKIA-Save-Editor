@@ -224,7 +224,7 @@ fn verified_new_achievement_creation_v301_raw_and_zip_roundtrips_without_other_c
  let done=AchievementValue{complete:true,current:1.0,completed:Some((1_750_000_000,123_456_700))};
  for zipped in [false,true] {
   let raw=slot("3.0.1");
-  let original=if zipped{zip(&raw)}else{raw};
+  let original=if zipped{zip(&raw)}else{raw.clone()};
   let mut editor=Editor::open(original.clone()).unwrap();
   let source=read_slot(&raw).unwrap();
   assert_eq!(source.index.documents,5);
