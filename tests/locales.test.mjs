@@ -82,8 +82,14 @@ test('native Babel v5000 extractor produces mapped labels without copying unrela
    [30,'z','z','z',0,'Duplicate','重複',30]
   ];
   const catalog=join(temp,'catalog.json');writeFileSync(catalog,JSON.stringify({items}));
+  const achindex=join(temp,'achievement-index.json'),achout=join(temp,'achievements');
+  writeFileSync(achindex,JSON.stringify({schema:'HKIA.AchievementKeyIndex.1',records:[
+   ['00000001:00000002:00000003:00000004','achievement_BlueFairy','300'],
+   ['00000001:00000002:00000003:00000005','achievement_SakuraCake','301']
+  ]}));
   const script=new URL('../scripts/extract-babel-items.py',import.meta.url).pathname;
-  const p=spawnSync('python3',[script,'--babel-dir',source,'--catalog',catalog,'--out',out,'--locales','en,ja,fr'],{encoding:'utf8'});
+  const p=spawnSync('python3',[script,'--babel-dir',source,'--catalog',catalog,'--out',out,
+   '--achievement-index',achindex,'--achievement-out',achout,'--locales','en,ja,fr'],{encoding:'utf8'});
   assert.equal(p.status,0,p.stderr);
   const keys=JSON.parse(readFileSync(join(out,'item-keys.json'),'utf8'));
   assert.deepEqual(keys.keys,{'10':'300','20':'301'});
@@ -93,6 +99,13 @@ test('native Babel v5000 extractor produces mapped labels without copying unrela
   assert.deepEqual(fr.strings,{'300':'Tenue de fée bleue','301':'Cheesecake sakura'});
   const index=JSON.parse(readFileSync(join(out,'index.json'),'utf8'));
   assert.deepEqual(index.available,['en','ja','fr']);
+  for(const loc of ['en','ja','fr']){
+   const titles=JSON.parse(readFileSync(join(achout,loc+'.json'),'utf8'));
+   assert.equal(titles.schema,'HKIA.AchievementTitles.1');
+   assert.deepEqual(Object.keys(titles.strings).sort(),['300','301']);
+  }
+  const achievementsJa=JSON.parse(readFileSync(join(achout,'ja.json'),'utf8'));
+  assert.deepEqual(achievementsJa.strings,{'300':'青い妖精の服','301':'桜のチーズケーキ'});
   assert.ok(!JSON.stringify(fr).includes('Dialogue non utilisé'));
  }finally{rmSync(temp,{recursive:true,force:true})}
 });
