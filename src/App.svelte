@@ -9,6 +9,7 @@
  import {joinAchievementCatalog} from './achievement-catalog';
  import {loadAchievementGroups,groupRows,ungroupedRows,nativeAchievementOrder,groupSummaries as summarizeAchievementGroups,type AchievementHierarchy} from './achievement-groups';
  import {achievementGroupCopy} from './achievement-group-ui';
+ import {loadAchievementCategoryAtlas,type CategoryIconAtlas} from './achievement-category-icons';
  import {loadAchievementIndex,achievementGuid,readableSourceKey,type AchievementIndex} from './achievement-index';
  import {loadAchievementTitles,type AchievementTitles} from './achievement-localization';
  import {editorErrors} from './ui-copy';
@@ -32,6 +33,7 @@
  let achievementQuery=$state('');
  let achievementIndex:AchievementIndex=$state(new Map());
  let achievementGroupHierarchy:AchievementHierarchy|null=$state(null);
+ let achievementCategoryAtlas:CategoryIconAtlas|null=$state(null);
  let achievementGroupSelection:string|null=$state(null);
  let achievementShowAll=$state(false);
  let achievementFacts:AchievementFactsIndex=$state(new Map());
@@ -137,7 +139,11 @@
   void loadLocaleIndex(import.meta.env.BASE_URL).then(available=>availableGameLocales=available).catch(()=>{});
   void loadAchievementIndex(import.meta.env.BASE_URL).then(index=>{
    achievementIndex=index;
-   void loadAchievementGroups(import.meta.env.BASE_URL,index).then(groups=>achievementGroupHierarchy=groups).catch(()=>{});
+   void loadAchievementGroups(import.meta.env.BASE_URL,index).then(groups=>{
+    achievementGroupHierarchy=groups;
+    void loadAchievementCategoryAtlas(import.meta.env.BASE_URL,index,groups)
+     .then(atlas=>achievementCategoryAtlas=atlas).catch(()=>{});
+   }).catch(()=>{});
   }).catch(()=>{});
 
   fetch(import.meta.env.BASE_URL+'catalog.json')
@@ -571,7 +577,15 @@
     </div>
     <div class="subcategory-grid achievement-group-grid">
      {#each achievementGroupSummaries as stat (stat.guid)}
+      {@const art=achievementCategoryAtlas?.bySaveGuid.get(stat.guid)}
       <button type="button" class="subcategory-card achievement-group-card" onclick={()=>showAchievementGroup(stat.guid)}>
+       {#if art}
+        <span class="achievement-category-art" aria-hidden="true">
+         <span class="achievement-category-sprite" style:background-image={`url("${achievementCategoryAtlas?.url}")`} style:background-position={`${art.x} ${art.y}`}></span>
+        </span>
+       {:else}
+        <span class="achievement-category-art achievement-category-placeholder" aria-hidden="true">✦</span>
+       {/if}
        <span class="subcategory-label">{achievementName(stat.guid,0)}</span>
        <span class="subcategory-count">{stat.completed.toLocaleString(locale)} {achCopy.completed} / {stat.total.toLocaleString(locale)} {groupCopy.memberCount}</span>
        <span class="subcategory-count">{stat.recorded.toLocaleString(locale)} {groupCopy.savedMembers} · {stat.missing.toLocaleString(locale)} {achCopy.missing}</span>
@@ -591,6 +605,12 @@
     {#each achievementRows.slice(0,achievementLimit) as item (item.index)}
      <article class="achievement-card" class:achievement-group-parent={achievementGroupSelection===item.guid}>
       <div>
+       {#if achievementCategoryAtlas?.bySaveGuid.get(item.guid)}
+        {@const art=achievementCategoryAtlas.bySaveGuid.get(item.guid)!}
+        <span class="achievement-category-art achievement-category-art-small" aria-hidden="true">
+         <span class="achievement-category-sprite" style:background-image={`url("${achievementCategoryAtlas.url}")`} style:background-position={`${art.x} ${art.y}`}></span>
+        </span>
+       {/if}
        {#if achievementGroupHierarchy?.byGuid.has(item.guid)}
         <span class="achievement-parent-label">{groupCopy.groupRecord}</span>
        {/if}
