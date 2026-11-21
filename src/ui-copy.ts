@@ -138,3 +138,48 @@ export const messages={
 } as const;
 export type Locale='ja'|'en';
 export type MessageKey=keyof typeof messages.ja;
+
+export const editorErrors={
+  "ja": {
+    "WASMファイルを取得できません。": "処理エンジンを読み込めませんでした。",
+    "WASM応答が不正です。": "処理エンジンの応答が不正です。",
+    "先にセーブを読み込んでください。": "セーブを開いてください。",
+    "セーブ一覧の応答が不正です。": "セーブ一覧のデータが不正です。",
+    "セーブ一覧の形式が不正です。": "セーブ一覧の形式が不正です。",
+    "対応するセーブファイルを選択してください（最大60MB）。": "60MB以下の対応セーブを選択してください。",
+    "セーブ読み込み用の領域を確保できません。": "セーブを読み込むメモリが不足しています。",
+    "対応セーブではありません。形式、ゲームバージョン、破損の有無を確認してください。": "対応セーブではありません。形式とゲームバージョンを確認してください。",
+    "ItemIdが不正です。": "操作対象が不正です。",
+    "変更できませんでした。元の値か編集条件が一致しません。": "状態が変化したか、編集条件を満たしていません。",
+    "戻せる変更がありません。": "戻せる変更はありません。",
+    "やり直せる変更がありません。": "やり直せる変更はありません。",
+    "セーブが読み込まれていません。": "セーブを開いてください。",
+    "書き出し後の再検証に失敗しました。データは出力していません。": "保存後の検証に失敗しました。ファイルは出力していません。",
+    "操作に失敗しました": "操作に失敗しました。",
+    "Web Workerが停止しました。": "処理が停止しました。",
+    "不明なエラー": "不明なエラーです。",
+    "Collection catalog unavailable": "コレクションのデータを読み込めませんでした。",
+    "Invalid collection catalog": "コレクションのデータが不正です。"
+  },
+  "en": {
+    "WASMファイルを取得できません。": "Could not load the editor engine.",
+    "WASM応答が不正です。": "Invalid editor engine response.",
+    "先にセーブを読み込んでください。": "Open a save first.",
+    "セーブ一覧の応答が不正です。": "Invalid save index response.",
+    "セーブ一覧の形式が不正です。": "Invalid save index format.",
+    "対応するセーブファイルを選択してください（最大60MB）。": "Select a supported save under 60 MB.",
+    "セーブ読み込み用の領域を確保できません。": "Insufficient memory to open this save.",
+    "対応セーブではありません。形式、ゲームバージョン、破損の有無を確認してください。": "Unsupported save. Check its format and game version.",
+    "ItemIdが不正です。": "Invalid target item.",
+    "変更できませんでした。元の値か編集条件が一致しません。": "The record changed or this edit is not permitted.",
+    "戻せる変更がありません。": "Nothing to undo.",
+    "やり直せる変更がありません。": "Nothing to redo.",
+    "セーブが読み込まれていません。": "Open a save first.",
+    "書き出し後の再検証に失敗しました。データは出力していません。": "Output validation failed. No edited file was produced.",
+    "操作に失敗しました": "The operation failed.",
+    "Web Workerが停止しました。": "The editor worker stopped.",
+    "不明なエラー": "Unknown error.",
+    "Collection catalog unavailable": "Could not load collection data.",
+    "Invalid collection catalog": "Invalid collection data."
+  }
+} as Record<Locale,Record<string,string>>;

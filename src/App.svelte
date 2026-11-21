@@ -1,7 +1,7 @@
 <script lang="ts">
  import {onMount} from 'svelte';
  import {openSave,changeCollection,undo,redo,exportSave,clear,type SaveSnapshot} from './worker-client';
- import {messages,type Locale} from './ui-copy';
+ import {messages,editorErrors,type Locale} from './ui-copy';
  type Item=[number,string,string,string,number,string|null,string|null];
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
@@ -55,7 +55,7 @@
     if(v.schema!=='HKIA.CollectionDisplayCatalog.2'||!Array.isArray(v.groups)||!Array.isArray(v.items))throw Error('Invalid collection catalog');
     catalog=v;
    })
-   .catch(e=>error=e instanceof Error?e.message:String(e));
+   .catch(e=>error=describeError(e));
   return ()=>media.removeEventListener?.('change',listener);
  });
  $effect(()=>{
@@ -85,6 +85,7 @@
   return {rows:filtered.slice(effective*PAGE_SIZE,(effective+1)*PAGE_SIZE),total:filtered.length,page:effective,pages};
  });
  const unnamed=$derived((catalog as Catalog | null)?.items.filter((x:Item)=>!x[5]||!x[6]).length??0);
+ function describeError(e:unknown){const raw=e instanceof Error?e.message:String(e);return editorErrors[locale][raw]??(locale==='ja'?(raw||copy.unknown):copy.unknown);}
  function setLanguage(v:LanguagePref){
   languagePref=v;try{localStorage.setItem('hkia-display-locale',v)}catch{}
  }
@@ -111,7 +112,7 @@
    const s=await openSave(file);
    snapshot=s;original=file;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));
    goHome();notice=copy.loaded;
-  }catch(e){error=e instanceof Error?e.message:copy.fileError}
+  }catch(e){error=describeError(e)}
   finally{busy=false}
  }
  function update(s:SaveSnapshot){snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));}
@@ -120,7 +121,7 @@
   const prev=recorded[String(id)]??null;
   busy=true;error='';notice='';
   try{update(await changeCollection(id,prev,next));editId=null;}
-  catch(e){error=e instanceof Error?e.message:copy.unknown}
+  catch(e){error=describeError(e)}
   finally{busy=false}
  }
  async function actHistory(which:'undo'|'redo'){
