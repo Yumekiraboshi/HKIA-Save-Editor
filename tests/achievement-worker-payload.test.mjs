@@ -103,7 +103,7 @@ test('all achievement mutation entrypoints normalize at the RPC boundary, not on
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  for(const marker of ['workerAchievementGuid(guid)','workerAchievementValue(beforeValue)',
   'workerAchievementValue(afterValue)','patches.map(workerCollectionPatch)',
-  'achievementPatches.map(workerAchievementPatch)','waiting.delete(id);reject']){
+  'achievementPatches.map(workerAchievementDraftPatch)','waiting.delete(id);reject']){
   assert.ok(client.includes(marker),marker);
  }
  assert.ok(app.includes('changeAchievement(live.guid,live.value,next)'));
