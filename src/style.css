@@ -213,3 +213,32 @@
 .collection-search-result-context{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
 .collection-search-result-chevron{font-size:22px;color:var(--accent);flex-shrink:0}
 @media(max-width:730px){.collection-search-result{padding:11px 12px}}
+
+/* Source-native scoped history and icon-first topbar. */
+.header-icon{display:block;width:19px;height:19px;flex:none;pointer-events:none}
+.file-action{width:45px;gap:2px;padding:0 5px}
+.menu-icon{display:block;width:16px;height:16px;flex:none;pointer-events:none}
+.file-menu .menu-popover button{display:flex;align-items:center;gap:11px}
+.header-select{display:inline-flex;align-items:center;gap:5px;min-width:0}
+.select-icon{display:block;width:16px;height:16px;flex:none;color:var(--muted);pointer-events:none}
+.history-menu{position:relative;flex:none}
+.history-menu>summary{list-style:none;cursor:pointer;user-select:none}
+.history-menu>summary::-webkit-details-marker{display:none}
+.history-menu[open]>summary,.file-menu[open]>summary{color:var(--accent);background:var(--hover)}
+.history-popover{position:absolute;right:0;top:calc(100% + 9px);z-index:45;width:min(350px,calc(100vw - 30px));background:var(--panel);border:1px solid var(--line);border-radius:13px;box-shadow:0 15px 44px #0002;padding:10px;display:grid;gap:10px;color:var(--ink)}
+.history-heading{font-size:12px;font-weight:750;padding:5px 6px 0;overflow-wrap:anywhere}
+.history-empty{color:var(--muted);font-size:12px;padding:9px 7px 14px}
+.history-list{display:grid;gap:3px;max-height:min(440px,60vh);overflow:auto;overscroll-behavior:contain}
+.history-list button{display:flex;align-items:center;text-align:left;gap:10px;min-height:40px;width:100%;padding:7px 8px;border-radius:8px;background:transparent;color:var(--ink);font-size:12px;line-height:1.4}
+.history-list button:hover:not(:disabled){background:var(--hover)}
+.history-list button.active{background:var(--accent-soft);color:var(--accent);font-weight:750}
+.history-step{display:inline-flex;flex:none;align-items:center;justify-content:center;width:23px;height:23px;border:1px solid var(--line);border-radius:50%;font-size:10px;font-variant-numeric:tabular-nums}
+.history-text{min-width:0;flex:1;overflow-wrap:anywhere}
+.history-current{font-size:13px;flex:none}
+:root[dir="rtl"] .history-popover{right:auto;left:0}
+@media(max-width:730px){
+ .file-action{width:40px;padding:0 4px}
+ .history-popover{right:-75px}
+ .header-select{gap:3px}
+ .select-icon{width:14px;height:14px}
+}
