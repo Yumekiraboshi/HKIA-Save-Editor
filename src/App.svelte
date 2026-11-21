@@ -11,7 +11,7 @@
  const PAGE_SIZE=24;
  const EPOCH=621355968000000000n;
  const MAX_TICKS=3155378975999999999n;
- const ICONS=import.meta.env.PROD?import.meta.env.BASE_URL+'icons/':'https://raw.githubusercontent.com/Yumekiraboshi/HKIA-Editor-Dev/main/assets/icons/';
+ const ICONS=import.meta.env.BASE_URL+'icons/';
  let catalog:Catalog|null=$state(null);
  let snapshot:SaveSnapshot|null=$state(null);
  let original:File|null=$state(null);

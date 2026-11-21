@@ -9,14 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: Yumekiraboshi/HKIA-Editor-Dev
-          ref: a8a5f20ea8b69765de1c49075ce6994d0591ca94
-          path: game-ui-assets
-          sparse-checkout: assets/icons
-          persist-credentials: false
-      - run: mkdir -p public/icons && cp game-ui-assets/assets/icons/*.webp public/icons/
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
