@@ -1,4 +1,4 @@
-type Action = 'open'|'snapshot'|'change'|'achievement'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
+type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-pair'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
 type AchievementValue = {complete:boolean;current:number;completed:[bigint,number]|null};
 type AchievementPatch = {guid:number[];before:AchievementValue;after:AchievementValue};
 type Request = { id:number; action:Action; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementPatch[];guid?:number[];beforeValue?:AchievementValue;afterValue?:AchievementValue };
@@ -8,6 +8,10 @@ type Engine = {
  hkia_stage(n:number):number; hkia_open():number;
  hkia_change(id:number,expectedPresent:number,old:bigint,nextPresent:number,value:bigint):number;
  hkia_achievement_change(g0:number,g1:number,g2:number,g3:number,bc:number,bp:number,bs:bigint,bn:number,bh:number,ac:number,ap:number,as:bigint,an:number,ah:number):number;
+ hkia_achievement_pair_change(
+  ...args:[number,number,number,number,number,number,bigint,number,number,number,number,bigint,number,number,
+   number,number,number,number,number,number,bigint,number,number,number,number,bigint,number,number]
+ ):number;
  hkia_achievement_snapshot():number;
  hkia_counter_snapshot():number;
  hkia_undo():number; hkia_redo():number; hkia_reset():number;
@@ -84,6 +88,16 @@ function changeAchievement(e:Engine,guid:number[]|undefined,before:AchievementVa
  if(!Array.isArray(guid)||guid.length!==4||guid.some(n=>!Number.isInteger(n)||n<0||n>0xffffffff)||!before||!after||!validAchievement(before)||!validAchievement(after))return false;
  return e.hkia_achievement_change(...guid as [number,number,number,number],Number(before.complete),before.current,before.completed?.[0]??0n,before.completed?.[1]??0,Number(before.completed!==null),Number(after.complete),after.current,after.completed?.[0]??0n,after.completed?.[1]??0,Number(after.completed!==null))===0;
 }
+type ChangeArgs=[number,number,number,number,number,number,bigint,number,number,number,number,bigint,number,number];
+function patchArgs(p:AchievementPatch):ChangeArgs{
+ const {guid,before,after}=p;
+ if(!Array.isArray(guid)||guid.length!==4||guid.some(n=>!Number.isInteger(n)||n<0||n>0xffffffff)||
+  !validAchievement(before)||!validAchievement(after))
+  throw Error('ACH_PAIR_INVALID');
+ return [guid[0],guid[1],guid[2],guid[3],
+  Number(before.complete),before.current,before.completed?.[0]??0n,before.completed?.[1]??0,Number(before.completed!==null),
+  Number(after.complete),after.current,after.completed?.[0]??0n,after.completed?.[1]??0,Number(after.completed!==null)];
+}
 async function execute(r:Request):Promise<unknown>{
  const e=await getEngine();
  switch(r.action){
@@ -106,6 +120,14 @@ async function execute(r:Request):Promise<unknown>{
   }
   case 'achievement':{
    if(!changeAchievement(e,r.guid,r.beforeValue,r.afterValue))throw Error('実績を変更できませんでした。編集条件を確認してください。');
+   return snapshot(e);
+  }
+  case 'achievement-pair':{
+   const patches=r.achievementPatches;
+   if(!Array.isArray(patches)||patches.length!==2)throw Error('ACH_PAIR_INVALID');
+   const a=patchArgs(patches[0]),b=patchArgs(patches[1]);
+   if(e.hkia_achievement_pair_change(...a,...b)!==0)
+    throw Error('ACH_PAIR_CONFLICT');
    return snapshot(e);
   }
   case 'batch':{
