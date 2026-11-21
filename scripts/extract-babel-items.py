@@ -6,10 +6,13 @@ import struct
 from collections import defaultdict
 from pathlib import Path
 
-LOCALES = (
-    "ar", "de", "en", "en-GB", "es", "fr", "fr-CA", "it",
-    "ja", "ko", "nl", "pt-BR", "ru", "tr", "zh-Hans", "zh-Hant",
-)
+LOCALE_IDS = {
+    "ar": 1000, "zh-Hans": 2000, "zh-Hant": 3000, "nl": 4000,
+    "en-GB": 5000, "en": 6000, "fr-CA": 7000, "fr": 8000,
+    "de": 9000, "it": 10000, "ja": 11000, "ko": 12000,
+    "pt-BR": 13000, "ru": 14000, "es": 15000, "tr": 16000,
+}
+LOCALES = tuple(LOCALE_IDS)
 MAX_MANIFEST = 50_000_000
 MAX_FILE = 32_000_000
 
@@ -27,7 +30,7 @@ def babel_strings(folder):
     if len(raw) < 12:
         raise ValueError(f"short Babel manifest: {name}")
     version, section_count, item_count = struct.unpack_from("<III", raw)
-    if version != 5000 or not 1 <= section_count <= 8 or item_count > 2_000_000:
+    if version != LOCALE_IDS[name] or not 1 <= section_count <= 8 or item_count > 2_000_000:
         raise ValueError(f"unsupported Babel manifest: {name}")
     footer = 12 + item_count * 20
     if len(raw) != footer + section_count * 12:

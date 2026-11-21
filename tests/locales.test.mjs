@@ -55,7 +55,7 @@ test('native Babel v5000 extractor produces mapped labels without copying unrela
   for(const locale of ['en','ja','fr']){
    const dir=join(source,locale);mkdirSync(dir,{recursive:true});
    const manifest=Buffer.alloc(12+phrases.length*20+3*12);
-   manifest.writeUInt32LE(5000,0);manifest.writeUInt32LE(3,4);manifest.writeUInt32LE(phrases.length,8);
+   manifest.writeUInt32LE({en:6000,ja:11000,fr:8000}[locale],0);manifest.writeUInt32LE(3,4);manifest.writeUInt32LE(phrases.length,8);
    let i=0;
    for(const table of [100,200,300]){
     const rows=phrases.filter(row=>row.table===table);

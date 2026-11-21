@@ -64,6 +64,6 @@ npm test
 npm run build
 ```
 
-The extractor parses the native version-5000 gzip-capable Babel format and generates `public/locales/item-keys.json` plus a compact dictionary for each of the 16 locales. It only maps an item if its catalog English name matches **one unique** native English Babel string key, leaving ambiguous or unverified names to fallback; exact English text matching is not proof of the item's source localization key. It does not publish the full game's dialogue tables.
+The extractor parses the native locale-ID-aware gzip-capable Babel format and generates `public/locales/item-keys.json` plus a compact dictionary for each of the 16 locales. It only maps an item if its catalog English name matches **one unique** native English Babel string key, leaving ambiguous or unverified names to fallback; exact English text matching is not proof of the item's source localization key. It does not publish the full game's dialogue tables.
 
 **Deployment status:** no Babel dictionaries have yet been committed. The current Pages build offers the 16 language choices and partial UI translations but uses existing Japanese/English item-name fallbacks until these dictionaries are generated and added. Do not claim complete localized coverage solely from the availability of a language choice.
