@@ -23,6 +23,13 @@ export function workerAchievementPatch(patch:AchievementPatch):AchievementPatch{
   after:workerAchievementValue(patch.after)
  };
 }
+export function workerAchievementDraftPatch(patch:AchievementDraftPatch):AchievementDraftPatch{
+ return {
+  guid:workerAchievementGuid(patch.guid),
+  before:patch.before===null?null:workerAchievementValue(patch.before),
+  after:workerAchievementValue(patch.after)
+ };
+}
 export function workerCollectionPatch(patch:ChangeRequest):ChangeRequest{
  return {id:patch.id,before:patch.before,after:patch.after};
 }
