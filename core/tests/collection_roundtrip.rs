@@ -450,3 +450,51 @@ fn category_parent_relock_is_atomic_and_restores_both_records_with_one_undo(){
   }
  }
 }
+
+#[test]
+fn completed_parent_date_sync_is_atomic_cas_checked_and_one_step_undoable_in_raw_and_zip(){
+ use hkia_save_core::achievement::AchievementValue;
+ for version in ["3.0.0","3.0.1"]{
+  for zipped in [false,true]{
+   let raw=slot(version);
+   let input=if zipped{zip(&raw)}else{raw};
+   let mut e=Editor::open(input.clone()).unwrap();
+   let leaf=[1,0,0,1];let parent=[2,0,0,1];
+   let incomplete_leaf=AchievementValue{complete:false,current:1.0,completed:None};
+   let incomplete_parent=AchievementValue{complete:false,current:2.0,completed:None};
+   let original_date=Some((1_750_000_001,123_456_700));
+   let changed_date=Some((1_750_000_010,987_654_300));
+   let old_leaf=AchievementValue{complete:true,current:1.0,completed:original_date};
+   let old_parent=AchievementValue{complete:true,current:2.0,completed:original_date};
+   let new_leaf=AchievementValue{completed:changed_date,..old_leaf};
+   let new_parent=AchievementValue{completed:changed_date,..old_parent};
+   e.change_achievement_pair(
+    (leaf,incomplete_leaf,old_leaf),(parent,incomplete_parent,old_parent)
+   ).unwrap();
+   let revision=e.revision();
+   assert!(e.change_achievement_pair(
+    (leaf,old_leaf,new_leaf),(parent,AchievementValue{current:99.0,..old_parent},new_parent)
+   ).is_err(),"bad parent CAS cannot partially mutate either date");
+   assert_eq!(e.revision(),revision);
+   assert_eq!(e.achievement_value(leaf),Some(old_leaf));
+   assert_eq!(e.achievement_value(parent),Some(old_parent));
+   e.change_achievement_pair((leaf,old_leaf,new_leaf),(parent,old_parent,new_parent)).unwrap();
+   assert_eq!(e.revision(),revision+1);
+   assert_eq!(e.achievement_value(leaf),Some(new_leaf));
+   assert_eq!(e.achievement_value(parent),Some(new_parent));
+   let reopened=Editor::open(e.export().unwrap()).unwrap();
+   assert_eq!(reopened.achievement_value(leaf),Some(new_leaf));
+   assert_eq!(reopened.achievement_value(parent),Some(new_parent));
+   assert!(e.undo());
+   assert_eq!(e.achievement_value(leaf),Some(old_leaf));
+   assert_eq!(e.achievement_value(parent),Some(old_parent));
+   assert!(e.redo());
+   assert_eq!(e.achievement_value(leaf),Some(new_leaf));
+   assert_eq!(e.achievement_value(parent),Some(new_parent));
+   assert!(e.undo());assert!(e.undo());
+   assert!(!e.dirty());
+   assert_eq!(e.achievement_value(leaf),Some(incomplete_leaf));
+   assert_eq!(e.achievement_value(parent),Some(incomplete_parent));
+  }
+ }
+}
