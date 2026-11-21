@@ -3,6 +3,7 @@
  import {openSave,changeCollection,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot} from './worker-client';
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
  import {messages,editorErrors,type Locale} from './ui-copy';
+ import {loadIconPack,type IconPack} from './icon-packs';
  type Item=[number,string,string,string,number,string|null,string|null,number];
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
@@ -30,6 +31,9 @@
  let draftReady=$state(false);
  let baseline=new Map<number,bigint>();
  let draftWrites:Promise<void>=Promise.resolve();
+ let iconPack:IconPack|null=$state(null);
+ let iconEpoch=0;
+ let iconError=$state(false);
  let loadMoreSentinel:HTMLDivElement|undefined;
  let languagePref:LanguagePref=$state('auto');
  let browserLanguage:Locale=$state('ja');
@@ -65,7 +69,7 @@
     catalog=v;
    })
    .catch(e=>error=describeError(e));
-  return ()=>{media.removeEventListener?.('change',listener);window.removeEventListener('beforeunload',beforeUnload)};
+  return ()=>{media.removeEventListener?.('change',listener);window.removeEventListener('beforeunload',beforeUnload);iconEpoch++;iconPack?.dispose()};
  });
  $effect(()=>{
   if(typeof document!=='undefined'){document.documentElement.lang=locale;document.documentElement.dataset.theme=actualTheme;}
@@ -118,9 +122,18 @@
  }
  function titleFor(g:Group){return locale==='ja'?g[1]:g[2]}
  function nameFor(item:Item){return (locale==='ja'?item[6]:item[5])??''}
- function selectCategory(key:string){selectedGroup=key;visibleLimit=BATCH_SIZE;query='';filter='all';editId=null;error='';void persistDraft();}
- function goHome(){selectedGroup=null;visibleLimit=BATCH_SIZE;editId=null;query='';filter='all';if(snapshot)void persistDraft();}
+ function selectCategory(key:string){selectedGroup=key;visibleLimit=BATCH_SIZE;query='';filter='all';editId=null;error='';void fetchImages(key);void persistDraft();}
+ function goHome(){selectedGroup=null;visibleLimit=BATCH_SIZE;editId=null;query='';filter='all';iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;if(snapshot)void persistDraft();}
  function askFile(){if(busy||!restored)return;fileMenu&&(fileMenu.open=false);fileInput?.click();}
+ async function fetchImages(key:string){
+  const epoch=++iconEpoch;
+  iconPack?.dispose();iconPack=null;iconError=false;
+  try{
+   const pack=await loadIconPack(key,import.meta.env.BASE_URL);
+   if(epoch!==iconEpoch||selectedGroup!==key){pack.dispose();return}
+   iconPack=pack;
+  }catch{if(epoch===iconEpoch)iconError=true}
+ }
  function update(s:SaveSnapshot){snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));}
  function persistDraft():Promise<void>{
   if(!original)return Promise.resolve();
@@ -146,6 +159,7 @@
     const session=patches.length?await applyDraft(patches):s;
     original=draft.file;baseline=originalRows;update(session);
     selectedGroup=draft.ui.group;
+    if(draft.ui.group)void fetchImages(draft.ui.group);
    }
    draftReady=true;
   }catch(e){draftReady=false;draftWarning=true;error=describeError(e)}
@@ -248,12 +262,12 @@
    <button class="brand" type="button" onclick={goHome} aria-label={copy.brand}>
     <span class="brand-mark" aria-hidden="true">✦</span><span class="brand-name">{copy.brand}</span>
    </button>
-   <nav class="tools-nav" aria-label="Tools">
+   {#if snapshot}<nav class="tools-nav" aria-label="Tools">
     <button type="button" class="tool-tab active" aria-current="page" onclick={goHome}>{copy.toolCollection}</button>
-   </nav>
+   </nav>{/if}
    <div class="bar-actions">
     {#if snapshot}
-     <span class="save-indicator" title={original?.name??''}><span class:changed={snapshot.dirty} class="state-dot"></span><span class="file-short">{original?.name}</span></span>
+     <span class="save-indicator" title={original?.name??''}><span class:changed={snapshot.dirty} class="state-dot"></span><span class="file-short">{original?.name}</span>{#if draftWarning}<span class="draft-risk" title={copy.autosaveFailed}>⚠</span>{/if}</span>
      <button type="button" class="icon-button" title={copy.undo} aria-label={copy.undo} disabled={busy||!snapshot.canUndo} onclick={()=>void actHistory('undo')}>↶</button>
      <button type="button" class="icon-button" title={copy.redo} aria-label={copy.redo} disabled={busy||!snapshot.canRedo} onclick={()=>void actHistory('redo')}>↷</button>
     {/if}
@@ -288,7 +302,7 @@
   onchange={e=>{const f=e.currentTarget.files?.[0];if(f)void load(f);e.currentTarget.value=''}}/>
  <main class="content">
   {#if error}<div class="message error" role="alert">{error}<button type="button" aria-label={copy.collapse} onclick={()=>error=''}>×</button></div>{/if}
-  {#if notice}<div class="message notice" role="status">{notice}<button type="button" aria-label={copy.collapse} onclick={()=>notice=''}>×</button></div>{/if}
+  {#if snapshot && draftWarning}<div class="message error" role="alert">{copy.autosaveFailed}</div>{/if}
   {#if !snapshot}
    <section class="empty-workspace">
     <div class="empty-decoration" aria-hidden="true">✦</div>
@@ -297,7 +311,6 @@
     <p>{copy.openHint}</p>
    </section>
   {:else if !selectedGroup}
-   <div class="section-heading"><h1>{copy.collections}</h1></div>
    {#if !catalog}
     <div class="empty-result">{copy.busy}</div>
    {:else}
@@ -306,7 +319,7 @@
       <button class="category-card" type="button" onclick={()=>selectCategory(cat.row[0])}>
        <span class="category-image"><img src={ICONS+cat.row[5]} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/></span>
        <span class="category-label">{titleFor(cat.row)}</span>
-       {#if cat.count>0}<span class="category-count">{copy.recorded} · {cat.count.toLocaleString(locale)}</span>{/if}
+       <span class="category-count" title={copy.progressHint}>{cat.count.toLocaleString(locale)} / {cat.total.toLocaleString(locale)}</span>
       </button>
      {/each}
     </div>
@@ -322,36 +335,37 @@
    <div class="collection-controls">
     <label class="search-field">
      <span class="search-symbol" aria-hidden="true">⌕</span>
-     <input type="search" placeholder={copy.search} aria-label={copy.search} bind:value={query} oninput={()=>page=0}/>
+     <input type="search" placeholder={copy.search} aria-label={copy.search} bind:value={query} oninput={()=>visibleLimit=BATCH_SIZE}/>
     </label>
     <div class="status-filter" role="group" aria-label="Status">
-     <button type="button" class:active={filter==='all'} onclick={()=>{filter='all';page=0}}>{copy.all}</button>
-     <button type="button" class:active={filter==='unrecorded'} onclick={()=>{filter='unrecorded';page=0}}>{copy.unrecorded}</button>
-     <button type="button" class:active={filter==='recorded'} onclick={()=>{filter='recorded';page=0}}>{copy.recorded}</button>
+     <button type="button" class:active={filter==='all'} onclick={()=>{filter='all';visibleLimit=BATCH_SIZE}}>{copy.all}</button>
+     <button type="button" class:active={filter==='unrecorded'} onclick={()=>{filter='unrecorded';visibleLimit=BATCH_SIZE}}>{copy.unrecorded}</button>
+     <button type="button" class:active={filter==='recorded'} onclick={()=>{filter='recorded';visibleLimit=BATCH_SIZE}}>{copy.recorded}</button>
     </div>
    </div>
    {#if !snapshot.membershipEdit}<div class="compact-hint">{copy.noMembership}</div>{/if}
    <div class="item-grid">
-    {#each visibleItems.rows as item (item[0])}
+    {#each visibleItems as item (item[0])}
      {@const tick=recorded[String(item[0])]}
      {@const has=tick!==undefined}
      {@const mayAdd=snapshot.membershipEdit && snapshot.version===catalog?.version && item[4]===0}
+     {@const mayToggle=has?snapshot.membershipEdit:mayAdd}
+     {@const sprite=iconPack?.group===selectedGroup?iconPack.entries[String(item[0])]:undefined}
      <article class="item-tile" class:is-recorded={has}>
-      <div class="item-primary">
-       <div class="item-name">{nameFor(item)}</div>
-       <div class="item-actions">
-        {#if has}
-         <button type="button" class="record-switch selected" aria-label={copy.unsetRecorded+': '+nameFor(item)} title={snapshot.membershipEdit?copy.unsetRecorded:copy.noMembership} disabled={busy||!snapshot.membershipEdit} onclick={()=>void change(item[0],null)}>
-          <span aria-hidden="true">✓</span> {copy.recorded}
-         </button>
-         <button type="button" class="date-button" aria-label={copy.editDate+': '+nameFor(item)} title={copy.editDate} disabled={busy} onclick={()=>editDate(item[0])}>◷</button>
+      <button type="button" class="item-toggle" aria-pressed={has} aria-label={(has?copy.unsetRecorded:copy.setRecorded)+': '+nameFor(item)}
+       title={mayToggle?(has?copy.unsetRecorded:copy.setRecorded):copy.unsafe} disabled={busy||!mayToggle}
+       onclick={()=>void change(item[0],has?null:EPOCH+BigInt(Date.now())*10000n)}>
+       <span class="item-art" aria-hidden="true">
+        {#if sprite}
+         <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
         {:else}
-         <button type="button" class="record-switch" aria-label={copy.setRecorded+': '+nameFor(item)} title={mayAdd?copy.setRecorded:copy.unsafe} disabled={busy||!mayAdd} onclick={()=>void change(item[0],EPOCH+BigInt(Date.now())*10000n)}>
-          <span aria-hidden="true">＋</span> {copy.unrecorded}
-         </button>
+         <span class="item-art-empty">✧</span>
         {/if}
-       </div>
-      </div>
+       </span>
+       <span class="item-name">{nameFor(item)}</span>
+       <span class="item-status" class:has={has}>{has?'✓ '+copy.recorded:copy.unrecorded}</span>
+      </button>
+      {#if has}<button type="button" class="date-button" title={copy.editDate} aria-label={copy.editDate+': '+nameFor(item)} disabled={busy} onclick={()=>editDate(item[0])}>◷</button>{/if}
       {#if editId===item[0] && has}
        <div class="date-panel">
         <label>{copy.editDate}<input type="datetime-local" bind:value={dateValue}/></label>
@@ -361,17 +375,13 @@
      </article>
     {/each}
    </div>
-   {#if visibleItems.rows.length===0}<p class="empty-result">{copy.none}</p>{/if}
-   <div class="pagination" role="navigation" aria-label={copy.page}>
-    <button type="button" aria-label={copy.first} disabled={visibleItems.page===0} onclick={()=>page=0}>«</button>
-    <button type="button" disabled={visibleItems.page===0} onclick={()=>page=visibleItems.page-1}>{copy.previous}</button>
-    <label class="page-control"><span class="visually-hidden">{copy.goToPage}</span>
-     <input type="number" min="1" max={visibleItems.pages} value={visibleItems.page+1} aria-label={copy.goToPage} onchange={e=>jumpPage(e.currentTarget.value)}/>
-     <span>/ {visibleItems.pages}</span>
-    </label>
-    <button type="button" disabled={visibleItems.page>=visibleItems.pages-1} onclick={()=>page=visibleItems.page+1}>{copy.next}</button>
-    <button type="button" aria-label={copy.last} disabled={visibleItems.page>=visibleItems.pages-1} onclick={()=>page=visibleItems.pages-1}>»</button>
-   </div>
+   {#if matching.length===0}<p class="empty-result">{copy.none}</p>{/if}
+   {#if iconError}<p class="compact-hint">{copy.imagesUnavailable}</p>{/if}
+   {#if visibleItems.length<matching.length}
+    <div class="load-marker" bind:this={loadMoreSentinel} aria-label={copy.moreItems}>
+     <button type="button" onclick={()=>visibleLimit=Math.min(visibleLimit+BATCH_SIZE,matching.length)}>{copy.moreItems}</button>
+    </div>
+   {/if}
   {/if}
  </main>
 </div>
