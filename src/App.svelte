@@ -173,15 +173,41 @@
  async function load(file:File){
   if(busy||!restored)return;
   if(snapshot?.dirty&&!confirm(copy.discard))return;
-  busy=true;error='';snapshot=null;original=null;recorded={};baseline=new Map();selectedGroup=null;visibleLimit=BATCH_SIZE;editId=null;
+  const priorFile=original;
+  const priorBaseline=baseline;
+  const priorRecorded=recorded;
+  const priorGroup=selectedGroup;
+  busy=true;error='';
   try{
    if(file.size>60*1024*1024||file.size===0)throw Error(copy.typeIssue);
    await draftWrites.catch(()=>{});
    const session=await openSave(file);
    original=file;baseline=new Map(session.entries);update(session);
+   selectedGroup=null;visibleLimit=BATCH_SIZE;editId=null;query='';filter='all';
+   iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;
    try{await saveOriginalLocally(file);draftReady=true;draftWarning=false}
    catch{draftReady=false;draftWarning=true}
-  }catch(e){error=describeError(e)}
+  }catch(e){
+   const reason=describeError(e);
+   if(priorFile){
+    try{
+     const opened=await openSave(priorFile);
+     const patches=diffPatches(priorBaseline,priorRecorded).map(p=>({
+      id:p.id,
+      before:p.before===null?null:BigInt(p.before),
+      after:p.after===null?null:BigInt(p.after)
+     }));
+     const previous=patches.length?await applyDraft(patches):opened;
+     original=priorFile;baseline=priorBaseline;update(previous);
+     selectedGroup=priorGroup;visibleLimit=BATCH_SIZE;
+     if(priorGroup&&(!iconPack||iconPack.group!==priorGroup))void fetchImages(priorGroup);
+    }catch{
+     original=null;snapshot=null;recorded={};baseline=new Map();
+     selectedGroup=null;iconEpoch++;iconPack?.dispose();iconPack=null;
+    }
+   }
+   error=reason;
+  }
   finally{busy=false}
  }
  async function change(id:number,next:bigint|null){
