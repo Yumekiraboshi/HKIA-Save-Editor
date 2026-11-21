@@ -25,7 +25,8 @@ test('source IDs remain internal; only matched bilingual labels can be listed',(
  const ids=new Set;
  let matched=0,unknown=0;
  for(const item of catalog.items){
-  assert.equal(item.length,7);
+  assert.equal(item.length,8);
+  assert.ok(Number.isInteger(item[7])&&item[7]>0);
   assert.ok(Number.isInteger(item[0])&&item[0]>0&&!ids.has(item[0]));
   ids.add(item[0]);
   assert.ok(typeof item[1]==='string'&&typeof item[2]==='string');
@@ -38,12 +39,16 @@ test('source IDs remain internal; only matched bilingual labels can be listed',(
  assert.match(component,/item\[5\]!\.toLocaleLowerCase\(\)/);
  assert.doesNotMatch(component,/\{item\[0\]\}|\{item\[1\]\}|\{item\[2\]\}/);
 });
-test('header commands and paging have real handlers',()=>{
- for(const symbol of ['openSave','exportSave','backup()','closeSave()','actHistory(','setLanguage(','setTheme(','jumpPage(','selectCategory(','change(','fileInput?.click()'])assert.ok(component.includes(symbol),symbol);
- assert.ok(component.includes('const PAGE_SIZE=24'));
+test('header commands, local recovery, image tiles and continuous listing have real handlers',()=>{
+ for(const symbol of ['openSave','exportSave','backup()','closeSave()','actHistory(','setLanguage(','setTheme(','persistDraft(', 'restoreSession(', 'loadIconPack(','selectCategory(','change(','fileInput?.click()'])assert.ok(component.includes(symbol),symbol);
+ assert.ok(component.includes('const BATCH_SIZE=40'));
  assert.match(component,/category-grid/);
  assert.doesNotMatch(component,/raw\.githubusercontent\.com/);
- assert.match(component,/page-control/);
+ assert.match(component,/loadMoreSentinel/);
+ assert.match(component,/aria-pressed=\{has\}/);
+ assert.match(component,/\{#if snapshot\}<nav/);
+ assert.match(component,/cat\.count\.toLocaleString/);
+ assert.doesNotMatch(component,/page-control/);
 });
 test('Japanese and English editor copy have matching keys',()=>{
  assert.deepEqual(Object.keys(langs.ja).sort(),Object.keys(langs.en).sort());
