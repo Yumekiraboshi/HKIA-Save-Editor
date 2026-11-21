@@ -69,3 +69,31 @@ export function planMissingCategoryParentCompletion(
  const planned=planParent(hierarchy,saved,editedGuid,editedNext);
  return planned?.before===null?{guid:planned.guid,after:planned.after}:null;
 }
+
+export function planCategoryParentRevocation(
+ hierarchy:AchievementHierarchy|null,saved:readonly AchievementEntry[],
+ editedGuid:AchievementEntry['guid'],editedBefore:AchievementValue,editedNext:AchievementValue
+):AchievementPatch|null{
+ if(!hierarchy||!editedBefore.complete||editedNext.complete)return null;
+ const guid=achievementGuid(editedGuid);
+ const parentGuid=hierarchy.owner.get(guid);
+ if(!parentGuid)return null;
+ const group=hierarchy.byGuid.get(parentGuid);
+ if(!group||!group.children.includes(guid))return null;
+ const byGuid=new Map<string,AchievementEntry>();
+ for(const entry of saved){
+  const key=achievementGuid(entry.guid);
+  if(byGuid.has(key))throw Error('ACH_GROUP_DUPLICATE');
+  byGuid.set(key,entry);
+ }
+ const parent=byGuid.get(parentGuid);
+ if(!parent?.value.complete)return null;
+ const completeSiblings=group.children.reduce(
+  (count,child)=>count+(child!==guid&&byGuid.get(child)?.value.complete===true?1:0),0
+ );
+ return {
+  guid:[...parent.guid] as AchievementEntry['guid'],
+  before:parent.value,
+  after:{complete:false,current:Math.min(parent.value.current,completeSiblings),completed:null}
+ };
+}
