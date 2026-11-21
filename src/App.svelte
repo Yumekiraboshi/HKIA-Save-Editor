@@ -25,7 +25,7 @@
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
  import {searchAllCollectionItems,collectionDisplayName,filterCollectionItems} from './collection-search';
-import {verifiedFloorplanName} from './floorplan-names';
+import {verifiedFloorplanName,isVerifiedFloorplanItemId} from './floorplan-names';
  type Item=CollectionItem;
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
@@ -909,7 +909,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const direct=tick!==undefined}
      {@const recordIds=families[String(item[7]||item[0])]??[]}
      {@const has=showVariants?direct:recordIds.length>0}
-     {@const mayAdd=snapshot.membershipEdit && snapshot.version===catalog?.version && item[4]===0}
+     {@const mayAdd=snapshot.membershipEdit && snapshot.version===catalog?.version && (item[4]===0 || (snapshot.version==='3.0.1' && item[3]==='collection_group_floorplans' && isVerifiedFloorplanItemId(item[0])))}
      {@const mayToggle=showVariants?(direct?snapshot.membershipEdit:mayAdd):(recordIds.length===0?mayAdd:recordIds.length===1&&direct&&snapshot.membershipEdit)}
      {@const sprite=iconPack?.group===selectedGroup?iconPack.entries[String(item[0])]:undefined}
      <article class="item-tile" id={'collection-item-'+item[0]} class:is-recorded={has}>
