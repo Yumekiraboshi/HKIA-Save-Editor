@@ -554,13 +554,13 @@ fn tab_scoped_history_jumps_preserve_interleaved_edits_and_independent_redo_bran
    // New collection edit preserves both achievement-redo entries.
    e.change(id,Some(second),Some(original+500)).unwrap();
    assert!(e.jump_history(Achievements,2));
-   assert_eq!(e.achievement_value(guid),Some(done));
+   assert_eq!(e.achievement_value(guid),Some(dated));
    assert_eq!(e.value(id),Some(original+500));
    let opened=Editor::open(e.export().unwrap()).unwrap();
-   assert_eq!(opened.achievement_value(guid),Some(done));
+   assert_eq!(opened.achievement_value(guid),Some(dated));
    assert_eq!(opened.value(id),Some(original+500));
    assert!(!e.jump_history(Achievements,300));
-   assert_eq!(e.achievement_value(guid),Some(done));
+   assert_eq!(e.achievement_value(guid),Some(dated));
    e.reset();
    assert!(e.history().is_empty());
    assert!(!e.can_undo());
