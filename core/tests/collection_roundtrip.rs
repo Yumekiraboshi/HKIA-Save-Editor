@@ -93,9 +93,9 @@ fn synthetic_slot_time_undo_redo_remove_add(){
   let no3=Editor::open(e.export().unwrap()).unwrap();
   assert_eq!(no3.value(3),None);
   if v=="3.0.1"{
-   e.change(216433,None,Some(638000000000000000)).unwrap();
+   e.change(315822,None,Some(638000000000000000)).unwrap();
    let added=Editor::open(e.export().unwrap()).unwrap();
-   assert_eq!(added.value(216433),Some(638000000000000000));
+   assert_eq!(added.value(315822),Some(638000000000000000));
    assert_eq!(added.value(3),None);
   }
   assert_eq!(original,slot(v));

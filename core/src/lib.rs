@@ -115,6 +115,7 @@ pub mod archive;
 mod deflate;
 pub mod digest;
 pub mod collection;
+mod catalog;
 #[derive(Debug)]
 pub struct ReadSlot { pub envelope: envelope::Envelope, pub index: native::NativeIndex }
 pub fn read_slot(raw:&[u8])->Result<ReadSlot,Error>{
