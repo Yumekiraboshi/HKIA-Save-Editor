@@ -13,7 +13,7 @@ test('future save labels are release-verified and structurally gated rather than
  assert.match(native,/short=="CollectionVersion"/);
  assert.match(native,/self\.version\.as_str\(\)/);
  assert.match(native,/short=="AchievementModel"/);
- assert.match(collection,/Version::Forward\{\.\.\}=>n\.is_some_and\(\|v\|v>=87&&v<=1_000_000\)/);
+ assert.match(collection,/Version::Forward\{\.\.\}=>n\.is_some_and\(\|v\|v>=87\)/);
  assert.match(collection,/pub fn version\(&self\)->String/);
  assert.match(collection,/if !Self::compatible\(&slot\)/);
  assert.match(collection,/if !Self::compatible\(&reread\)/);
