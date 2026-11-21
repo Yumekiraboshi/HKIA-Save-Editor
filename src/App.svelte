@@ -1,9 +1,9 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,createAchievement,createAchievementWithParent,completeChildWithNewParent,changeAchievement,changeAchievementPair,applyDraft,jumpHistory,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,createAchievement,createAchievementWithParent,completeChildWithNewParent,changeAchievement,changeAchievementPair,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch,type HistoryRecord} from './worker-client';
  import {planCategoryParentCompletion,planMissingCategoryParentCompletion,planCategoryParentRevocation,planCategoryParentDateSync} from './achievement-parent-auto';
- import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
- import {diffAchievements,decodeAchievementDraft} from './achievement-draft';
+ import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
+ import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
  import {historyCopy} from './history-copy';
  import {compactAchievementCopy} from './achievement-compact-ui';
@@ -349,12 +349,31 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
   return achievementName(achievementGuid(entry.guid),0)+(entry.paired?' · '+hCopy.paired:'');
  }
  function update(s:SaveSnapshot){snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));}
+ /** Verify a restored native journal reproduces the locally persisted net edits.
+  * Canonical comparison retains lossless decimal timestamp strings.
+  */
+ function recoveredMatchesDraft(
+  baseRows:ReadonlyMap<number,bigint>,baseAchievements:readonly AchievementEntry[],
+  recovered:SaveSnapshot,collectionPatches:readonly DraftPatch[],achievementPatches:readonly StoredPatch[]
+ ):boolean{
+  const current=Object.fromEntries(recovered.entries.map(([id,t])=>[String(id),t]));
+  const sortedCollection=(xs:readonly DraftPatch[])=>
+   JSON.stringify([...xs].sort((a,b)=>a.id-b.id));
+  const sortedAchievement=(xs:readonly StoredPatch[])=>
+   JSON.stringify([...xs].sort((a,b)=>{
+    for(let i=0;i<4;i++){const d=a.guid[i]-b.guid[i];if(d)return d}
+    return 0;
+   }));
+  return sortedCollection(diffPatches(baseRows,current))===sortedCollection(collectionPatches)&&
+   sortedAchievement(diffAchievements(baseAchievements,recovered.achievements))===sortedAchievement(achievementPatches);
+ }
  function persistDraft():Promise<void>{
   if(!original)return Promise.resolve();
   const patches=diffPatches(baseline,recorded);
   const achievements=diffAchievements(achievementBaseline,snapshot?.achievements??[]);
   const ui={group:selectedGroup,subgroup:selectedSubgroup};
-  const job=draftWrites.catch(()=>{}).then(()=>saveDraftChanges(patches,ui,achievements));
+  const checkpoint=(snapshot as SaveSnapshot|null)?.historyCheckpoint??null;
+  const job=draftWrites.catch(()=>{}).then(()=>saveDraftChanges(patches,ui,achievements,checkpoint));
   draftWrites=job;
   return job.then(()=>{draftReady=true;draftWarning=false},()=>{draftReady=false;draftWarning=true});
  }
@@ -372,7 +391,20 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
      return {id:p.id,before,after};
     });
     const achievementPatches=decodeAchievementDraft(draft.achievementPatches,s.achievements);
-    const session=patches.length||achievementPatches.length?await applyDraft(patches,achievementPatches):s;
+    let session:SaveSnapshot|null=null;
+    if(draft.historyCheckpoint){
+     try{
+      const recovered=await restoreHistory(draft.historyCheckpoint);
+      if(!recoveredMatchesDraft(originalRows,s.achievements,recovered,draft.patches,draft.achievementPatches))
+       throw Error('HISTORY_RESTORE_CONFLICT');
+      session=recovered;
+     }catch{
+      // Atomic native replay may reject stale or malformed metadata.
+      // Reopen the original file before applying validated net changes.
+      await openSave(draft.file);
+     }
+    }
+    if(!session)session=patches.length||achievementPatches.length?await applyDraft(patches,achievementPatches):s;
    collectionSearchDrilldown=false;query='';
     original=draft.file;baseline=originalRows;achievementBaseline=s.achievements;update(session);
     selectedGroup=draft.ui.group;selectedSubgroup=draft.ui.subgroup;
@@ -395,6 +427,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
   const priorRecorded=recorded;
   const priorAchievements=snapshot?.achievements??[];
   const priorAchievementBaseline=achievementBaseline;
+  const priorHistoryCheckpoint=(snapshot as SaveSnapshot|null)?.historyCheckpoint??null;
   const priorGroup=selectedGroup;
   const priorSubgroup=selectedSubgroup;
   const priorVariants=showVariants;
@@ -420,7 +453,16 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
      }));
      const achievementPatches=diffAchievements(priorAchievementBaseline,priorAchievements);
      const decodedAchievements=decodeAchievementDraft(achievementPatches,opened.achievements);
-     const previous=patches.length||decodedAchievements.length?await applyDraft(patches,decodedAchievements):opened;
+     let previous:SaveSnapshot|null=null;
+     if(priorHistoryCheckpoint){
+      try{
+       const recovered=await restoreHistory(priorHistoryCheckpoint);
+       if(!recoveredMatchesDraft(priorBaseline,opened.achievements,recovered,
+        diffPatches(priorBaseline,priorRecorded),achievementPatches))throw Error('HISTORY_RESTORE_CONFLICT');
+       previous=recovered;
+      }catch{await openSave(priorFile)}
+     }
+     if(!previous)previous=patches.length||decodedAchievements.length?await applyDraft(patches,decodedAchievements):opened;
      original=priorFile;baseline=priorBaseline;achievementBaseline=priorAchievementBaseline;update(previous);
      selectedGroup=priorGroup;selectedSubgroup=priorSubgroup;showVariants=priorVariants;visibleLimit=BATCH_SIZE;
      if(priorGroup&&(!iconPack||iconPack.group!==priorGroup))void fetchImages(priorGroup);
