@@ -9,7 +9,7 @@ const u32=n=>append([0xce],Array.from({length:4},(_,i)=>n>>>(24-8*i)&255));
 const f32=n=>{const v=new Uint8Array(5);v[0]=0xca;new DataView(v.buffer).setFloat32(1,n);return v};
 const i64=n=>{const v=new Uint8Array(9);v[0]=0xd3;new DataView(v.buffer).setBigInt64(1,n,false);return v};
 const arr=(...xs)=>{assert.ok(xs.length<16);return append([0x90|xs.length],...xs)};
-const map=(...xs)=>{assert.ok(xs.length<16);return append([0x80|xs.length],...xs.flat())};
+const map=(...xs)=>{assert.ok(xs.length%2===0&&xs.length/2<16);return append([0x80|(xs.length/2)],...xs)};
 const hash=(...xs)=>append(...xs.map(u32));
 const doc=(tag,body)=>arr([tag],body);
 const str=s=>append([0xa0|s.length],new TextEncoder().encode(s));
