@@ -68,7 +68,9 @@ impl Editor {
  pub fn value(&self,id:i32)->Option<i64>{
   match self.changes.get(&id){Some(v)=>*v,None=>self.base.get(&id).copied()}
  }
- pub fn dirty(&self)->bool {!self.changes.is_empty()}\n pub fn can_undo(&self)->bool {!self.undo.is_empty()}\n pub fn can_redo(&self)->bool {!self.redo.is_empty()}
+ pub fn dirty(&self)->bool {!self.changes.is_empty()}
+ pub fn can_undo(&self)->bool {!self.undo.is_empty()}
+ pub fn can_redo(&self)->bool {!self.redo.is_empty()}
  pub fn change(&mut self,id:i32,expected:Option<i64>,next:Option<i64>)->Result<(),Error>{
   if id<=0 || id==i32::MAX || self.value(id)!=expected || next==expected {return Err(Error::Schema)}
   if let Some(t)=next {if !(1..=MAX_TICKS).contains(&t){return Err(Error::Schema)}}
@@ -150,7 +152,10 @@ fn replace_map(raw:&[u8],map:Range<usize>,before:&[crate::native::CollectionEntr
  }
  if at!=map.end||old.len()!=before.len(){return Err(Error::Schema)}
  let mut seen=HashSet::new();
- for x in after{if x.id<=0||!seen.insert(x.id)||!(1..=MAX_TICKS).contains(&x.ticks){return Err(Error::Schema)}}
+ for x in after{
+  if !seen.insert(x.id){return Err(Error::Schema)}
+  if !old.contains_key(&x.id)&&!(1..=MAX_TICKS).contains(&x.ticks){return Err(Error::Schema)}
+ }
  let mut out=Vec::with_capacity(raw.len().saturating_add(after.len().saturating_mul(14)));
  out.extend_from_slice(&raw[..map.start]);out.extend(mp_map_len(after.len())?);
  for x in after{
