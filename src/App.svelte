@@ -39,6 +39,9 @@
  let achievementGroupHierarchy:AchievementHierarchy|null=$state(null);
  let achievementCategoryAtlas:CategoryIconAtlas|null=$state(null);
  let achievementIndividualAtlas:IndividualAchievementAtlas|null=$state(null);
+ let achievementImagesFailed=$state(false);
+ let achievementImagesStarted=false;
+ let achievementImagesEpoch=0;
  let achievementGroupSelection:string|null=$state(null);
  let achievementShowAll=$state(false);
  let achievementFacts:AchievementFactsIndex=$state(new Map());
@@ -144,13 +147,8 @@
   void loadLocaleIndex(import.meta.env.BASE_URL).then(available=>availableGameLocales=available).catch(()=>{});
   void loadAchievementIndex(import.meta.env.BASE_URL).then(index=>{
    achievementIndex=index;
-   void loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index)
-    .then(atlas=>achievementIndividualAtlas=atlas).catch(()=>{});
-   void loadAchievementGroups(import.meta.env.BASE_URL,index).then(groups=>{
-    achievementGroupHierarchy=groups;
-    void loadAchievementCategoryAtlas(import.meta.env.BASE_URL,index,groups)
-     .then(atlas=>achievementCategoryAtlas=atlas).catch(()=>{});
-   }).catch(()=>{});
+   void loadAchievementGroups(import.meta.env.BASE_URL,index)
+    .then(groups=>achievementGroupHierarchy=groups).catch(()=>{});
   }).catch(()=>{});
 
   fetch(import.meta.env.BASE_URL+'catalog.json')
@@ -160,10 +158,35 @@
     catalog=v;
    })
    .catch(e=>error=describeError(e));
-  return ()=>{media.removeEventListener?.('change',listener);window.removeEventListener('beforeunload',beforeUnload);iconEpoch++;iconPack?.dispose()};
+  return ()=>{
+   media.removeEventListener?.('change',listener);
+   window.removeEventListener('beforeunload',beforeUnload);
+   iconEpoch++;iconPack?.dispose();
+   achievementImagesEpoch++;
+   achievementIndividualAtlas?.dispose?.();
+   achievementCategoryAtlas?.dispose?.();
+  };
  });
  $effect(()=>{
   if(typeof document!=='undefined'){document.documentElement.lang=locale;document.documentElement.dir=isRtl(locale)?'rtl':'ltr';document.documentElement.dataset.theme=actualTheme;}
+ });
+ /* Native artwork loads only with a save in the Achievements tab.
+    Tampered or stale image data fail closed without blocking save edits. */
+ $effect(()=>{
+  if(!snapshot||activeTool!=='achievements'||achievementIndex.size!==820||!achievementGroupHierarchy||achievementImagesStarted)return;
+  achievementImagesStarted=true;
+  const epoch=++achievementImagesEpoch;
+  const index=achievementIndex,groups=achievementGroupHierarchy;
+  void loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index)
+   .then(atlas=>{
+    if(epoch!==achievementImagesEpoch){atlas.dispose?.();return;}
+    achievementIndividualAtlas=atlas;
+   }).catch(()=>{if(epoch===achievementImagesEpoch)achievementImagesFailed=true});
+  void loadAchievementCategoryAtlas(import.meta.env.BASE_URL,index,groups)
+   .then(atlas=>{
+    if(epoch!==achievementImagesEpoch){atlas.dispose?.();return;}
+    achievementCategoryAtlas=atlas;
+   }).catch(()=>{if(epoch===achievementImagesEpoch)achievementImagesFailed=true});
  });
  $effect(()=>{
   const current=locale;
@@ -574,6 +597,9 @@
    </section>
 
   {:else if activeTool==='achievements'}
+   {#if achievementImagesFailed}
+    <p class="compact-hint" role="status">{achCopy.imagesUnavailable}</p>
+   {/if}
    {#if achievementGroupHierarchy && (achievementGroupSelection!==null||achievementShowAll)}
     <button type="button" class="back-link achievement-group-back" onclick={()=>showAchievementGroup(null)}>‹ {groupCopy.back}</button>
    {/if}
