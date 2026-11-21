@@ -92,7 +92,7 @@ impl Editor {
    // Future content revisions may change the collection revision number
    // even while all target field layouts remain byte-compatible.
    // read_slot() already enforces the complete typed native schema walk.
-   Version::Forward{..}=>n.is_some_and(|v|v>=87&&v<=1_000_000)
+   Version::Forward{..}=>n.is_some_and(|v|v>=87)
   };
   compatible_version&&slot.index.collection_map.is_some()
  }
