@@ -44,11 +44,35 @@ export async function loadAchievementGroups(base:string,index:AchievementIndex):
  if(!response.ok)throw Error('ACH_GROUPS_UNAVAILABLE');
  return decodeAchievementGroups(await response.json(),index);
 }
-export function groupRows(hierarchy:AchievementHierarchy,groupId:string,all:readonly AchievementListRow[]):AchievementListRow[]{
+/** Stable native progress order. A category parent has order=0; children use LocalAchievementData.order.
+ * Equal/missing order values retain the original GameCounterAchievementsDefinition reference order.
+ * No locale-dependent sorting is used for achievements.
+ */
+export function groupRows(
+ hierarchy:AchievementHierarchy,groupId:string,all:readonly AchievementListRow[],
+ order:ReadonlyMap<string,{order:number}>=new Map()
+):AchievementListRow[]{
  const group=hierarchy.byGuid.get(groupId);
  if(!group)return [];
  const lookup=new Map(all.map(r=>[r.guid,r]));
- return [group.guid,...group.children].map(guid=>lookup.get(guid)).filter((r):r is AchievementListRow=>r!==undefined);
+ const children=group.children.map((guid,i)=>({guid,i})).sort((a,b)=>{
+  const ar=order.get(a.guid)?.order,br=order.get(b.guid)?.order;
+  if(ar===undefined||br===undefined||ar===0||br===0)return a.i-b.i;
+  return ar-br||a.i-b.i;
+ });
+ return [group.guid,...children.map(x=>x.guid)].map(guid=>lookup.get(guid))
+  .filter((r):r is AchievementListRow=>r!==undefined);
+}
+/** All achievements: native root category order, each category parent, then its progress-ordered children.
+ * Unknown/new-version saved GUIDs remain visible at the end in original save order.
+ */
+export function nativeAchievementOrder(
+ hierarchy:AchievementHierarchy|null,all:readonly AchievementListRow[],
+ order:ReadonlyMap<string,{order:number}>=new Map()
+):AchievementListRow[]{
+ if(hierarchy===null)return [...all];
+ const grouped=hierarchy.groups.flatMap(group=>groupRows(hierarchy,group.guid,all,order));
+ return [...grouped,...ungroupedRows(hierarchy,all)];
 }
 export function ungroupedRows(hierarchy:AchievementHierarchy,all:readonly AchievementListRow[]):AchievementListRow[]{
  return all.filter(r=>!hierarchy.byGuid.has(r.guid)&&!hierarchy.owner.has(r.guid));
