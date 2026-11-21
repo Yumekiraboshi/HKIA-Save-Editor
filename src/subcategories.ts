@@ -1,6 +1,6 @@
 export type CollectionItem=[number,string,string,string,number,string|null,string|null,number];
 export type Subcategory={key:string;count:number;total:number;previewId:number|null};
-export type Locale='ja'|'en';
+import type {Locale} from './locales';
 const LABELS:Record<string,readonly [string,string]>={
  'all': ["すべて","All"],
  'allballoons': ["すべてのバルーン","All Balloons"],

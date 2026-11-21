@@ -49,3 +49,21 @@ npm run build
 ```
 
 Unofficial tool. Not affiliated with Sunblink, Sanrio or the game's publishers.
+
+## Languages and shared game text
+
+The language selector offers all 16 Babel locales present in the supplied game assets: `ar`, `de`, `en`, `en-GB`, `es`, `fr`, `fr-CA`, `it`, `ja`, `ko`, `nl`, `pt-BR`, `ru`, `tr`, `zh-Hans`, `zh-Hant`. Browser language matching, remembered selection and Arabic right-to-left layout are supported. Common editor actions have language-specific labels; remaining editor-owned copy falls back to English until reviewed translations are available.
+
+The game text system is shared across tools. The editor accepts on-demand Babel string dictionaries keyed by native 64-bit string ID, with a separate item-to-string crosswalk. A future Achievements tab can use the same ID-based dictionaries without duplicating images or game text. Only the selected locale is fetched.
+
+To build the item dictionaries locally, put the legally obtained Babel language folders directly under `<BABEL_DIR>/`, e.g. `<BABEL_DIR>/ja/ja.manifest`, `ja.100.txt`, `ja.200.txt`, `ja.300.txt`, and run:
+
+```sh
+python3 scripts/extract-babel-items.py --babel-dir /path/to/Babel
+npm test
+npm run build
+```
+
+The extractor parses the native version-5000 gzip-capable Babel format and generates `public/locales/item-keys.json` plus a compact dictionary for each of the 16 locales. It only maps an item if its catalog English name matches **one unique** native English Babel string key, leaving ambiguous or unverified names to fallback; exact English text matching is not proof of the item's source localization key. It does not publish the full game's dialogue tables.
+
+**Deployment status:** no Babel dictionaries have yet been committed. The current Pages build offers the 16 language choices and partial UI translations but uses existing Japanese/English item-name fallbacks until these dictionaries are generated and added. Do not claim complete localized coverage solely from the availability of a language choice.
