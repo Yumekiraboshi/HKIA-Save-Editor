@@ -77,7 +77,7 @@ export function exportSave():Promise<Uint8Array>{return rpc('export') as Promise
 export function clear():Promise<unknown>{return rpc('clear')}
 
 export type ChangeRequest={id:number;before:bigint|null;after:bigint|null};
-export function applyDraft(patches:ChangeRequest[],achievementPatches:AchievementPatch[]=[]):Promise<SaveSnapshot>{
+export function applyDraft(patches:ChangeRequest[],achievementPatches:AchievementDraftPatch[]=[]):Promise<SaveSnapshot>{
  return rpc('batch',{
   patches:patches.map(workerCollectionPatch),
   achievementPatches:achievementPatches.map(workerAchievementPatch)
