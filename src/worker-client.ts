@@ -1,6 +1,7 @@
 export type SaveSnapshot={
  version:'3.0.0'|'3.0.1';
  zip:boolean;
+ membershipEdit:boolean;
  dirty:boolean;
  canUndo:boolean;
  canRedo:boolean;

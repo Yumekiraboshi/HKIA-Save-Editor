@@ -46,7 +46,7 @@
   return {total:filtered.length,pages,page:safe,items:filtered.slice(safe*PAGE,(safe+1)*PAGE)};
  });
  const ownedCount=$derived(Object.keys(history).length);
- const canGrant=$derived(Boolean((snapshot as SaveSnapshot | null)?.version && (snapshot as SaveSnapshot | null)?.version===(catalog as Catalog | null)?.version));
+ const canGrant=$derived(Boolean((snapshot as SaveSnapshot | null)?.membershipEdit && (snapshot as SaveSnapshot | null)?.version===(catalog as Catalog | null)?.version));
  function humanize(s:string){
   return s.replace(/^(collections_group_|collection_group_|collection_|item_)/,'').replaceAll('_',' ').replace(/([a-z])([A-Z])/g,'$1 $2');
  }
@@ -161,6 +161,7 @@
   {#if error}<div class="message error" role="alert">{error}</div>{/if}
   {#if notice}<div class="message success" role="status">{notice}</div>{/if}
   {#if snapshot}
+   {#if !snapshot.membershipEdit}<div class="message error">このセーブには旧式の履歴（Key0）が残っています。整合性を保つため、取得・未取得の切り替えを無効にし、記録日時の変更のみ許可しています。</div>{/if}
    <section class="toolbar card">
     <div><span class="card-label">02 · 編集</span><h3>収集アイテムを探す</h3><p>定義データはv{catalog?.version??'…'}。ゲーム内の所有や実績は自動変更しません。</p></div>
     <div class="tools">
@@ -199,7 +200,7 @@
         {#if obtained}
          <span class="state-pill yes">取得済み</span>
          <button class="small" disabled={busy} onclick={()=>{editId=item[0];editTime=inputDate(ticks)}}>日時</button>
-         <button class="small danger" disabled={busy} onclick={()=>void change(item[0],ticks,null)}>未取得にする</button>
+         <button class="small danger" disabled={busy||!snapshot.membershipEdit} onclick={()=>void change(item[0],ticks,null)}>未取得にする</button>
         {:else}
          <span class="state-pill">未取得</span>
          <button class="small primary" disabled={busy||!canGrant||restricted||Boolean(item[4]&4)} title={!canGrant?'定義とセーブのバージョンが異なります。':restricted?'DLC/イベント条件が未検証です。':''} onclick={()=>void change(item[0],null,EPOCH+BigInt(Date.now())*10000n)}>取得にする</button>

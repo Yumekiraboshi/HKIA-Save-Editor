@@ -37,7 +37,7 @@ function snapshot(e:Engine){
  if(!version||count>1_000_000||b.length!==17+count*12)throw Error('セーブ一覧の形式が不正です。');
  const entries:Array<[number,bigint]>=[];
  for(let i=0;i<count;i++){const p=17+i*12;entries.push([v.getInt32(p,true),v.getBigInt64(p+4,true)]);}
- return {version,zip:b[1]===1,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries};
+ return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries};
 }
 async function execute(r:Request):Promise<unknown>{
  const e=await getEngine();

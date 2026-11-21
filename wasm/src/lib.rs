@@ -62,7 +62,7 @@ pub extern "C" fn hkia_snapshot()->u32{
   if rows.len()>1_000_000{return 1}
   let mut bytes=Vec::with_capacity(17+rows.len()*12);
   bytes.push(if e.version()=="3.0.0"{1}else{2});
-  bytes.push(u8::from(e.is_zip()));bytes.push(u8::from(e.dirty()));
+  bytes.push(u8::from(e.is_zip()) | (u8::from(e.can_change_membership())<<1));bytes.push(u8::from(e.dirty()));
   bytes.push(u8::from(e.can_undo()));bytes.push(u8::from(e.can_redo()));
   bytes.extend(e.revision().to_le_bytes());
   bytes.extend((e.source_bytes()as u32).to_le_bytes());

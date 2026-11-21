@@ -48,8 +48,6 @@ impl Editor {
   let n=slot.index.collection_version.as_ref().map(|v|v.number);
   n==Some(match slot.envelope.version{Version::V300=>83,Version::V301=>87})
    &&slot.index.collection_map.is_some()
-   &&slot.index.deprecated_count==0
-   &&slot.index.deprecated.is_empty()
  }
  pub fn version(&self)->&'static str {self.slot.envelope.version.as_str()}
  pub fn source_bytes(&self)->usize {self.original.len()}
@@ -71,8 +69,10 @@ impl Editor {
  pub fn dirty(&self)->bool {!self.changes.is_empty()}
  pub fn can_undo(&self)->bool {!self.undo.is_empty()}
  pub fn can_redo(&self)->bool {!self.redo.is_empty()}
+ pub fn can_change_membership(&self)->bool {self.slot.index.deprecated_map.is_some() && self.slot.index.deprecated_count==0 && self.slot.index.deprecated.is_empty()}
  pub fn change(&mut self,id:i32,expected:Option<i64>,next:Option<i64>)->Result<(),Error>{
   if id<=0 || id==i32::MAX || self.value(id)!=expected || next==expected {return Err(Error::Schema)}
+  if (expected.is_none() || next.is_none()) && !self.can_change_membership(){return Err(Error::Schema)}
   if expected.is_none() && next.is_some() && (self.slot.envelope.version!=Version::V301 || !crate::catalog::eligible_for_new_history(id)){return Err(Error::Schema)}
   if let Some(t)=next {if !(1..=MAX_TICKS).contains(&t){return Err(Error::Schema)}}
   if expected.is_none() && self.entries.len()+self.changes.len()>=1_000_000 {return Err(Error::Budget)}
