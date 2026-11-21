@@ -13,6 +13,7 @@
  import {loadAchievementGroups,groupRows,ungroupedRows,nativeAchievementOrder,groupSummaries as summarizeAchievementGroups,type AchievementHierarchy} from './achievement-groups';
  import {achievementGroupCopy} from './achievement-group-ui';
  import {loadAchievementCategoryAtlas,type CategoryIconAtlas} from './achievement-category-icons';
+ import {loadAchievementIndividualAtlas,type IndividualAchievementAtlas} from './achievement-individual-icons';
  import {loadAchievementIndex,achievementGuid,readableSourceKey,type AchievementIndex} from './achievement-index';
  import {loadAchievementTitles,type AchievementTitles} from './achievement-localization';
  import {editorErrors} from './ui-copy';
@@ -37,6 +38,7 @@
  let achievementIndex:AchievementIndex=$state(new Map());
  let achievementGroupHierarchy:AchievementHierarchy|null=$state(null);
  let achievementCategoryAtlas:CategoryIconAtlas|null=$state(null);
+ let achievementIndividualAtlas:IndividualAchievementAtlas|null=$state(null);
  let achievementGroupSelection:string|null=$state(null);
  let achievementShowAll=$state(false);
  let achievementFacts:AchievementFactsIndex=$state(new Map());
@@ -142,6 +144,8 @@
   void loadLocaleIndex(import.meta.env.BASE_URL).then(available=>availableGameLocales=available).catch(()=>{});
   void loadAchievementIndex(import.meta.env.BASE_URL).then(index=>{
    achievementIndex=index;
+   void loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index)
+    .then(atlas=>achievementIndividualAtlas=atlas).catch(()=>{});
    void loadAchievementGroups(import.meta.env.BASE_URL,index).then(groups=>{
     achievementGroupHierarchy=groups;
     void loadAchievementCategoryAtlas(import.meta.env.BASE_URL,index,groups)
@@ -617,6 +621,7 @@
     <div class="item-grid achievement-grid achievement-item-grid">
      {#each achievementRows.slice(0,achievementLimit) as item (item.guid)}
       {@const art=achievementCategoryAtlas?.bySaveGuid.get(item.guid)}
+      {@const individualArt=achievementIndividualAtlas?.bySaveGuid.get(item.guid)}
       {@const title=achievementName(item.guid,item.index)}
       {@const progressGoal=achievementProgressTarget(
        achievementGroupHierarchy?.byGuid.get(item.guid)?.children.length??null,
@@ -629,7 +634,9 @@
         title={item.row?(item.row.value.complete?compactCopy.relock:compactCopy.unlock):achCopy.missing}
         disabled={busy||!item.row} onclick={()=>{if(item.row)void quickToggleAchievement(item.row)}}>
         <span class="item-art achievement-item-art" aria-hidden="true">
-         {#if art}
+         {#if individualArt}
+          <span class="achievement-individual-sprite" style:background-image={`url("${achievementIndividualAtlas?.url}")`} style:background-position={`${individualArt.x} ${individualArt.y}`}></span>
+         {:else if art}
           <span class="achievement-category-sprite" style:background-image={`url("${achievementCategoryAtlas?.url}")`} style:background-position={`${art.x} ${art.y}`}></span>
          {:else}
           <span class="item-art-empty">✧</span>
