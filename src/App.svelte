@@ -1,7 +1,7 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
  import {openSave,changeCollection,createAchievement,createAchievementWithParent,completeChildWithNewParent,changeAchievement,changeAchievementPair,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch} from './worker-client';
- import {planCategoryParentCompletion,planMissingCategoryParentCompletion,planCategoryParentRevocation} from './achievement-parent-auto';
+ import {planCategoryParentCompletion,planMissingCategoryParentCompletion,planCategoryParentRevocation,planCategoryParentDateSync} from './achievement-parent-auto';
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
  import {diffAchievements,decodeAchievementDraft} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -492,7 +492,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  }
 
  /**
-  * Keep source-defined category completion or revocation in one atomic edit.
+  * Keep source-defined category completion, revocation, or date sync in one atomic edit.
   * Counters, rewards and platform claims remain untouched.
   */
  async function changeAchievementWithParent(live:AchievementEntry,next:AchievementValue):Promise<SaveSnapshot>{
@@ -500,6 +500,10 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
    achievementGroupHierarchy,snapshot.achievements,live.guid,live.value,next
   ):null;
   if(revocation)return changeAchievementPair({guid:live.guid,before:live.value,after:next},revocation);
+  const dateSync=snapshot?.version==='3.0.1'?planCategoryParentDateSync(
+   achievementGroupHierarchy,snapshot.achievements,live.guid,live.value,next
+  ):null;
+  if(dateSync)return changeAchievementPair({guid:live.guid,before:live.value,after:next},dateSync);
   const parent=planCategoryParentCompletion(achievementGroupHierarchy,snapshot?.achievements??[],live.guid,next);
   if(parent){
    const child:AchievementPatch={guid:live.guid,before:live.value,after:next};
