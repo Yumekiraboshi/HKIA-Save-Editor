@@ -1,4 +1,4 @@
-import type {AchievementEntry,AchievementPatch,AchievementValue,ChangeRequest} from './worker-client';
+import type {AchievementEntry,AchievementPatch,AchievementDraftPatch,AchievementValue,ChangeRequest} from './worker-client';
 
 /**
  * Svelte 5 $state creates deep Proxies. Web Worker postMessage uses structuredClone,
