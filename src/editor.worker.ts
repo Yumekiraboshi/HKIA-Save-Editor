@@ -1,4 +1,4 @@
-type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-pair'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
+type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
 type AchievementValue = {complete:boolean;current:number;completed:[bigint,number]|null};
 type AchievementPatch = {guid:number[];before:AchievementValue;after:AchievementValue};
 type AchievementDraftPatch = {guid:number[];before:AchievementValue|null;after:AchievementValue};
@@ -8,6 +8,7 @@ type Engine = {
  memory:WebAssembly.Memory;
  hkia_stage(n:number):number; hkia_open():number;
  hkia_change(id:number,expectedPresent:number,old:bigint,nextPresent:number,value:bigint):number;
+ hkia_achievement_parent_create(...args:[ number,number,number,number, number, number,number,bigint,number,number, number,number,bigint,number,number, number,number,number,number, number,number,bigint,number,number]):number;
  hkia_achievement_create(g0:number,g1:number,g2:number,g3:number,complete:number,progress:number,seconds:bigint,nanos:number,hasDate:number):number;
  hkia_achievement_create_parent(...args:[
   number,number,number,number,number,number,bigint,number,number,
@@ -149,6 +150,33 @@ async function execute(r:Request):Promise<unknown>{
     throw Error('ACH_CREATE_PARENT_INVALID');
    if(e.hkia_achievement_create_parent(...args,...patchArgs(parent[0] as AchievementPatch))!==0)
     throw Error('ACH_CREATE_PARENT_CONFLICT');
+   return snapshot(e);
+  }
+  case 'achievement-parent-create':{
+   const patches=r.achievementPatches;
+   if(!Array.isArray(patches)||patches.length!==2||patches[1].before!==null)
+    throw Error('ACH_PARENT_CREATE_INVALID');
+   const [child,parent]=patches;
+   const childAfter=createArgs(child.guid,child.after);
+   const parentAfter=createArgs(parent.guid,parent.after);
+   const before=child.before;
+   if(before!==null&&!validAchievement(before))throw Error('ACH_PARENT_CREATE_INVALID');
+   type ParentCreateArgs=[
+    number,number,number,number, number, number,number,bigint,number,number,
+    number,number,bigint,number,number, number,number,number,number,
+    number,number,bigint,number,number
+   ];
+   const args:ParentCreateArgs=[
+    childAfter[0],childAfter[1],childAfter[2],childAfter[3],
+    Number(before!==null),
+    Number(before?.complete??false),before?.current??0,
+    before?.completed?.[0]??0n,before?.completed?.[1]??0,
+    Number(before!==null&&before.completed!==null),
+    childAfter[4],childAfter[5],childAfter[6],childAfter[7],childAfter[8],
+    parentAfter[0],parentAfter[1],parentAfter[2],parentAfter[3],
+    parentAfter[4],parentAfter[5],parentAfter[6],parentAfter[7],parentAfter[8]
+   ];
+   if(e.hkia_achievement_parent_create(...args)!==0)throw Error('ACH_PARENT_CREATE_CONFLICT');
    return snapshot(e);
   }
   case 'achievement-pair':{
