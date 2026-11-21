@@ -6,6 +6,7 @@ A browser-local collection-history and achievement-state editor for Hello Kitty 
 
 ## Interface
 
+- **No-save achievement gallery:** from the landing screen, browse all 820 source-defined achievements and their 16-language game titles without opening a save. Navigate the 63 native achievement categories, view 198 source-verified individual icons and 63 category icons, and see neutral placeholders for the 559 definitions with no native Icon reference. No saved state is inferred; every edit control remains disabled until a save is loaded.
 - Game-derived collection categories, with 25 local category images and their real sub-collections from each item's collection ID. Subcategory cards reuse representative local item sprites.
 - Select a category and (where applicable) a subcategory before browsing items. Search names in Japanese or English in the continuously loading list.
 - Show base collection items by default instead of mixing color/size variations into the checklist. An optional variation toggle preserves individual variant-history editing. Edit collection-history membership or recorded date in a modal where structural constraints allow it.
