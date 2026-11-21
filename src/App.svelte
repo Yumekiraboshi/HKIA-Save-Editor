@@ -1,6 +1,7 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeAchievement,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue} from './worker-client';
+ import {openSave,changeCollection,changeAchievement,changeAchievementPair,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch} from './worker-client';
+ import {planCategoryParentCompletion} from './achievement-parent-auto';
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
  import {diffAchievements,decodeAchievementDraft} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -465,6 +466,18 @@
   else dateValidation=error||copy.fileError;
  }
 
+ /**
+  * If a last leaf becomes complete, atomically complete its existing parent.
+  * Do not fabricate missing saved rows or alter game counters/reward claims.
+  */
+ async function changeAchievementWithParent(live:AchievementEntry,next:AchievementValue):Promise<SaveSnapshot>{
+  const parent=planCategoryParentCompletion(achievementGroupHierarchy,snapshot?.achievements??[],live.guid,next);
+  if(parent){
+   const child:AchievementPatch={guid:live.guid,before:live.value,after:next};
+   return changeAchievementPair(child,parent);
+  }
+  return changeAchievement(live.guid,live.value,next);
+ }
  async function quickToggleAchievement(row:AchievementEntry){
   if(!snapshot||busy)return;
   const live=snapshot.achievements.find(x=>achievementGuid(x.guid)===achievementGuid(row.guid));
@@ -472,7 +485,7 @@
   busy=true;error='';
   try{
    const next=toggleAchievementState(live.value,Date.now());
-   update(await changeAchievement(live.guid,live.value,next));
+   update(await changeAchievementWithParent(live,next));
    await persistDraft();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -524,7 +537,7 @@
    next.completed?.[1]===selected.value.completed?.[1]){closeAchievement();return}
   busy=true;error='';achievementValidation='';
   try{
-   update(await changeAchievement(selected.guid,selected.value,next));
+   update(await changeAchievementWithParent(selected,next));
    closeAchievement();await persistDraft();
   }catch(e){achievementValidation=describeError(e)}
   finally{busy=false}
