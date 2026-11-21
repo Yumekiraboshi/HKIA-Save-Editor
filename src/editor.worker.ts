@@ -58,9 +58,8 @@ function snapshot(e:Engine){
   if(!n||n>24||b.length!==end+1+n)throw Error('セーブ一覧の形式が不正です。');
   const label=new TextDecoder('utf-8',{fatal:true}).decode(b.subarray(end+1));
   const parts=label.split('.');
-  if(parts.length!==3||parts.some(p=>!/^\\d{1,2}$/.test(p)||(p.length>1&&p.startsWith('0')))||
-   parts.map(Number).some(n=>n>99)||parts.map(Number).join('.')==='3.0.0'||
-   parts.map(Number).join('.')==='3.0.1')throw Error('セーブ一覧の形式が不正です。');
+  if(parts.length!==3||parts.some(p=>!/^[0-9]{1,2}$/.test(p)||(p.length>1&&p.startsWith('0'))||
+   Number(p)>99))throw Error('セーブ一覧の形式が不正です。');
   const [major,minor,patch]=parts.map(Number);
   if(major<3||(major===3&&minor===0&&patch<=1))throw Error('セーブ一覧の形式が不正です。');
   version=label;
