@@ -1,4 +1,4 @@
-import type {StoredPatch} from './achievement-draft';
+import {cloneStoredAchievementPatches,type StoredPatch} from './achievement-draft';
 export type DraftPatch={id:number;before:string|null;after:string|null};
 export type DraftUi={group:string|null;subgroup:string|null};
 export type LocalDraft={file:File;patches:DraftPatch[];achievementPatches:StoredPatch[];ui:DraftUi};
@@ -83,12 +83,17 @@ export async function saveOriginalLocally(file:File):Promise<void>{
  }finally{db.close()}
 }
 export async function saveDraftChanges(patches:DraftPatch[],ui:DraftUi,achievementPatches:StoredPatch[]=[]):Promise<void>{
- safePatches(patches);
+ // Svelte $state arrays and their nested GUIDs can be Proxies. IDB.put clones data
+ // synchronously and rejects them with DataCloneError, so normalize *all* inputs
+ // before opening the transaction. Do not JSON-stringify nanosecond timestamps.
+ const savedPatches=safePatches(patches).map(p=>({id:p.id,before:p.before,after:p.after}));
+ const savedAchievements=cloneStoredAchievementPatches(achievementPatches);
+ const savedUi:DraftUi={group:ui.group,subgroup:ui.subgroup};
  const db=await openDatabase();
  try{
   const tx=db.transaction(EDITS,'readwrite');
   const finished=complete(tx);
-  tx.objectStore(EDITS).put({version:VERSION,patches,achievementPatches,ui},KEY);
+  tx.objectStore(EDITS).put({version:VERSION,patches:savedPatches,achievementPatches:savedAchievements,ui:savedUi},KEY);
   await finished;
  }finally{db.close()}
 }
