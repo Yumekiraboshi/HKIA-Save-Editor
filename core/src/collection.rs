@@ -26,7 +26,7 @@ pub struct Editor {
 impl Editor {
  pub fn open(original:Vec<u8>)->Result<Self,Error>{
   if original.is_empty() || original.len()>MAX_ARCHIVE {return Err(Error::Budget)}
-  let (zip,slot_raw)=if original.starts_with(b"PK\\x03\\x04") {
+  let (zip,slot_raw)=if original.starts_with(b"PK\x03\x04") {
    let z=ZipIndex::parse(&original)?;
    if !z.entries.iter().any(|x|x.name==SLOT) || !z.entries.iter().any(|x|x.name==ACCOUNT){return Err(Error::Schema)}
    let (s,_)=z.targets(&original)?;
@@ -68,7 +68,7 @@ impl Editor {
  pub fn value(&self,id:i32)->Option<i64>{
   match self.changes.get(&id){Some(v)=>*v,None=>self.base.get(&id).copied()}
  }
- pub fn dirty(&self)->bool {!self.changes.is_empty()}
+ pub fn dirty(&self)->bool {!self.changes.is_empty()}\n pub fn can_undo(&self)->bool {!self.undo.is_empty()}\n pub fn can_redo(&self)->bool {!self.redo.is_empty()}
  pub fn change(&mut self,id:i32,expected:Option<i64>,next:Option<i64>)->Result<(),Error>{
   if id<=0 || id==i32::MAX || self.value(id)!=expected || next==expected {return Err(Error::Schema)}
   if let Some(t)=next {if !(1..=MAX_TICKS).contains(&t){return Err(Error::Schema)}}
