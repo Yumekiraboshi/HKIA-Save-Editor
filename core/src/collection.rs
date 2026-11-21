@@ -268,7 +268,39 @@ impl Editor {
     patches.extend(achievement::replacements(model,*value)?);
    }
   }
-  let (next_payload,first)=achievement::splice(original_payload,patches)?;
+  // First patch existing token spans, then use a fresh schema walk to insert
+  // new IDocuments into DbRoot's original documents array. The array header
+  // and byte offsets can shift when existing timestamps change width.
+  let (intermediate,first)=if patches.is_empty(){
+   (original_payload.clone(),original_payload.len())
+  }else{achievement::splice(original_payload,patches)?};
+  let (next_payload,first)=if self.achievement_created.is_empty(){
+   (intermediate,first)
+  }else{
+   let index=crate::native::index_native(&intermediate,self.slot.envelope.version)?;
+   let span=index.root_documents_span.clone().ok_or(Error::Schema)?;
+   let mut cursor=Cursor::new(&intermediate[span.clone()]);
+   let count=cursor.array()?;
+   if count!=index.documents||count+self.achievement_created.len()>1_000_000{return Err(Error::Schema)}
+   let insertion=index.achievements.last().ok_or(Error::Schema)?.fields[2].bytes.end;
+   let head_end=span.start+cursor.pos;
+   if insertion<head_end||insertion>span.end{return Err(Error::Schema)}
+   let mut added:Vec<_>=self.achievement_created.iter().collect();
+   added.sort_by_key(|(&guid,_)|guid);
+   let max_id=index.achievements.iter().map(|x|x.id).max().ok_or(Error::Schema)?;
+   let max_new=max_id.checked_add(u32::try_from(added.len()).map_err(|_|Error::Overflow)?).ok_or(Error::Overflow)?;
+   if max_new>i32::MAX as u32{return Err(Error::Schema)}
+   let mut replacement=Vec::new();
+   mp_array_header(count+added.len(),&mut replacement)?;
+   replacement.extend_from_slice(&intermediate[head_end..insertion]);
+   for (i,(&guid,&value)) in added.into_iter().enumerate(){
+    let id=max_id+(i as u32)+1;
+    replacement.extend(encode_achievement_document(id,guid,value)?);
+   }
+   replacement.extend_from_slice(&intermediate[insertion..span.end]);
+   let (result,created_at)=achievement::splice(&intermediate,vec![(span,replacement)])?;
+   (result,first.min(created_at))
+  };
   if next_payload==*original_payload{return Err(Error::Schema)}
   let new_slot=encode_slot(&self.slot_raw,&self.slot,&next_payload,first)?;
   let reread=read_slot(&new_slot)?;
@@ -299,6 +331,28 @@ impl Editor {
   Ok(candidate)
  }
 
+}
+
+fn mp_array_header(n:usize,out:&mut Vec<u8>)->Result<(),Error>{
+ if n>1_000_000{return Err(Error::Budget)}
+ if n<16{out.push(0x90|n as u8)}
+ else if n<=u16::MAX as usize{out.push(0xdc);out.extend((n as u16).to_be_bytes());}
+ else{out.push(0xdd);out.extend((n as u32).to_be_bytes());}
+ Ok(())
+}
+fn mp_u32(n:u32,out:&mut Vec<u8>){out.push(0xce);out.extend(n.to_be_bytes());}
+fn encode_achievement_document(id:u32,guid:[u32;4],value:AchievementValue)->Result<Vec<u8>,Error>{
+ if id>i32::MAX as u32||!achievement::valid(value)||!value.complete||value.completed.is_none(){return Err(Error::Schema)}
+ let mut out=vec![0x92,0x10,0x93]; // IDocument Union(16) -> AchievementModel[Id,Hash128,AchievementData]
+ mp_u32(id,&mut out);
+ // Hash128 is FOUR consecutively encoded UInt32 tokens, not a nested array.
+ for word in guid{mp_u32(word,&mut out);}
+ out.push(0x93);out.push(if value.complete{0xc3}else{0xc2});
+ out.push(0xca);out.extend(value.current.to_bits().to_be_bytes());
+ if let Some((seconds,nanos))=value.completed{
+  out.extend([0xc7,12,0xff]);out.extend(nanos.to_be_bytes());out.extend(seconds.to_be_bytes());
+ }else{out.push(0xc0)}
+ Ok(out)
 }
 
 fn mp_map_len(n:usize)->Result<Vec<u8>,Error>{
