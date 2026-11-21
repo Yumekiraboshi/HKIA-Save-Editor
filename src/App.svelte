@@ -4,6 +4,7 @@
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
  import {messages,editorErrors,type Locale} from './ui-copy';
  import {loadIconPack,type IconPack} from './icon-packs';
+ import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  type Item=[number,string,string,string,number,string|null,string|null,number];
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
@@ -12,7 +13,6 @@
  type ThemePref='system'|'light'|'dark';
  const BATCH_SIZE=40;
  const EPOCH=621355968000000000n;
- const MAX_TICKS=3155378975999999999n;
  const ICONS=import.meta.env.BASE_URL+'icons/';
  let catalog:Catalog|null=$state(null);
  let snapshot:SaveSnapshot|null=$state(null);
@@ -249,31 +249,20 @@
   catch(e){error=e instanceof Error?e.message:copy.unknown}
   finally{busy=false}
  }
- function toDateValue(t:bigint){
-  const ms=(t-EPOCH)/10000n;
-  if(ms< -8640000000000000n||ms>8640000000000000n)return '';
-  const d=new Date(Number(ms));
-  if(!Number.isFinite(d.getTime())||d.getFullYear()<1||d.getFullYear()>9999)return '';
-  const p=(v:number,n=2)=>String(v).padStart(n,'0');
-  return [p(d.getFullYear(),4),p(d.getMonth()+1),p(d.getDate())].join('-')+'T'+p(d.getHours())+':'+p(d.getMinutes());
- }
- function fromDateValue(v:string){
-  const ms=new Date(v).getTime();
-  if(!v||!Number.isFinite(ms))throw Error(copy.fileError);
-  const t=EPOCH+BigInt(ms)*10000n;
-  if(t<1n||t>MAX_TICKS)throw Error(copy.fileError);
-  return t;
- }
- 
+
  function editDate(id:number){
   const old=recorded[String(id)];
   if(old===undefined)return;
-  editId=id;dateValue=toDateValue(old);
+  editId=id;dateValue=toDateTimeValue(old);
  }
  function applyDate(){
   if(editId===null)return;
-  try{void change(editId,fromDateValue(dateValue))}
-  catch(e){error=e instanceof Error?e.message:copy.fileError}
+  const id=editId;
+  const old=recorded[String(id)];
+  if(old===undefined){editId=null;return}
+  if(dateValue===toDateTimeValue(old)){editId=null;return}
+  try{void change(id,fromDateTimeValue(dateValue,old))}
+  catch{error=copy.fileError}
  }
 </script>
 
@@ -394,7 +383,7 @@
       {#if has}<button type="button" class="date-button" title={copy.editDate} aria-label={copy.editDate+': '+nameFor(item)} disabled={busy} onclick={()=>editDate(item[0])}>◷</button>{/if}
       {#if editId===item[0] && has}
        <div class="date-panel">
-        <label>{copy.editDate}<input type="datetime-local" bind:value={dateValue}/></label>
+        <label>{copy.editDate}<input type="datetime-local" step="1" bind:value={dateValue}/></label>
         <div><button type="button" class="primary" disabled={busy||!dateValue} onclick={applyDate}>{copy.apply}</button><button type="button" onclick={()=>editId=null}>{copy.cancel}</button></div>
        </div>
       {/if}
