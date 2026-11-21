@@ -199,3 +199,17 @@
  .achievement-category-card .achievement-category-art{width:65px;height:65px}
 }
 @media(max-width:350px){.achievement-item-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Search is available at every Collection level; global hits navigate to the
+   original editor category/subcategory, keeping the existing item Sprite packs. */
+.collection-search-controls{justify-content:flex-start}
+.collection-search-result-count{margin:0 0 10px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.collection-search-results{display:grid;gap:8px}
+.collection-search-result{width:100%;display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:0;padding:13px 17px;text-align:left;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:11px}
+.collection-search-result:hover{background:var(--hover);border-color:var(--accent)}
+.collection-search-result:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.collection-search-result-text{min-width:0;display:flex;flex-direction:column;gap:5px}
+.collection-search-result-name{font-size:13px;font-weight:700;overflow-wrap:anywhere}
+.collection-search-result-context{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.collection-search-result-chevron{font-size:22px;color:var(--accent);flex-shrink:0}
+@media(max-width:730px){.collection-search-result{padding:11px 12px}}
