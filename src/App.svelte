@@ -510,7 +510,7 @@
     achievementGroupHierarchy?.byGuid.get(guid)?.children.length??null,
     achievementFacts.get(guid)?.threshold??null
    );
-   if(target===null&&achievementIndex.has(guid))throw Error(achCopy.goalUnavailable);
+   if(target===null&&achievementIndex.has(guid)){error=achCopy.goalUnavailable;return;}
    const next=toggleAchievementState(live.value,Date.now(),target);
    update(await changeAchievementWithParent(live,next));
    await persistDraft();
