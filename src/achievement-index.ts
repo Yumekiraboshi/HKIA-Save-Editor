@@ -30,5 +30,5 @@ export async function loadAchievementIndex(base:string):Promise<AchievementIndex
  return decodeAchievementIndex(await response.json());
 }
 export function readableSourceKey(key:string):string{
- return key.replace(/^ache?ivement_?/i,'').replace(/_/g,' ').replace(/([a-z])([A-Z])/g,'$1 $2').trim()||key;
+ return key.replace(/^(?:achievement|acheivement|achivement)_?/i,'').replace(/_/g,' ').replace(/([a-z])([A-Z])/g,'$1 $2').replace(/([0-9])([A-Za-z])/g,'$1 $2').trim()||key;
 }
