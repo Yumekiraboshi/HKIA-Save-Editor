@@ -25,6 +25,7 @@
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
  import {searchAllCollectionItems,collectionDisplayName,filterCollectionItems} from './collection-search';
+import {verifiedFloorplanName} from './floorplan-names';
  type Item=CollectionItem;
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
@@ -255,7 +256,7 @@
   observer.observe(el);
   return ()=>observer.disconnect();
  });
- const unnamed=$derived((catalog as Catalog | null)?.items.filter((x:Item)=>!nameFor(x)).length??0);
+ const unnamed=$derived((catalog as Catalog|null)?.items.filter((x:Item)=>!x[5]&&!x[6]&&!verifiedFloorplanName(x[0],locale)).length??0);
  function describeError(e:unknown){const raw=e instanceof Error?e.message:String(e);return editorErrors[locale==='ja'?'ja':'en'][raw]??(locale==='ja'?(raw||copy.unknown):copy.unknown);}
  function setLanguage(v:LanguagePref){
   languagePref=v;try{localStorage.setItem('hkia-display-locale',v)}catch{}
@@ -279,7 +280,10 @@
   return locale==='ja'&&g[0]==='collection_group_citytown'?'都市の町':locale==='ja'?g[1]:g[2];
  }
  function nameFor(item:Item){
-  return collectionDisplayName(item,gameLabels.names[String(item[0])],locale==='ja',copy.unverifiedItem);
+  // Source ItemId -> Babel ID -> original localized text takes precedence over
+  // the older name-by-string heuristic. All 18 floorplans have exact ID links.
+  return verifiedFloorplanName(item[0],locale)??
+   collectionDisplayName(item,gameLabels.names[String(item[0])],locale==='ja',copy.unverifiedItem);
  }
  function jumpToCollectionItem(item:Item){
   // Search always covers all collection groups. Selecting a result restores
