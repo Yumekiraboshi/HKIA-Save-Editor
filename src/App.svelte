@@ -1,10 +1,11 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,createAchievement,createAchievementWithParent,completeChildWithNewParent,changeAchievement,changeAchievementPair,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch} from './worker-client';
+ import {openSave,changeCollection,createAchievement,createAchievementWithParent,completeChildWithNewParent,changeAchievement,changeAchievementPair,applyDraft,jumpHistory,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch,type HistoryRecord} from './worker-client';
  import {planCategoryParentCompletion,planMissingCategoryParentCompletion,planCategoryParentRevocation,planCategoryParentDateSync} from './achievement-parent-auto';
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
  import {diffAchievements,decodeAchievementDraft} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
+ import {historyCopy} from './history-copy';
  import {compactAchievementCopy} from './achievement-compact-ui';
  import {toggleAchievementState} from './achievement-quick';
  import {achievementProgressTarget} from './achievement-progress';
@@ -96,9 +97,11 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  let prefersDark=$state(false);
  let fileInput:HTMLInputElement;
  let fileMenu:HTMLDetailsElement;
+ let historyMenu:HTMLDetailsElement;
  const locale=$derived(languagePref==='auto'?browserLanguage:languagePref);
  const copy=$derived(localizedCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
+ const hCopy=$derived(historyCopy(locale));
  const compactCopy=$derived(compactAchievementCopy(locale));
  const groupCopy=$derived(achievementGroupCopy(locale));
  const factCopy=$derived(achievementFactsCopy(locale));
@@ -106,6 +109,9 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  const rewardsById=$derived(new Map(((catalog as Catalog|null)?.items??[]).map((item:Item)=>[item[0],nameFor(item)])));
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
+ const tabHistory=$derived((snapshot?.history??[]).filter(entry=>entry.scope===activeTool));
+ const tabHistoryCursor=$derived(tabHistory.filter(entry=>entry.applied).length);
+ const historyItems=$derived(new Map(((catalog as Catalog|null)?.items??[]).map(item=>[item[0],item])));
  const sourceAchievementRows=$derived(joinAchievementCatalog(achievementIndex,(snapshot as SaveSnapshot|null)?.achievements??[]));
  const achievementGroupSummaries=$derived(achievementGroupHierarchy?summarizeAchievementGroups(achievementGroupHierarchy,sourceAchievementRows):[]);
  const unmappedAchievementRows=$derived(achievementGroupHierarchy?ungroupedRows(achievementGroupHierarchy,sourceAchievementRows):[]);
@@ -334,6 +340,14 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
   }catch{if(epoch===iconEpoch)iconError=true}
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
+ function historyEntryLabel(entry:HistoryRecord):string{
+  if(entry.scope==='collections'){
+   const item=historyItems.get(entry.itemId??0);
+   return item?nameFor(item):'#'+String(entry.itemId);
+  }
+  if(!entry.guid)return hCopy.title;
+  return achievementName(achievementGuid(entry.guid),0)+(entry.paired?' · '+hCopy.paired:'');
+ }
  function update(s:SaveSnapshot){snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));}
  function persistDraft():Promise<void>{
   if(!original)return Promise.resolve();
@@ -427,11 +441,20 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
   catch(e){error=describeError(e);return false}
   finally{busy=false}
  }
- async function actHistory(which:'undo'|'redo'){
-  if(!snapshot||busy)return;busy=true;error='';
-  try{update(await (which==='undo'?undo():redo()));editId=null;await persistDraft();}
-  catch(e){error=e instanceof Error?e.message:copy.unknown}
+ async function goToHistory(target:number){
+  if(!snapshot||busy||!Number.isSafeInteger(target)||target<0||target>tabHistory.length||target===tabHistoryCursor)return;
+  const scope=activeTool;
+  busy=true;error='';
+  try{
+   update(await jumpHistory(scope,target));
+   editId=null;editingAchievement=null;
+   if(historyMenu)historyMenu.open=false;
+   await persistDraft();
+  }catch(e){error=e instanceof Error?e.message:copy.unknown}
   finally{busy=false}
+ }
+ async function actHistory(which:'undo'|'redo'){
+  return goToHistory(tabHistoryCursor+(which==='undo'?-1:1));
  }
  async function saveEdited(){
   if(!snapshot?.dirty||busy)return;
