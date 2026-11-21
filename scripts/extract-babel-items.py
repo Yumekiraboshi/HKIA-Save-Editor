@@ -39,6 +39,8 @@ def babel_strings(folder):
         if start != covered or count > item_count or start + count > item_count:
             raise ValueError(f"invalid Babel section range: {name}")
         covered += count
+        if table_id != 300:
+            continue
         data = unpack_file(folder / f"{name}.{table_id}.txt", MAX_FILE)
         for row in range(start, start + count):
             key, offset, length, variant = struct.unpack_from("<QIII", raw, 12 + row * 20)
@@ -90,7 +92,7 @@ def extract(catalog, root, output, locales):
     print(f"matched items={len(item_keys)}, ambiguous={skipped_ambiguous}, total={len(items)}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Extract matching local HKIA Babel item names, without shipping full game string tables")
+    parser = argparse.ArgumentParser(description="Extract game item names from Babel table 300 without shipping unrelated dialogue tables")
     parser.add_argument("--babel-dir", required=True, type=Path)
     parser.add_argument("--catalog", default="public/catalog.json", type=Path)
     parser.add_argument("--out", default="public/locales", type=Path)
