@@ -4,6 +4,8 @@
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
  import {diffAchievements,decodeAchievementDraft} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
+ import {achievementFactsCopy} from './achievement-facts-ui';
+ import {loadAchievementFacts,counterIndex,type AchievementFactsIndex} from './achievement-facts';
  import {joinAchievementCatalog} from './achievement-catalog';
  import {loadAchievementIndex,achievementGuid,readableSourceKey,type AchievementIndex} from './achievement-index';
  import {loadAchievementTitles,type AchievementTitles} from './achievement-localization';
@@ -27,6 +29,8 @@
  let achievementFilter:'all'|'completed'|'incomplete'|'missing'=$state('all');
  let achievementQuery=$state('');
  let achievementIndex:AchievementIndex=$state(new Map());
+ let achievementFacts:AchievementFactsIndex=$state(new Map());
+ let achievementFactsEpoch=0;
  let achievementTitles:AchievementTitles=$state({});
  let achievementTitleEpoch=0;
  let achievementLimit=$state(BATCH_SIZE);
@@ -78,6 +82,9 @@
  const locale=$derived(languagePref==='auto'?browserLanguage:languagePref);
  const copy=$derived(localizedCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
+ const factCopy=$derived(achievementFactsCopy(locale));
+ const gameCounters=$derived(counterIndex((snapshot as SaveSnapshot|null)?.counters??[]));
+ const rewardsById=$derived(new Map(((catalog as Catalog|null)?.items??[]).map((item:Item)=>[item[0],nameFor(item)])));
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
  const sourceAchievementRows=$derived(joinAchievementCatalog(achievementIndex,(snapshot as SaveSnapshot|null)?.achievements??[]));
@@ -147,6 +154,14 @@
   if(index.size===820)void loadAchievementTitles(current,import.meta.env.BASE_URL,index)
    .then(titles=>{if(epoch===achievementTitleEpoch)achievementTitles=titles})
    .catch(()=>{if(epoch===achievementTitleEpoch)achievementTitles={}});
+ });
+ $effect(()=>{
+  const source=achievementIndex;
+  const epoch=++achievementFactsEpoch;
+  achievementFacts=new Map();
+  if(source.size===820)void loadAchievementFacts(import.meta.env.BASE_URL,source)
+   .then(facts=>{if(epoch===achievementFactsEpoch)achievementFacts=facts})
+   .catch(()=>{if(epoch===achievementFactsEpoch)achievementFacts=new Map()});
  });
  const categories=$derived.by(()=>{
   if(!catalog)return [];
@@ -534,6 +549,28 @@
       {#if item.row}
        <span class="achievement-progress">{achCopy.progress}: {item.row.value.current.toLocaleString(locale)}</span>
        {#if item.row.value.completed}<span class="achievement-progress">{achCopy.completedAt}: {new Date(Number(item.row.value.completed[0])*1000+Math.floor(item.row.value.completed[1]/1_000_000)).toLocaleString(locale)}</span>{/if}
+      {/if}
+      {#if achievementFacts.get(item.guid)}
+       {@const facts=achievementFacts.get(item.guid)!}
+       {@const linkedCounter=gameCounters.get(facts.counterGuid)}
+       <details class="achievement-fact-details">
+        <summary>{factCopy.condition}</summary>
+        <dl class="achievement-fact-list">
+         <dt>{factCopy.counterKind}</dt><dd>{facts.counterKind.replace(/^GameCounter|Definition$/g,'')}</dd>
+         <dt>{factCopy.threshold}</dt><dd>{facts.threshold.toLocaleString(locale)}</dd>
+         <dt>{factCopy.savedCounter}</dt><dd>{linkedCounter?linkedCounter.current.toLocaleString(locale):factCopy.noCounter}</dd>
+        </dl>
+        {#if facts.groupCondition}<p class="achievement-caution">{factCopy.group}</p>{/if}
+        {#if facts.hasDlcCondition}<p class="achievement-caution">{factCopy.dlc}</p>{/if}
+        {#if facts.rewardQuantity>0}
+         <p class="achievement-reward">🎁 {factCopy.reward}: {facts.rewardId===null?facts.rewardKey:rewardsById.get(facts.rewardId)??facts.rewardKey} × {facts.rewardQuantity.toLocaleString(locale)}</p>
+         <p class="achievement-caution">{factCopy.receiptUnverified}</p>
+        {:else}
+         <p class="achievement-caution">{factCopy.noReward}</p>
+        {/if}
+       </details>
+      {/if}
+      {#if item.row}
        <button type="button" class="achievement-edit" disabled={busy} onclick={e=>{if(item.row)void openAchievement(item.row,e.currentTarget,item.index)}}>{achCopy.edit}</button>
       {/if}
      </article>
