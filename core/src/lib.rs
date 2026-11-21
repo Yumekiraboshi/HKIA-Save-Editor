@@ -117,6 +117,7 @@ pub mod digest;
 pub mod collection;
 pub mod achievement;
 mod catalog;
+mod achievement_keys;
 #[derive(Debug)]
 pub struct ReadSlot { pub envelope: envelope::Envelope, pub index: native::NativeIndex }
 pub fn read_slot(raw:&[u8])->Result<ReadSlot,Error>{
