@@ -117,11 +117,13 @@ test('native Babel v5000 extractor produces mapped labels without copying unrela
   assert.deepEqual(achievementsJa.strings,{'300':'青い妖精の服','301':'桜のチーズケーキ'});
   const descriptionsJa=JSON.parse(readFileSync(join(descriptionsOut,'ja.json'),'utf8'));
   assert.deepEqual(descriptionsJa.strings,{'304':'青い妖精の服を着る','305':'桜のチーズケーキを作る'});
+  const forbidden=new URL('../public/__forbidden_private_achievements__',import.meta.url).pathname;
   const bad=spawnSync('python3',[script,'--babel-dir',source,'--catalog',catalog,'--out',out,
    '--achievement-index',achindex,'--achievement-out',achout,
-   '--achievement-facts-index',factsindex,'--achievement-descriptions-out',join(out,'under-public'),
+   '--achievement-facts-index',factsindex,'--achievement-descriptions-out',forbidden,
    '--locales','en'],{encoding:'utf8'});
-  assert.equal(bad.status,0,'temporary directories are private and not a public website tree: '+bad.stderr);
+  assert.notEqual(bad.status,0);
+  assert.match(bad.stderr,/description output must not be inside the public website tree/);
   assert.ok(!JSON.stringify(fr).includes('Dialogue non utilisé'));
  }finally{rmSync(temp,{recursive:true,force:true})}
 });
