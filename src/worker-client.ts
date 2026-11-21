@@ -1,4 +1,4 @@
-import {workerAchievementGuid,workerAchievementValue,workerAchievementPatch,workerCollectionPatch} from './achievement-worker-payload';
+import {workerAchievementGuid,workerAchievementValue,workerAchievementPatch,workerAchievementDraftPatch,workerCollectionPatch} from './achievement-worker-payload';
 
 export type AchievementValue={complete:boolean;current:number;completed:[bigint,number]|null};
 export type AchievementEntry={guid:[number,number,number,number];value:AchievementValue};
