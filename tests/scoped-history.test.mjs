@@ -30,7 +30,7 @@ test('native/WASM history records preserve scopes and atomic pair identity',()=>
 test('active-tab timeline jumps keep other tabs unchanged and are accessible from SVG header',()=>{
  const app=read('../src/App.svelte');
  const translations=read('../src/history-copy.ts');
- assert.match(app,/const tabHistory=\$derived\(\(snapshot\?\.history\?\?\[\]\)\.filter\(entry=>entry\.scope===activeTool\)\)/);
+ assert.match(app,/const tabHistory=\$derived\(\(\(snapshot as SaveSnapshot\|null\)\?\.history\?\?\[\]\)\.filter\(\(entry:HistoryRecord\)=>entry\.scope===activeTool\)\)/);
  assert.match(app,/const tabHistoryCursor=\$derived\(tabHistory\.filter\(entry=>entry\.applied\)\.length\)/);
  assert.match(app,/update\(await jumpHistory\(scope,target\)\)/);
  assert.match(app,/return goToHistory\(tabHistoryCursor\+\(which==='undo'\?-1:1\)\)/);
