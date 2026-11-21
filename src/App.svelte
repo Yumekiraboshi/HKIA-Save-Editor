@@ -5,6 +5,7 @@
  import {diffAchievements,decodeAchievementDraft} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
  import {loadAchievementIndex,achievementGuid,readableSourceKey,type AchievementIndex} from './achievement-index';
+ import {loadAchievementTitles,type AchievementTitles} from './achievement-localization';
  import {editorErrors} from './ui-copy';
  import {supportedLocales,isLocale,detectLocale,isRtl,type Locale,type LanguagePref} from './locales';
  import {localizedCopy} from './ui-locales';
@@ -25,8 +26,11 @@
  let achievementFilter:'all'|'completed'|'incomplete'=$state('all');
  let achievementQuery=$state('');
  let achievementIndex:AchievementIndex=$state(new Map());
+ let achievementTitles:AchievementTitles=$state({});
+ let achievementTitleEpoch=0;
  let achievementLimit=$state(BATCH_SIZE);
  let editingAchievement:AchievementEntry|null=$state(null);
+ let editingAchievementTitle=$state('');
  let achievementDialogEl:HTMLDialogElement|undefined=$state();
  let achievementReturnFocus:HTMLElement|null=null;
  let achievementProgress=$state('');
@@ -133,6 +137,15 @@
    .then(labels=>{if(epoch===languageLoadEpoch)gameLabels=labels})
    .catch(()=>{if(epoch===languageLoadEpoch)gameLabels=EMPTY_LABELS});
  });
+ $effect(()=>{
+  const current=locale;
+  const index=achievementIndex;
+  const epoch=++achievementTitleEpoch;
+  achievementTitles={};
+  if(index.size===820)void loadAchievementTitles(current,import.meta.env.BASE_URL,index)
+   .then(titles=>{if(epoch===achievementTitleEpoch)achievementTitles=titles})
+   .catch(()=>{if(epoch===achievementTitleEpoch)achievementTitles={}});
+ });
  const categories=$derived.by(()=>{
   if(!catalog)return [];
   const totals=new Map<string,Set<number>>();
@@ -183,7 +196,7 @@
  function achievementName(row:AchievementEntry,index:number):string{
   const meta=achievementIndex.get(achievementGuid(row.guid));
   if(!meta)return achCopy.unknown+' '+index.toLocaleString(locale);
-  return gameLabels.strings[meta.titleId]??readableSourceKey(meta.key);
+  return achievementTitles[meta.titleId]??gameLabels.strings[meta.titleId]??readableSourceKey(meta.key);
  }
  function titleFor(g:Group){return locale==='ja'?g[1]:g[2]}
  function nameFor(item:Item){return gameLabels.names[String(item[0])]??(locale==='ja'?item[6]??item[5]:item[5]??item[6])??''}
@@ -384,9 +397,9 @@
   const pad=(v:number)=>String(v).padStart(2,'0');
   return date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate())+'T'+pad(date.getHours())+':'+pad(date.getMinutes())+':'+pad(date.getSeconds());
  }
- async function openAchievement(row:AchievementEntry,opener:HTMLElement){
+ async function openAchievement(row:AchievementEntry,opener:HTMLElement,index:number){
   if(busy)return;
-  editingAchievement=row;achievementReturnFocus=opener;
+  editingAchievement=row;achievementReturnFocus=opener;editingAchievementTitle=achievementName(row,index);
   achievementComplete=row.value.complete;
   achievementProgress=String(row.value.current);
   achievementDate=formatAchievementDate(row.value)||formatAchievementDate({complete:true,current:0,completed:[BigInt(Math.floor(Date.now()/1000)),0]});
@@ -396,7 +409,7 @@
  }
  function closeAchievement(){if(achievementDialogEl?.open)achievementDialogEl.close()}
  function onAchievementDialogClosed(){
-  editingAchievement=null;achievementValidation='';
+  editingAchievement=null;editingAchievementTitle='';achievementValidation='';
   const focus=achievementReturnFocus;achievementReturnFocus=null;
   if(focus?.isConnected)focus.focus();
  }
@@ -511,7 +524,7 @@
       <div><strong>{achievementName(item.row,item.index)}</strong><span class:achieved={item.row.value.complete} class="achievement-status">{item.row.value.complete?'✓ '+achCopy.completed:achCopy.incomplete}</span></div>
       <span class="achievement-progress">{achCopy.progress}: {item.row.value.current.toLocaleString(locale)}</span>
       {#if item.row.value.completed}<span class="achievement-progress">{achCopy.completedAt}: {new Date(Number(item.row.value.completed[0])*1000+Math.floor(item.row.value.completed[1]/1_000_000)).toLocaleString(locale)}</span>{/if}
-      <button type="button" class="achievement-edit" disabled={busy} onclick={e=>void openAchievement(item.row,e.currentTarget)}>{achCopy.edit}</button>
+      <button type="button" class="achievement-edit" disabled={busy} onclick={e=>void openAchievement(item.row,e.currentTarget,item.index)}>{achCopy.edit}</button>
      </article>
     {/each}
    </div>
@@ -523,6 +536,7 @@
     {#if editingAchievement}
      <form class="achievement-form" onsubmit={e=>{e.preventDefault();void saveAchievement()}}>
       <div class="date-dialog-heading"><h2>{achCopy.edit}</h2><button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeAchievement}>×</button></div>
+      <strong class="achievement-edit-name">{editingAchievementTitle}</strong>
       <label class="achievement-check"><input type="checkbox" bind:checked={achievementComplete}/>{achCopy.completed}</label>
       <label class="date-dialog-field"><span>{achCopy.progress}</span><input type="text" inputmode="decimal" required bind:value={achievementProgress}/></label>
       {#if achievementComplete}
