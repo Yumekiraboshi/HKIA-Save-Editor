@@ -1,4 +1,5 @@
 import type {AchievementIndex} from './achievement-index';
+import {loadVerifiedAchievementImage} from './achievement-atlas-image';
 import type {AchievementHierarchy} from './achievement-groups';
 
 export type CategorySprite={
@@ -12,6 +13,7 @@ export type CategorySprite={
 export type CategoryIconAtlas={
  readonly url:string;
  readonly bySaveGuid:ReadonlyMap<string,CategorySprite>;
+ dispose?():void;
 };
 const HEX64=/^[0-9a-f]{64}$/;
 const SOURCE_GUID=/^[0-9a-f]{32}$/;
@@ -52,5 +54,7 @@ export async function loadAchievementCategoryAtlas(
 ):Promise<CategoryIconAtlas>{
  const response=await fetch(base+'achievement-category-atlas.json');
  if(!response.ok)throw Error('ACH_CATEGORY_ICONS_UNAVAILABLE');
- return decodeAchievementCategoryAtlas(await response.json(),index,hierarchy,base);
+ const atlas=decodeAchievementCategoryAtlas(await response.json(),index,hierarchy,base);
+ const image=await loadVerifiedAchievementImage(base,'achievement-category-atlas.webp',EXPECTED_ATLAS_SHA);
+ return {...atlas,...image};
 }
