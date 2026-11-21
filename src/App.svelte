@@ -24,6 +24,8 @@
  let achievementFilter:'all'|'completed'|'incomplete'=$state('all');
  let achievementLimit=$state(BATCH_SIZE);
  let editingAchievement:AchievementEntry|null=$state(null);
+ let achievementDialogEl:HTMLDialogElement;
+ let achievementReturnFocus:HTMLElement|null=null;
  let achievementProgress=$state('');
  let achievementComplete=$state(false);
  let achievementDate=$state('');
@@ -364,13 +366,21 @@
   const pad=(v:number)=>String(v).padStart(2,'0');
   return date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate())+'T'+pad(date.getHours())+':'+pad(date.getMinutes())+':'+pad(date.getSeconds());
  }
- function openAchievement(row:AchievementEntry){
+ async function openAchievement(row:AchievementEntry,opener:HTMLElement){
   if(busy)return;
-  editingAchievement=row;
+  editingAchievement=row;achievementReturnFocus=opener;
   achievementComplete=row.value.complete;
   achievementProgress=String(row.value.current);
   achievementDate=formatAchievementDate(row.value)||formatAchievementDate({complete:true,current:0,completed:[BigInt(Math.floor(Date.now()/1000)),0]});
   achievementValidation='';
+  await tick();
+  if(achievementDialogEl&&!achievementDialogEl.open)achievementDialogEl.showModal();
+ }
+ function closeAchievement(){if(achievementDialogEl?.open)achievementDialogEl.close()}
+ function onAchievementDialogClosed(){
+  editingAchievement=null;achievementValidation='';
+  const focus=achievementReturnFocus;achievementReturnFocus=null;
+  if(focus?.isConnected)focus.focus();
  }
  async function saveAchievement(){
   const selected=editingAchievement;
@@ -395,7 +405,7 @@
   busy=true;error='';achievementValidation='';
   try{
    update(await changeAchievement(selected.guid,selected.value,next));
-   editingAchievement=null;await persistDraft();
+   closeAchievement();await persistDraft();
   }catch(e){achievementValidation=describeError(e)}
   finally{busy=false}
  }
@@ -482,7 +492,7 @@
       <div><strong>{achCopy.unknown} {item.index.toLocaleString(locale)}</strong><span class:achieved={item.row.value.complete} class="achievement-status">{item.row.value.complete?'✓ '+achCopy.completed:achCopy.incomplete}</span></div>
       <span class="achievement-progress">{achCopy.progress}: {item.row.value.current.toLocaleString(locale)}</span>
       {#if item.row.value.completed}<span class="achievement-progress">{achCopy.completedAt}: {new Date(Number(item.row.value.completed[0])*1000+Math.floor(item.row.value.completed[1]/1_000_000)).toLocaleString(locale)}</span>{/if}
-      <button type="button" class="achievement-edit" disabled={busy} onclick={()=>openAchievement(item.row)}>{achCopy.edit}</button>
+      <button type="button" class="achievement-edit" disabled={busy} onclick={e=>void openAchievement(item.row,e.currentTarget)}>{achCopy.edit}</button>
      </article>
     {/each}
    </div>
@@ -490,20 +500,20 @@
    {#if achievementRows.length>achievementLimit}
     <div class="load-marker"><button type="button" onclick={()=>achievementLimit=Math.min(achievementLimit+BATCH_SIZE,achievementRows.length)}>{copy.moreItems}</button></div>
    {/if}
-   {#if editingAchievement}
-    <div class="achievement-modal-backdrop">
+   <dialog class="achievement-dialog" bind:this={achievementDialogEl} onclose={onAchievementDialogClosed} oncancel={e=>{if(busy)e.preventDefault()}}>
+    {#if editingAchievement}
      <form class="achievement-form" onsubmit={e=>{e.preventDefault();void saveAchievement()}}>
-      <div class="date-dialog-heading"><h2>{achCopy.edit}</h2><button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={()=>editingAchievement=null}>×</button></div>
+      <div class="date-dialog-heading"><h2>{achCopy.edit}</h2><button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeAchievement}>×</button></div>
       <label class="achievement-check"><input type="checkbox" bind:checked={achievementComplete}/>{achCopy.completed}</label>
       <label class="date-dialog-field"><span>{achCopy.progress}</span><input type="text" inputmode="decimal" required bind:value={achievementProgress}/></label>
       {#if achievementComplete}
        <label class="date-dialog-field"><span>{achCopy.completedAt}</span><input type="datetime-local" step="1" required bind:value={achievementDate}/></label>
       {/if}
       {#if achievementValidation}<p class="date-dialog-error" role="alert">{achievementValidation}</p>{/if}
-      <div class="date-dialog-actions"><button type="button" class="date-dialog-cancel" disabled={busy} onclick={()=>editingAchievement=null}>{copy.cancel}</button><button type="submit" class="primary" disabled={busy}>{achCopy.save}</button></div>
+      <div class="date-dialog-actions"><button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeAchievement}>{copy.cancel}</button><button type="submit" class="primary" disabled={busy}>{achCopy.save}</button></div>
      </form>
-    </div>
-   {/if}
+    {/if}
+   </dialog>
   {:else if !selectedGroup}
    {#if !catalog}
     <div class="empty-result">{copy.busy}</div>
