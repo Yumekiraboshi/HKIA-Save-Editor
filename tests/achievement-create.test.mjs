@@ -68,6 +68,7 @@ test('UI displays absent 0/goal and restricts creation to a verified source-defi
 test('all original 25 collection categories remain accessible; already supported dictionary-member add is preserved',()=>{
  assert.match(rust,/eligible_for_new_history\(id\)/);
  assert.match(rust,/replace_map\(original_payload,map\.clone\(\),&self\.slot\.index\.collections,&self\.entries\(\)\)/);
- assert.match(app,/mayAdd=snapshot\.membershipEdit && snapshot\.version===catalog\?\.version && item\[4\]===0/);
+ assert.match(app,/mayAdd=mayCreateCollectionHistory\(item,snapshot\.membershipEdit,snapshot\.version,catalog\?\.version\)/);
+ assert.match(read('../src/collection-eligibility.ts'),/item\[4\]===0/);
  assert.match(app,/EPOCH\+BigInt\(Date\.now\(\)\)\*10000n/);
 });

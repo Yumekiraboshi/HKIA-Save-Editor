@@ -342,3 +342,67 @@ fn absent_parent_is_created_with_last_existing_child_and_preserves_prior_undo(){
  assert!(e.redo());assert_eq!(e.achievement_value(child),Some(incomplete));
  assert!(e.redo());assert_eq!(e.achievement_value(parent),Some(done));
 }
+
+
+#[test]
+fn source_verified_floorplans_all_18_history_add_remove_and_zip_roundtrip(){
+ // Steam v3.0.1 original InventoryItemDefinitionAsset.Id / group_floorplans:
+ // exact same source IDs as public floorplan icon map and all 16 Babel names.
+ const FLOORPLANS:[i32;18]=[
+  259795663,290094351,300918892,464377127,559890359,618271257,
+  619281290,754411213,768707764,1287138344,1386807800,1436147020,
+  1517287020,1611086920,1709307148,1834332337,2124133713,2146463597
+ ];
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");
+  let original=if zipped{zip(&raw)}else{raw};
+  let mut editor=Editor::open(original.clone()).unwrap();
+  assert!(editor.can_change_membership());
+  assert!(!editor.dirty());
+  for (i,&id) in FLOORPLANS.iter().enumerate(){
+   let ticks=638000000000000000i64+(i as i64)*10000;
+   assert_eq!(editor.value(id),None);
+   editor.change(id,None,Some(ticks)).unwrap();
+   assert_eq!(editor.value(id),Some(ticks));
+   assert!(editor.change(id,None,Some(ticks)).is_err(),"duplicate CAS");
+  }
+  assert_eq!(editor.entries().len(),20); // original two + source 18
+  let exported=editor.export().unwrap();
+  let restored=Editor::open(exported).unwrap();
+  assert_eq!(restored.entries().len(),20);
+  assert_eq!(restored.version(),"3.0.1");
+  for (i,&id) in FLOORPLANS.iter().enumerate(){
+   let ticks=638000000000000000i64+(i as i64)*10000;
+   assert_eq!(restored.value(id),Some(ticks),"missing floorplan after export");
+  }
+  // Previously absent saved history is actually removable and undoable.
+  let removed=FLOORPLANS[0];
+  let ticks=638000000000000000i64;
+  editor.change(removed,Some(ticks),None).unwrap();
+  assert_eq!(editor.value(removed),None);
+  assert!(editor.undo());
+  assert_eq!(editor.value(removed),Some(ticks));
+  assert!(editor.redo());assert_eq!(editor.value(removed),None);
+  assert!(editor.undo());
+  for _ in 0..18{assert!(editor.undo());}
+  assert!(!editor.dirty());
+  assert!(!editor.can_undo());
+  assert_eq!(editor.source_bytes(),original.len());
+ }
+}
+#[test]
+fn floorplan_history_writer_keeps_other_restricted_ids_and_older_versions_denied(){
+ const ID:i32=259795663;
+ let ticks=638000000000000000i64;
+ let mut v300=Editor::open(slot("3.0.0")).unwrap();
+ assert!(v300.change(ID,None,Some(ticks)).is_err());
+ assert!(!v300.dirty());assert!(!v300.can_undo());
+ let mut v301=Editor::open(slot("3.0.1")).unwrap();
+ for denied in [259795662,259795664,2147483647,-1,0] {
+  assert!(v301.change(denied,None,Some(ticks)).is_err(),"unverified ID {denied} accepted");
+ }
+ assert!(!v301.dirty());
+ assert_eq!(v301.entries().len(),2);
+ v301.change(ID,None,Some(ticks)).unwrap();
+ assert_eq!(Editor::open(v301.export().unwrap()).unwrap().value(ID),Some(ticks));
+}
