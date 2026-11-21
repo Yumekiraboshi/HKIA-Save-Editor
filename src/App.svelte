@@ -4,6 +4,7 @@
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
  import {diffAchievements,decodeAchievementDraft} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
+ import {loadAchievementIndex,achievementGuid,readableSourceKey,type AchievementIndex} from './achievement-index';
  import {editorErrors} from './ui-copy';
  import {supportedLocales,isLocale,detectLocale,isRtl,type Locale,type LanguagePref} from './locales';
  import {localizedCopy} from './ui-locales';
@@ -22,6 +23,8 @@
  const ICONS=import.meta.env.BASE_URL+'icons/';
  let activeTool:Tool=$state('collections');
  let achievementFilter:'all'|'completed'|'incomplete'=$state('all');
+ let achievementQuery=$state('');
+ let achievementIndex:AchievementIndex=$state(new Map());
  let achievementLimit=$state(BATCH_SIZE);
  let editingAchievement:AchievementEntry|null=$state(null);
  let achievementDialogEl:HTMLDialogElement|undefined=$state();
@@ -72,8 +75,16 @@
  const achCopy=$derived(achievementCopy(locale));
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
- const achievementRows=$derived(((snapshot as SaveSnapshot|null)?.achievements??[]).map((row:AchievementEntry,index:number)=>({row,index:index+1})).filter(x=>
-  achievementFilter==='all'||(achievementFilter==='completed'?x.row.value.complete:!x.row.value.complete)));
+ const achievementRows=$derived(((snapshot as SaveSnapshot|null)?.achievements??[])
+  .map((row:AchievementEntry,index:number)=>({row,index:index+1}))
+  .filter(x=>{
+   if(achievementFilter!=='all'&&(achievementFilter==='completed'?!x.row.value.complete:x.row.value.complete))return false;
+   const q=achievementQuery.trim().toLocaleLowerCase();
+   if(!q)return true;
+   const meta=achievementIndex.get(achievementGuid(x.row.guid));
+   return achievementName(x.row,x.index).toLocaleLowerCase().includes(q)||
+    (meta?.key??'').toLocaleLowerCase().includes(q);
+  }));
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
  const subgroups=$derived(selectedGroup?listSubcategories((catalog as Catalog|null)?.items??[],selectedGroup,recorded,locale):[]);
  const activeSubgroup=$derived(subgroups.length===1?subgroups[0].key:subgroups.some(s=>s.key===selectedSubgroup)?selectedSubgroup:null);
@@ -99,6 +110,8 @@
   const beforeUnload=(e:BeforeUnloadEvent)=>{if(snapshot?.dirty&&(!draftReady||busy)){e.preventDefault();e.returnValue='';}};
   window.addEventListener('beforeunload',beforeUnload);
   void loadLocaleIndex(import.meta.env.BASE_URL).then(available=>availableGameLocales=available).catch(()=>{});
+  void loadAchievementIndex(import.meta.env.BASE_URL).then(index=>achievementIndex=index).catch(()=>{});
+
   fetch(import.meta.env.BASE_URL+'catalog.json')
    .then(r=>r.ok?r.json():Promise.reject(Error('Collection catalog unavailable')))
    .then((v:Catalog)=>{
@@ -166,6 +179,11 @@
  }
  function setTheme(v:ThemePref){
   themePref=v;try{localStorage.setItem('hkia-display-theme',v)}catch{}
+ }
+ function achievementName(row:AchievementEntry,index:number):string{
+  const meta=achievementIndex.get(achievementGuid(row.guid));
+  if(!meta)return achCopy.unknown+' '+index.toLocaleString(locale);
+  return gameLabels.strings[meta.titleId]??readableSourceKey(meta.key);
  }
  function titleFor(g:Group){return locale==='ja'?g[1]:g[2]}
  function nameFor(item:Item){return gameLabels.names[String(item[0])]??(locale==='ja'?item[6]??item[5]:item[5]??item[6])??''}
@@ -425,7 +443,7 @@
    </button>
    {#if snapshot}<nav class="tools-nav" aria-label="Tools">
     <button type="button" class="tool-tab" class:active={activeTool==='collections'} aria-current={activeTool==='collections'?'page':undefined} onclick={goHome}>{copy.toolCollection}</button>
-    <button type="button" class="tool-tab" class:active={activeTool==='achievements'} aria-current={activeTool==='achievements'?'page':undefined} onclick={()=>{activeTool='achievements';editingAchievement=null;achievementFilter='all';achievementLimit=BATCH_SIZE;error='';}}>{achCopy.title}</button>
+    <button type="button" class="tool-tab" class:active={activeTool==='achievements'} aria-current={activeTool==='achievements'?'page':undefined} onclick={()=>{activeTool='achievements';editingAchievement=null;achievementFilter='all';achievementLimit=BATCH_SIZE;achievementQuery='';error='';}}>{achCopy.title}</button>
    </nav>{/if}
    <div class="bar-actions">
     {#if snapshot}
@@ -480,6 +498,7 @@
    <div class="section-heading"><h1>{achCopy.title}</h1><span class="category-count">{snapshot.achievements.filter(a=>a.value.complete).length.toLocaleString(locale)} / {snapshot.achievements.length.toLocaleString(locale)}</span></div>
    <p class="achievement-note">{achCopy.notice}</p>
    <div class="collection-controls">
+    <label class="search-field"><span class="search-symbol" aria-hidden="true">⌕</span><input type="search" bind:value={achievementQuery} placeholder={achCopy.search} aria-label={achCopy.search}/></label>
     <div class="status-filter" role="group" aria-label={achCopy.title}>
      <button type="button" class:active={achievementFilter==='all'} onclick={()=>{achievementFilter='all';achievementLimit=BATCH_SIZE}}>{copy.all}</button>
      <button type="button" class:active={achievementFilter==='completed'} onclick={()=>{achievementFilter='completed';achievementLimit=BATCH_SIZE}}>{achCopy.completed}</button>
@@ -489,7 +508,7 @@
    <div class="achievement-grid">
     {#each achievementRows.slice(0,achievementLimit) as item (item.index)}
      <article class="achievement-card">
-      <div><strong>{achCopy.unknown} {item.index.toLocaleString(locale)}</strong><span class:achieved={item.row.value.complete} class="achievement-status">{item.row.value.complete?'✓ '+achCopy.completed:achCopy.incomplete}</span></div>
+      <div><strong>{achievementName(item.row,item.index)}</strong><span class:achieved={item.row.value.complete} class="achievement-status">{item.row.value.complete?'✓ '+achCopy.completed:achCopy.incomplete}</span></div>
       <span class="achievement-progress">{achCopy.progress}: {item.row.value.current.toLocaleString(locale)}</span>
       {#if item.row.value.completed}<span class="achievement-progress">{achCopy.completedAt}: {new Date(Number(item.row.value.completed[0])*1000+Math.floor(item.row.value.completed[1]/1_000_000)).toLocaleString(locale)}</span>{/if}
       <button type="button" class="achievement-edit" disabled={busy} onclick={e=>void openAchievement(item.row,e.currentTarget)}>{achCopy.edit}</button>
