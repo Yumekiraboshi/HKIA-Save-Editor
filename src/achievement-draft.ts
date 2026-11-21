@@ -50,7 +50,7 @@ export function cloneStoredAchievementPatches(patches:readonly StoredPatch[]):St
  });
  return patches.map(p=>{
   if(!p||!Array.isArray(p.guid)||p.guid.length!==4||
-   p.guid.some(n=>!Number.isInteger(n)||n<0||n>0xffffffff)||
+   p.guid.some((n:unknown)=>typeof n!=='number'||!Number.isInteger(n)||n<0||n>0xffffffff)||
    !valid(p.before)||!valid(p.after))throw Error('DRAFT_INVALID');
   const guid:[number,number,number,number]=[p.guid[0],p.guid[1],p.guid[2],p.guid[3]];
   const key=guidKey(guid);
