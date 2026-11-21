@@ -30,12 +30,36 @@ export function diffAchievements(baseline:readonly AchievementEntry[],current:re
   const previous=originals.get(guidKey(row.guid));
   if(!previous)throw Error('DRAFT_INVALID');
   if(!same(previous.value,row.value))result.push({
-   guid:row.guid,before:store(previous.value),after:store(row.value)
+   guid:[row.guid[0],row.guid[1],row.guid[2],row.guid[3]],before:store(previous.value),after:store(row.value)
   });
  }
  if(current.length!==baseline.length)throw Error('DRAFT_INVALID');
  return result;
 }
+/**
+ * IndexedDB uses the same structured-clone algorithm as Worker.postMessage.
+ * Read all nested values through Svelte proxies and rebuild plain objects before IDB.put.
+ * This is also safe for already serialized drafts and preserves exact GUID/timestamp text.
+ */
+export function cloneStoredAchievementPatches(patches:readonly StoredPatch[]):StoredPatch[]{
+ if(!Array.isArray(patches)||patches.length>10000)throw Error('DRAFT_INVALID');
+ const seen=new Set<string>();
+ const cloneValue=(v:StoredValue):StoredValue=>({
+  complete:v.complete,current:v.current,
+  completed:v.completed===null?null:[v.completed[0],v.completed[1]]
+ });
+ return patches.map(p=>{
+  if(!p||!Array.isArray(p.guid)||p.guid.length!==4||
+   p.guid.some(n=>!Number.isInteger(n)||n<0||n>0xffffffff)||
+   !valid(p.before)||!valid(p.after))throw Error('DRAFT_INVALID');
+  const guid:[number,number,number,number]=[p.guid[0],p.guid[1],p.guid[2],p.guid[3]];
+  const key=guidKey(guid);
+  if(seen.has(key))throw Error('DRAFT_INVALID');
+  seen.add(key);
+  return {guid,before:cloneValue(p.before),after:cloneValue(p.after)};
+ });
+}
+
 export function decodeAchievementDraft(value:unknown,baseline:readonly AchievementEntry[]):AchievementPatch[]{
  if(!Array.isArray(value)||value.length>10000)throw Error('DRAFT_INVALID');
  const originals=new Map(baseline.map(a=>[guidKey(a.guid),a]));
