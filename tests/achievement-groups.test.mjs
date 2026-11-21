@@ -142,7 +142,7 @@ test('ranked children sort numerically and same-rank items use source reference 
  const group=hierarchy.groups[0],guid=group.guid;
  const shuffled=new Map(sourceOrder);
  const [first,second,third]=group.children;
- shuffled.set(first,{order:8});shuffled.set(second,{order:2});shuffled.set(third,{order:2});
+ shuffled.set(first,{order:999});shuffled.set(second,{order:2});shuffled.set(third,{order:2});
  const rows=groups.groupRows(hierarchy,guid,sourceRows,shuffled);
  assert.equal(rows[0].guid,guid);
  assert.deepEqual(rows.slice(1,3).map(x=>x.guid),[second,third]);
