@@ -64,6 +64,43 @@ pub extern "C" fn hkia_achievement_change(
   }
  })
 }
+/// Single-transaction leaf + parent achievement mutation.
+#[no_mangle]
+pub extern "C" fn hkia_achievement_pair_change(
+ a0:u32,a1:u32,a2:u32,a3:u32,
+ abc:u32,abp:f32,abs:i64,abn:u32,abh:u32,
+ aac:u32,aap:f32,aas:i64,aan:u32,aah:u32,
+ b0:u32,b1:u32,b2:u32,b3:u32,
+ bbc:u32,bbp:f32,bbs:i64,bbn:u32,bbh:u32,
+ bac:u32,bap:f32,bas:i64,ban:u32,bah:u32
+)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  if [abc,abh,aac,aah,bbc,bbh,bac,bah].iter().any(|&n|n>1){return 1}
+  let first=(
+   [a0,a1,a2,a3],
+   hkia_save_core::achievement::AchievementValue{
+    complete:abc==1,current:abp,completed:if abh==1{Some((abs,abn))}else{None}
+   },
+   hkia_save_core::achievement::AchievementValue{
+    complete:aac==1,current:aap,completed:if aah==1{Some((aas,aan))}else{None}
+   }
+  );
+  let second=(
+   [b0,b1,b2,b3],
+   hkia_save_core::achievement::AchievementValue{
+    complete:bbc==1,current:bbp,completed:if bbh==1{Some((bbs,bbn))}else{None}
+   },
+   hkia_save_core::achievement::AchievementValue{
+    complete:bac==1,current:bap,completed:if bah==1{Some((bas,ban))}else{None}
+   }
+  );
+  match a.editor.as_mut().map(|e|e.change_achievement_pair(first,second)){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+
 #[no_mangle]
 pub extern "C" fn hkia_achievement_snapshot()->u32{
  STATE.with(|s|{
