@@ -1,5 +1,5 @@
 export type CollectionItem=[number,string,string,string,number,string|null,string|null,number];
-export type Subcategory={key:string;count:number;total:number};
+export type Subcategory={key:string;count:number;total:number;previewId:number|null};
 export type Locale='ja'|'en';
 const LABELS:Record<string,readonly [string,string]>={
  'all': ["すべて","All"],
@@ -151,6 +151,12 @@ const LABELS:Record<string,readonly [string,string]>={
  'yummy': ["ヤミー","Yummy"],
 };
 const WEATHER_ORDER=['collection_aquafall_aquafallmachine','collection_celestree_celestree','collection_saunarator_saunarator','collection_weather_snow'];
+const PREVIEW_PARENTS:Record<string,number>={
+ collection_aquafall_aquafallmachine:1611616925,
+ collection_celestree_celestree:463096384,
+ collection_saunarator_saunarator:254880643,
+ collection_weather_snow:815186408
+};
 
 export function subcategoryLabel(key:string,locale:Locale):string{
  const slug=key.split('_').slice(2).join('_');
@@ -163,16 +169,23 @@ export function isKnownSubcategory(key:string):boolean{
 }
 
 export function listSubcategories(items:readonly CollectionItem[],group:string,recorded:Readonly<Record<string,bigint>>,locale:Locale):Subcategory[]{
- const map=new Map<string,{all:Set<number>;owned:Set<number>}>();
+ const map=new Map<string,{all:Set<number>;owned:Set<number>;firstParent:number|null;namedParent:number|null}>();
  for(const item of items){
   if(item[3]!==group)continue;
   let current=map.get(item[2]);
-  if(!current){current={all:new Set(),owned:new Set()};map.set(item[2],current)}
+  if(!current){current={all:new Set(),owned:new Set(),firstParent:null,namedParent:null};map.set(item[2],current)}
   const parent=item[7]||item[0];
   current.all.add(parent);
   if(recorded[String(item[0])]!==undefined)current.owned.add(parent);
+  if(item[0]===parent){
+   current.firstParent??=parent;
+   if(item[5]||item[6])current.namedParent??=parent;
+  }
  }
- return [...map.entries()].map(([key,counts])=>({key,count:counts.owned.size,total:counts.all.size}))
+ return [...map.entries()].map(([key,counts])=>({
+  key,count:counts.owned.size,total:counts.all.size,
+  previewId:counts.all.has(PREVIEW_PARENTS[key])?PREVIEW_PARENTS[key]:counts.namedParent??counts.firstParent
+ }))
   .sort((a,b)=>{
    if(group==='collections_group_weather'){
     return WEATHER_ORDER.indexOf(a.key)-WEATHER_ORDER.indexOf(b.key);
