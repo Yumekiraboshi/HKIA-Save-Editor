@@ -7,6 +7,8 @@
  import {achievementFactsCopy} from './achievement-facts-ui';
  import {loadAchievementFacts,counterIndex,type AchievementFactsIndex} from './achievement-facts';
  import {joinAchievementCatalog} from './achievement-catalog';
+ import {loadAchievementGroups,groupRows,ungroupedRows,groupSummaries as summarizeAchievementGroups,type AchievementHierarchy} from './achievement-groups';
+ import {achievementGroupCopy} from './achievement-group-ui';
  import {loadAchievementIndex,achievementGuid,readableSourceKey,type AchievementIndex} from './achievement-index';
  import {loadAchievementTitles,type AchievementTitles} from './achievement-localization';
  import {editorErrors} from './ui-copy';
@@ -29,6 +31,9 @@
  let achievementFilter:'all'|'completed'|'incomplete'|'missing'=$state('all');
  let achievementQuery=$state('');
  let achievementIndex:AchievementIndex=$state(new Map());
+ let achievementGroupHierarchy:AchievementHierarchy|null=$state(null);
+ let achievementGroupSelection:string|null=$state(null);
+ let achievementShowAll=$state(false);
  let achievementFacts:AchievementFactsIndex=$state(new Map());
  let achievementFactsEpoch=0;
  let achievementTitles:AchievementTitles=$state({});
@@ -82,13 +87,19 @@
  const locale=$derived(languagePref==='auto'?browserLanguage:languagePref);
  const copy=$derived(localizedCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
+ const groupCopy=$derived(achievementGroupCopy(locale));
  const factCopy=$derived(achievementFactsCopy(locale));
  const gameCounters=$derived(counterIndex((snapshot as SaveSnapshot|null)?.counters??[]));
  const rewardsById=$derived(new Map(((catalog as Catalog|null)?.items??[]).map((item:Item)=>[item[0],nameFor(item)])));
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
  const sourceAchievementRows=$derived(joinAchievementCatalog(achievementIndex,(snapshot as SaveSnapshot|null)?.achievements??[]));
- const achievementRows=$derived(sourceAchievementRows.filter(x=>{
+ const achievementGroupSummaries=$derived(achievementGroupHierarchy?summarizeAchievementGroups(achievementGroupHierarchy,sourceAchievementRows):[]);
+ const unmappedAchievementRows=$derived(achievementGroupHierarchy?ungroupedRows(achievementGroupHierarchy,sourceAchievementRows):[]);
+ const groupScopedAchievementRows=$derived(achievementGroupHierarchy&&achievementGroupSelection?
+  achievementGroupSelection==='__unmapped'?unmappedAchievementRows:groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows):
+  sourceAchievementRows);
+ const achievementRows=$derived(groupScopedAchievementRows.filter(x=>{
   if(achievementFilter==='completed'&&!x.row?.value.complete)return false;
   if(achievementFilter==='incomplete'&&(!x.row||x.row.value.complete))return false;
   if(achievementFilter==='missing'&&x.row!==null)return false;
@@ -123,7 +134,10 @@
   const beforeUnload=(e:BeforeUnloadEvent)=>{if(snapshot?.dirty&&(!draftReady||busy)){e.preventDefault();e.returnValue='';}};
   window.addEventListener('beforeunload',beforeUnload);
   void loadLocaleIndex(import.meta.env.BASE_URL).then(available=>availableGameLocales=available).catch(()=>{});
-  void loadAchievementIndex(import.meta.env.BASE_URL).then(index=>achievementIndex=index).catch(()=>{});
+  void loadAchievementIndex(import.meta.env.BASE_URL).then(index=>{
+   achievementIndex=index;
+   void loadAchievementGroups(import.meta.env.BASE_URL,index).then(groups=>achievementGroupHierarchy=groups).catch(()=>{});
+  }).catch(()=>{});
 
   fetch(import.meta.env.BASE_URL+'catalog.json')
    .then(r=>r.ok?r.json():Promise.reject(Error('Collection catalog unavailable')))
@@ -209,6 +223,14 @@
  }
  function setTheme(v:ThemePref){
   themePref=v;try{localStorage.setItem('hkia-display-theme',v)}catch{}
+ }
+ function showAchievementGroup(guid:string|null){
+  achievementGroupSelection=guid;achievementShowAll=false;achievementFilter='all';achievementQuery='';
+  achievementLimit=BATCH_SIZE;
+ }
+ function showEveryAchievement(){
+  achievementGroupSelection=null;achievementShowAll=true;achievementFilter='all';achievementQuery='';
+  achievementLimit=BATCH_SIZE;
  }
  function achievementName(guid:string,index:number):string{
   const meta=achievementIndex.get(guid);
@@ -473,7 +495,7 @@
    </button>
    {#if snapshot}<nav class="tools-nav" aria-label="Tools">
     <button type="button" class="tool-tab" class:active={activeTool==='collections'} aria-current={activeTool==='collections'?'page':undefined} onclick={goHome}>{copy.toolCollection}</button>
-    <button type="button" class="tool-tab" class:active={activeTool==='achievements'} aria-current={activeTool==='achievements'?'page':undefined} onclick={()=>{activeTool='achievements';editingAchievement=null;achievementFilter='all';achievementLimit=BATCH_SIZE;achievementQuery='';error='';}}>{achCopy.title}</button>
+    <button type="button" class="tool-tab" class:active={activeTool==='achievements'} aria-current={activeTool==='achievements'?'page':undefined} onclick={()=>{activeTool='achievements';editingAchievement=null;showAchievementGroup(null);error='';}}>{achCopy.title}</button>
    </nav>{/if}
    <div class="bar-actions">
     {#if snapshot}
@@ -525,7 +547,12 @@
    </section>
 
   {:else if activeTool==='achievements'}
-   <div class="section-heading"><h1>{achCopy.title}</h1><span class="category-count">{achCopy.completed}: {snapshot.achievements.filter(a=>a.value.complete).length.toLocaleString(locale)} / {snapshot.achievements.length.toLocaleString(locale)} · {achCopy.missing}: {sourceAchievementRows.filter(r=>r.row===null).length.toLocaleString(locale)}</span></div>
+   {#if achievementGroupHierarchy && (achievementGroupSelection!==null||achievementShowAll)}
+    <button type="button" class="back-link achievement-group-back" onclick={()=>showAchievementGroup(null)}>‹ {groupCopy.back}</button>
+   {/if}
+   <div class="section-heading"><h1>{achievementGroupHierarchy&&achievementGroupSelection!==null?
+    achievementGroupSelection==='__unmapped'?groupCopy.uncategorized:achievementName(achievementGroupSelection,0):
+    achievementShowAll?groupCopy.showAll:achCopy.title}</h1><span class="category-count">{achCopy.completed}: {snapshot.achievements.filter(a=>a.value.complete).length.toLocaleString(locale)} / {snapshot.achievements.length.toLocaleString(locale)} · {achCopy.missing}: {sourceAchievementRows.filter(r=>r.row===null).length.toLocaleString(locale)}</span></div>
    <p class="achievement-note">{achCopy.notice}</p>
    <div class="collection-controls">
     <label class="search-field"><span class="search-symbol" aria-hidden="true">⌕</span><input type="search" bind:value={achievementQuery} placeholder={achCopy.search} aria-label={achCopy.search}/></label>
@@ -536,10 +563,37 @@
      <button type="button" class:active={achievementFilter==='missing'} onclick={()=>{achievementFilter='missing';achievementLimit=BATCH_SIZE}}>{achCopy.missing}</button>
     </div>
    </div>
+   {#if achievementGroupHierarchy && achievementGroupSelection===null && !achievementShowAll && !achievementQuery.trim() && achievementFilter==='all'}
+    <div class="achievement-group-heading">
+     <h2>{groupCopy.categories}</h2>
+     <button type="button" class="variation-button" onclick={showEveryAchievement}>{groupCopy.showAll}</button>
+    </div>
+    <div class="subcategory-grid achievement-group-grid">
+     {#each achievementGroupSummaries as stat (stat.guid)}
+      <button type="button" class="subcategory-card achievement-group-card" onclick={()=>showAchievementGroup(stat.guid)}>
+       <span class="subcategory-label">{achievementName(stat.guid,0)}</span>
+       <span class="subcategory-count">{stat.completed.toLocaleString(locale)} {achCopy.completed} / {stat.total.toLocaleString(locale)} {groupCopy.memberCount}</span>
+       <span class="subcategory-count">{stat.recorded.toLocaleString(locale)} {groupCopy.savedMembers} · {stat.missing.toLocaleString(locale)} {achCopy.missing}</span>
+       <span class:achieved={stat.parentComplete===true} class="achievement-status">{stat.parentComplete===true?achCopy.completed:stat.parentComplete===false?achCopy.incomplete:achCopy.missing}</span>
+      </button>
+     {/each}
+     {#if unmappedAchievementRows.length}
+      <button type="button" class="subcategory-card achievement-group-card" onclick={()=>showAchievementGroup('__unmapped')}>
+       <span class="subcategory-label">{groupCopy.uncategorized}</span>
+       <span class="subcategory-count">{unmappedAchievementRows.length.toLocaleString(locale)} {groupCopy.savedMembers}</span>
+      </button>
+     {/if}
+    </div>
+    <p class="achievement-group-note">{groupCopy.groupNote}</p>
+   {:else}
    <div class="achievement-grid">
     {#each achievementRows.slice(0,achievementLimit) as item (item.index)}
-     <article class="achievement-card">
-      <div><strong>{achievementName(item.guid,item.index)}</strong>
+     <article class="achievement-card" class:achievement-group-parent={achievementGroupSelection===item.guid}>
+      <div>
+       {#if achievementGroupHierarchy?.byGuid.has(item.guid)}
+        <span class="achievement-parent-label">{groupCopy.groupRecord}</span>
+       {/if}
+       <strong>{achievementName(item.guid,item.index)}</strong>
        {#if item.row}
         <span class:achieved={item.row.value.complete} class="achievement-status">{item.row.value.complete?'✓ '+achCopy.completed:achCopy.incomplete}</span>
        {:else}
@@ -579,6 +633,7 @@
    {#if achievementRows.length===0}<p class="empty-result">{copy.none}</p>{/if}
    {#if achievementRows.length>achievementLimit}
     <div class="load-marker"><button type="button" onclick={()=>achievementLimit=Math.min(achievementLimit+BATCH_SIZE,achievementRows.length)}>{copy.moreItems}</button></div>
+   {/if}
    {/if}
    <dialog class="achievement-dialog" bind:this={achievementDialogEl} onclose={onAchievementDialogClosed} oncancel={e=>{if(busy)e.preventDefault()}}>
     {#if editingAchievement}
