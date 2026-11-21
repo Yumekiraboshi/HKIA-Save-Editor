@@ -43,11 +43,11 @@ pub extern "C" fn hkia_change(id:i32,expected_present:u32,expected_ticks:i64,nex
 }
 #[no_mangle]
 pub extern "C" fn hkia_undo()->u32{
- STATE.with(|s|{let mut a=s.borrow_mut();a.reply.clear();a.output.clear();match a.editor.as_mut(){Some(e)if e.undo()=>0,_=>1}})
+ STATE.with(|s|{let mut a=s.borrow_mut();a.reply.clear();a.output.clear();match a.editor.as_mut(){Some(e)=>if e.undo(){0}else{1},None=>1}})
 }
 #[no_mangle]
 pub extern "C" fn hkia_redo()->u32{
- STATE.with(|s|{let mut a=s.borrow_mut();a.reply.clear();a.output.clear();match a.editor.as_mut(){Some(e)if e.redo()=>0,_=>1}})
+ STATE.with(|s|{let mut a=s.borrow_mut();a.reply.clear();a.output.clear();match a.editor.as_mut(){Some(e)=>if e.redo(){0}else{1},None=>1}})
 }
 #[no_mangle]
 pub extern "C" fn hkia_reset()->u32{
