@@ -4,6 +4,8 @@
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
  import {diffAchievements,decodeAchievementDraft} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
+ import {compactAchievementCopy} from './achievement-compact-ui';
+ import {toggleAchievementState} from './achievement-quick';
  import {achievementFactsCopy} from './achievement-facts-ui';
  import {loadAchievementFacts,counterIndex,type AchievementFactsIndex} from './achievement-facts';
  import {joinAchievementCatalog} from './achievement-catalog';
@@ -46,7 +48,6 @@
  let achievementDialogEl:HTMLDialogElement|undefined=$state();
  let achievementReturnFocus:HTMLElement|null=null;
  let achievementProgress=$state('');
- let achievementComplete=$state(false);
  let achievementDate=$state('');
  let achievementValidation=$state('');
  let achievementBaseline:AchievementEntry[]=[];
@@ -89,6 +90,7 @@
  const locale=$derived(languagePref==='auto'?browserLanguage:languagePref);
  const copy=$derived(localizedCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
+ const compactCopy=$derived(compactAchievementCopy(locale));
  const groupCopy=$derived(achievementGroupCopy(locale));
  const factCopy=$derived(achievementFactsCopy(locale));
  const gameCounters=$derived(counterIndex((snapshot as SaveSnapshot|null)?.counters??[]));
@@ -435,6 +437,18 @@
   else dateValidation=error||copy.fileError;
  }
 
+ async function quickToggleAchievement(row:AchievementEntry){
+  if(!snapshot||busy)return;
+  const live=snapshot.achievements.find(x=>achievementGuid(x.guid)===achievementGuid(row.guid));
+  if(!live)return;
+  busy=true;error='';
+  try{
+   const next=toggleAchievementState(live.value,Date.now());
+   update(await changeAchievement(live.guid,live.value,next));
+   await persistDraft();
+  }catch(e){error=describeError(e)}
+  finally{busy=false}
+ }
  function formatAchievementDate(value:AchievementValue):string{
   if(!value.completed)return '';
   const ms=Number(value.completed[0])*1000+Math.floor(value.completed[1]/1_000_000);
@@ -446,9 +460,8 @@
  async function openAchievement(row:AchievementEntry,opener:HTMLElement,index:number){
   if(busy)return;
   editingAchievement=row;achievementReturnFocus=opener;editingAchievementTitle=achievementName(achievementGuid(row.guid),index);
-  achievementComplete=row.value.complete;
   achievementProgress=String(row.value.current);
-  achievementDate=formatAchievementDate(row.value)||formatAchievementDate({complete:true,current:0,completed:[BigInt(Math.floor(Date.now()/1000)),0]});
+  achievementDate=formatAchievementDate(row.value)||(row.value.complete?formatAchievementDate({complete:true,current:0,completed:[BigInt(Math.floor(Date.now()/1000)),0]}):'');
   achievementValidation='';
   await tick();
   if(achievementDialogEl&&!achievementDialogEl.open)achievementDialogEl.showModal();
@@ -466,8 +479,8 @@
   if(!achievementProgress.trim()||!Number.isFinite(current)||current<0||current>3.4028234663852886e38){
    achievementValidation=achCopy.invalid;return;
   }
-  let completed:AchievementValue['completed']=null;
-  if(achievementComplete){
+  let completed:AchievementValue['completed']=selected.value.completed;
+  if(selected.value.complete){
    if(!achievementDate){achievementValidation=achCopy.invalid;return}
    if(achievementDate===formatAchievementDate(selected.value)&&selected.value.completed){
     completed=selected.value.completed;
@@ -478,7 +491,9 @@
     completed=[BigInt(seconds),Math.round((ms-seconds*1000)*1_000_000)];
    }
   }
-  const next:AchievementValue={complete:achievementComplete,current,completed};
+  const next:AchievementValue={complete:selected.value.complete,current,completed};
+  if(next.current===selected.value.current&&next.completed?.[0]===selected.value.completed?.[0]&&
+   next.completed?.[1]===selected.value.completed?.[1]){closeAchievement();return}
   busy=true;error='';achievementValidation='';
   try{
    update(await changeAchievement(selected.guid,selected.value,next));
