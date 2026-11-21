@@ -65,7 +65,12 @@ export const messages={
     "unverifiedNames": "名前未照合",
     "noSave": "先にセーブを開いてください",
     "backupHint": "元のファイルは自動変更されません",
-    "collapse": "閉じる"
+    "collapse": "閉じる",
+    "autosaveFailed": "再読み込み時の復元用データを保存できません。編集中のセーブを書き出してください。",
+    "progressHint": "収集履歴の参考値（親アイテム単位）。ゲーム内達成率・所持数とは異なる場合があります。",
+    "imagesUnavailable": "アイテム画像を読み込めませんでした。画像以外の編集は引き続き利用できます。",
+    "moreItems": "続きを表示",
+    "localDraft": "編集中の内容は、このブラウザ内に自動保存されます。"
   },
   "en": {
     "brand": "Yumekiraboshi",
@@ -133,12 +138,14 @@ export const messages={
     "unverifiedNames": "Unmatched names",
     "noSave": "Open a save first",
     "backupHint": "Your original file is never modified automatically",
-    "collapse": "Close"
+    "collapse": "Close",
+    "autosaveFailed": "Could not store the recovery draft. Download an edited save before refreshing.",
+    "progressHint": "Collection-history estimate by parent item. This may differ from in-game completion and ownership.",
+    "imagesUnavailable": "Item images could not be loaded. Editing remains available.",
+    "moreItems": "Load more",
+    "localDraft": "Your editing session is stored locally in this browser."
   }
 } as const;
-export type Locale='ja'|'en';
-export type MessageKey=keyof typeof messages.ja;
-
 export const editorErrors={
   "ja": {
     "WASMファイルを取得できません。": "処理エンジンを読み込めませんでした。",
@@ -159,7 +166,9 @@ export const editorErrors={
     "Web Workerが停止しました。": "処理が停止しました。",
     "不明なエラー": "不明なエラーです。",
     "Collection catalog unavailable": "コレクションのデータを読み込めませんでした。",
-    "Invalid collection catalog": "コレクションのデータが不正です。"
+    "Invalid collection catalog": "コレクションのデータが不正です。",
+  "DRAFT_INVALID": "保存済みの編集内容が不正です。元セーブを開き直してください。",
+  "DRAFT_CONFLICT": "保存済みの編集内容を復元できませんでした。元セーブと内容が一致しません。"
   },
   "en": {
     "WASMファイルを取得できません。": "Could not load the editor engine.",
@@ -180,6 +189,8 @@ export const editorErrors={
     "Web Workerが停止しました。": "The editor worker stopped.",
     "不明なエラー": "Unknown error.",
     "Collection catalog unavailable": "Could not load collection data.",
-    "Invalid collection catalog": "Invalid collection data."
+    "Invalid collection catalog": "Invalid collection data.",
+  "DRAFT_INVALID": "The local recovery data is invalid. Reopen the original save.",
+  "DRAFT_CONFLICT": "The local changes could not be restored because they do not match the original save."
   }
 } as Record<Locale,Record<string,string>>;
