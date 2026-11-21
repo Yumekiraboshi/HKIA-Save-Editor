@@ -35,7 +35,7 @@
  const copy=$derived(messages[locale]);
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
- const group=$derived((catalog?.groups??[]).find(g=>g[0]===selectedGroup)??null);
+ const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
 
  onMount(()=>{
   browserLanguage=(navigator.languages.find(l=>l.toLowerCase().startsWith('ja')||l.toLowerCase().startsWith('en'))??navigator.language??'ja').toLowerCase().startsWith('en')?'en':'ja';
@@ -84,7 +84,7 @@
   const effective=Math.min(page,pages-1);
   return {rows:filtered.slice(effective*PAGE_SIZE,(effective+1)*PAGE_SIZE),total:filtered.length,page:effective,pages};
  });
- const unnamed=$derived(catalog?catalog.items.filter(x=>!x[5]||!x[6]).length:0);
+ const unnamed=$derived((catalog as Catalog | null)?.items.filter((x:Item)=>!x[5]||!x[6]).length??0);
  function setLanguage(v:LanguagePref){
   languagePref=v;try{localStorage.setItem('hkia-display-locale',v)}catch{}
  }
@@ -247,7 +247,7 @@
     <div class="category-grid">
      {#each categories as cat (cat.row[0])}
       <button class="category-card" type="button" onclick={()=>selectCategory(cat.row[0])}>
-       <span class="category-image"><img src={ICONS+cat.row[5]} alt="" loading="lazy" onerror={e=>e.currentTarget.style.visibility='hidden'}/></span>
+       <span class="category-image"><img src={ICONS+cat.row[5]} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/></span>
        <span class="category-label">{titleFor(cat.row)}</span>
        {#if cat.count>0}<span class="category-count">{copy.recorded} · {cat.count.toLocaleString(locale)}</span>{/if}
       </button>
