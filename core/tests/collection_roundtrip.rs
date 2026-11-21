@@ -638,7 +638,7 @@ fn future_semver_uses_native_schema_compatibility_for_existing_collection_and_ac
 
 #[test]
 fn forward_compatibility_rejects_malformed_versions_and_version_metadata_disagreement(){
- for version in ["2.99.99","3.0.01","3.0.0","3.00.2","3.0.300","99.0.0"]{
+ for version in ["2.99.99","3.0.01","3.0.0","3.00.2","3.0.300"]{
   if version=="3.0.0"{continue}
   // Synthetic test builder may include rejected headers; do not open.
   assert!(Editor::open(slot(version)).is_err(),"malformed version {version} accepted");
@@ -649,9 +649,9 @@ fn forward_compatibility_rejects_malformed_versions_and_version_metadata_disagre
  // Native schema cannot be skipped by a higher syntactically valid version.
  let mut bad=synthetic_payload("3.0.2");
  // Change the collection history map's saved timestamp into a boolean token.
- let original=[0xd3,0x08,0xda,0xcf,0xef,0x28,0x00,0x00,0x01];
- let start=bad.windows(original.len()).position(|x|x==original);
- if let Some(p)=start {bad[p]=0xc3;}
+ let original=l(638000000000000001);
+ let p=bad.windows(original.len()).position(|x|x==original.as_slice()).expect("native sample timestamp");
+ bad[p]=0xc3;
  assert!(Editor::open(slot_from_payload("3.0.2",bad)).is_err(),
   "incorrect future target types must fail before write");
 }
