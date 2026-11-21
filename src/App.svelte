@@ -105,6 +105,7 @@
   if(busy)return;
   if(snapshot?.dirty&&!confirm(copy.discard))return;
   busy=true;error='';notice='';
+  snapshot=null;original=null;recorded={};goHome();
   try{
    if(file.size>60*1024*1024||file.size===0)throw Error(copy.typeIssue);
    const s=await openSave(file);
