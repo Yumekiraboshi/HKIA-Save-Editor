@@ -10,7 +10,7 @@ async function compiled(path){
   bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
  return import('data:text/javascript;base64,'+Buffer.from(r.outputFiles[0].text).toString('base64'));
 }
-const {planCategoryParentCompletion,planMissingCategoryParentCompletion,planCategoryParentRevocation}=await compiled('../src/achievement-parent-auto.ts');
+const {planCategoryParentCompletion,planMissingCategoryParentCompletion,planCategoryParentRevocation,planCategoryParentDateSync}=await compiled('../src/achievement-parent-auto.ts');
 const {decodeAchievementGroups}=await compiled('../src/achievement-groups.ts');
 const indexData=JSON.parse(read('../public/achievement-index.json'));
 const index=new Map(indexData.records.map(([guid,key,titleId])=>[guid,{key,titleId}]));
@@ -202,4 +202,91 @@ test('relocking uses the existing atomic pair RPC, is v3.0.1 gated and preserves
  assert.match(backend,/Change::AchievementPair/);
  assert.match(backend,/pub fn change_achievement_pair/);
  assert.match(backend,/self\.undo\.push\(Change::AchievementPair/);
+});
+
+const datedSource=hierarchy.groups.find(g=>g.children.length>2);
+const at=(secs,nanos=0)=>[BigInt(secs),nanos];
+const datedChildren=dates=>[
+ row(datedSource.guid,true,datedSource.children.length,dates.reduce((max,d)=>d[0]>max[0]||d[0]===max[0]&&d[1]>max[1]?d:max,dates[0])),
+ ...datedSource.children.map((g,i)=>row(g,true,1,dates[i]))
+];
+
+test('date correction of the latest child updates only the matching source-derived parent date',()=>{
+ const dates=datedSource.children.map((_,i)=>at(1750000000+i,123456700));
+ const saved=datedChildren(dates);
+ const index=dates.length-1, old=saved[index+1].value;
+ const newTime=at(1750005000,987654300);
+ const edited=value(true,old.current,newTime);
+ const plan=planCategoryParentDateSync(hierarchy,saved,saved[index+1].guid,old,edited);
+ assert.ok(plan);
+ assert.deepEqual(plan.guid,words(datedSource.guid));
+ assert.deepEqual(plan.before,saved[0].value);
+ assert.deepEqual(plan.after,{
+  complete:true,current:datedSource.children.length,completed:newTime
+ });
+ assert.deepEqual(saved[0].value.completed,dates[index],'planner must not mutate parent');
+ assert.deepEqual(saved[index+1].value.completed,dates[index],'planner must not mutate child');
+});
+
+test('moving latest child to an earlier time chooses the next latest sibling with full 100ns precision',()=>{
+ const dates=datedSource.children.map((_,i)=>at(1750005000+i,100));
+ const saved=datedChildren(dates),lastIndex=dates.length-1;
+ const before=saved[lastIndex+1].value;
+ const patch=planCategoryParentDateSync(
+  hierarchy,saved,saved[lastIndex+1].guid,before,value(true,before.current,at(1749990000,0))
+ );
+ assert.ok(patch);
+ assert.deepEqual(patch.after.completed,dates[lastIndex-1]);
+});
+
+test('changing a non-latest child date does not rewrite the category if the latest is unchanged',()=>{
+ const dates=datedSource.children.map((_,i)=>at(1750000000+i,500));
+ const saved=datedChildren(dates);
+ assert.equal(planCategoryParentDateSync(
+  hierarchy,saved,saved[1].guid,saved[1].value,value(true,1,at(1750000000,900))
+ ),null);
+ const first=datedSource.children.map((_,i)=>i===0?at(1750009000,100):at(1750000000+i,100));
+ const repeated=datedChildren(first);
+ assert.equal(planCategoryParentDateSync(
+  hierarchy,repeated,repeated[2].guid,repeated[2].value,value(true,1,at(1750001000,0))
+ ),null);
+});
+
+test('preserves independent native parent timestamps and incomplete, undated, missing or inconsistent rows',()=>{
+ const dates=datedSource.children.map((_,i)=>at(1750000000+i,0));
+ const saved=datedChildren(dates),last=saved.at(-1);
+ const edited=value(true,1,at(1750010000,0));
+ const plan=(rows,before=last.value,after=edited,guid=last.guid)=>
+  planCategoryParentDateSync(hierarchy,rows,guid,before,after);
+ assert.equal(plan([{...saved[0],value:value(true,datedSource.children.length,at(1750009000))},...saved.slice(1)]),null,
+  'an independently recorded parent timestamp must not be rewritten');
+ assert.equal(plan([{...saved[0],value:value(true,datedSource.children.length,null)},...saved.slice(1)]),null);
+ assert.equal(plan([{...saved[0],value:value(false,datedSource.children.length,dates.at(-1))},...saved.slice(1)]),null);
+ assert.equal(plan([{...saved[0],value:value(true,2,dates.at(-1))},...saved.slice(1)]),null);
+ assert.equal(plan(saved.slice(1)),null,'missing category is never created by a date edit');
+ assert.equal(plan(saved.filter(x=>x!==saved[2])),null,'missing sibling cannot be assumed complete');
+ assert.equal(plan(saved.map((r,i)=>i===2?{...r,value:{...r.value,complete:false}}:r)),null);
+ assert.equal(plan(saved.map((r,i)=>i===2?{...r,value:{...r.value,completed:null}}:r)),null);
+ assert.equal(plan(saved.map((r,i)=>i===2?{...r,value:{...r.value,completed:at(1750000002,111)}}:r)),null);
+ assert.equal(plan(saved,value(true,2,dates.at(-1))),null,'stale child progress must not drive a parent write');
+ assert.equal(plan(saved,value(false,1,dates.at(-1))),null,'date edit requires a completed old child');
+ assert.equal(plan(saved,last.value,value(false,0,null)),null,'revoke uses a separate rule');
+ assert.equal(plan(saved,last.value,value(true,1,null)),null,'missing new timestamp cannot be invented');
+ assert.equal(plan(saved,last.value,last.value),null,'same timestamp must be a no-op');
+ assert.equal(plan(saved,last.value,value(true,3,edited.completed)),null,'progress edit alone is not timestamp sync');
+ assert.equal(plan(saved,last.value,value(true,1,at(1750010000,123456789))),null,
+  'invalid source precision must never be written');
+ assert.equal(plan(saved,last.value,edited,words(datedSource.guid)),null,'parents cannot be edited as children');
+ assert.equal(planCategoryParentDateSync(null,saved,last.guid,last.value,edited),null);
+ assert.throws(()=>plan([...saved,saved[0]]),/ACH_GROUP_DUPLICATE/);
+});
+
+test('date sync is reachable only on v3.0.1 and uses paired Rust/WASM CAS and one Undo',()=>{
+ const app=read('../src/App.svelte');
+ assert.match(app,/snapshot\?\.version==='3\.0\.1'\?planCategoryParentDateSync\(/);
+ assert.match(app,/planCategoryParentDateSync\(\s*achievementGroupHierarchy,snapshot\.achievements,live\.guid,live\.value,next/);
+ assert.match(app,/if\(dateSync\)return changeAchievementPair\(\{guid:live\.guid,before:live\.value,after:next\},dateSync\)/);
+ assert.match(app,/update\(await changeAchievementWithParent\(selected,next\)\)/);
+ const core=read('../core/src/collection.rs');
+ assert.match(core,/self\.undo\.push\(Change::AchievementPair/);
 });
