@@ -406,3 +406,47 @@ fn floorplan_history_writer_keeps_other_restricted_ids_and_older_versions_denied
  v301.change(ID,None,Some(ticks)).unwrap();
  assert_eq!(Editor::open(v301.export().unwrap()).unwrap().value(ID),Some(ticks));
 }
+
+#[test]
+fn category_parent_relock_is_atomic_and_restores_both_records_with_one_undo(){
+ use hkia_save_core::achievement::AchievementValue;
+ for version in ["3.0.0","3.0.1"]{
+  for zipped in [false,true]{
+   let raw=slot(version);
+   let input=if zipped{zip(&raw)}else{raw};
+   let mut editor=Editor::open(input).unwrap();
+   let leaf=[1,0,0,1];let parent=[2,0,0,1];
+   let old_leaf=AchievementValue{complete:false,current:1.0,completed:None};
+   let old_parent=AchievementValue{complete:false,current:2.0,completed:None};
+   let completed_at=Some((1_750_000_001,123_456_700));
+   let done_leaf=AchievementValue{complete:true,current:1.0,completed:completed_at};
+   let done_parent=AchievementValue{complete:true,current:2.0,completed:completed_at};
+   let undone_leaf=AchievementValue{complete:false,current:0.0,completed:None};
+   let undone_parent=AchievementValue{complete:false,current:1.0,completed:None};
+   editor.change_achievement_pair((leaf,old_leaf,done_leaf),(parent,old_parent,done_parent)).unwrap();
+   assert!(editor.change_achievement_pair(
+    (leaf,done_leaf,undone_leaf),(parent,old_parent,undone_parent)
+   ).is_err(),"stale parent CAS must not partially revoke child");
+   assert_eq!(editor.achievement_value(leaf),Some(done_leaf));
+   assert_eq!(editor.achievement_value(parent),Some(done_parent));
+   editor.change_achievement_pair(
+    (leaf,done_leaf,undone_leaf),(parent,done_parent,undone_parent)
+   ).unwrap();
+   assert_eq!(editor.revision(),2);
+   let reopened=Editor::open(editor.export().unwrap()).unwrap();
+   assert_eq!(reopened.achievement_value(leaf),Some(undone_leaf));
+   assert_eq!(reopened.achievement_value(parent),Some(undone_parent));
+   assert!(editor.undo());
+   assert_eq!(editor.achievement_value(leaf),Some(done_leaf));
+   assert_eq!(editor.achievement_value(parent),Some(done_parent));
+   assert!(editor.redo());
+   assert_eq!(editor.achievement_value(leaf),Some(undone_leaf));
+   assert_eq!(editor.achievement_value(parent),Some(undone_parent));
+   assert!(editor.undo());
+   assert!(editor.undo());
+   assert_eq!(editor.achievement_value(leaf),Some(old_leaf));
+   assert_eq!(editor.achievement_value(parent),Some(old_parent));
+   assert!(!editor.dirty());
+  }
+ }
+}
