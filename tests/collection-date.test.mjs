@@ -38,6 +38,7 @@ test('timestamps before Unix epoch and invalid calendar input are handled safely
 test('collection UI uses second-precision input and skips unchanged timestamps',()=>{
  const component=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  assert.match(component,/type="datetime-local" step="1"/);
- assert.match(component,/dateValue===toDateTimeValue\(old\)/);
- assert.match(component,/fromDateTimeValue\(dateValue,old\)/);
+ assert.match(component,/dateValue!==toDateTimeValue\(dateDialogTick\)/);
+ assert.match(component,/!dateChanged\)return/);
+ assert.match(component,/fromDateTimeValue\(dateValue,dateDialogTick\)/);
 });
