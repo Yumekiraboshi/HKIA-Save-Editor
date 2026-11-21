@@ -243,7 +243,7 @@
   return filtered;
  });
  const showingGlobalCollectionSearch=$derived(Boolean(query.trim())&&!collectionSearchDrilldown);
- const collectionSearchResults=$derived(catalog?searchAllCollectionItems(catalog.items,query,locale,nameFor):[] as Item[]);
+ const collectionSearchResults=$derived(searchAllCollectionItems((catalog as Catalog|null)?.items??[],query,locale,nameFor));
  const visibleItems=$derived(matching.slice(0,visibleLimit));
  $effect(()=>{
   const el=loadMoreSentinel;
