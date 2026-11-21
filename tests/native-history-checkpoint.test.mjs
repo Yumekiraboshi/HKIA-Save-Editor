@@ -32,9 +32,10 @@ test('WASM checkpoint bytes reach IndexedDB and can be restored atomically throu
  assert.match(wasm,/editor\.restore_history\(&checkpoint\)/);
  assert.match(worker,/case 'history-restore':/);
  assert.match(worker,/e\.hkia_history_restore\(\)/);
- assert.match(worker,/e\.hkia_history_checkpoint\(\)/);
+ assert.match(worker,/e\.hkia_history_checkpoint\(\)===0/);
+ assert.match(worker,/let checkpoint:Uint8Array\|null=null/);
  assert.match(worker,/historyCheckpoint:checkpoint/);
- assert.match(client,/historyCheckpoint:Uint8Array/);
+ assert.match(client,/historyCheckpoint:Uint8Array\|null/);
  assert.match(client,/export function restoreHistory\(checkpoint:Uint8Array\)/);
  assert.match(store,/historyCheckpoint:savedHistory/);
  assert.match(store,/historyCheckpoint:safeHistoryCheckpoint\(state\?\.historyCheckpoint\)/);
