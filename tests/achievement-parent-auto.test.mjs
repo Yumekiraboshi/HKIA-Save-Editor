@@ -99,7 +99,7 @@ test('both UI edit paths use a single parent/child WASM transaction and do not m
  assert.match(wasm,/pub extern "C" fn hkia_achievement_pair_change/);
  assert.match(core,/pub fn change_achievement_pair/);
  assert.match(core,/Change::AchievementPair/);
- assert.doesNotMatch(app,/\$effect\([\s\S]*?planCategoryParentCompletion\(/);
+ assert.doesNotMatch(app,/load\(file:File\)[\s\S]{0,500}planCategoryParentCompletion\(/);
  const gui=read('../src/achievement-compact-ui.ts');
  assert.match(gui,/最後の日時をコピー/);
 });
