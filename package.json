@@ -11,7 +11,8 @@
     "check": "svelte-check --tsconfig ./tsconfig.json && tsc --noEmit",
     "test": "node --test tests/*.test.mjs",
     "build:wasm": "node scripts/build-wasm.mjs",
-    "build": "npm run build:wasm && vite build"
+    "build": "npm run build:wasm && vite build",
+    "test:wasm": "node scripts/wasm-smoke.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "6.2.4",

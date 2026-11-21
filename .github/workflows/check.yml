@@ -18,6 +18,7 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci
+      - run: npm run test:wasm
       - run: npm run check
       - run: npm run build
       - uses: actions/upload-artifact@v4
