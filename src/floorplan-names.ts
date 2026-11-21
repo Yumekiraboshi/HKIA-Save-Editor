@@ -41,6 +41,10 @@ const NAMES:Readonly<Record<Locale,readonly string[]>>={
  "zh-Hant":["反之字形格局","長型房間中央閣樓格局","深型房間中央閣樓格局","超深型房間格局","長型房間側邊閣樓格局","凸字形格局","前側轉角格局","大型房間格局","小型房間格局","後側轉角格局","深型房間格局","深型房間側邊閣樓格局","反之字形格局","超長型房間格局","長型房間格局","深型房間中央走廊格局","簡約閣樓格局","長型房間中央走廊格局"]
 };
 const INDEX=new Map<number,number>(FLOORPLAN_ITEM_IDS.map((id,i)=>[id,i]));
+/** Exact original v3.0.1 native source ItemId; false for every other item. */
+export function isVerifiedFloorplanItemId(id:number):boolean{
+ return Number.isSafeInteger(id)&&INDEX.has(id);
+}
 export function verifiedFloorplanName(id:number,locale:Locale):string|null{
  const index=INDEX.get(id);
  return index===undefined?null:NAMES[locale][index]??null;
