@@ -71,3 +71,31 @@ test('UI implements subgroup navigation and does not hide individual variation c
  assert.match(store,/const subgroup=typeof state\?\.ui\?\.subgroup/);
  assert.match(store,/return \{file:actualFile,patches,ui:\{group,subgroup\}\}/);
 });
+
+test('each subcategory has an actual representative parent image in its group',()=>{
+ const byId=new Map(catalog.items.map(item=>[item[0],item]));
+ for(const group of catalog.groups){
+  for(const sub of taxonomy.listSubcategories(catalog.items,group[0],{},'en')){
+   assert.ok(Number.isInteger(sub.previewId),sub.key);
+   const item=byId.get(sub.previewId);
+   assert.ok(item,sub.key);
+   assert.equal(item[2],sub.key);
+   assert.equal(item[3],group[0]);
+   assert.equal(item[0],item[7]);
+  }
+ }
+ const weather=taxonomy.listSubcategories(catalog.items,'collections_group_weather',{},'en');
+ assert.deepEqual(weather.map(x=>x.previewId),[1611616925,463096384,254880643,815186408]);
+});
+
+test('category previews reuse shipped sprites, dates use a native modal instead of clipped cards',()=>{
+ assert.match(component,/class="subcategory-art"/);
+ assert.match(component,/iconPack\.entries\[String\(sub\.previewId\)\]/);
+ assert.match(component,/void fetchImages\(key\)/);
+ assert.match(component,/<dialog class="date-dialog"/);
+ assert.match(component,/dateDialogEl\.showModal\(\)/);
+ assert.match(component,/onclose=\{onDateDialogClosed\}/);
+ assert.match(component,/type="datetime-local" step="1"/);
+ assert.match(component,/fromDateTimeValue\(dateValue,dateDialogTick\)/);
+ assert.doesNotMatch(component,/<div class="date-panel"/);
+});
