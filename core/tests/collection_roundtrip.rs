@@ -126,7 +126,7 @@ fn achievement_only_and_mixed_edits_roundtrip_with_undo_and_zip_isolation(){
  use hkia_save_core::achievement::AchievementValue;
  let guid=[1,0,0,1];
  let base=AchievementValue{complete:false,current:1.0,completed:None};
- let done=AchievementValue{complete:true,current:2.0,completed:Some((1_750_000_000,123_456_789))};
+ let done=AchievementValue{complete:true,current:2.0,completed:Some((1_750_000_000,123_456_700))};
  for version in ["3.0.0","3.0.1"] {
   for zipped in [false,true] {
    let raw=slot(version);
