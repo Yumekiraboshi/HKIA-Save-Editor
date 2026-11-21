@@ -180,6 +180,9 @@
 .achievement-info-note{margin:20px 0 0}
 .achievement-dialog-status{font-size:12px;color:var(--muted);font-weight:700}
 .achievement-dialog-status.achieved{color:var(--positive)}
+/* Reuse the verified native sprites in the achievement editing dialog. */
+.achievement-dialog-item .achievement-dialog-status{color:var(--muted)}
+.achievement-dialog-item .achievement-dialog-status.achieved{color:var(--positive)}
 .achievement-modal-advanced{border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:12px;color:var(--ink)}
 .achievement-modal-advanced>summary{cursor:pointer;font-weight:700}
 .achievement-modal-advanced[open]>summary{margin-bottom:14px}

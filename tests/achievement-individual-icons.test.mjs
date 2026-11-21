@@ -116,3 +116,24 @@ test('individual cards use exact sprites and missing rows retain placeholder; ca
  assert.match(css,/\.achievement-tile\{height:224px;min-height:224px\}/);
  assert.match(css,/\.achievement-tile\{height:211px;min-height:211px\}/);
 });
+
+test('achievement edit dialog reuses source-matched individual/category icons and leaves native nulls empty',()=>{
+ const app=read('../src/App.svelte').toString('utf8');
+ const css=read('../src/style.css').toString('utf8');
+ const modal=app.slice(app.indexOf('<dialog class="achievement-dialog"'),app.indexOf('</dialog>',app.indexOf('<dialog class="achievement-dialog"')));
+ assert.ok(modal.includes('editingSaveGuid=achievementGuid(editingAchievement.guid)'));
+ assert.ok(modal.includes('achievementIndividualAtlas?.bySaveGuid.get(editingSaveGuid)'));
+ assert.ok(modal.includes('achievementCategoryAtlas?.bySaveGuid.get(editingSaveGuid)'));
+ assert.ok(modal.includes('{#if dialogIndividualArt}'));
+ assert.ok(modal.includes('{:else if dialogCategoryArt}'));
+ assert.ok(modal.includes('<span class="item-art-empty">✧</span>'));
+ assert.ok(modal.includes('class="date-dialog-item achievement-dialog-item"'));
+ assert.ok(modal.includes('achievement-individual-sprite'));
+ assert.ok(modal.includes('achievement-category-sprite'));
+ assert.match(css,/\.achievement-dialog-item \.achievement-dialog-status\{/);
+ const bySaveGuid=icons.decodeAchievementIndividualAtlas(manifest,index,'/').bySaveGuid;
+ assert.equal(bySaveGuid.size,198);
+ const categorySaveGuids=new Set(categoryManifest.categories.map(c=>[...index].find(([,r])=>r.key===c.sourceKey)?.[0]));
+ assert.equal(categorySaveGuids.size,63);
+ assert.equal([...index.keys()].filter(g=>!bySaveGuid.has(g)&&!categorySaveGuids.has(g)).length,559);
+});
