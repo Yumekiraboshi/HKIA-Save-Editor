@@ -14,6 +14,10 @@ fn map(a:Vec<(Vec<u8>,Vec<u8>)>)->Vec<u8>{
 }
 fn guid(a:[u32;4])->Vec<u8>{let mut b=Vec::new();for x in a{b.extend(u(x))}b}
 fn doc(tag:u8,value:Vec<u8>)->Vec<u8>{arr(vec![vec![tag],value])}
+fn version_number(version:&str)->u32{
+ let components:Vec<u32>=version.split('.').map(|x|x.parse().unwrap()).collect();
+ components[0]*10000+components[1]*100+components[2]
+}
 fn synthetic_payload(version:&str)->Vec<u8>{
  let v=doc(18,arr(vec![vec![0],u(if version=="3.0.0"{83}else{87}),{
   let mut s=vec![0xa0|version.len()as u8];s.extend(version.as_bytes());s
@@ -42,7 +46,7 @@ fn slot_from_payload(version:&str,payload:Vec<u8>)->Vec<u8>{
  let mut b=prefix.to_vec();b.push(0x98);
  for _ in 0..4{b.extend(u(0))}
  b.push(0xa0|version.len()as u8);b.extend(version.as_bytes());
- b.extend(u(if version=="3.0.0"{30000}else{30001}));
+ b.extend(u(version_number(version)));
  b.extend([0x92,0xd6,0xff]);b.extend(1_750_000_000u32.to_be_bytes());b.push(0);
  b.push(0);b.push(0x80);b.push(0x90);b.extend([0x91,9]);
  b.extend(magic);
@@ -598,4 +602,56 @@ fn native_pair_is_one_achievement_history_step_and_never_rewinds_collections(){
  assert_eq!(e.achievement_value(child),Some(done_child));
  assert_eq!(e.achievement_value(parent),Some(done_parent));
  assert_eq!(e.value(2),Some(638000000000000100));
+}
+
+
+#[test]
+fn future_semver_uses_native_schema_compatibility_for_existing_collection_and_achievement_edits(){
+ use hkia_save_core::achievement::AchievementValue;
+ for version in ["3.0.2","3.0.4","3.1.0","4.0.0"]{
+  for zipped in [false,true]{
+   let raw=slot(version);
+   let input=if zipped{zip(&raw)}else{raw};
+   let mut editor=Editor::open(input).unwrap();
+   assert_eq!(editor.version(),version);
+   assert_eq!(editor.value(2),Some(638000000000000001));
+   let before=AchievementValue{complete:false,current:1.0,completed:None};
+   let after=AchievementValue{complete:true,current:1.0,completed:Some((1_750_000_000,123_456_700))};
+   editor.change_achievement([1,0,0,1],before,after).unwrap();
+   editor.change(2,Some(638000000000000001),Some(638000000000000200)).unwrap();
+   assert!(editor.create_achievement([3,0,0,1],after).is_err(),
+    "future achievements absent from the source must not be created blindly");
+   assert!(editor.change(12345,None,Some(638000000000000200)).is_err(),
+    "new collection source IDs must not be presumed valid across versions");
+   let exported=editor.export().unwrap();
+   let reopened=Editor::open(exported).unwrap();
+   assert_eq!(reopened.version(),version);
+   assert_eq!(reopened.value(2),Some(638000000000000200));
+   assert_eq!(reopened.achievement_value([1,0,0,1]),Some(after));
+   assert!(editor.undo());
+   assert_eq!(editor.value(2),Some(638000000000000001));
+   assert!(editor.redo());
+   assert_eq!(editor.value(2),Some(638000000000000200));
+  }
+ }
+}
+
+#[test]
+fn forward_compatibility_rejects_malformed_versions_and_version_metadata_disagreement(){
+ for version in ["2.99.99","3.0.01","3.0.0","3.00.2","3.0.300","99.0.0"]{
+  if version=="3.0.0"{continue}
+  // Synthetic test builder may include rejected headers; do not open.
+  assert!(Editor::open(slot(version)).is_err(),"malformed version {version} accepted");
+ }
+ assert!(Editor::open(slot_from_payload("3.0.2",synthetic_payload("3.0.3"))).is_err(),
+  "CollectionVersion metadata must match forward envelope version");
+ assert!(Editor::open(slot_from_payload("3.0.3",synthetic_payload("3.0.2"))).is_err());
+ // Native schema cannot be skipped by a higher syntactically valid version.
+ let mut bad=synthetic_payload("3.0.2");
+ // Change the collection history map's saved timestamp into a boolean token.
+ let original=[0xd3,0x08,0xda,0xcf,0xef,0x28,0x00,0x00,0x01];
+ let start=bad.windows(original.len()).position(|x|x==original);
+ if let Some(p)=start {bad[p]=0xc3;}
+ assert!(Editor::open(slot_from_payload("3.0.2",bad)).is_err(),
+  "incorrect future target types must fail before write");
 }
