@@ -6,9 +6,9 @@ A browser-local collection-history editor for Hello Kitty Island Adventure. The 
 
 ## Interface
 
-- Game-derived collection categories, with the 25 local category images and category order.
-- Select a category, search by Japanese or English item name, and browse a continuously loading item list.
-- Edit collection-history membership or recorded date where the structural save constraints allow it.
+- Game-derived collection categories, with 25 local category images and their real sub-collections from each item's collection ID.
+- Select a category and (where applicable) a subcategory before browsing items. Search names in Japanese or English in the continuously loading list.
+- Show base collection items by default instead of mixing color/size variations into the checklist. An optional variation toggle preserves individual variant-history editing. Edit collection-history membership or recorded date where structural constraints allow it.
 - Compact header for the active tool, loading another file, downloading the **unchanged original** backup, downloading an edited copy, undo/redo, language and light/dark/system theme.
 - Browser-language detection and manual Japanese/English language selection; display preferences and the active editing session are stored locally for recovery after a refresh.
 - No raw item IDs, internal keys, GUIDs, or technical tokens in normal item and category views.
