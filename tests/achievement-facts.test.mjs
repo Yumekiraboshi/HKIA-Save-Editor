@@ -67,7 +67,7 @@ test('all 16 languages have non-claim condition and reward notices',()=>{
  }
  assert.match(labelsTs,/未確認/);
  const app=read('../src/App.svelte');
- assert.match(app,/achievementFacts\.get\(item\.guid\)/);
+ assert.match(app,/achievementFacts\.get\(achievementGuid\(editingAchievement\.guid\)\)/);
  assert.match(app,/gameCounters\.get\(facts\.counterGuid\)/);
  assert.match(app,/factCopy\.receiptUnverified/);
  assert.match(app,/facts\.groupCondition/);
