@@ -642,3 +642,182 @@ mod tests {
   assert_eq!(mp_map_len(16).unwrap(),[0xde,0,16]);
  }
 }
+
+
+/// A bounded, local-only transaction checkpoint. This is NOT a save format.
+/// Every edit is reconstructed from the original source using the regular
+/// source-validated CAS APIs before any recovered history is committed.
+const HISTORY_MAGIC:&[u8;8]=b"HKIAHS01";
+const HISTORY_MAX_BYTES:usize=128*1024;
+
+struct HistoryCursor<'a>{bytes:&'a [u8],pos:usize}
+impl<'a> HistoryCursor<'a>{
+ fn take(&mut self,n:usize)->Result<&'a [u8],Error>{
+  let end=self.pos.checked_add(n).ok_or(Error::Overflow)?;
+  let bytes=self.bytes.get(self.pos..end).ok_or(Error::Truncated)?;
+  self.pos=end;Ok(bytes)
+ }
+ fn byte(&mut self)->Result<u8,Error>{Ok(self.take(1)?[0])}
+ fn u32(&mut self)->Result<u32,Error>{Ok(u32::from_le_bytes(self.take(4)?.try_into().map_err(|_|Error::Schema)?))}
+ fn i32(&mut self)->Result<i32,Error>{Ok(i32::from_le_bytes(self.take(4)?.try_into().map_err(|_|Error::Schema)?))}
+ fn i64(&mut self)->Result<i64,Error>{Ok(i64::from_le_bytes(self.take(8)?.try_into().map_err(|_|Error::Schema)?))}
+ fn guid(&mut self)->Result<[u32;4],Error>{Ok([self.u32()?,self.u32()?,self.u32()?,self.u32()?])}
+ fn ticks(&mut self)->Result<Option<i64>,Error>{
+  let present=self.byte()?;let value=self.i64()?;
+  if present>1||(present==0&&value!=0){return Err(Error::Schema)}
+  Ok(if present==1{Some(value)}else{None})
+ }
+ fn value(&mut self)->Result<AchievementValue,Error>{
+  let complete=self.byte()?;let current=f32::from_bits(self.u32()?);
+  let dated=self.byte()?;let seconds=self.i64()?;let nanos=self.u32()?;
+  if complete>1||dated>1||(dated==0&&(seconds!=0||nanos!=0)){return Err(Error::Schema)}
+  let value=AchievementValue{complete:complete==1,current,completed:if dated==1{Some((seconds,nanos))}else{None}};
+  if !achievement::valid(value){return Err(Error::Schema)}Ok(value)
+ }
+ fn optional_value(&mut self)->Result<Option<AchievementValue>,Error>{
+  match self.byte()?{0=>{let bytes=self.take(18)?;if bytes.iter().any(|&b|b!=0){return Err(Error::Schema)}Ok(None)},
+   1=>Ok(Some(self.value()?)),_=>Err(Error::Schema)}
+ }
+}
+fn history_write_guid(out:&mut Vec<u8>,guid:[u32;4]){for word in guid{out.extend(word.to_le_bytes())}}
+fn history_write_ticks(out:&mut Vec<u8>,ticks:Option<i64>){
+ out.push(u8::from(ticks.is_some()));out.extend(ticks.unwrap_or(0).to_le_bytes());
+}
+fn history_write_value(out:&mut Vec<u8>,v:AchievementValue){
+ out.push(u8::from(v.complete));out.extend(v.current.to_bits().to_le_bytes());
+ out.push(u8::from(v.completed.is_some()));
+ let (sec,nano)=v.completed.unwrap_or((0,0));
+ out.extend(sec.to_le_bytes());out.extend(nano.to_le_bytes());
+}
+fn history_write_optional_value(out:&mut Vec<u8>,v:Option<AchievementValue>){
+ out.push(u8::from(v.is_some()));
+ if let Some(v)=v{history_write_value(out,v)}else{out.extend([0u8;18]);}
+}
+impl Editor {
+ fn history_original_achievement(&self,guid:[u32;4])->Result<AchievementValue,Error>{
+  let model=self.slot.index.achievements.iter().find(|m|m.guid==guid).ok_or(Error::Schema)?;
+  achievement::value(model)
+ }
+ fn history_effective_achievement(&self,guid:[u32;4],created:bool,override_value:Option<AchievementValue>)->Result<AchievementValue,Error>{
+  if created{override_value.ok_or(Error::Schema)}
+  else{match override_value{Some(v)=>Ok(v),None=>self.history_original_achievement(guid)}}
+ }
+ /// Export exact native transactions, including paired achievement operations,
+ /// plus the positions of both scoped undo and redo stacks.
+ pub fn history_checkpoint(&self)->Result<Vec<u8>,Error>{
+  if self.undo.len()+self.redo.len()>MAX_UNDO{return Err(Error::Budget)}
+  let mut out=Vec::with_capacity(16+self.undo.len()*96+self.redo.len()*96);
+  out.extend(HISTORY_MAGIC);
+  out.extend(u32::try_from(self.undo.len()+self.redo.len()).map_err(|_|Error::Budget)?.to_le_bytes());
+  out.extend(u32::try_from(self.undo.len()).map_err(|_|Error::Budget)?.to_le_bytes());
+  for change in self.undo.iter().chain(self.redo.iter().rev()){
+   match *change {
+    Change::Collection{id,before,after}=>{
+     out.push(0);out.extend(id.to_le_bytes());
+     history_write_ticks(&mut out,before.unwrap_or_else(||self.base.get(&id).copied()));
+     history_write_ticks(&mut out,after.unwrap_or_else(||self.base.get(&id).copied()));
+    }
+    Change::Achievement{guid,before,after}=>{
+     out.push(1);history_write_guid(&mut out,guid);
+     history_write_value(&mut out,self.history_effective_achievement(guid,false,before)?);
+     history_write_value(&mut out,self.history_effective_achievement(guid,false,after)?);
+    }
+    Change::AchievementCreated{guid,before,after}=>{
+     if let Some(value)=before{
+      out.push(1);history_write_guid(&mut out,guid);
+      history_write_value(&mut out,value);
+      history_write_value(&mut out,after.ok_or(Error::Schema)?);
+     }else{
+      out.push(2);history_write_guid(&mut out,guid);
+      history_write_value(&mut out,after.ok_or(Error::Schema)?);
+     }
+    }
+    Change::AchievementCreatedPair{guid,value,parent:(pg,before,after)}=>{
+     out.push(3);history_write_guid(&mut out,guid);history_write_value(&mut out,value);
+     history_write_guid(&mut out,pg);
+     history_write_value(&mut out,self.history_effective_achievement(pg,false,before)?);
+     history_write_value(&mut out,self.history_effective_achievement(pg,false,after)?);
+    }
+    Change::AchievementParentNew{child:(guid,created,before,after),parent:(pg,value)}=>{
+     out.push(4);history_write_guid(&mut out,guid);
+     let old=if created{before}else{Some(self.history_effective_achievement(guid,false,before)?)};
+     history_write_optional_value(&mut out,old);
+     history_write_value(&mut out,self.history_effective_achievement(guid,created,after)?);
+     history_write_guid(&mut out,pg);history_write_value(&mut out,value);
+    }
+    Change::AchievementPair{first,second}=>{
+     out.push(5);
+     for (guid,created,before,after) in [first,second]{
+      history_write_guid(&mut out,guid);
+      history_write_value(&mut out,self.history_effective_achievement(guid,created,before)?);
+      history_write_value(&mut out,self.history_effective_achievement(guid,created,after)?);
+     }
+    }
+   }
+  }
+  if out.len()>HISTORY_MAX_BYTES{return Err(Error::Budget)}
+  Ok(out)
+ }
+ /// Atomic restore: the existing editor is unchanged on any parsing, source,
+ /// CAS, version, grouping, or timeline disagreement. The recovered operation
+ /// trail is roundtrip-compared byte-for-byte against the canonical native log.
+ pub fn restore_history(&mut self,checkpoint:&[u8])->Result<(),Error>{
+  if checkpoint.len()<16||checkpoint.len()>HISTORY_MAX_BYTES||self.dirty()||
+   self.can_undo()||self.can_redo(){return Err(Error::Schema)}
+  let mut r=HistoryCursor{bytes:checkpoint,pos:0};
+  if r.take(HISTORY_MAGIC.len())?!=HISTORY_MAGIC{return Err(Error::Schema)}
+  let count=r.u32()? as usize;
+  let active=r.u32()? as usize;
+  if count>MAX_UNDO||active>count{return Err(Error::Budget)}
+  let mut candidate=Self::open(self.original.clone())?;
+  let mut scopes=Vec::with_capacity(count);
+  for _ in 0..count{
+   let kind=r.byte()?;
+   match kind {
+    0=>{
+     let id=r.i32()?;let before=r.ticks()?;let after=r.ticks()?;
+     candidate.change(id,before,after)?;
+     scopes.push(HistoryScope::Collections);
+    }
+    1=>{
+     let guid=r.guid()?;let before=r.value()?;let after=r.value()?;
+     candidate.change_achievement(guid,before,after)?;
+     scopes.push(HistoryScope::Achievements);
+    }
+    2=>{
+     let guid=r.guid()?;let value=r.value()?;
+     candidate.create_achievement(guid,value)?;
+     scopes.push(HistoryScope::Achievements);
+    }
+    3=>{
+     let guid=r.guid()?;let child=r.value()?;let pg=r.guid()?;
+     let before=r.value()?;let after=r.value()?;
+     candidate.create_achievement_with_parent(guid,child,pg,before,after)?;
+     scopes.push(HistoryScope::Achievements);
+    }
+    4=>{
+     let guid=r.guid()?;let before=r.optional_value()?;let after=r.value()?;
+     let pg=r.guid()?;let parent=r.value()?;
+     candidate.complete_child_and_create_parent(guid,before,after,pg,parent)?;
+     scopes.push(HistoryScope::Achievements);
+    }
+    5=>{
+     let aguid=r.guid()?;let abefore=r.value()?;let anext=r.value()?;
+     let bguid=r.guid()?;let bbefore=r.value()?;let bnext=r.value()?;
+     candidate.change_achievement_pair((aguid,abefore,anext),(bguid,bbefore,bnext))?;
+     scopes.push(HistoryScope::Achievements);
+    }
+    _=>return Err(Error::Schema)
+   }
+  }
+  if r.pos!=checkpoint.len(){return Err(Error::Trailing)}
+  // Replay all edits, then undo exactly the saved global redo tail in reverse.
+  // This preserves both per-tab cursors AND the original redo ordering.
+  for scope in scopes[active..].iter().rev(){
+   if !candidate.undo_scope(*scope){return Err(Error::Schema)}
+  }
+  if candidate.history_checkpoint()?.as_slice()!=checkpoint{return Err(Error::Schema)}
+  *self=candidate;
+  Ok(())
+ }
+}

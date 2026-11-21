@@ -87,11 +87,11 @@ test('IndexedDB payload normalization deep-copies reactive GUIDs, timestamps and
    version:1,
    patches:[{id:17,before:null,after:'638000000000001234'}],
    achievementPatches:[expected],
-   ui:{group:'fish',subgroup:'nested'}
+   ui:{group:'fish',subgroup:'nested'},historyCheckpoint:null
   }}]);
   await store.saveDraftChanges(reactive([]),reactive({group:null,subgroup:null}),reactive([]));
   assert.deepEqual(writes.at(-1).payload,{version:1,patches:[],achievementPatches:[],
-   ui:{group:null,subgroup:null}});
+   ui:{group:null,subgroup:null},historyCheckpoint:null});
   assert.deepEqual(expected.after.completed,['1780000000',123456700]);
  }finally{
   if(old===undefined)delete globalThis.indexedDB;else globalThis.indexedDB=old;
@@ -108,11 +108,11 @@ test('tampered or duplicated achievement drafts cannot be persisted',()=>{
  assert.deepEqual(structuredClone(allowed),[expected]);
 });
 
-test('existing worker and save behavior are unaffected by the IndexedDB-only fix',()=>{
+test('worker values still use normalized draft payloads with native history checkpoints',()=>{
  const source=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  const worker=readFileSync(new URL('../src/worker-client.ts',import.meta.url),'utf8');
  assert.match(source,/diffAchievements\(achievementBaseline,snapshot\?\.achievements\?\?\[\]\)/);
- assert.match(source,/saveDraftChanges\(patches,ui,achievements\)/);
+ assert.match(source,/saveDraftChanges\(patches,ui,achievements,checkpoint\)/);
  assert.match(worker,/workerAchievementGuid\(guid\)/);
  assert.match(worker,/workerAchievementValue\(beforeValue\)/);
 });
