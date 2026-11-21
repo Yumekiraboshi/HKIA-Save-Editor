@@ -589,8 +589,8 @@
 </script>
 
 <svelte:head>
- <title>{activeTool==='achievements'?achCopy.title:copy.toolCollection} | Yumekiraboshi</title>
- <meta name="description" content="Local collection-history save editor"/>
+ <title>{activeTool==='achievements'?achCopy.title+' | HKIA Save Editor':'HKIA Save Editor'}</title>
+ <meta name="description" content="HKIA Save Editor — edit local collection history and achievements"/>
 </svelte:head>
 
 <div class="site-shell">
@@ -610,7 +610,7 @@
      <button type="button" class="icon-button" title={copy.redo} aria-label={copy.redo} disabled={busy||!snapshot.canRedo} onclick={()=>void actHistory('redo')}>↷</button>
     {/if}
     <details class="file-menu" bind:this={fileMenu}>
-     <summary class="bar-button">{copy.file} <span class="chevron">⌄</span></summary>
+     <summary class="bar-button">{copy.file}<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
      <div class="menu-popover">
       <button type="button" onclick={askFile}>{snapshot?copy.replace:copy.openFile}</button>
       {#if snapshot}
@@ -659,16 +659,13 @@
    {#if achievementGroupHierarchy && achievementGroupSelection!==null}
     <button type="button" class="back-link achievement-group-back" onclick={()=>showAchievementGroup(null)}>‹ {groupCopy.back}</button>
    {/if}
-   <div class="section-heading"><h1>{achievementGroupHierarchy&&achievementGroupSelection!==null?
-    achievementGroupSelection==='__unmapped'?groupCopy.uncategorized:achievementName(achievementGroupSelection,0):
-    achCopy.title}</h1><span class="category-count">{achCopy.completed}: {sourceOrderedAchievementRows.filter(r=>r.row?.value.complete===true).length.toLocaleString(locale)} / {sourceOrderedAchievementRows.filter(r=>r.row!==null).length.toLocaleString(locale)} · {achCopy.missing}: {sourceOrderedAchievementRows.filter(r=>r.row===null).length.toLocaleString(locale)}</span></div>
+   {#if achievementGroupHierarchy && achievementGroupSelection!==null}
+    <div class="section-heading"><h1>{achievementGroupSelection==='__unmapped'?groupCopy.uncategorized:achievementName(achievementGroupSelection,0)}</h1></div>
+   {/if}
    <div class="collection-controls">
-    <label class="search-field"><span class="search-symbol" aria-hidden="true">⌕</span><input type="search" bind:value={achievementQuery} oninput={()=>achievementLimit=BATCH_SIZE} placeholder={achCopy.search} aria-label={achCopy.search}/></label>
+    <label class="search-field"><svg class="search-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.75" cy="10.75" r="6.75"/><path d="m16 16 5 5"/></svg><input type="search" bind:value={achievementQuery} oninput={()=>achievementLimit=BATCH_SIZE} placeholder={achCopy.search} aria-label={achCopy.search}/></label>
    </div>
    {#if achievementGroupHierarchy && achievementGroupSelection===null && !achievementQuery.trim()}
-    <div class="achievement-group-heading">
-     <h2>{groupCopy.categories}</h2>
-    </div>
     <div class="category-grid achievement-category-grid">
      {#each achievementGroupSummaries as stat (stat.guid)}
       {@const art=achievementCategoryAtlas?.bySaveGuid.get(stat.guid)}
@@ -819,7 +816,7 @@
   {:else}
    <div class="collection-controls collection-search-controls">
     <label class="search-field">
-     <span class="search-symbol" aria-hidden="true">⌕</span>
+     <svg class="search-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.75" cy="10.75" r="6.75"/><path d="m16 16 5 5"/></svg>
      <input type="search" placeholder={copy.search} aria-label={copy.search} bind:value={query}
       oninput={()=>{collectionSearchDrilldown=false;visibleLimit=BATCH_SIZE}}/>
     </label>
