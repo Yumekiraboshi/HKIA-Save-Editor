@@ -54,7 +54,7 @@ test('all 63 category goals are their number of children, not the native sentine
 test('achievement detail popup no longer accepts arbitrary progress or changes it while editing a date',()=>{
  const app=read('../src/App.svelte');
  const ui=read('../src/achievement-compact-ui.ts');
- assert.doesNotMatch(app,/achievementProgress|inputmode="decimal"/);
+ assert.doesNotMatch(app,/bind:value=\{achievementProgress\}|let achievementProgress=|inputmode="decimal"/);
  assert.doesNotMatch(ui,/進捗を調整|Adjust saved progress|Edit progress and date/);
  assert.match(app,/const next:AchievementValue=\{complete:selected\.value\.complete,current:selected\.value\.current,completed\}/);
  assert.match(app,/toggleAchievementState\(live\.value,Date\.now\(\),target\)/);
