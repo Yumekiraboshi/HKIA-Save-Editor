@@ -2,7 +2,10 @@
  import {onMount,tick} from 'svelte';
  import {openSave,changeCollection,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot} from './worker-client';
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
- import {messages,editorErrors,type Locale} from './ui-copy';
+ import {editorErrors} from './ui-copy';
+ import {supportedLocales,isLocale,detectLocale,isRtl,type Locale,type LanguagePref} from './locales';
+ import {localizedCopy} from './ui-locales';
+ import {loadLocaleIndex,loadGameLabels,EMPTY_LABELS,type GameLabels} from './game-localization';
  import {loadIconPack,type IconPack} from './icon-packs';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
@@ -10,7 +13,6 @@
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
  type Filter='all'|'recorded'|'unrecorded';
- type LanguagePref='auto'|Locale;
  type ThemePref='system'|'light'|'dark';
  const BATCH_SIZE=40;
  const EPOCH=621355968000000000n;
@@ -44,12 +46,15 @@
  let loadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
  let languagePref:LanguagePref=$state('auto');
  let browserLanguage:Locale=$state('ja');
+ let availableGameLocales:Locale[]=$state([]);
+ let gameLabels:GameLabels=$state(EMPTY_LABELS);
+ let languageLoadEpoch=0;
  let themePref:ThemePref=$state('system');
  let prefersDark=$state(false);
  let fileInput:HTMLInputElement;
  let fileMenu:HTMLDetailsElement;
  const locale=$derived(languagePref==='auto'?browserLanguage:languagePref);
- const copy=$derived(messages[locale]);
+ const copy=$derived(localizedCopy(locale));
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
@@ -62,10 +67,10 @@
  const dateChanged=$derived(dateDialogTick!==null&&dateValue!==toDateTimeValue(dateDialogTick));
 
  onMount(()=>{
-  browserLanguage=(navigator.languages.find(l=>l.toLowerCase().startsWith('ja')||l.toLowerCase().startsWith('en'))??navigator.language??'ja').toLowerCase().startsWith('en')?'en':'ja';
+  browserLanguage=detectLocale(navigator.languages?.length?navigator.languages:[navigator.language||'en']);
   try{
    const savedLang=localStorage.getItem('hkia-display-locale');
-   if(savedLang==='auto'||savedLang==='ja'||savedLang==='en')languagePref=savedLang;
+   if(savedLang==='auto'||(savedLang&&isLocale(savedLang)))languagePref=savedLang;
    const savedTheme=localStorage.getItem('hkia-display-theme');
    if(savedTheme==='system'||savedTheme==='light'||savedTheme==='dark')themePref=savedTheme;
   }catch{}
@@ -76,6 +81,7 @@
   void restoreSession();
   const beforeUnload=(e:BeforeUnloadEvent)=>{if(snapshot?.dirty&&(!draftReady||busy)){e.preventDefault();e.returnValue='';}};
   window.addEventListener('beforeunload',beforeUnload);
+  void loadLocaleIndex(import.meta.env.BASE_URL).then(available=>availableGameLocales=available).catch(()=>{});
   fetch(import.meta.env.BASE_URL+'catalog.json')
    .then(r=>r.ok?r.json():Promise.reject(Error('Collection catalog unavailable')))
    .then((v:Catalog)=>{
@@ -86,7 +92,16 @@
   return ()=>{media.removeEventListener?.('change',listener);window.removeEventListener('beforeunload',beforeUnload);iconEpoch++;iconPack?.dispose()};
  });
  $effect(()=>{
-  if(typeof document!=='undefined'){document.documentElement.lang=locale;document.documentElement.dataset.theme=actualTheme;}
+  if(typeof document!=='undefined'){document.documentElement.lang=locale;document.documentElement.dir=isRtl(locale)?'rtl':'ltr';document.documentElement.dataset.theme=actualTheme;}
+ });
+ $effect(()=>{
+  const current=locale;
+  const available=availableGameLocales.includes(current);
+  const epoch=++languageLoadEpoch;
+  gameLabels=EMPTY_LABELS;
+  if(available)void loadGameLabels(current,import.meta.env.BASE_URL)
+   .then(labels=>{if(epoch===languageLoadEpoch)gameLabels=labels})
+   .catch(()=>{if(epoch===languageLoadEpoch)gameLabels=EMPTY_LABELS});
  });
  const categories=$derived.by(()=>{
   if(!catalog)return [];
@@ -108,13 +123,13 @@
   if(!catalog||!selectedGroup||!activeSubgroup)return [] as Item[];
   const q=query.trim().toLocaleLowerCase();
   const filtered=catalog.items.filter(item=>{
-   if(item[3]!==selectedGroup||item[2]!==activeSubgroup||!item[5]||!item[6])return false;
+   if(item[3]!==selectedGroup||item[2]!==activeSubgroup||!nameFor(item))return false;
    if(!showVariants&&item[0]!==item[7])return false;
    const has=showVariants?recorded[String(item[0])]!==undefined:(families[String(item[7]||item[0])]?.length??0)>0;
    if(filter==='recorded'&&!has||filter==='unrecorded'&&has)return false;
-   return !q||item[5]!.toLocaleLowerCase().includes(q)||item[6]!.toLocaleLowerCase().includes(q);
+   return !q||nameFor(item).toLocaleLowerCase().includes(q)||item[5]?.toLocaleLowerCase().includes(q)||item[6]?.toLocaleLowerCase().includes(q);
   });
-  filtered.sort((a,b)=>String(locale==='ja'?a[6]:a[5]).localeCompare(String(locale==='ja'?b[6]:b[5]),locale));
+  filtered.sort((a,b)=>nameFor(a).localeCompare(nameFor(b),locale));
   return filtered;
  });
  const visibleItems=$derived(matching.slice(0,visibleLimit));
@@ -127,8 +142,8 @@
   observer.observe(el);
   return ()=>observer.disconnect();
  });
- const unnamed=$derived((catalog as Catalog | null)?.items.filter((x:Item)=>!x[5]||!x[6]).length??0);
- function describeError(e:unknown){const raw=e instanceof Error?e.message:String(e);return editorErrors[locale][raw]??(locale==='ja'?(raw||copy.unknown):copy.unknown);}
+ const unnamed=$derived((catalog as Catalog | null)?.items.filter((x:Item)=>!nameFor(x)).length??0);
+ function describeError(e:unknown){const raw=e instanceof Error?e.message:String(e);return editorErrors[locale==='ja'?'ja':'en'][raw]??(locale==='ja'?(raw||copy.unknown):copy.unknown);}
  function setLanguage(v:LanguagePref){
   languagePref=v;try{localStorage.setItem('hkia-display-locale',v)}catch{}
  }
@@ -136,7 +151,7 @@
   themePref=v;try{localStorage.setItem('hkia-display-theme',v)}catch{}
  }
  function titleFor(g:Group){return locale==='ja'?g[1]:g[2]}
- function nameFor(item:Item){return (locale==='ja'?item[6]:item[5])??''}
+ function nameFor(item:Item){return gameLabels.names[String(item[0])]??(locale==='ja'?item[6]??item[5]:item[5]??item[6])??''}
  function selectCategory(key:string){
   selectedGroup=key;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
   query='';filter='all';editId=null;error='';
@@ -356,7 +371,10 @@
     <label class="header-select" title={copy.language}>
      <span class="visually-hidden">{copy.language}</span>
      <select aria-label={copy.language} value={languagePref} onchange={e=>setLanguage(e.currentTarget.value as LanguagePref)}>
-      <option value="auto">{copy.system}</option><option value="ja">日本語</option><option value="en">English</option>
+      <option value="auto">{copy.system}</option>
+      {#each supportedLocales as language (language.code)}
+       <option value={language.code}>{language.label}</option>
+      {/each}
      </select>
     </label>
     <label class="header-select theme-select" title={copy.theme}>
