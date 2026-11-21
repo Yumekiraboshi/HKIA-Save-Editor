@@ -120,3 +120,50 @@ fn synthetic_archive_other_members_byte_exact(){
  assert_eq!(Editor::open(source.clone()).unwrap().value(2),Some(638000000000000001));
  let mut corrupt=source;corrupt[45]^=0x80;assert!(Editor::open(corrupt).is_err());
 }
+
+#[test]
+fn achievement_only_and_mixed_edits_roundtrip_with_undo_and_zip_isolation(){
+ use hkia_save_core::achievement::AchievementValue;
+ let guid=[1,0,0,1];
+ let base=AchievementValue{complete:false,current:1.0,completed:None};
+ let done=AchievementValue{complete:true,current:2.0,completed:Some((1_750_000_000,123_456_700))};
+ for version in ["3.0.0","3.0.1"] {
+  for zipped in [false,true] {
+   let raw=slot(version);
+   let original=if zipped{zip(&raw)}else{raw.clone()};
+   let mut editor=Editor::open(original.clone()).unwrap();
+   assert_eq!(editor.achievement_value(guid),Some(base));
+   assert!(editor.change_achievement([9,0,0,9],base,done).is_err());
+   assert!(editor.change_achievement(guid,done,base).is_err());
+   assert!(editor.change_achievement(guid,base,AchievementValue{current:f32::NAN,..done}).is_err());
+   editor.change_achievement(guid,base,done).unwrap();
+   assert_eq!(editor.achievement_value(guid),Some(done));
+   assert!(editor.dirty());
+   let completed=editor.export().unwrap();
+   let read=Editor::open(completed).unwrap();
+   assert_eq!(read.achievement_value(guid),Some(done));
+   assert_eq!(read.value(2),Some(638000000000000001));
+   assert!(editor.undo());assert_eq!(editor.achievement_value(guid),Some(base));
+   assert!(!editor.dirty());assert!(editor.redo());
+   editor.change(2,Some(638000000000000001),Some(638000000020000001)).unwrap();
+   let mixed=editor.export().unwrap();
+   let after=Editor::open(mixed.clone()).unwrap();
+   assert_eq!(after.achievement_value(guid),Some(done));
+   assert_eq!(after.value(2),Some(638000000020000001));
+   if zipped {
+    let before_zip=ZipIndex::parse(&original).unwrap();
+    let after_zip=ZipIndex::parse(&mixed).unwrap();
+    for (a,b) in before_zip.entries.iter().zip(after_zip.entries.iter()){
+     if a.name!=SLOT{
+      assert_eq!(a.name,b.name);
+      assert_eq!(&original[a.local.clone()],&mixed[b.local.clone()]);
+     }
+    }
+   }
+   assert!(editor.undo());assert_eq!(editor.value(2),Some(638000000000000001));
+   assert_eq!(editor.achievement_value(guid),Some(done));
+   assert!(editor.undo());assert!(!editor.dirty());
+   assert_eq!(original,if zipped{zip(&slot(version))}else{slot(version)});
+  }
+ }
+}

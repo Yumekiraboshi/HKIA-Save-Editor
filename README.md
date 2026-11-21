@@ -2,13 +2,14 @@
 
 **[Open the editor](https://yumekiraboshi.github.io/HKIA-Save-Editor/)**
 
-A browser-local collection-history editor for Hello Kitty Island Adventure. The interface is based on the game's 25 collection groups rather than a flat raw ItemId list.
+A browser-local collection-history and achievement-state editor for Hello Kitty Island Adventure. Collection browsing uses the game's 25 collection groups rather than a flat ItemId list.
 
 ## Interface
 
 - Game-derived collection categories, with 25 local category images and their real sub-collections from each item's collection ID. Subcategory cards reuse representative local item sprites.
 - Select a category and (where applicable) a subcategory before browsing items. Search names in Japanese or English in the continuously loading list.
 - Show base collection items by default instead of mixing color/size variations into the checklist. An optional variation toggle preserves individual variant-history editing. Edit collection-history membership or recorded date in a modal where structural constraints allow it.
+- Separate Collections and Achievements tabs. Achievement records are read from the save and can be edited for completion state, floating-point progress and completion time. The real in-game achievement titles are not mapped to save GUIDs yet, so the UI uses ordinal placeholders rather than inventing labels.
 - Compact header for the active tool, loading another file, downloading the **unchanged original** backup, downloading an edited copy, undo/redo, language and light/dark/system theme.
 - Browser-language detection and manual Japanese/English language selection; display preferences and the active editing session are stored locally for recovery after a refresh.
 - No raw item IDs, internal keys, GUIDs, or technical tokens in normal item and category views.
@@ -21,10 +22,10 @@ The 3.0.1 collection membership IDs were joined against a separately sourced ite
 
 - Only game SaveGameV2 3.0.0/3.0.1 slot or supported ZIP backups are accepted.
 - Data is processed in Rust/WebAssembly inside a Web Worker, entirely in the browser. The original remains untouched. No save is uploaded.
-- Changes are limited to the **collection history (Key1)**, not ownership, items in inventory, achievements, quests, rewards, DLC entitlements or other linked systems.
+- Changes are limited to **collection history (Key1)** and existing **AchievementModel** state fields (completion, progress, completion date). Achievement/GameCounter linkages, quest/reward unlocks, inventory, DLC entitlements, and other linked systems are **not** modified. In-game synchronization of achievement changes is not proven.
 - An existing legacy Key0 map blocks add/remove; editing an existing saved timestamp remains available.
 - New v3.0.1 history additions are further gated in Rust to confirmed collection IDs without identified DLC/event group restrictions.
-- Synthetic native Save and ZIP tests, compiled WASM save roundtrip, Svelte/TypeScript checks and page builds run in CI. **Real-game acceptance and the behavior of edited genuine saves remain unverified.**
+- Synthetic native Save and ZIP tests, achievement mutation/undo/re-export/reopen tests, compiled WASM save roundtrip, Svelte/TypeScript checks and page builds run in CI. **Real-game acceptance and the behavior of edited genuine saves remain unverified.**
 - Keep an untouched backup before testing edited saves.
 
 ## Development
@@ -54,7 +55,7 @@ Unofficial tool. Not affiliated with Sunblink, Sanrio or the game's publishers.
 
 The language selector offers all 16 Babel locales present in the supplied game assets: `ar`, `de`, `en`, `en-GB`, `es`, `fr`, `fr-CA`, `it`, `ja`, `ko`, `nl`, `pt-BR`, `ru`, `tr`, `zh-Hans`, `zh-Hant`. Browser language matching, remembered selection and Arabic right-to-left layout are supported. Common editor actions have language-specific labels; remaining editor-owned copy falls back to English until reviewed translations are available.
 
-The game text system is shared across tools. The editor accepts on-demand Babel string dictionaries keyed by native 64-bit string ID, with a separate item-to-string crosswalk. A future Achievements tab can use the same ID-based dictionaries without duplicating images or game text. Only the selected locale is fetched.
+The game text system is shared across tools. The editor accepts on-demand Babel string dictionaries keyed by native 64-bit string ID, with a separate item-to-string crosswalk. The Achievements tab uses the shared locale selection; a verified achievement GUID-to-Babel-ID crosswalk is still required before displaying native achievement titles. Only the selected locale is fetched.
 
 To build the item dictionaries locally, put the legally obtained Babel language folders directly under `<BABEL_DIR>/`, e.g. `<BABEL_DIR>/ja/ja.manifest`, `ja.100.txt`, `ja.200.txt`, `ja.300.txt`, and run:
 

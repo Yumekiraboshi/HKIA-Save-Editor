@@ -1,5 +1,6 @@
 use crate::{archive::{ZipIndex,SLOT,ACCOUNT,MAX_ARCHIVE,crc32},envelope::Version,read_slot,ReadSlot,Error,MAX_INPUT,MAX_DECODED,MAX_BLOCK,MAX_BLOCKS,decode_block};
 use crate::wire::{Cursor,Token};
+use crate::achievement::{self,AchievementValue,AchievementEntry};
 use std::{collections::{HashMap,HashSet},ops::Range};
 
 const MAX_TICKS:i64=3_155_378_975_999_999_999;
@@ -8,7 +9,10 @@ const MAX_UNDO:usize=256;
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub struct Entry {pub id:i32,pub ticks:i64}
 #[derive(Clone,Copy,Debug)]
-struct Change {id:i32, before:Option<Option<i64>>, after:Option<Option<i64>>}
+enum Change {
+ Collection{id:i32,before:Option<Option<i64>>,after:Option<Option<i64>>},
+ Achievement{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
+}
 
 pub struct Editor {
  original:Vec<u8>,
@@ -18,6 +22,7 @@ pub struct Editor {
  base:HashMap<i32,i64>,
  entries:Vec<Entry>,
  changes:HashMap<i32,Option<i64>>,
+ achievement_changes:HashMap<[u32;4],AchievementValue>,
  undo:Vec<Change>,
  redo:Vec<Change>,
  revision:u32,
@@ -42,7 +47,7 @@ impl Editor {
    if base.insert(row.id,row.ticks).is_some(){return Err(Error::Duplicate)}
    entries.push(Entry{id:row.id,ticks:row.ticks});
   }
-  Ok(Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0})
+  Ok(Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),achievement_changes:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0})
  }
  fn compatible(slot:&ReadSlot)->bool{
   let n=slot.index.collection_version.as_ref().map(|v|v.number);
@@ -66,7 +71,16 @@ impl Editor {
  pub fn value(&self,id:i32)->Option<i64>{
   match self.changes.get(&id){Some(v)=>*v,None=>self.base.get(&id).copied()}
  }
- pub fn dirty(&self)->bool {!self.changes.is_empty()}
+ pub fn achievements(&self)->Vec<AchievementEntry>{
+  self.slot.index.achievements.iter().filter_map(|model|{
+   let value=self.achievement_changes.get(&model.guid).copied().or_else(||achievement::value(model).ok())?;
+   Some(AchievementEntry{guid:model.guid,value})
+  }).collect()
+ }
+ pub fn achievement_value(&self,guid:[u32;4])->Option<AchievementValue>{
+  self.achievement_changes.get(&guid).copied().or_else(||self.slot.index.achievements.iter().find(|m|m.guid==guid).and_then(|m|achievement::value(m).ok()))
+ }
+ pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.achievement_changes.is_empty()}
  pub fn can_undo(&self)->bool {!self.undo.is_empty()}
  pub fn can_redo(&self)->bool {!self.redo.is_empty()}
  pub fn can_change_membership(&self)->bool {self.slot.index.deprecated_map.is_some() && self.slot.index.deprecated_count==0 && self.slot.index.deprecated.is_empty()}
@@ -79,39 +93,76 @@ impl Editor {
   let before=self.changes.get(&id).copied();
   let after=if self.base.get(&id).copied()==next {None}else{Some(next)};
   match after {Some(t)=>{self.changes.insert(id,t);},None=>{self.changes.remove(&id);}}
-  self.undo.push(Change{id,before,after});if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
+  self.undo.push(Change::Collection{id,before,after});if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
   self.redo.clear();self.revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   Ok(())
  }
- fn restore(&mut self,id:i32,state:Option<Option<i64>>){
-  match state {Some(v)=>{self.changes.insert(id,v);},None=>{self.changes.remove(&id);}}
+ pub fn change_achievement(&mut self,guid:[u32;4],expected:AchievementValue,next:AchievementValue)->Result<(),Error>{
+  if !achievement::valid(next) || expected==next || self.achievement_value(guid)!=Some(expected){return Err(Error::Schema)}
+  let model=self.slot.index.achievements.iter().find(|m|m.guid==guid).ok_or(Error::Schema)?;
+  let original=achievement::value(model)?;
+  let before=self.achievement_changes.get(&guid).copied();
+  let after=if next==original{None}else{Some(next)};
+  match after {Some(v)=>{self.achievement_changes.insert(guid,v);},None=>{self.achievement_changes.remove(&guid);}}
+  self.undo.push(Change::Achievement{guid,before,after});
+  if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
+  self.redo.clear();self.revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  Ok(())
+ }
+ fn restore_change(&mut self,change:&Change,reverse:bool){
+  match *change {
+   Change::Collection{id,before,after}=>{
+    match if reverse{before}else{after}{
+     Some(v)=>{self.changes.insert(id,v);},None=>{self.changes.remove(&id);}
+    }
+   },
+   Change::Achievement{guid,before,after}=>{
+    match if reverse{before}else{after}{
+     Some(v)=>{self.achievement_changes.insert(guid,v);},None=>{self.achievement_changes.remove(&guid);}
+    }
+   }
+  }
  }
  pub fn undo(&mut self)->bool {
   let Some(change)=self.undo.pop() else{return false};
-  self.restore(change.id,change.before);self.redo.push(change);
+  self.restore_change(&change,true);self.redo.push(change);
   self.revision=self.revision.wrapping_add(1);true
  }
  pub fn redo(&mut self)->bool {
   let Some(change)=self.redo.pop() else{return false};
-  self.restore(change.id,change.after);self.undo.push(change);
+  self.restore_change(&change,false);self.undo.push(change);
   self.revision=self.revision.wrapping_add(1);true
  }
- pub fn reset(&mut self){self.changes.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
+ pub fn reset(&mut self){self.changes.clear();self.achievement_changes.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
  pub fn export(&self)->Result<Vec<u8>,Error>{
   if !self.dirty(){return Err(Error::Schema)}
-  let expected=self.entries();
-  let map=self.slot.index.collection_map.clone().ok_or(Error::Schema)?;
   let original_payload=&self.slot.envelope.decoded;
-  let next_payload=replace_map(original_payload,map.clone(),&self.slot.index.collections,&expected)?;
+  let mut patches:Vec<achievement::Replacement>=Vec::new();
+  if !self.changes.is_empty(){
+   let map=self.slot.index.collection_map.clone().ok_or(Error::Schema)?;
+   let updated=replace_map(original_payload,map.clone(),&self.slot.index.collections,&self.entries())?;
+   let inserted=updated.len().checked_sub(original_payload.len()-map.len()).ok_or(Error::Overflow)?;
+   if updated[..map.start]!=original_payload[..map.start]||updated[map.start+inserted..]!=original_payload[map.end..]{return Err(Error::Schema)}
+   patches.push((map.clone(),updated[map.start..map.start+inserted].to_vec()));
+  }
+  for model in &self.slot.index.achievements {
+   if let Some(value)=self.achievement_changes.get(&model.guid){
+    patches.extend(achievement::replacements(model,*value)?);
+   }
+  }
+  let (next_payload,first)=achievement::splice(original_payload,patches)?;
   if next_payload==*original_payload{return Err(Error::Schema)}
-  let new_slot=encode_slot(&self.slot_raw,&self.slot,&next_payload,map.start)?;
+  let new_slot=encode_slot(&self.slot_raw,&self.slot,&next_payload,first)?;
   let reread=read_slot(&new_slot)?;
-  if !Self::compatible(&reread)||reread.envelope.version!=self.slot.envelope.version {return Err(Error::Schema)}
+  if !Self::compatible(&reread)||reread.envelope.version!=self.slot.envelope.version{return Err(Error::Schema)}
+  let expected=self.entries();
   if reread.index.collections.len()!=expected.len() ||
-    !reread.index.collections.iter().zip(&expected).all(|(r,e)|r.id==e.id&&r.ticks==e.ticks) {return Err(Error::Schema)}
-  let newmap=reread.index.collection_map.clone().ok_or(Error::Schema)?;
-  if original_payload[..map.start]!=reread.envelope.decoded[..newmap.start] ||
-    original_payload[map.end..]!=reread.envelope.decoded[newmap.end..] {return Err(Error::Schema)}
+   !reread.index.collections.iter().zip(&expected).all(|(r,e)|r.id==e.id&&r.ticks==e.ticks) {return Err(Error::Schema)}
+  let expected_achievements=self.achievements();
+  if reread.index.achievements.len()!=expected_achievements.len() ||
+   !reread.index.achievements.iter().zip(&expected_achievements).all(|(r,e)|r.guid==e.guid&&achievement::value(r).ok()==Some(e.value)){return Err(Error::Schema)}
+  if reread.index.counters.len()!=self.slot.index.counters.len() ||
+   !reread.index.counters.iter().zip(&self.slot.index.counters).all(|(a,b)|a.guid==b.guid&&a.state==b.state){return Err(Error::Schema)}
   if self.zip.is_none(){return Ok(new_slot)}
   let zip=self.zip.as_ref().unwrap();
   let candidate=replace_zip(&self.original,zip,&new_slot)?;
@@ -129,6 +180,7 @@ impl Editor {
   }
   Ok(candidate)
  }
+
 }
 
 fn mp_map_len(n:usize)->Result<Vec<u8>,Error>{

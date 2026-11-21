@@ -41,6 +41,23 @@ function snapshot(){
  return {entries,dirty:b[2],canUndo:b[3],canRedo:b[4]};
 }
 load(slot);
+assert.equal(e.hkia_achievement_snapshot(),0);
+assert.equal(e.hkia_reply_len(),38);
+const ag=[1,0,0,1];
+assert.equal(e.hkia_achievement_change(...ag,0,1,0n,0,0,1,2,1750000000n,123456700,1),0);
+assert.equal(e.hkia_achievement_change(...ag,0,1,0n,0,0,1,2,1750000000n,123456700,1),1);
+assert.equal(e.hkia_export(),0);
+const achievementOutput=new Uint8Array(e.memory.buffer,e.hkia_output_ptr(),e.hkia_output_len()).slice();
+e.hkia_clear();load(achievementOutput);
+assert.equal(e.hkia_achievement_snapshot(),0);
+const achBytes=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+assert.equal(achBytes.getUint32(0,true),1);
+assert.equal(achBytes.getUint8(20),1);
+assert.equal(achBytes.getFloat32(21,true),2);
+assert.equal(achBytes.getUint8(25),1);
+assert.equal(achBytes.getBigInt64(26,true),1750000000n);
+assert.equal(achBytes.getUint32(34,true),123456700);
+e.hkia_clear();load(slot);
 assert.equal(snapshot().entries.get(2),638000000000000001n);
 assert.equal(e.hkia_change(2,1,638000000000000001n,1,638000000010000001n),0);
 assert.equal(e.hkia_change(2,1,638000000000000001n,1,638000000020000001n),1);

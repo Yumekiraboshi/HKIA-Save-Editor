@@ -1,3 +1,6 @@
+export type AchievementValue={complete:boolean;current:number;completed:[bigint,number]|null};
+export type AchievementEntry={guid:[number,number,number,number];value:AchievementValue};
+export type AchievementPatch={guid:[number,number,number,number];before:AchievementValue;after:AchievementValue};
 export type SaveSnapshot={
  version:'3.0.0'|'3.0.1';
  zip:boolean;
@@ -8,8 +11,9 @@ export type SaveSnapshot={
  revision:number;
  bytes:number;
  entries:Array<[number,bigint]>;
+ achievements:AchievementEntry[];
 };
-type Action='open'|'snapshot'|'change'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'achievement'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -36,6 +40,9 @@ export async function openSave(file:File):Promise<SaveSnapshot>{
 export function changeCollection(itemId:number,expected:bigint|null,next:bigint|null):Promise<SaveSnapshot>{
  return rpc('change',{itemId,expected,next}) as Promise<SaveSnapshot>;
 }
+export function changeAchievement(guid:AchievementEntry['guid'],beforeValue:AchievementValue,afterValue:AchievementValue):Promise<SaveSnapshot>{
+ return rpc('achievement',{guid,beforeValue,afterValue}) as Promise<SaveSnapshot>;
+}
 export function undo():Promise<SaveSnapshot>{return rpc('undo') as Promise<SaveSnapshot>}
 export function redo():Promise<SaveSnapshot>{return rpc('redo') as Promise<SaveSnapshot>}
 export function reset():Promise<SaveSnapshot>{return rpc('reset') as Promise<SaveSnapshot>}
@@ -43,4 +50,4 @@ export function exportSave():Promise<Uint8Array>{return rpc('export') as Promise
 export function clear():Promise<unknown>{return rpc('clear')}
 
 export type ChangeRequest={id:number;before:bigint|null;after:bigint|null};
-export function applyDraft(patches:ChangeRequest[]):Promise<SaveSnapshot>{return rpc('batch',{patches}) as Promise<SaveSnapshot>}
+export function applyDraft(patches:ChangeRequest[],achievementPatches:AchievementPatch[]=[]):Promise<SaveSnapshot>{return rpc('batch',{patches,achievementPatches}) as Promise<SaveSnapshot>}

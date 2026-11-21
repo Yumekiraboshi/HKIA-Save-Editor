@@ -1,7 +1,9 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot} from './worker-client';
+ import {openSave,changeCollection,changeAchievement,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue} from './worker-client';
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
+ import {diffAchievements,decodeAchievementDraft} from './achievement-draft';
+ import {achievementCopy} from './achievement-ui';
  import {editorErrors} from './ui-copy';
  import {supportedLocales,isLocale,detectLocale,isRtl,type Locale,type LanguagePref} from './locales';
  import {localizedCopy} from './ui-locales';
@@ -13,10 +15,22 @@
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
  type Filter='all'|'recorded'|'unrecorded';
+ type Tool='collections'|'achievements';
  type ThemePref='system'|'light'|'dark';
  const BATCH_SIZE=40;
  const EPOCH=621355968000000000n;
  const ICONS=import.meta.env.BASE_URL+'icons/';
+ let activeTool:Tool=$state('collections');
+ let achievementFilter:'all'|'completed'|'incomplete'=$state('all');
+ let achievementLimit=$state(BATCH_SIZE);
+ let editingAchievement:AchievementEntry|null=$state(null);
+ let achievementDialogEl:HTMLDialogElement|undefined=$state();
+ let achievementReturnFocus:HTMLElement|null=null;
+ let achievementProgress=$state('');
+ let achievementComplete=$state(false);
+ let achievementDate=$state('');
+ let achievementValidation=$state('');
+ let achievementBaseline:AchievementEntry[]=[];
  let catalog:Catalog|null=$state(null);
  let snapshot:SaveSnapshot|null=$state(null);
  let original:File|null=$state(null);
@@ -55,8 +69,11 @@
  let fileMenu:HTMLDetailsElement;
  const locale=$derived(languagePref==='auto'?browserLanguage:languagePref);
  const copy=$derived(localizedCopy(locale));
+ const achCopy=$derived(achievementCopy(locale));
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
+ const achievementRows=$derived(((snapshot as SaveSnapshot|null)?.achievements??[]).map((row:AchievementEntry,index:number)=>({row,index:index+1})).filter(x=>
+  achievementFilter==='all'||(achievementFilter==='completed'?x.row.value.complete:!x.row.value.complete)));
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
  const subgroups=$derived(selectedGroup?listSubcategories((catalog as Catalog|null)?.items??[],selectedGroup,recorded,locale):[]);
  const activeSubgroup=$derived(subgroups.length===1?subgroups[0].key:subgroups.some(s=>s.key===selectedSubgroup)?selectedSubgroup:null);
@@ -169,7 +186,7 @@
   if(snapshot)void persistDraft();
  }
  function goHome(){
-  selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
+  activeTool='collections';selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
   editId=null;query='';filter='all';iconEpoch++;iconLoadingGroup=null;iconPack?.dispose();iconPack=null;iconError=false;
   if(snapshot)void persistDraft();
  }
@@ -189,8 +206,9 @@
  function persistDraft():Promise<void>{
   if(!original)return Promise.resolve();
   const patches=diffPatches(baseline,recorded);
+  const achievements=diffAchievements(achievementBaseline,snapshot?.achievements??[]);
   const ui={group:selectedGroup,subgroup:selectedSubgroup};
-  const job=draftWrites.catch(()=>{}).then(()=>saveDraftChanges(patches,ui));
+  const job=draftWrites.catch(()=>{}).then(()=>saveDraftChanges(patches,ui,achievements));
   draftWrites=job;
   return job.then(()=>{draftReady=true;draftWarning=false},()=>{draftReady=false;draftWarning=true});
  }
@@ -207,8 +225,9 @@
      if((originalRows.get(p.id)??null)!==before)throw Error('DRAFT_CONFLICT');
      return {id:p.id,before,after};
     });
-    const session=patches.length?await applyDraft(patches):s;
-    original=draft.file;baseline=originalRows;update(session);
+    const achievementPatches=decodeAchievementDraft(draft.achievementPatches,s.achievements);
+    const session=patches.length||achievementPatches.length?await applyDraft(patches,achievementPatches):s;
+    original=draft.file;baseline=originalRows;achievementBaseline=s.achievements;update(session);
     selectedGroup=draft.ui.group;selectedSubgroup=draft.ui.subgroup;
     if(draft.ui.group)void fetchImages(draft.ui.group);
    }
@@ -227,6 +246,8 @@
   const priorFile=original;
   const priorBaseline=baseline;
   const priorRecorded=recorded;
+  const priorAchievements=snapshot?.achievements??[];
+  const priorAchievementBaseline=achievementBaseline;
   const priorGroup=selectedGroup;
   const priorSubgroup=selectedSubgroup;
   const priorVariants=showVariants;
@@ -235,7 +256,7 @@
    if(file.size>60*1024*1024||file.size===0)throw Error(copy.typeIssue);
    await draftWrites.catch(()=>{});
    const session=await openSave(file);
-   original=file;baseline=new Map(session.entries);update(session);
+   original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;update(session);
    selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';filter='all';
    iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;
    try{await saveOriginalLocally(file);draftReady=true;draftWarning=false}
@@ -250,12 +271,14 @@
       before:p.before===null?null:BigInt(p.before),
       after:p.after===null?null:BigInt(p.after)
      }));
-     const previous=patches.length?await applyDraft(patches):opened;
-     original=priorFile;baseline=priorBaseline;update(previous);
+     const achievementPatches=diffAchievements(priorAchievementBaseline,priorAchievements);
+     const decodedAchievements=decodeAchievementDraft(achievementPatches,opened.achievements);
+     const previous=patches.length||decodedAchievements.length?await applyDraft(patches,decodedAchievements):opened;
+     original=priorFile;baseline=priorBaseline;achievementBaseline=priorAchievementBaseline;update(previous);
      selectedGroup=priorGroup;selectedSubgroup=priorSubgroup;showVariants=priorVariants;visibleLimit=BATCH_SIZE;
      if(priorGroup&&(!iconPack||iconPack.group!==priorGroup))void fetchImages(priorGroup);
     }catch{
-     original=null;snapshot=null;recorded={};baseline=new Map();
+     original=null;snapshot=null;recorded={};baseline=new Map();achievementBaseline=[];
      selectedGroup=null;selectedSubgroup=null;showVariants=false;iconEpoch++;iconPack?.dispose();iconPack=null;
     }
    }
@@ -298,7 +321,7 @@
   if(!snapshot||busy)return;
   if(snapshot.dirty&&!confirm(copy.discard))return;
   busy=true;error='';
-  try{await draftWrites.catch(()=>{});await forgetLocalDraft();await clear();snapshot=null;original=null;recorded={};baseline=new Map();goHome();draftReady=true;draftWarning=false;}
+  try{await draftWrites.catch(()=>{});await forgetLocalDraft();await clear();snapshot=null;original=null;recorded={};baseline=new Map();achievementBaseline=[];editingAchievement=null;goHome();draftReady=true;draftWarning=false;}
   catch(e){error=e instanceof Error?e.message:copy.unknown}
   finally{busy=false}
  }
@@ -334,10 +357,63 @@
   if(success)closeDateDialog();
   else dateValidation=error||copy.fileError;
  }
+
+ function formatAchievementDate(value:AchievementValue):string{
+  if(!value.completed)return '';
+  const ms=Number(value.completed[0])*1000+Math.floor(value.completed[1]/1_000_000);
+  const date=new Date(ms);
+  if(!Number.isFinite(date.getTime()))return '';
+  const pad=(v:number)=>String(v).padStart(2,'0');
+  return date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate())+'T'+pad(date.getHours())+':'+pad(date.getMinutes())+':'+pad(date.getSeconds());
+ }
+ async function openAchievement(row:AchievementEntry,opener:HTMLElement){
+  if(busy)return;
+  editingAchievement=row;achievementReturnFocus=opener;
+  achievementComplete=row.value.complete;
+  achievementProgress=String(row.value.current);
+  achievementDate=formatAchievementDate(row.value)||formatAchievementDate({complete:true,current:0,completed:[BigInt(Math.floor(Date.now()/1000)),0]});
+  achievementValidation='';
+  await tick();
+  if(achievementDialogEl&&!achievementDialogEl.open)achievementDialogEl.showModal();
+ }
+ function closeAchievement(){if(achievementDialogEl?.open)achievementDialogEl.close()}
+ function onAchievementDialogClosed(){
+  editingAchievement=null;achievementValidation='';
+  const focus=achievementReturnFocus;achievementReturnFocus=null;
+  if(focus?.isConnected)focus.focus();
+ }
+ async function saveAchievement(){
+  const selected=editingAchievement;
+  if(!snapshot||!selected||busy)return;
+  const current=Number(achievementProgress);
+  if(!achievementProgress.trim()||!Number.isFinite(current)||current<0||current>3.4028234663852886e38){
+   achievementValidation=achCopy.invalid;return;
+  }
+  let completed:AchievementValue['completed']=null;
+  if(achievementComplete){
+   if(!achievementDate){achievementValidation=achCopy.invalid;return}
+   if(achievementDate===formatAchievementDate(selected.value)&&selected.value.completed){
+    completed=selected.value.completed;
+   }else{
+    const ms=new Date(achievementDate).getTime();
+    if(!Number.isFinite(ms)||ms<0||ms>253402300799000){achievementValidation=achCopy.invalid;return}
+    const seconds=Math.floor(ms/1000);
+    completed=[BigInt(seconds),Math.round((ms-seconds*1000)*1_000_000)];
+   }
+  }
+  const next:AchievementValue={complete:achievementComplete,current,completed};
+  busy=true;error='';achievementValidation='';
+  try{
+   update(await changeAchievement(selected.guid,selected.value,next));
+   closeAchievement();await persistDraft();
+  }catch(e){achievementValidation=describeError(e)}
+  finally{busy=false}
+ }
+
 </script>
 
 <svelte:head>
- <title>{copy.toolCollection} | Yumekiraboshi</title>
+ <title>{activeTool==='achievements'?achCopy.title:copy.toolCollection} | Yumekiraboshi</title>
  <meta name="description" content="Local collection-history save editor"/>
 </svelte:head>
 
@@ -348,7 +424,8 @@
     <span class="brand-mark" aria-hidden="true">✦</span><span class="brand-name">{copy.brand}</span>
    </button>
    {#if snapshot}<nav class="tools-nav" aria-label="Tools">
-    <button type="button" class="tool-tab active" aria-current="page" onclick={goHome}>{copy.toolCollection}</button>
+    <button type="button" class="tool-tab" class:active={activeTool==='collections'} aria-current={activeTool==='collections'?'page':undefined} onclick={goHome}>{copy.toolCollection}</button>
+    <button type="button" class="tool-tab" class:active={activeTool==='achievements'} aria-current={activeTool==='achievements'?'page':undefined} onclick={()=>{activeTool='achievements';editingAchievement=null;achievementFilter='all';achievementLimit=BATCH_SIZE;error='';}}>{achCopy.title}</button>
    </nav>{/if}
    <div class="bar-actions">
     {#if snapshot}
@@ -398,6 +475,45 @@
     <button type="button" class="primary big" disabled={busy} onclick={askFile}>{busy?copy.busy:copy.openFile}</button>
     <p>{copy.openHint}</p>
    </section>
+
+  {:else if activeTool==='achievements'}
+   <div class="section-heading"><h1>{achCopy.title}</h1><span class="category-count">{snapshot.achievements.filter(a=>a.value.complete).length.toLocaleString(locale)} / {snapshot.achievements.length.toLocaleString(locale)}</span></div>
+   <p class="achievement-note">{achCopy.notice}</p>
+   <div class="collection-controls">
+    <div class="status-filter" role="group" aria-label={achCopy.title}>
+     <button type="button" class:active={achievementFilter==='all'} onclick={()=>{achievementFilter='all';achievementLimit=BATCH_SIZE}}>{copy.all}</button>
+     <button type="button" class:active={achievementFilter==='completed'} onclick={()=>{achievementFilter='completed';achievementLimit=BATCH_SIZE}}>{achCopy.completed}</button>
+     <button type="button" class:active={achievementFilter==='incomplete'} onclick={()=>{achievementFilter='incomplete';achievementLimit=BATCH_SIZE}}>{achCopy.incomplete}</button>
+    </div>
+   </div>
+   <div class="achievement-grid">
+    {#each achievementRows.slice(0,achievementLimit) as item (item.index)}
+     <article class="achievement-card">
+      <div><strong>{achCopy.unknown} {item.index.toLocaleString(locale)}</strong><span class:achieved={item.row.value.complete} class="achievement-status">{item.row.value.complete?'✓ '+achCopy.completed:achCopy.incomplete}</span></div>
+      <span class="achievement-progress">{achCopy.progress}: {item.row.value.current.toLocaleString(locale)}</span>
+      {#if item.row.value.completed}<span class="achievement-progress">{achCopy.completedAt}: {new Date(Number(item.row.value.completed[0])*1000+Math.floor(item.row.value.completed[1]/1_000_000)).toLocaleString(locale)}</span>{/if}
+      <button type="button" class="achievement-edit" disabled={busy} onclick={e=>void openAchievement(item.row,e.currentTarget)}>{achCopy.edit}</button>
+     </article>
+    {/each}
+   </div>
+   {#if achievementRows.length===0}<p class="empty-result">{copy.none}</p>{/if}
+   {#if achievementRows.length>achievementLimit}
+    <div class="load-marker"><button type="button" onclick={()=>achievementLimit=Math.min(achievementLimit+BATCH_SIZE,achievementRows.length)}>{copy.moreItems}</button></div>
+   {/if}
+   <dialog class="achievement-dialog" bind:this={achievementDialogEl} onclose={onAchievementDialogClosed} oncancel={e=>{if(busy)e.preventDefault()}}>
+    {#if editingAchievement}
+     <form class="achievement-form" onsubmit={e=>{e.preventDefault();void saveAchievement()}}>
+      <div class="date-dialog-heading"><h2>{achCopy.edit}</h2><button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeAchievement}>×</button></div>
+      <label class="achievement-check"><input type="checkbox" bind:checked={achievementComplete}/>{achCopy.completed}</label>
+      <label class="date-dialog-field"><span>{achCopy.progress}</span><input type="text" inputmode="decimal" required bind:value={achievementProgress}/></label>
+      {#if achievementComplete}
+       <label class="date-dialog-field"><span>{achCopy.completedAt}</span><input type="datetime-local" step="1" required bind:value={achievementDate}/></label>
+      {/if}
+      {#if achievementValidation}<p class="date-dialog-error" role="alert">{achievementValidation}</p>{/if}
+      <div class="date-dialog-actions"><button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeAchievement}>{copy.cancel}</button><button type="submit" class="primary" disabled={busy}>{achCopy.save}</button></div>
+     </form>
+    {/if}
+   </dialog>
   {:else if !selectedGroup}
    {#if !catalog}
     <div class="empty-result">{copy.busy}</div>
