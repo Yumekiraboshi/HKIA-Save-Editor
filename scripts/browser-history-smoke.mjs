@@ -195,6 +195,14 @@ async function run(){
  assert.ok(bounds.x>=-2&&bounds.x+bounds.width<=392,
   'mobile history menu should not be clipped horizontally: '+JSON.stringify(bounds));
 
+ await page.locator('.history-menu > summary').click();
+ await page.locator('.file-menu > summary').click();
+ const fileBounds=await page.locator('.file-menu .menu-popover').boundingBox();
+ assert.ok(fileBounds,'mobile file menu should be visible');
+ assert.ok(fileBounds.x>=-2&&fileBounds.x+fileBounds.width<=392,
+  'mobile file menu should not be clipped horizontally: '+JSON.stringify(fileBounds));
+ await page.locator('.file-menu > summary').click();
+
  assert.deepEqual(errors,[],'no console exceptions or 5xx during browser replay');
  console.log('CHROMIUM UI HISTORY SMOKE PASS: collection add/remove, achievement edit, independent redo, IndexedDB reload, mobile menu');
  await context.close();
