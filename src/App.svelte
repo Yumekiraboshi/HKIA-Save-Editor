@@ -168,6 +168,7 @@
   if(t<1n||t>MAX_TICKS)throw Error(copy.fileError);
   return t;
  }
+ function jumpPage(value:string){const target=Number(value);if(Number.isFinite(target)&&Number.isInteger(target))page=Math.min(Math.max(0,target-1),visibleItems.pages-1);}
  function editDate(id:number){
   const old=recorded[String(id)];
   if(old===undefined)return;
@@ -305,10 +306,15 @@
     {/each}
    </div>
    {#if visibleItems.rows.length===0}<p class="empty-result">{copy.none}</p>{/if}
-   <div class="pagination" role="navigation" aria-label="Pagination">
-    <button type="button" disabled={visibleItems.page<=0} onclick={()=>page=Math.max(0,visibleItems.page-1)}>{copy.previous}</button>
-    <span>{visibleItems.page+1} / {visibleItems.pages}</span>
+   <div class="pagination" role="navigation" aria-label={copy.page}>
+    <button type="button" aria-label={copy.first} disabled={visibleItems.page===0} onclick={()=>page=0}>«</button>
+    <button type="button" disabled={visibleItems.page===0} onclick={()=>page=visibleItems.page-1}>{copy.previous}</button>
+    <label class="page-control"><span class="visually-hidden">{copy.goToPage}</span>
+     <input type="number" min="1" max={visibleItems.pages} value={visibleItems.page+1} aria-label={copy.goToPage} onchange={e=>jumpPage(e.currentTarget.value)}/>
+     <span>/ {visibleItems.pages}</span>
+    </label>
     <button type="button" disabled={visibleItems.page>=visibleItems.pages-1} onclick={()=>page=visibleItems.page+1}>{copy.next}</button>
+    <button type="button" aria-label={copy.last} disabled={visibleItems.page>=visibleItems.pages-1} onclick={()=>page=visibleItems.pages-1}>»</button>
    </div>
   {/if}
  </main>
