@@ -17,7 +17,7 @@ function valid(v:unknown):v is StoredValue{
  (x.completed===null||(Array.isArray(x.completed)&&x.completed.length===2&&
  typeof x.completed[0]==='string'&&/^(0|[1-9]\d{0,11})$/.test(x.completed[0])&&
  BigInt(x.completed[0])<=253402300799n&&
- Number.isInteger(x.completed[1])&&x.completed[1]>=0&&x.completed[1]<1_000_000_000));
+ Number.isInteger(x.completed[1])&&x.completed[1]>=0&&x.completed[1]<1_000_000_000&&x.completed[1]%100===0));
 }
 const restore=(v:StoredValue):AchievementValue=>({
  complete:v.complete,current:v.current,
