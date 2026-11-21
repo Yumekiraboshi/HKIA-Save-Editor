@@ -107,6 +107,10 @@ test('all achievement mutation entrypoints normalize at the RPC boundary, not on
   assert.ok(client.includes(marker),marker);
  }
  assert.ok(app.includes('changeAchievement(live.guid,live.value,next)'));
- assert.ok(app.includes('changeAchievement(selected.guid,selected.value,next)'));
+ assert.ok(app.includes('changeAchievementWithParent(live,next)'));
+ assert.ok(app.includes('changeAchievementWithParent(selected,next)'));
+ assert.ok(app.includes('changeAchievementPair(child,parent)'));
+ assert.ok(client.includes('workerAchievementPatch(first)'));
+ assert.ok(client.includes('workerAchievementPatch(second)'));
  assert.ok(app.includes('applyDraft(patches,achievementPatches)'));
 });
