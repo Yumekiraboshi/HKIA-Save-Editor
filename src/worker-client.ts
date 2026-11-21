@@ -5,7 +5,13 @@ export type AchievementEntry={guid:[number,number,number,number];value:Achieveme
 export type AchievementPatch={guid:[number,number,number,number];before:AchievementValue;after:AchievementValue};
 export type AchievementDraftPatch={guid:[number,number,number,number];before:AchievementValue|null;after:AchievementValue};
 export type CounterEntry={guid:[number,number,number,number];current:number;countedValues:number|null;countedGuids:number};
+export type HistoryScope='collections'|'achievements';
+export type HistoryRecord={
+ scope:HistoryScope;applied:boolean;paired:boolean;
+ itemId:number|null;guid:[number,number,number,number]|null
+};
 export type SaveSnapshot={
+ history:HistoryRecord[];
  version:'3.0.0'|'3.0.1';
  zip:boolean;
  membershipEdit:boolean;
@@ -18,7 +24,7 @@ export type SaveSnapshot={
  achievements:AchievementEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'batch'|'undo'|'redo'|'history-jump'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -81,6 +87,10 @@ export function changeAchievement(guid:AchievementEntry['guid'],beforeValue:Achi
   beforeValue:workerAchievementValue(beforeValue),
   afterValue:workerAchievementValue(afterValue)
  }) as Promise<SaveSnapshot>;
+}
+/** Absolute cursor in one independent tab timeline. Other tab's edits are retained. */
+export function jumpHistory(scope:HistoryScope,target:number):Promise<SaveSnapshot>{
+ return rpc('history-jump',{scope,target}) as Promise<SaveSnapshot>;
 }
 export function undo():Promise<SaveSnapshot>{return rpc('undo') as Promise<SaveSnapshot>}
 export function redo():Promise<SaveSnapshot>{return rpc('redo') as Promise<SaveSnapshot>}

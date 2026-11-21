@@ -1,10 +1,11 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,createAchievement,createAchievementWithParent,completeChildWithNewParent,changeAchievement,changeAchievementPair,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch} from './worker-client';
+ import {openSave,changeCollection,createAchievement,createAchievementWithParent,completeChildWithNewParent,changeAchievement,changeAchievementPair,applyDraft,jumpHistory,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch,type HistoryRecord} from './worker-client';
  import {planCategoryParentCompletion,planMissingCategoryParentCompletion,planCategoryParentRevocation,planCategoryParentDateSync} from './achievement-parent-auto';
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
  import {diffAchievements,decodeAchievementDraft} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
+ import {historyCopy} from './history-copy';
  import {compactAchievementCopy} from './achievement-compact-ui';
  import {toggleAchievementState} from './achievement-quick';
  import {achievementProgressTarget} from './achievement-progress';
@@ -96,9 +97,11 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  let prefersDark=$state(false);
  let fileInput:HTMLInputElement;
  let fileMenu:HTMLDetailsElement;
+ let historyMenu:HTMLDetailsElement|undefined=$state(undefined);
  const locale=$derived(languagePref==='auto'?browserLanguage:languagePref);
  const copy=$derived(localizedCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
+ const hCopy=$derived(historyCopy(locale));
  const compactCopy=$derived(compactAchievementCopy(locale));
  const groupCopy=$derived(achievementGroupCopy(locale));
  const factCopy=$derived(achievementFactsCopy(locale));
@@ -106,6 +109,9 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  const rewardsById=$derived(new Map(((catalog as Catalog|null)?.items??[]).map((item:Item)=>[item[0],nameFor(item)])));
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
+ const tabHistory=$derived(((snapshot as SaveSnapshot|null)?.history??[]).filter((entry:HistoryRecord)=>entry.scope===activeTool));
+ const tabHistoryCursor=$derived(tabHistory.filter(entry=>entry.applied).length);
+ const historyItems=$derived(new Map(((catalog as Catalog|null)?.items??[]).map(item=>[item[0],item])));
  const sourceAchievementRows=$derived(joinAchievementCatalog(achievementIndex,(snapshot as SaveSnapshot|null)?.achievements??[]));
  const achievementGroupSummaries=$derived(achievementGroupHierarchy?summarizeAchievementGroups(achievementGroupHierarchy,sourceAchievementRows):[]);
  const unmappedAchievementRows=$derived(achievementGroupHierarchy?ungroupedRows(achievementGroupHierarchy,sourceAchievementRows):[]);
@@ -334,6 +340,14 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
   }catch{if(epoch===iconEpoch)iconError=true}
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
+ function historyEntryLabel(entry:HistoryRecord):string{
+  if(entry.scope==='collections'){
+   const item=historyItems.get(entry.itemId??0);
+   return item?nameFor(item):'#'+String(entry.itemId);
+  }
+  if(!entry.guid)return hCopy.title;
+  return achievementName(achievementGuid(entry.guid),0)+(entry.paired?' · '+hCopy.paired:'');
+ }
  function update(s:SaveSnapshot){snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));}
  function persistDraft():Promise<void>{
   if(!original)return Promise.resolve();
@@ -427,11 +441,20 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
   catch(e){error=describeError(e);return false}
   finally{busy=false}
  }
- async function actHistory(which:'undo'|'redo'){
-  if(!snapshot||busy)return;busy=true;error='';
-  try{update(await (which==='undo'?undo():redo()));editId=null;await persistDraft();}
-  catch(e){error=e instanceof Error?e.message:copy.unknown}
+ async function goToHistory(target:number){
+  if(!snapshot||busy||!Number.isSafeInteger(target)||target<0||target>tabHistory.length||target===tabHistoryCursor)return;
+  const scope=activeTool;
+  busy=true;error='';
+  try{
+   update(await jumpHistory(scope,target));
+   editId=null;editingAchievement=null;
+   if(historyMenu)historyMenu.open=false;
+   await persistDraft();
+  }catch(e){error=e instanceof Error?e.message:copy.unknown}
   finally{busy=false}
+ }
+ async function actHistory(which:'undo'|'redo'){
+  return goToHistory(tabHistoryCursor+(which==='undo'?-1:1));
  }
  async function saveEdited(){
   if(!snapshot?.dirty||busy)return;
@@ -613,22 +636,44 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
    <div class="bar-actions">
     {#if snapshot}
      <span class="save-indicator" title={original?.name??''}><span class:changed={snapshot.dirty} class="state-dot"></span><span class="file-short">{original?.name}</span>{#if draftWarning}<span class="draft-risk" title={copy.autosaveFailed}>⚠</span>{/if}</span>
-     <button type="button" class="icon-button" title={copy.undo} aria-label={copy.undo} disabled={busy||!snapshot.canUndo} onclick={()=>void actHistory('undo')}>↶</button>
-     <button type="button" class="icon-button" title={copy.redo} aria-label={copy.redo} disabled={busy||!snapshot.canRedo} onclick={()=>void actHistory('redo')}>↷</button>
+     <button type="button" class="icon-button" title={copy.undo} aria-label={copy.undo} disabled={busy||tabHistoryCursor===0} onclick={()=>void actHistory('undo')}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 1 2.7 6.3"/></svg></button>
+     <button type="button" class="icon-button" title={copy.redo} aria-label={copy.redo} disabled={busy||tabHistoryCursor>=tabHistory.length} onclick={()=>void actHistory('redo')}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 0-2.7 6.3"/></svg></button>
+     <details class="history-menu" bind:this={historyMenu}>
+      <summary class="icon-button" title={hCopy.title} aria-label={hCopy.title}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></summary>
+      <div class="history-popover">
+       <div class="history-heading">{hCopy.title} · {activeTool==='collections'?copy.toolCollection:achCopy.title}</div>
+       {#if !tabHistory.length}
+        <p class="history-empty">{hCopy.empty}</p>
+       {:else}
+        <div class="history-list">
+         <button type="button" class:active={tabHistoryCursor===0} disabled={busy} title={hCopy.step} onclick={()=>void goToHistory(0)}>
+          <span class="history-step">0</span><span class="history-text">{hCopy.initial}</span>
+          {#if tabHistoryCursor===0}<span class="history-current" aria-label={hCopy.current}>✓</span>{/if}
+         </button>
+         {#each tabHistory as entry,i (i)}
+          <button type="button" class:active={tabHistoryCursor===i+1} disabled={busy} title={hCopy.step} onclick={()=>void goToHistory(i+1)}>
+           <span class="history-step">{i+1}</span><span class="history-text">{historyEntryLabel(entry)}</span>
+           {#if tabHistoryCursor===i+1}<span class="history-current" aria-label={hCopy.current}>✓</span>{/if}
+          </button>
+         {/each}
+        </div>
+       {/if}
+      </div>
+     </details>
     {/if}
     <details class="file-menu" bind:this={fileMenu}>
-     <summary class="bar-button">{copy.file}<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+     <summary class="bar-button icon-button file-action" title={copy.file} aria-label={copy.file}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h9l5 5v13H5z"/><path d="M14 3v6h5"/><path d="M8 14h8M8 17h8"/></svg><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
      <div class="menu-popover">
-      <button type="button" onclick={askFile}>{snapshot?copy.replace:copy.openFile}</button>
+      <button type="button" onclick={askFile}><svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5h6l2 2h8v12z"/><path d="M12 10v6m-3-3h6"/></svg>{snapshot?copy.replace:copy.openFile}</button>
       {#if snapshot}
-       <button type="button" onclick={backup}>{copy.backup}</button>
-       <button type="button" disabled={!snapshot.dirty||busy} onclick={()=>void saveEdited()}>{copy.export}</button>
+       <button type="button" onclick={backup}><svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4"/><path d="M4 17v4h16v-4"/></svg>{copy.backup}</button>
+       <button type="button" disabled={!snapshot.dirty||busy} onclick={()=>void saveEdited()}><svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4"/><path d="M4 17v4h16v-4"/></svg>{copy.export}</button>
        <hr/>
-       <button type="button" onclick={()=>void closeSave()}>{copy.close}</button>
+       <button type="button" onclick={()=>void closeSave()}><svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3H5v18h4"/><path d="M12 12h9m-4-4 4 4-4 4"/></svg>{copy.close}</button>
       {/if}
      </div>
     </details>
-    <label class="header-select" title={copy.language}>
+    <label class="header-select" title={copy.language}><svg class="select-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
      <span class="visually-hidden">{copy.language}</span>
      <select aria-label={copy.language} value={languagePref} onchange={e=>setLanguage(e.currentTarget.value as LanguagePref)}>
       <option value="auto">{copy.system}</option>
@@ -637,7 +682,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
       {/each}
      </select>
     </label>
-    <label class="header-select theme-select" title={copy.theme}>
+    <label class="header-select theme-select" title={copy.theme}><svg class="select-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M12 3a9 9 0 0 1 0 18"/></svg>
      <span class="visually-hidden">{copy.theme}</span>
      <select aria-label={copy.theme} value={themePref} onchange={e=>setTheme(e.currentTarget.value as ThemePref)}>
       <option value="system">◐ {copy.system}</option><option value="light">☀ {copy.light}</option><option value="dark">☾ {copy.dark}</option>

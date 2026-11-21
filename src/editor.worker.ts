@@ -1,8 +1,8 @@
-type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
+type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'batch'|'undo'|'redo'|'history-jump'|'reset'|'export'|'clear';
 type AchievementValue = {complete:boolean;current:number;completed:[bigint,number]|null};
 type AchievementPatch = {guid:number[];before:AchievementValue;after:AchievementValue};
 type AchievementDraftPatch = {guid:number[];before:AchievementValue|null;after:AchievementValue};
-type Request = { id:number; action:Action; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];guid?:number[];beforeValue?:AchievementValue;afterValue?:AchievementValue };
+type Request = { id:number; action:Action; scope?:'collections'|'achievements'; target?:number; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];guid?:number[];beforeValue?:AchievementValue;afterValue?:AchievementValue };
 type Transport = { postMessage(data:unknown, transfer?:Transferable[]):void; onmessage:((event:MessageEvent<Request>)=>void)|null };
 type Engine = {
  memory:WebAssembly.Memory;
@@ -22,7 +22,7 @@ type Engine = {
  ):number;
  hkia_achievement_snapshot():number;
  hkia_counter_snapshot():number;
- hkia_undo():number; hkia_redo():number; hkia_reset():number;
+ hkia_undo():number; hkia_redo():number; hkia_reset():number; hkia_history_snapshot():number; hkia_history_jump(scope:number,target:number):number;
  hkia_snapshot():number; hkia_export():number; hkia_clear():void;
  hkia_reply_ptr():number; hkia_reply_len():number;
  hkia_output_ptr():number; hkia_output_len():number;
@@ -85,7 +85,30 @@ function snapshot(e:Engine){
   if(!Number.isFinite(current)||countedValues< -1||countedGuids>1000000)throw Error('COUNTER_SNAPSHOT_INVALID');
   counters.push({guid,current,countedValues:countedValues===-1?null:countedValues,countedGuids});
  }
- return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,achievements,counters};
+ if(e.hkia_history_snapshot()!==0)throw Error('HISTORY_SNAPSHOT_FAILED');
+ const h=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+ if(h.length<4)throw Error('HISTORY_SNAPSHOT_INVALID');
+ const historyCount=new DataView(h.buffer,h.byteOffset,h.byteLength).getUint32(0,true);
+ if(historyCount>512||h.length!==4+historyCount*23)throw Error('HISTORY_SNAPSHOT_INVALID');
+ const history:Array<{
+  scope:'collections'|'achievements';applied:boolean;paired:boolean;
+  itemId:number|null;guid:[number,number,number,number]|null
+ }>=[];
+ const hv=new DataView(h.buffer,h.byteOffset,h.byteLength);
+ for(let i=0;i<historyCount;i++){
+  const offset=4+i*23,scope=h[offset],applied=h[offset+1],paired=h[offset+2];
+  if(scope>1||applied>1||paired>1)throw Error('HISTORY_SNAPSHOT_INVALID');
+  const itemId=hv.getInt32(offset+3,true);
+  const guid:[number,number,number,number]=[
+   hv.getUint32(offset+7,true),hv.getUint32(offset+11,true),
+   hv.getUint32(offset+15,true),hv.getUint32(offset+19,true)
+  ];
+  if(scope===0&&itemId<=0)throw Error('HISTORY_SNAPSHOT_INVALID');
+  history.push({scope:scope===0?'collections':'achievements',
+   applied:applied===1,paired:paired===1,
+   itemId:scope===0?itemId:null,guid:scope===1?guid:null});
+ }
+ return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,achievements,counters,history};
 }
 function validAchievement(v:AchievementValue):boolean{
  return !!v&&typeof v.complete==='boolean'&&typeof v.current==='number'&&Number.isFinite(v.current)&&v.current>=0&&
@@ -211,6 +234,12 @@ async function execute(r:Request):Promise<unknown>{
   }
   case 'undo':if(e.hkia_undo()!==0)throw Error('戻せる変更がありません。');return snapshot(e);
   case 'redo':if(e.hkia_redo()!==0)throw Error('やり直せる変更がありません。');return snapshot(e);
+   case 'history-jump':{
+    if((r.scope!=='collections'&&r.scope!=='achievements')||!Number.isSafeInteger(r.target)||
+     r.target===undefined||r.target<0||r.target>512)throw Error('HISTORY_JUMP_INVALID');
+    if(e.hkia_history_jump(r.scope==='collections'?0:1,r.target)!==0)throw Error('HISTORY_JUMP_CONFLICT');
+    return snapshot(e);
+   }
   case 'reset':if(e.hkia_reset()!==0)throw Error('セーブが読み込まれていません。');return snapshot(e);
   case 'export':{
    if(e.hkia_export()!==0)throw Error('書き出し後の再検証に失敗しました。データは出力していません。');

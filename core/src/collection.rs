@@ -22,6 +22,32 @@ enum Change {
                  second:([u32;4],bool,Option<AchievementValue>,Option<AchievementValue>)},
 }
 
+
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub enum HistoryScope { Collections, Achievements }
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub struct HistoryRecord {
+ pub scope:HistoryScope,
+ pub applied:bool,
+ pub paired:bool,
+ pub item_id:i32,
+ pub guid:[u32;4],
+}
+impl Change {
+ fn scope(&self)->HistoryScope{
+  match self {Self::Collection{..}=>HistoryScope::Collections,_=>HistoryScope::Achievements}
+ }
+ fn history_record(&self,applied:bool)->HistoryRecord{
+  let (item_id,guid,paired)=match self {
+   Self::Collection{id,..}=>(*id,[0;4],false),
+   Self::Achievement{guid,..}|Self::AchievementCreated{guid,..}=>(0,*guid,false),
+   Self::AchievementCreatedPair{guid,..}|Self::AchievementParentNew{child:(guid,..),..}=>(0,*guid,true),
+   Self::AchievementPair{first:(guid,..),..}=>(0,*guid,true),
+  };
+  HistoryRecord{scope:self.scope(),applied,paired,item_id,guid}
+ }
+}
+
 pub struct Editor {
  original:Vec<u8>,
  zip:Option<ZipIndex>,
@@ -105,6 +131,38 @@ impl Editor {
  pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
  pub fn can_undo(&self)->bool {!self.undo.is_empty()}
  pub fn can_redo(&self)->bool {!self.redo.is_empty()}
+ pub fn history(&self)->Vec<HistoryRecord>{
+  self.undo.iter().map(|change|change.history_record(true))
+   .chain(self.redo.iter().rev().map(|change|change.history_record(false))).collect()
+ }
+ fn scope_counts(&self,scope:HistoryScope)->(usize,usize){
+  (self.undo.iter().filter(|change|change.scope()==scope).count(),
+   self.redo.iter().filter(|change|change.scope()==scope).count())
+ }
+ pub fn undo_scope(&mut self,scope:HistoryScope)->bool{
+  let Some(index)=self.undo.iter().rposition(|change|change.scope()==scope) else{return false};
+  let change=self.undo.remove(index);
+  self.restore_change(&change,true);self.redo.push(change);
+  self.revision=self.revision.wrapping_add(1);true
+ }
+ pub fn redo_scope(&mut self,scope:HistoryScope)->bool{
+  let Some(index)=self.redo.iter().rposition(|change|change.scope()==scope) else{return false};
+  let change=self.redo.remove(index);
+  self.restore_change(&change,false);self.undo.push(change);
+  self.revision=self.revision.wrapping_add(1);true
+ }
+ /// Jump to an absolute applied-edit cursor in one tab; the other tab is unchanged.
+ /// Validate the entire requested distance before modifying any state.
+ pub fn jump_history(&mut self,scope:HistoryScope,target:usize)->bool{
+  let (applied,undone)=self.scope_counts(scope);
+  if target>applied+undone{return false}
+  if target<applied{
+   for _ in target..applied{if !self.undo_scope(scope){return false}}
+  }else{
+   for _ in applied..target{if !self.redo_scope(scope){return false}}
+  }
+  true
+ }
  pub fn can_change_membership(&self)->bool {self.slot.index.deprecated_map.is_some() && self.slot.index.deprecated_count==0 && self.slot.index.deprecated.is_empty()}
  pub fn change(&mut self,id:i32,expected:Option<i64>,next:Option<i64>)->Result<(),Error>{
   if id<=0 || id==i32::MAX || self.value(id)!=expected || next==expected {return Err(Error::Schema)}
@@ -116,7 +174,7 @@ impl Editor {
   let after=if self.base.get(&id).copied()==next {None}else{Some(next)};
   match after {Some(t)=>{self.changes.insert(id,t);},None=>{self.changes.remove(&id);}}
   self.undo.push(Change::Collection{id,before,after});if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
-  self.redo.clear();self.revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  self.redo.retain(|change|change.scope()!=HistoryScope::Collections);self.revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   Ok(())
  }
  /// Create a v3.0.1 source-defined, previously absent achievement document.
@@ -130,7 +188,7 @@ impl Editor {
   self.achievement_created.insert(guid,value);
   self.undo.push(Change::AchievementCreated{guid,before:None,after:Some(value)});
   if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
-  self.redo.clear();self.revision=revision;Ok(())
+  self.redo.retain(|change|change.scope()!=HistoryScope::Achievements);self.revision=revision;Ok(())
  }
  /// Missing last child plus an existing parent must not be a partial mutation.
  pub fn create_achievement_with_parent(
@@ -152,7 +210,7 @@ impl Editor {
   match after{Some(v)=>{self.achievement_changes.insert(parent,v);},None=>{self.achievement_changes.remove(&parent);}}
   self.undo.push(Change::AchievementCreatedPair{guid,value,parent:(parent,before,after)});
   if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
-  self.redo.clear();self.revision=revision;Ok(())
+  self.redo.retain(|change|change.scope()!=HistoryScope::Achievements);self.revision=revision;Ok(())
  }
  /// Complete the last child (existing or absent) and create a missing
  /// source-defined parent. Preflight both before any write; one Undo covers both.
@@ -203,7 +261,7 @@ impl Editor {
   self.achievement_created.insert(parent,parent_next);
   self.undo.push(Change::AchievementParentNew{child:(child,created,before,after),parent:(parent,parent_next)});
   if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
-  self.redo.clear();self.revision=revision;Ok(())
+  self.redo.retain(|change|change.scope()!=HistoryScope::Achievements);self.revision=revision;Ok(())
  }
  /// Update a leaf and its completed parent atomically, with exactly one undo entry.
  /// Every compare-and-swap precondition is checked before modifying either record.
@@ -237,7 +295,7 @@ impl Editor {
   }
   self.undo.push(Change::AchievementPair{first:replacements[0],second:replacements[1]});
   if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
-  self.redo.clear();self.revision=next_revision;
+  self.redo.retain(|change|change.scope()!=HistoryScope::Achievements);self.revision=next_revision;
   Ok(())
  }
  pub fn change_achievement(&mut self,guid:[u32;4],expected:AchievementValue,next:AchievementValue)->Result<(),Error>{
@@ -247,7 +305,7 @@ impl Editor {
    self.achievement_created.insert(guid,next);
    self.undo.push(Change::AchievementCreated{guid,before:Some(before),after:Some(next)});
    if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
-   self.redo.clear();self.revision=revision;
+   self.redo.retain(|change|change.scope()!=HistoryScope::Achievements);self.revision=revision;
    return Ok(())
   }
   let model=self.slot.index.achievements.iter().find(|m|m.guid==guid).ok_or(Error::Schema)?;
@@ -257,7 +315,7 @@ impl Editor {
   match after {Some(v)=>{self.achievement_changes.insert(guid,v);},None=>{self.achievement_changes.remove(&guid);}}
   self.undo.push(Change::Achievement{guid,before,after});
   if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
-  self.redo.clear();self.revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  self.redo.retain(|change|change.scope()!=HistoryScope::Achievements);self.revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   Ok(())
  }
  fn restore_change(&mut self,change:&Change,reverse:bool){

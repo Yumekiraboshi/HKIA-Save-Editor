@@ -220,6 +220,45 @@ pub extern "C" fn hkia_counter_snapshot()->u32{
  })
 }
 
+/// Native per-tab timeline with applied and redoable events (4+23*N bytes).
+#[no_mangle]
+pub extern "C" fn hkia_history_snapshot()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let rows=editor.history();
+  if rows.len()>512{return 1}
+  let mut bytes=Vec::with_capacity(4+rows.len()*23);
+  bytes.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{
+   bytes.push(match row.scope{
+    hkia_save_core::collection::HistoryScope::Collections=>0,
+    hkia_save_core::collection::HistoryScope::Achievements=>1
+   });
+   bytes.push(u8::from(row.applied));
+   bytes.push(u8::from(row.paired));
+   bytes.extend(row.item_id.to_le_bytes());
+   for g in row.guid{bytes.extend(g.to_le_bytes());}
+  }
+  a.reply=bytes;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_history_jump(scope:u32,target:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  let scope=match scope{
+   0=>hkia_save_core::collection::HistoryScope::Collections,
+   1=>hkia_save_core::collection::HistoryScope::Achievements,
+   _=>return 1
+  };
+  match a.editor.as_mut(){
+   Some(editor)=>if editor.jump_history(scope,target as usize){0}else{1},
+   None=>1
+  }
+ })
+}
+
 #[no_mangle]
 pub extern "C" fn hkia_undo()->u32{
  STATE.with(|s|{let mut a=s.borrow_mut();a.reply.clear();a.output.clear();match a.editor.as_mut(){Some(e)=>if e.undo(){0}else{1},None=>1}})

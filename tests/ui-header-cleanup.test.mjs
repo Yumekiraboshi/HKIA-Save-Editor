@@ -32,10 +32,24 @@ test('topbar and HTML identity refer to HKIA Save Editor, never the parent proje
 
 test('file menu chevron and both search magnifiers are centered source-independent SVGs',()=>{
  assert.equal((app.match(/<svg class="search-symbol" viewBox="0 0 24 24"/g)??[]).length,2);
- assert.match(app,/<summary class="bar-button">\{copy\.file\}<svg class="chevron"/);
+ assert.match(app,/<summary class="bar-button icon-button file-action" title=\{copy\.file\} aria-label=\{copy\.file\}>/);
+ assert.match(app,/<svg class="header-icon"[^>]*>[\s\S]*?<\/svg><svg class="chevron"/);
  assert.doesNotMatch(app,/<span class="chevron">|<span class="search-symbol"/);
  assert.match(css,/\.search-symbol\{[^}]*top:50%;transform:translateY\(-50%\);width:18px;height:18px/);
  assert.match(css,/\.chevron\{display:block;width:12px;height:12px;flex:none/);
  assert.match(css,/\.file-menu>summary\{[^}]*gap:6px/);
  assert.match(css,/\.search-field input\{[^}]*padding:12px 14px 12px 36px/);
+});
+
+test('SVG toolbar actions remain keyboard accessible and per-tab history is selectable',()=>{
+ assert.match(app,/class="history-menu" bind:this=\{historyMenu\}/);
+ assert.match(app,/onclick=\{\(\)=>void goToHistory\(0\)\}/);
+ assert.match(app,/onclick=\{\(\)=>void goToHistory\(i\+1\)\}/);
+ assert.match(app,/disabled=\{busy\|\|tabHistoryCursor===0\}/);
+ assert.match(app,/disabled=\{busy\|\|tabHistoryCursor>=tabHistory.length\}/);
+ assert.match(app,/class="header-icon" viewBox="0 0 24 24"/);
+ assert.match(app,/class="select-icon" viewBox="0 0 24 24"/);
+ assert.match(app,/class="menu-icon" viewBox="0 0 24 24"/);
+ assert.doesNotMatch(app,/\>↶<\/button>|\>↷<\/button>/);
+ assert.match(css,/\.history-list button\.active\{/);
 });
