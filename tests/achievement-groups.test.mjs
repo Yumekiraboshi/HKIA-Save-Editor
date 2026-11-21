@@ -80,15 +80,17 @@ test('invalid crosswalks, group recursion and missing leaves fail closed',()=>{
  assert.throws(()=>groups.decodeAchievementGroups(forged,index),/ACH_GROUPS_INVALID/);
 });
 
-test('group category navigation retains save search/status filters and is localized for all sixteen locales',()=>{
+test('group category navigation retains name search, omits redundant achievement status filters, and is localized for all sixteen locales',()=>{
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  for(const token of [
   'loadAchievementGroups(','summarizeAchievementGroups(','showAchievementGroup(',
   'achievementGroupHierarchy && achievementGroupSelection===null',
   "achievementGroupSelection==='__unmapped'",'groupRows(','ungroupedRows(',
-  'achievementQuery.trim()','achievementFilter===','achievementName(stat.guid,0)',
+  'achievementQuery.trim()','achievementName(stat.guid,0)',
   'if(item.row)void openAchievement(item.row'
  ])assert.ok(app.includes(token),token);
+ assert.doesNotMatch(app,/achievementFilter|showEveryAchievement/);
+ assert.match(app,/bind:this=\{achievementLoadMoreSentinel\}/);
  const all=['ar','de','en','en-GB','es','fr','fr-CA','it','ja','ko','nl','pt-BR','ru','tr','zh-Hans','zh-Hant'];
  for(const locale of all){
   const copy=labels.achievementGroupCopy(locale);
