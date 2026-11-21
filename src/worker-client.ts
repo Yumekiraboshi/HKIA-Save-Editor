@@ -12,7 +12,7 @@ export type HistoryRecord={
 };
 export type SaveSnapshot={
  history:HistoryRecord[];
- version:'3.0.0'|'3.0.1';
+ version:string; // Source-semver; Rust verifies target schema for future revisions.
  zip:boolean;
  membershipEdit:boolean;
  dirty:boolean;
