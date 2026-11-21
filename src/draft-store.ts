@@ -1,6 +1,7 @@
+import type {StoredPatch} from './achievement-draft';
 export type DraftPatch={id:number;before:string|null;after:string|null};
 export type DraftUi={group:string|null;subgroup:string|null};
-export type LocalDraft={file:File;patches:DraftPatch[];ui:DraftUi};
+export type LocalDraft={file:File;patches:DraftPatch[];achievementPatches:StoredPatch[];ui:DraftUi};
 const DB_NAME='hkia-editor-local-session';
 const BASE='source-save';
 const EDITS='unsaved-changes';
@@ -62,11 +63,13 @@ export async function restoreLocalDraft():Promise<LocalDraft|null>{
   const file=source.result;
   if(!(file instanceof Blob)||file.size<=0||file.size>60*1024*1024)throw Error('DRAFT_INVALID');
   const actualFile=file instanceof File?file:new File([file],'HKIA-save.save',{type:'application/octet-stream'});
-  const state=changes.result as {version?:number;patches?:DraftPatch[];ui?:DraftUi}|undefined;
+  const state=changes.result as {version?:number;patches?:DraftPatch[];achievementPatches?:unknown;ui?:DraftUi}|undefined;
   const patches=safePatches(state?.patches??[]);
+  const achievementPatches=state?.achievementPatches??[];
+  if(!Array.isArray(achievementPatches)||achievementPatches.length>10000)throw Error('DRAFT_INVALID');
   const group=typeof state?.ui?.group==='string'&&state.ui.group.length<128?state.ui.group:null;
   const subgroup=typeof state?.ui?.subgroup==='string'&&state.ui.subgroup.length<128?state.ui.subgroup:null;
-  return {file:actualFile,patches,ui:{group,subgroup}};
+  return {file:actualFile,patches,achievementPatches:achievementPatches as StoredPatch[],ui:{group,subgroup}};
  }finally{db.close()}
 }
 export async function saveOriginalLocally(file:File):Promise<void>{
@@ -75,17 +78,17 @@ export async function saveOriginalLocally(file:File):Promise<void>{
   const tx=db.transaction([BASE,EDITS],'readwrite');
   const finished=complete(tx);
   tx.objectStore(BASE).put(file,KEY);
-  tx.objectStore(EDITS).put({version:VERSION,patches:[],ui:{group:null,subgroup:null}},KEY);
+  tx.objectStore(EDITS).put({version:VERSION,patches:[],achievementPatches:[],ui:{group:null,subgroup:null}},KEY);
   await finished;
  }finally{db.close()}
 }
-export async function saveDraftChanges(patches:DraftPatch[],ui:DraftUi):Promise<void>{
+export async function saveDraftChanges(patches:DraftPatch[],ui:DraftUi,achievementPatches:StoredPatch[]=[]):Promise<void>{
  safePatches(patches);
  const db=await openDatabase();
  try{
   const tx=db.transaction(EDITS,'readwrite');
   const finished=complete(tx);
-  tx.objectStore(EDITS).put({version:VERSION,patches,ui},KEY);
+  tx.objectStore(EDITS).put({version:VERSION,patches,achievementPatches,ui},KEY);
   await finished;
  }finally{db.close()}
 }
