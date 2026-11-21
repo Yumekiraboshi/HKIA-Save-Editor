@@ -44,9 +44,10 @@ export async function loadAchievementGroups(base:string,index:AchievementIndex):
  if(!response.ok)throw Error('ACH_GROUPS_UNAVAILABLE');
  return decodeAchievementGroups(await response.json(),index);
 }
-/** Stable native progress order. A category parent has order=0; children use LocalAchievementData.order.
- * Equal/missing order values retain the original GameCounterAchievementsDefinition reference order.
- * No locale-dependent sorting is used for achievements.
+/** Stable native progress order for displayable *leaf* achievements.
+ * Category parents remain in the underlying saved model for automatic completion,
+ * but are represented by the category cards, not duplicated as child tiles.
+ * Equal/missing source Order values retain their original reference order.
  */
 export function groupRows(
  hierarchy:AchievementHierarchy,groupId:string,all:readonly AchievementListRow[],
@@ -60,10 +61,10 @@ export function groupRows(
   if(ar===undefined||br===undefined||ar===0||br===0)return a.i-b.i;
   return ar-br||a.i-b.i;
  });
- return [group.guid,...children.map(x=>x.guid)].map(guid=>lookup.get(guid))
+ return children.map(x=>x.guid).map(guid=>lookup.get(guid))
   .filter((r):r is AchievementListRow=>r!==undefined);
 }
-/** All achievements: native root category order, each category parent, then its progress-ordered children.
+/** All achievements: group order followed by source-ordered leaves (no parent tiles).
  * Unknown/new-version saved GUIDs remain visible at the end in original save order.
  */
 export function nativeAchievementOrder(

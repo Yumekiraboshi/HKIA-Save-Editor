@@ -618,7 +618,7 @@
    {/if}
    <div class="section-heading"><h1>{achievementGroupHierarchy&&achievementGroupSelection!==null?
     achievementGroupSelection==='__unmapped'?groupCopy.uncategorized:achievementName(achievementGroupSelection,0):
-    achievementShowAll?groupCopy.showAll:achCopy.title}</h1><span class="category-count">{achCopy.completed}: {snapshot.achievements.filter(a=>a.value.complete).length.toLocaleString(locale)} / {snapshot.achievements.length.toLocaleString(locale)} · {achCopy.missing}: {sourceAchievementRows.filter(r=>r.row===null).length.toLocaleString(locale)}</span></div>
+    achievementShowAll?groupCopy.showAll:achCopy.title}</h1><span class="category-count">{achCopy.completed}: {sourceOrderedAchievementRows.filter(r=>r.row?.value.complete===true).length.toLocaleString(locale)} / {sourceOrderedAchievementRows.filter(r=>r.row!==null).length.toLocaleString(locale)} · {achCopy.missing}: {sourceOrderedAchievementRows.filter(r=>r.row===null).length.toLocaleString(locale)}</span></div>
    <div class="collection-controls">
     <label class="search-field"><span class="search-symbol" aria-hidden="true">⌕</span><input type="search" bind:value={achievementQuery} placeholder={achCopy.search} aria-label={achCopy.search}/></label>
     <div class="status-filter" role="group" aria-label={achCopy.title}>
@@ -636,7 +636,7 @@
     <div class="category-grid achievement-category-grid">
      {#each achievementGroupSummaries as stat (stat.guid)}
       {@const art=achievementCategoryAtlas?.bySaveGuid.get(stat.guid)}
-      <button type="button" class="category-card achievement-category-card" onclick={()=>showAchievementGroup(stat.guid)}>
+      <button type="button" class="category-card achievement-category-card" class:is-recorded={stat.parentComplete===true} onclick={()=>showAchievementGroup(stat.guid)}>
        <span class="category-image achievement-category-art" aria-hidden="true">
         {#if art}
          <span class="achievement-category-sprite" style:background-image={`url("${achievementCategoryAtlas?.url}")`} style:background-position={`${art.x} ${art.y}`}></span>
@@ -645,7 +645,7 @@
         {/if}
        </span>
        <span class="category-label">{achievementName(stat.guid,0)}</span>
-       <span class="category-count" title={groupCopy.groupNote}>{stat.completed.toLocaleString(locale)} / {stat.total.toLocaleString(locale)}</span>
+       <span class="category-count" title={groupCopy.groupNote}>{stat.completed.toLocaleString(locale)} / {stat.total.toLocaleString(locale)}{#if stat.parentComplete===true} · ✓{/if}</span>
       </button>
      {/each}
      {#if unmappedAchievementRows.length}
@@ -666,7 +666,7 @@
        achievementGroupHierarchy?.byGuid.get(item.guid)?.children.length??null,
        achievementFacts.get(item.guid)?.threshold??null
       )}
-      <article class="item-tile achievement-tile" class:is-recorded={item.row?.value.complete===true} class:achievement-group-parent={achievementGroupSelection===item.guid}>
+      <article class="item-tile achievement-tile" class:is-recorded={item.row?.value.complete===true}>
        <button type="button" class="item-toggle achievement-toggle"
         aria-pressed={item.row?.value.complete}
         aria-label={item.row?(item.row.value.complete?compactCopy.relock:compactCopy.unlock)+': '+title:achCopy.missing+': '+title}
