@@ -54,7 +54,6 @@
  let editingAchievementTitle=$state('');
  let achievementDialogEl:HTMLDialogElement|undefined=$state();
  let achievementReturnFocus:HTMLElement|null=null;
- let achievementProgress=$state('');
  let achievementDate=$state('');
  let achievementValidation=$state('');
  let achievementBaseline:AchievementEntry[]=[];
@@ -506,7 +505,13 @@
   if(!live)return;
   busy=true;error='';
   try{
-   const next=toggleAchievementState(live.value,Date.now());
+   const guid=achievementGuid(live.guid);
+   const target=achievementProgressTarget(
+    achievementGroupHierarchy?.byGuid.get(guid)?.children.length??null,
+    achievementFacts.get(guid)?.threshold??null
+   );
+   if(target===null&&achievementIndex.has(guid)){error=achCopy.goalUnavailable;return;}
+   const next=toggleAchievementState(live.value,Date.now(),target);
    update(await changeAchievementWithParent(live,next));
    await persistDraft();
   }catch(e){error=describeError(e)}
@@ -523,7 +528,6 @@
  async function openAchievement(row:AchievementEntry,opener:HTMLElement,index:number){
   if(busy)return;
   editingAchievement=row;achievementReturnFocus=opener;editingAchievementTitle=achievementName(achievementGuid(row.guid),index);
-  achievementProgress=String(row.value.current);
   achievementDate=formatAchievementDate(row.value)||(row.value.complete?formatAchievementDate({complete:true,current:0,completed:[BigInt(Math.floor(Date.now()/1000)),0]}):'');
   achievementValidation='';
   await tick();
@@ -537,11 +541,7 @@
  }
  async function saveAchievement(){
   const selected=editingAchievement;
-  if(!snapshot||!selected||busy)return;
-  const current=Number(achievementProgress);
-  if(!achievementProgress.trim()||!Number.isFinite(current)||current<0||current>3.4028234663852886e38){
-   achievementValidation=achCopy.invalid;return;
-  }
+  if(!snapshot||!selected||busy||!selected.value.complete)return;
   let completed:AchievementValue['completed']=selected.value.completed;
   if(selected.value.complete){
    if(!achievementDate){achievementValidation=achCopy.invalid;return}
@@ -554,7 +554,7 @@
     completed=[BigInt(seconds),Math.round((ms-seconds*1000)*1_000_000)];
    }
   }
-  const next:AchievementValue={complete:selected.value.complete,current,completed};
+  const next:AchievementValue={complete:selected.value.complete,current:selected.value.current,completed};
   if(next.current===selected.value.current&&next.completed?.[0]===selected.value.completed?.[0]&&
    next.completed?.[1]===selected.value.completed?.[1]){closeAchievement();return}
   busy=true;error='';achievementValidation='';
@@ -769,15 +769,9 @@
         <input type="datetime-local" step="1" required bind:value={achievementDate} oninput={()=>achievementValidation=''}/>
        </label>
       {/if}
-      <details class="achievement-modal-advanced">
-       <summary>{compactCopy.advanced}</summary>
-       <label class="date-dialog-field">
-        <span>{achCopy.progress}</span>
-        <input type="text" inputmode="decimal" required bind:value={achievementProgress} oninput={()=>achievementValidation=''}/>
-       </label>
-       {#if facts}
-        <details class="achievement-modal-source">
-         <summary>{compactCopy.source}</summary>
+      {#if facts}
+       <details class="achievement-modal-source">
+        <summary>{compactCopy.source}</summary>
          <dl class="achievement-fact-list">
           <dt>{factCopy.counterKind}</dt><dd>{facts.counterKind.replace(/^GameCounter|Definition$/g,'')}</dd>
           <dt>{factCopy.threshold}</dt><dd>{facts.threshold.toLocaleString(locale)}</dd>
@@ -789,14 +783,15 @@
           <p class="achievement-reward">🎁 {factCopy.reward}: {facts.rewardId===null?facts.rewardKey:rewardsById.get(facts.rewardId)??facts.rewardKey} × {facts.rewardQuantity.toLocaleString(locale)}</p>
           <p class="achievement-caution">{factCopy.receiptUnverified}</p>
          {/if}
-        </details>
-       {/if}
-      </details>
+       </details>
+      {/if}
       <p class="achievement-modal-scope">{compactCopy.scope}</p>
       {#if achievementValidation}<p class="date-dialog-error" role="alert">{achievementValidation}</p>{/if}
       <div class="date-dialog-actions">
        <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeAchievement}>{copy.cancel}</button>
-       <button type="submit" class="primary" disabled={busy}>{achCopy.save}</button>
+       {#if editingAchievement.value.complete}
+        <button type="submit" class="primary" disabled={busy}>{achCopy.save}</button>
+       {/if}
       </div>
      </form>
     {/if}
