@@ -46,7 +46,7 @@ test('header commands, local recovery, image tiles and continuous listing have r
  assert.doesNotMatch(component,/raw\.githubusercontent\.com/);
  assert.match(component,/loadMoreSentinel/);
  assert.match(component,/aria-pressed=\{has\}/);
- assert.match(component,/\{#if snapshot\|\|activeTool==='achievements'\}<nav/);
+ assert.match(component,/\{#if snapshot\}<nav/);
  assert.match(component,/cat\.count\.toLocaleString/);
  assert.doesNotMatch(component,/page-control/);
 });

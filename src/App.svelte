@@ -520,7 +520,7 @@
    <button class="brand" type="button" onclick={goHome} aria-label={copy.brand}>
     <span class="brand-mark" aria-hidden="true">✦</span><span class="brand-name">{copy.brand}</span>
    </button>
-   {#if snapshot||activeTool==='achievements'}<nav class="tools-nav" aria-label="Tools">
+   {#if snapshot}<nav class="tools-nav" aria-label="Tools">
     <button type="button" class="tool-tab" class:active={activeTool==='collections'} aria-current={activeTool==='collections'?'page':undefined} onclick={goHome}>{copy.toolCollection}</button>
     <button type="button" class="tool-tab" class:active={activeTool==='achievements'} aria-current={activeTool==='achievements'?'page':undefined} onclick={()=>{activeTool='achievements';editingAchievement=null;showAchievementGroup(null);error='';}}>{achCopy.title}</button>
    </nav>{/if}
@@ -565,36 +565,29 @@
  <main class="content">
   {#if error}<div class="message error" role="alert">{error}<button type="button" aria-label={copy.collapse} onclick={()=>error=''}>×</button></div>{/if}
   {#if snapshot && draftWarning}<div class="message error" role="alert">{copy.autosaveFailed}</div>{/if}
-  {#if !snapshot&&activeTool!=='achievements'}
+  {#if !snapshot}
    <section class="empty-workspace">
     <div class="empty-decoration" aria-hidden="true">✦</div>
     <h1>{copy.waiting}</h1>
     <button type="button" class="primary big" disabled={busy} onclick={askFile}>{busy?copy.busy:copy.openFile}</button>
     <p>{copy.openHint}</p>
-    <button type="button" class="variation-button achievement-browse-button" onclick={()=>{activeTool='achievements';showAchievementGroup(null)}}>{achCopy.browse}</button>
    </section>
 
   {:else if activeTool==='achievements'}
-   {#if !snapshot}
-    <div class="achievement-gallery-notice">
-     <p>{achCopy.browseHint}</p>
-     <button type="button" class="primary" disabled={busy||!restored} onclick={askFile}>{copy.openFile}</button>
-    </div>
-   {/if}
    {#if achievementGroupHierarchy && (achievementGroupSelection!==null||achievementShowAll)}
     <button type="button" class="back-link achievement-group-back" onclick={()=>showAchievementGroup(null)}>‹ {groupCopy.back}</button>
    {/if}
    <div class="section-heading"><h1>{achievementGroupHierarchy&&achievementGroupSelection!==null?
     achievementGroupSelection==='__unmapped'?groupCopy.uncategorized:achievementName(achievementGroupSelection,0):
-    achievementShowAll?groupCopy.showAll:achCopy.title}</h1>{#if snapshot}<span class="category-count">{achCopy.completed}: {snapshot.achievements.filter(a=>a.value.complete).length.toLocaleString(locale)} / {snapshot.achievements.length.toLocaleString(locale)} · {achCopy.missing}: {sourceAchievementRows.filter(r=>r.row===null).length.toLocaleString(locale)}</span>{/if}</div>
+    achievementShowAll?groupCopy.showAll:achCopy.title}</h1><span class="category-count">{achCopy.completed}: {snapshot.achievements.filter(a=>a.value.complete).length.toLocaleString(locale)} / {snapshot.achievements.length.toLocaleString(locale)} · {achCopy.missing}: {sourceAchievementRows.filter(r=>r.row===null).length.toLocaleString(locale)}</span></div>
    <div class="collection-controls">
     <label class="search-field"><span class="search-symbol" aria-hidden="true">⌕</span><input type="search" bind:value={achievementQuery} placeholder={achCopy.search} aria-label={achCopy.search}/></label>
-    {#if snapshot}<div class="status-filter" role="group" aria-label={achCopy.title}>
+    <div class="status-filter" role="group" aria-label={achCopy.title}>
      <button type="button" class:active={achievementFilter==='all'} onclick={()=>{achievementFilter='all';achievementLimit=BATCH_SIZE}}>{copy.all}</button>
      <button type="button" class:active={achievementFilter==='completed'} onclick={()=>{achievementFilter='completed';achievementLimit=BATCH_SIZE}}>{achCopy.completed}</button>
      <button type="button" class:active={achievementFilter==='incomplete'} onclick={()=>{achievementFilter='incomplete';achievementLimit=BATCH_SIZE}}>{achCopy.incomplete}</button>
      <button type="button" class:active={achievementFilter==='missing'} onclick={()=>{achievementFilter='missing';achievementLimit=BATCH_SIZE}}>{achCopy.missing}</button>
-    </div>{/if}
+    </div>
    </div>
    {#if achievementGroupHierarchy && achievementGroupSelection===null && !achievementShowAll && !achievementQuery.trim() && achievementFilter==='all'}
     <div class="achievement-group-heading">
@@ -613,7 +606,7 @@
         {/if}
        </span>
        <span class="category-label">{achievementName(stat.guid,0)}</span>
-       <span class="category-count" title={snapshot?groupCopy.groupNote:groupCopy.memberCount}>{#if snapshot}{stat.completed.toLocaleString(locale)} / {/if}{stat.total.toLocaleString(locale)}{#if !snapshot} {groupCopy.memberCount}{/if}</span>
+       <span class="category-count" title={groupCopy.groupNote}>{stat.completed.toLocaleString(locale)} / {stat.total.toLocaleString(locale)}</span>
       </button>
      {/each}
      {#if unmappedAchievementRows.length}
@@ -634,7 +627,7 @@
        achievementGroupHierarchy?.byGuid.get(item.guid)?.children.length??null,
        achievementFacts.get(item.guid)?.threshold??null
       )}
-      <article class="item-tile achievement-tile" class:achievement-preview-only={!snapshot} class:is-recorded={item.row?.value.complete===true} class:achievement-group-parent={achievementGroupSelection===item.guid}>
+      <article class="item-tile achievement-tile" class:is-recorded={item.row?.value.complete===true} class:achievement-group-parent={achievementGroupSelection===item.guid}>
        <button type="button" class="item-toggle achievement-toggle"
         aria-pressed={item.row?.value.complete}
         aria-label={item.row?(item.row.value.complete?compactCopy.relock:compactCopy.unlock)+': '+title:achCopy.missing+': '+title}
@@ -650,7 +643,7 @@
          {/if}
         </span>
         <span class="item-name">{title}</span>
-        {#if snapshot}<span class="item-status achievement-compact-status" class:has={item.row?.value.complete===true}>
+        <span class="item-status achievement-compact-status" class:has={item.row?.value.complete===true}>
          {#if !item.row}
           {achCopy.missing}
          {:else if item.row.value.complete}
@@ -660,7 +653,7 @@
          {:else}
           {achCopy.incomplete}
          {/if}
-        </span>{/if}
+        </span>
        </button>
        {#if item.row}
         <button type="button" class="date-button achievement-dialog-button"
@@ -788,7 +781,7 @@
      </button>
     {/each}
    </div>
-  {:else if snapshot}
+  {:else}
    <div class="section-heading with-back">
     <button type="button" class="back-link" onclick={subgroups.length>1?goSubcategories:goHome}>‹ {subgroups.length>1?copy.backSubcategories:copy.back}</button>
     <h1>{group?titleFor(group):copy.collections}{#if subgroups.length>1}<span class="subsection-divider"> / </span>{subcategoryLabel(activeSubgroup,locale)}{/if}</h1>
