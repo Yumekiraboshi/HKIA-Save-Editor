@@ -1,5 +1,5 @@
 <script lang="ts">
- import {onMount} from 'svelte';
+ import {onMount,tick} from 'svelte';
  import {openSave,changeCollection,applyDraft,undo,redo,exportSave,clear,type SaveSnapshot} from './worker-client';
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft} from './draft-store';
  import {messages,editorErrors,type Locale} from './ui-copy';
@@ -27,6 +27,10 @@
  let visibleLimit=$state(BATCH_SIZE);
  let editId:number|null=$state(null);
  let dateValue=$state('');
+ let dateValidation=$state('');
+ let dateDialogEl:HTMLDialogElement;
+ let dateReturnFocus:HTMLElement|null=null;
+ let iconLoadingGroup:string|null=null;
  let busy=$state(false);
  let error=$state('');
  let restored=$state(false);
@@ -53,6 +57,9 @@
  const activeSubgroup=$derived(subgroups.length===1?subgroups[0].key:subgroups.some(s=>s.key===selectedSubgroup)?selectedSubgroup:null);
  const families=$derived(recordedFamilies((catalog as Catalog|null)?.items??[],recorded));
  const hasVariants=$derived(Boolean(activeSubgroup&&((catalog as Catalog|null)?.items??[]).some((item:Item)=>item[3]===selectedGroup&&item[2]===activeSubgroup&&item[0]!==item[7])));
+ const dateDialogItem=$derived(editId===null?null:((catalog as Catalog|null)?.items??[]).find((item:Item)=>item[0]===editId)??null);
+ const dateDialogTick=$derived(editId===null?null:recorded[String(editId)]??null);
+ const dateChanged=$derived(dateDialogTick!==null&&dateValue!==toDateTimeValue(dateDialogTick));
 
  onMount(()=>{
   browserLanguage=(navigator.languages.find(l=>l.toLowerCase().startsWith('ja')||l.toLowerCase().startsWith('en'))??navigator.language??'ja').toLowerCase().startsWith('en')?'en':'ja';
@@ -133,34 +140,35 @@
  function selectCategory(key:string){
   selectedGroup=key;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
   query='';filter='all';editId=null;error='';
-  const rows=catalog?.items.filter(item=>item[3]===key)??[];
-  if(rows.length>0&&rows.every(item=>item[2]===rows[0][2]))void fetchImages(key);
+  void fetchImages(key);
   void persistDraft();
  }
  function selectSubcategory(key:string){
   if(!selectedGroup||!subgroups.some(sub=>sub.key===key))return;
   selectedSubgroup=key;showVariants=false;visibleLimit=BATCH_SIZE;query='';filter='all';editId=null;error='';
-  void fetchImages(selectedGroup);void persistDraft();
+  if(iconPack?.group!==selectedGroup&&iconLoadingGroup!==selectedGroup)void fetchImages(selectedGroup);
+  void persistDraft();
  }
  function goSubcategories(){
   selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';filter='all';
-  iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;
   if(snapshot)void persistDraft();
  }
  function goHome(){
   selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
-  editId=null;query='';filter='all';iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;
+  editId=null;query='';filter='all';iconEpoch++;iconLoadingGroup=null;iconPack?.dispose();iconPack=null;iconError=false;
   if(snapshot)void persistDraft();
  }
  function askFile(){if(busy||!restored)return;fileMenu&&(fileMenu.open=false);fileInput?.click();}
  async function fetchImages(key:string){
+  if((iconPack?.group===key||iconLoadingGroup===key)&&!iconError)return;
   const epoch=++iconEpoch;
-  iconPack?.dispose();iconPack=null;iconError=false;
+  iconLoadingGroup=key;iconPack?.dispose();iconPack=null;iconError=false;
   try{
    const pack=await loadIconPack(key,import.meta.env.BASE_URL);
    if(epoch!==iconEpoch||selectedGroup!==key){pack.dispose();return}
    iconPack=pack;
   }catch{if(epoch===iconEpoch)iconError=true}
+  finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
  function update(s:SaveSnapshot){snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));}
  function persistDraft():Promise<void>{
@@ -240,12 +248,12 @@
   }
   finally{busy=false}
  }
- async function change(id:number,next:bigint|null){
-  if(!snapshot||busy)return;
+ async function change(id:number,next:bigint|null):Promise<boolean>{
+  if(!snapshot||busy)return false;
   const prev=recorded[String(id)]??null;
   busy=true;error='';
-  try{update(await changeCollection(id,prev,next));editId=null;await persistDraft();}
-  catch(e){error=describeError(e)}
+  try{update(await changeCollection(id,prev,next));await persistDraft();return true}
+  catch(e){error=describeError(e);return false}
   finally{busy=false}
  }
  async function actHistory(which:'undo'|'redo'){
@@ -280,19 +288,36 @@
   finally{busy=false}
  }
 
- function editDate(id:number){
+ async function editDate(id:number,opener:HTMLElement){
   const old=recorded[String(id)];
-  if(old===undefined)return;
-  editId=id;dateValue=toDateTimeValue(old);
+  if(old===undefined||busy)return;
+  editId=id;dateValue=toDateTimeValue(old);dateValidation='';dateReturnFocus=opener;
+  await tick();
+  if(dateDialogEl&&!dateDialogEl.open)dateDialogEl.showModal();
  }
- function applyDate(){
-  if(editId===null)return;
+ function closeDateDialog(){if(dateDialogEl?.open)dateDialogEl.close()}
+ function onDateDialogClosed(){
+  editId=null;dateValue='';dateValidation='';
+  const focus=dateReturnFocus;dateReturnFocus=null;
+  if(focus?.isConnected)focus.focus();
+ }
+ async function applyDate(){
+  if(editId===null||dateDialogTick===null||busy||!dateChanged)return;
   const id=editId;
-  const old=recorded[String(id)];
-  if(old===undefined){editId=null;return}
-  if(dateValue===toDateTimeValue(old)){editId=null;return}
-  try{void change(id,fromDateTimeValue(dateValue,old))}
-  catch{error=copy.fileError}
+  let next:bigint;
+  try{next=fromDateTimeValue(dateValue,dateDialogTick)}
+  catch{dateValidation=copy.invalidDate;return}
+  dateValidation='';
+  const success=await change(id,next);
+  if(success)closeDateDialog();
+  else dateValidation=error||copy.fileError;
+ }
+ async function clearDate(){
+  if(editId===null||dateDialogTick===null||busy||!snapshot?.membershipEdit)return;
+  const id=editId;
+  const success=await change(id,null);
+  if(success)closeDateDialog();
+  else dateValidation=error||copy.fileError;
  }
 </script>
 
