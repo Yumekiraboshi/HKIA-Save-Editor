@@ -20,7 +20,7 @@ pub fn value(model:&Model)->Result<AchievementValue,Error>{
 }
 pub fn valid(v:AchievementValue)->bool{
  v.current.is_finite() && v.current>=0.0 &&
- v.completed.map_or(true,|(secs,nanos)| (0..=253402300799).contains(&secs)&&nanos<1_000_000_000)
+ v.completed.map_or(true,|(secs,nanos)| (0..=253402300799).contains(&secs)&&nanos<1_000_000_000&&nanos%100==0)
 }
 pub type Replacement=(Range<usize>,Vec<u8>);
 pub fn replacements(model:&Model,next:AchievementValue)->Result<Vec<Replacement>,Error>{
