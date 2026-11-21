@@ -19,11 +19,12 @@ fn synthetic_payload(version:&str)->Vec<u8>{
   let mut s=vec![0xa0|version.len()as u8];s.extend(version.as_bytes());s
  }]));
  let a=doc(16,arr(vec![vec![1],guid([1,0,0,1]),arr(vec![vec![0xc2],f(1.0),vec![0xc0]])]));
+ let b=doc(16,arr(vec![vec![2],guid([2,0,0,1]),arr(vec![vec![0xc2],f(2.0),vec![0xc0]])]));
  let c=doc(17,arr(vec![vec![1],guid([1,0,0,2]),arr(vec![f(2.0),vec![0xc0],vec![0x90]])]));
  let key1=map(vec![(vec![2],l(638000000000000001)),(vec![3],l(9))]);
  let trait_collection=doc(39,arr(vec![map(vec![]),key1]));
  let obj=doc(32,arr(vec![vec![3],guid([0,0,0,3]),vec![0],arr(vec![trait_collection])]));
- arr(vec![vec![0],vec![4],arr(vec![v,a,c,obj])])
+ arr(vec![vec![0],vec![4],arr(vec![v,a,b,c,obj])])
 }
 fn literal(s:&[u8])->Vec<u8>{
  let mut b=vec![(s.len().min(15)as u8)<<4];
@@ -164,6 +165,53 @@ fn achievement_only_and_mixed_edits_roundtrip_with_undo_and_zip_isolation(){
    assert_eq!(editor.achievement_value(guid),Some(done));
    assert!(editor.undo());assert!(!editor.dirty());
    assert_eq!(original,if zipped{zip(&slot(version))}else{slot(version)});
+  }
+ }
+}
+
+#[test]
+fn category_child_and_parent_atomic_change_with_single_undo_and_no_partial_conflict(){
+ use hkia_save_core::achievement::AchievementValue;
+ for version in ["3.0.0","3.0.1"] {
+  for zipped in [false,true] {
+   let raw=slot(version);
+   let input=if zipped{zip(&raw)}else{raw};
+   let mut editor=Editor::open(input).unwrap();
+   let leaf=[1,0,0,1];let parent=[2,0,0,1];
+   let old_leaf=AchievementValue{complete:false,current:1.0,completed:None};
+   let old_parent=AchievementValue{complete:false,current:2.0,completed:None};
+   let last_time=(1_750_000_001,987_654_300);
+   let done_leaf=AchievementValue{complete:true,current:1.0,completed:Some(last_time)};
+   let done_parent=AchievementValue{complete:true,current:2.0,completed:Some(last_time)};
+   let pair=((leaf,old_leaf,done_leaf),(parent,old_parent,done_parent));
+
+   // The pair is rejected without any writes if either CAS input is stale,
+   // either GUID is missing, values are malformed, or the GUIDs collide.
+   let bad=(parent,AchievementValue{current:99.0,..old_parent},done_parent);
+   assert!(editor.change_achievement_pair(pair.0,bad).is_err());
+   assert!(editor.change_achievement_pair(pair.0,(leaf,old_leaf,done_parent)).is_err());
+   assert!(editor.change_achievement_pair(pair.0,([9,9,9,9],old_parent,done_parent)).is_err());
+   assert_eq!(editor.achievement_value(leaf),Some(old_leaf));
+   assert_eq!(editor.achievement_value(parent),Some(old_parent));
+   assert!(!editor.dirty());assert!(!editor.can_undo());
+
+   editor.change_achievement_pair(pair.0,pair.1).unwrap();
+   assert_eq!(editor.achievement_value(leaf),Some(done_leaf));
+   assert_eq!(editor.achievement_value(parent),Some(done_parent));
+   assert_eq!(editor.revision(),1);
+   let exported=editor.export().unwrap();
+   let read=Editor::open(exported).unwrap();
+   assert_eq!(read.achievement_value(leaf),Some(done_leaf));
+   assert_eq!(read.achievement_value(parent),Some(done_parent));
+   assert!(editor.undo()); // One undo restores both values.
+   assert_eq!(editor.achievement_value(leaf),Some(old_leaf));
+   assert_eq!(editor.achievement_value(parent),Some(old_parent));
+   assert!(!editor.can_undo());
+   assert!(!editor.dirty());
+   assert!(editor.redo());
+   assert_eq!(editor.achievement_value(leaf),Some(done_leaf));
+   assert_eq!(editor.achievement_value(parent),Some(done_parent));
+   assert!(editor.can_undo());
   }
  }
 }
