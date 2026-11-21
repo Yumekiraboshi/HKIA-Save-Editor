@@ -9,7 +9,7 @@ export type SaveSnapshot={
  bytes:number;
  entries:Array<[number,bigint]>;
 };
-type Action='open'|'snapshot'|'change'|'undo'|'redo'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -41,3 +41,6 @@ export function redo():Promise<SaveSnapshot>{return rpc('redo') as Promise<SaveS
 export function reset():Promise<SaveSnapshot>{return rpc('reset') as Promise<SaveSnapshot>}
 export function exportSave():Promise<Uint8Array>{return rpc('export') as Promise<Uint8Array>}
 export function clear():Promise<unknown>{return rpc('clear')}
+
+export type ChangeRequest={id:number;before:bigint|null;after:bigint|null};
+export function applyDraft(patches:ChangeRequest[]):Promise<SaveSnapshot>{return rpc('batch',{patches}) as Promise<SaveSnapshot>}

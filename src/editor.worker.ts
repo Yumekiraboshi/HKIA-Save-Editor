@@ -1,5 +1,5 @@
-type Action = 'open'|'snapshot'|'change'|'undo'|'redo'|'reset'|'export'|'clear';
-type Request = { id:number; action:Action; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null };
+type Action = 'open'|'snapshot'|'change'|'batch'|'undo'|'redo'|'reset'|'export'|'clear';
+type Request = { id:number; action:Action; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}> };
 type Transport = { postMessage(data:unknown, transfer?:Transferable[]):void; onmessage:((event:MessageEvent<Request>)=>void)|null };
 type Engine = {
  memory:WebAssembly.Memory;
@@ -57,6 +57,20 @@ async function execute(r:Request):Promise<unknown>{
    if(typeof r.itemId!=='number'||!Number.isInteger(r.itemId)||r.itemId<=0||r.itemId>2147483647)throw Error('ItemIdが不正です。');
    const a=r.expected??null,b=r.next??null;
    if(e.hkia_change(r.itemId,a===null?0:1,a??0n,b===null?0:1,b??0n)!==0)throw Error('変更できませんでした。元の値か編集条件が一致しません。');
+   return snapshot(e);
+  }
+  case 'batch':{
+   const patches=r.patches;
+   if(!Array.isArray(patches)||patches.length>20000)throw Error('DRAFT_INVALID');
+   for(const p of patches){
+    if(!Number.isInteger(p.id)||p.id<=0||p.id>2147483647){
+     e.hkia_reset();throw Error('DRAFT_INVALID');
+    }
+    const before=p.before??null,after=p.after??null;
+    if(e.hkia_change(p.id,before===null?0:1,before??0n,after===null?0:1,after??0n)!==0){
+     e.hkia_reset();throw Error('DRAFT_CONFLICT');
+    }
+   }
    return snapshot(e);
   }
   case 'undo':if(e.hkia_undo()!==0)throw Error('戻せる変更がありません。');return snapshot(e);
