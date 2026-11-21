@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,existsSync} from 'node:fs';
 const catalog=JSON.parse(readFileSync(new URL('../public/catalog.json',import.meta.url),'utf8'));
 const component=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
 const i18nSource=readFileSync(new URL('../src/ui-copy.ts',import.meta.url),'utf8');
@@ -13,6 +13,11 @@ test('game taxonomy is complete and sorted',()=>{
  for(let i=1;i<catalog.groups.length;i++)assert.ok(catalog.groups[i][4]>catalog.groups[i-1][4]);
  for(const group of catalog.groups){
   assert.ok(group[1].trim()&&group[2].trim()&&group[5].endsWith('.webp'));
+  const icon=new URL('../public/icons/'+group[5],import.meta.url);
+  assert.ok(existsSync(icon),'missing category icon '+group[5]);
+  const bytes=readFileSync(icon);
+  assert.equal(bytes.toString('ascii',0,4),'RIFF');
+  assert.equal(bytes.toString('ascii',8,12),'WEBP');
  }
  for(const item of catalog.items)assert.ok(groupIds.has(item[3]));
 });
@@ -37,6 +42,7 @@ test('header commands and paging have real handlers',()=>{
  for(const symbol of ['openSave','exportSave','backup()','closeSave()','actHistory(','setLanguage(','setTheme(','jumpPage(','selectCategory(','change(','fileInput?.click()'])assert.ok(component.includes(symbol),symbol);
  assert.ok(component.includes('const PAGE_SIZE=24'));
  assert.match(component,/category-grid/);
+ assert.doesNotMatch(component,/raw\.githubusercontent\.com/);
  assert.match(component,/page-control/);
 });
 test('Japanese and English editor copy have matching keys',()=>{

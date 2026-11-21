@@ -1,30 +1,35 @@
 # HKIA Save Editor
 
-[Open the browser editor](https://yumekiraboshi.github.io/HKIA-Save-Editor/)
+**[Open the editor](https://yumekiraboshi.github.io/HKIA-Save-Editor/)**
 
-An unofficial, browser-local collection-history editor for Hello Kitty Island Adventure.
+A browser-local collection-history editor for Hello Kitty Island Adventure. The interface is based on the game's 25 collection groups rather than a flat raw ItemId list.
 
-## Features
+## Interface
 
-- Open supported 3.0.0 / 3.0.1 SaveGameV2 and ZIP backups locally; the save file is never uploaded.
-- Browse/search/filter 3.0.1 collection definitions.
-- Edit existing collection-history timestamps and, when the save is eligible, add or remove collection-history records.
-- Undo, redo, reset and download a **separate edited file**, preserving the original.
-- Rust/WebAssembly reader/writer, TypeScript + Svelte UI and a dedicated Web Worker.
-- Validate encoded edits by independently re-parsing the generated output. Unrelated ZIP members remain byte-for-byte unchanged.
+- Game-derived collection categories, with the 25 local category images and category order.
+- Select a category, search by Japanese or English item name, and navigate in pages of 24 items (including direct page jump).
+- Edit collection-history membership or recorded date where the structural save constraints allow it.
+- Compact header for the active tool, loading another file, downloading the **unchanged original** backup, downloading an edited copy, undo/redo, language and light/dark/system theme.
+- Browser-language detection and manual Japanese/English language selection; display preferences only are stored locally.
+- No raw item IDs, internal keys, GUIDs, or technical tokens in normal item and category views.
 
-## Safety and compatibility
+### Display-name coverage and accuracy
 
-- **Keep the original backup.** Game-side persistence has not yet been verified with a genuine save in this restarted project.
-- Changes target the Key1 *collection history*, **not** inventory, entitlements, paid items, quests, rewards, or achievements.
-- Presence of legacy Key0 data disables add/remove to prevent uncertain cross-version mutations; existing timestamps remain editable.
-- Newly added entries require a source-mapped, non-DLC/non-event item in the exact v3.0.1 catalog. Unsupported options are disabled.
-- Actual gameplay effects, event eligibility and other linked systems are not inferred from Key1.
-- The project includes a synthetic save/ZIP roundtrip test and a compiled WASM ABI smoke test, but no genuine-save browser E2E acceptance yet.
+The 3.0.1 collection membership IDs were joined against a separately sourced item-name index for **PC Build 1119 / Switch 2.16.2**. The current result has **8,647 matched English/Japanese display-name pairs** out of 10,262 mapped collection items. The other **1,615 items are deliberately hidden from the normal list** instead of presenting opaque internal identifiers. The match by stable item ID does not prove naming parity with 3.0.1; a current-version localization extraction remains required. Japanese category group labels are editor labels matched to game group keys, not asserted to be exact in-game text.
+
+## Save data and compatibility
+
+- Only game SaveGameV2 3.0.0/3.0.1 slot or supported ZIP backups are accepted.
+- Data is processed in Rust/WebAssembly inside a Web Worker, entirely in the browser. The original remains untouched. No save is uploaded.
+- Changes are limited to the **collection history (Key1)**, not ownership, items in inventory, achievements, quests, rewards, DLC entitlements or other linked systems.
+- An existing legacy Key0 map blocks add/remove; editing an existing saved timestamp remains available.
+- New v3.0.1 history additions are further gated in Rust to confirmed collection IDs without identified DLC/event group restrictions.
+- Synthetic native Save and ZIP tests, compiled WASM save roundtrip, Svelte/TypeScript checks and page builds run in CI. **Real-game acceptance and the behavior of edited genuine saves remain unverified.**
+- Keep an untouched backup before testing edited saves.
 
 ## Development
 
-Requires Rust with the `wasm32-unknown-unknown` target and Node.js 22+.
+Requires Node.js 22+ and Rust with `wasm32-unknown-unknown`.
 
 ```sh
 npm ci
@@ -32,14 +37,15 @@ npm run build:wasm
 npm run dev
 ```
 
-To run the complete CI checks:
+To run checks:
 
 ```sh
 cargo test -p hkia-save-core
-cargo build --release --target wasm32-unknown-unknown -p hkia-web-editor
+npm test
+npm run build:wasm
 npm run test:wasm
 npm run check
 npm run build
 ```
 
-Not affiliated with Sunblink, Sanrio, or the game's publishers.
+Unofficial tool. Not affiliated with Sunblink, Sanrio or the game's publishers.
