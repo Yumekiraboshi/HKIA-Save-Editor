@@ -636,22 +636,44 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
    <div class="bar-actions">
     {#if snapshot}
      <span class="save-indicator" title={original?.name??''}><span class:changed={snapshot.dirty} class="state-dot"></span><span class="file-short">{original?.name}</span>{#if draftWarning}<span class="draft-risk" title={copy.autosaveFailed}>⚠</span>{/if}</span>
-     <button type="button" class="icon-button" title={copy.undo} aria-label={copy.undo} disabled={busy||!snapshot.canUndo} onclick={()=>void actHistory('undo')}>↶</button>
-     <button type="button" class="icon-button" title={copy.redo} aria-label={copy.redo} disabled={busy||!snapshot.canRedo} onclick={()=>void actHistory('redo')}>↷</button>
+     <button type="button" class="icon-button" title={copy.undo} aria-label={copy.undo} disabled={busy||tabHistoryCursor===0} onclick={()=>void actHistory('undo')}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 1 2.7 6.3"/></svg></button>
+     <button type="button" class="icon-button" title={copy.redo} aria-label={copy.redo} disabled={busy||tabHistoryCursor>=tabHistory.length} onclick={()=>void actHistory('redo')}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 0-2.7 6.3"/></svg></button>
+     <details class="history-menu" bind:this={historyMenu}>
+      <summary class="icon-button" title={hCopy.title} aria-label={hCopy.title}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></summary>
+      <div class="history-popover">
+       <div class="history-heading">{hCopy.title} · {activeTool==='collections'?copy.toolCollection:achCopy.title}</div>
+       {#if !tabHistory.length}
+        <p class="history-empty">{hCopy.empty}</p>
+       {:else}
+        <div class="history-list">
+         <button type="button" class:active={tabHistoryCursor===0} disabled={busy} title={hCopy.step} onclick={()=>void goToHistory(0)}>
+          <span class="history-step">0</span><span class="history-text">{hCopy.initial}</span>
+          {#if tabHistoryCursor===0}<span class="history-current" aria-label={hCopy.current}>✓</span>{/if}
+         </button>
+         {#each tabHistory as entry,i (i)}
+          <button type="button" class:active={tabHistoryCursor===i+1} disabled={busy} title={hCopy.step} onclick={()=>void goToHistory(i+1)}>
+           <span class="history-step">{i+1}</span><span class="history-text">{historyEntryLabel(entry)}</span>
+           {#if tabHistoryCursor===i+1}<span class="history-current" aria-label={hCopy.current}>✓</span>{/if}
+          </button>
+         {/each}
+        </div>
+       {/if}
+      </div>
+     </details>
     {/if}
     <details class="file-menu" bind:this={fileMenu}>
-     <summary class="bar-button">{copy.file}<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+     <summary class="bar-button icon-button file-action" title={copy.file} aria-label={copy.file}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h9l5 5v13H5z"/><path d="M14 3v6h5"/><path d="M8 14h8M8 17h8"/></svg><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
      <div class="menu-popover">
-      <button type="button" onclick={askFile}>{snapshot?copy.replace:copy.openFile}</button>
+      <button type="button" onclick={askFile}><svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5h6l2 2h8v12z"/><path d="M12 10v6m-3-3h6"/></svg>{snapshot?copy.replace:copy.openFile}</button>
       {#if snapshot}
-       <button type="button" onclick={backup}>{copy.backup}</button>
-       <button type="button" disabled={!snapshot.dirty||busy} onclick={()=>void saveEdited()}>{copy.export}</button>
+       <button type="button" onclick={backup}><svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4"/><path d="M4 17v4h16v-4"/></svg>{copy.backup}</button>
+       <button type="button" disabled={!snapshot.dirty||busy} onclick={()=>void saveEdited()}><svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4"/><path d="M4 17v4h16v-4"/></svg>{copy.export}</button>
        <hr/>
-       <button type="button" onclick={()=>void closeSave()}>{copy.close}</button>
+       <button type="button" onclick={()=>void closeSave()}><svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3H5v18h4"/><path d="M12 12h9m-4-4 4 4-4 4"/></svg>{copy.close}</button>
       {/if}
      </div>
     </details>
-    <label class="header-select" title={copy.language}>
+    <label class="header-select" title={copy.language}><svg class="select-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
      <span class="visually-hidden">{copy.language}</span>
      <select aria-label={copy.language} value={languagePref} onchange={e=>setLanguage(e.currentTarget.value as LanguagePref)}>
       <option value="auto">{copy.system}</option>
@@ -660,7 +682,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
       {/each}
      </select>
     </label>
-    <label class="header-select theme-select" title={copy.theme}>
+    <label class="header-select theme-select" title={copy.theme}><svg class="select-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M12 3a9 9 0 0 1 0 18"/></svg>
      <span class="visually-hidden">{copy.theme}</span>
      <select aria-label={copy.theme} value={themePref} onchange={e=>setTheme(e.currentTarget.value as ThemePref)}>
       <option value="system">◐ {copy.system}</option><option value="light">☀ {copy.light}</option><option value="dark">☾ {copy.dark}</option>
