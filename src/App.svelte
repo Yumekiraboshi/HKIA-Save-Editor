@@ -49,10 +49,10 @@
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
- const subgroups=$derived(catalog&&selectedGroup?listSubcategories(catalog.items,selectedGroup,recorded,locale):[]);
+ const subgroups=$derived(selectedGroup?listSubcategories((catalog as Catalog|null)?.items??[],selectedGroup,recorded,locale):[]);
  const activeSubgroup=$derived(subgroups.length===1?subgroups[0].key:subgroups.some(s=>s.key===selectedSubgroup)?selectedSubgroup:null);
- const families=$derived(catalog?recordedFamilies(catalog.items,recorded):{} as Record<string,number[]>);
- const hasVariants=$derived(Boolean(catalog&&selectedGroup&&activeSubgroup&&catalog.items.some(item=>item[3]===selectedGroup&&item[2]===activeSubgroup&&item[0]!==item[7])));
+ const families=$derived(recordedFamilies((catalog as Catalog|null)?.items??[],recorded));
+ const hasVariants=$derived(Boolean(activeSubgroup&&((catalog as Catalog|null)?.items??[]).some((item:Item)=>item[3]===selectedGroup&&item[2]===activeSubgroup&&item[0]!==item[7])));
 
  onMount(()=>{
   browserLanguage=(navigator.languages.find(l=>l.toLowerCase().startsWith('ja')||l.toLowerCase().startsWith('en'))??navigator.language??'ja').toLowerCase().startsWith('en')?'en':'ja';
