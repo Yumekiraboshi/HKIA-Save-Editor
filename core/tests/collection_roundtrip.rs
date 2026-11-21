@@ -278,3 +278,67 @@ fn creation_followed_by_uncomplete_edit_has_one_undo_per_step_and_exports_as_inc
  assert!(editor.redo());assert_eq!(editor.achievement_value(guid),Some(undone));
  editor.reset();assert_eq!(editor.achievement_value(guid),None);
 }
+
+#[test]
+fn absent_parent_is_created_with_absent_last_child_in_single_atomic_undo(){
+ use hkia_save_core::achievement::AchievementValue;
+ // Source-confirmed one-child GameCounterAchievementsDefinition group.
+ let parent=[0x3aad9063,0x467141c3,0x0e4a9888,0xed6f034e];
+ let child=[0x7a4030d3,0x4113e55e,0x8cb9a6a2,0xc866d13e];
+ let done=AchievementValue{complete:true,current:1.0,completed:Some((1_750_000_000,123_456_700))};
+ let wrong_date=AchievementValue{completed:Some((1_750_000_001,0)),..done};
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");
+  let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.complete_child_and_create_parent(child,None,done,parent,wrong_date).is_err());
+  assert!(e.complete_child_and_create_parent(child,None,done,[0,0,0,0],done).is_err());
+  assert!(e.complete_child_and_create_parent(child,None,done,parent,AchievementValue{current:2.0,..done}).is_err());
+  assert!(!e.dirty());assert!(!e.can_undo());
+
+  e.complete_child_and_create_parent(child,None,done,parent,done).unwrap();
+  assert_eq!(e.achievement_value(child),Some(done));
+  assert_eq!(e.achievement_value(parent),Some(done));
+  assert_eq!(e.achievements().len(),4);
+  assert_eq!(e.revision(),1);
+  let out=e.export().unwrap();
+  let reloaded=Editor::open(out).unwrap();
+  assert_eq!(reloaded.achievement_value(child),Some(done));
+  assert_eq!(reloaded.achievement_value(parent),Some(done));
+  assert_eq!(reloaded.achievements().len(),4);
+  assert!(e.undo());
+  assert_eq!(e.achievement_value(child),None);
+  assert_eq!(e.achievement_value(parent),None);
+  assert!(!e.dirty());
+  assert!(!e.can_undo());
+  assert!(e.redo());
+  assert_eq!(e.achievement_value(child),Some(done));
+  assert_eq!(e.achievement_value(parent),Some(done));
+ }
+}
+#[test]
+fn absent_parent_is_created_with_last_existing_child_and_preserves_prior_undo(){
+ use hkia_save_core::achievement::AchievementValue;
+ let parent=[0x3aad9063,0x467141c3,0x0e4a9888,0xed6f034e];
+ let child=[0x7a4030d3,0x4113e55e,0x8cb9a6a2,0xc866d13e];
+ let incomplete=AchievementValue{complete:false,current:0.0,completed:None};
+ let done=AchievementValue{complete:true,current:1.0,completed:Some((1_750_000_001,0))};
+ let mut e=Editor::open(slot("3.0.1")).unwrap();
+ e.create_achievement(child,incomplete).unwrap();
+ let rev=e.revision();
+ assert!(e.complete_child_and_create_parent(child,Some(done),done,parent,done).is_err());
+ assert!(e.complete_child_and_create_parent(child,Some(incomplete),done,parent,
+  AchievementValue{current:2.0,..done}).is_err());
+ assert_eq!(e.revision(),rev);
+ e.complete_child_and_create_parent(child,Some(incomplete),done,parent,done).unwrap();
+ assert_eq!(e.achievement_value(child),Some(done));
+ assert_eq!(e.achievement_value(parent),Some(done));
+ assert_eq!(Editor::open(e.export().unwrap()).unwrap().achievement_value(parent),Some(done));
+ assert!(e.undo());
+ assert_eq!(e.achievement_value(child),Some(incomplete));
+ assert_eq!(e.achievement_value(parent),None);
+ assert!(e.undo());
+ assert_eq!(e.achievement_value(child),None);
+ assert!(e.redo());assert_eq!(e.achievement_value(child),Some(incomplete));
+ assert!(e.redo());assert_eq!(e.achievement_value(parent),Some(done));
+}
