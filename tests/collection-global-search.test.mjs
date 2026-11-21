@@ -58,7 +58,7 @@ test('collection global search is visible on root, subcategory, and item pages a
  assert.match(app,/showVariants=item\[0\]!==item\[7\]/);
  assert.match(app,/collectionSearchDrilldown=true/);
  assert.match(app,/void fetchImages\(item\[3\]\)/);
- assert.match(app,/searchAllCollectionItems\(catalog\.items,query,locale,nameFor\)/);
+ assert.match(app,/searchAllCollectionItems\(\(catalog as Catalog\|null\)\?\.items\?\?\[\],query,locale,nameFor\)/);
  assert.match(app,/bind:value=\{query\}[\s\S]{0,100}collectionSearchDrilldown=false/);
  assert.equal((app.match(/placeholder=\{copy\.search\}/g)||[]).length,1,'one shared search control for all collection pages');
  assert.match(app,/iconPack\.entries\[String\(sub\.previewId\)\]/);
