@@ -404,7 +404,15 @@
    </div>
    <div class="subcategory-grid">
     {#each subgroups as sub (sub.key)}
+     {@const sprite=sub.previewId!==null&&iconPack?.group===selectedGroup?iconPack.entries[String(sub.previewId)]:undefined}
      <button type="button" class="subcategory-card" onclick={()=>selectSubcategory(sub.key)}>
+      <span class="subcategory-art" aria-hidden="true">
+       {#if sprite}
+        <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
+       {:else}
+        <span class="subcategory-art-empty">✧</span>
+       {/if}
+      </span>
       <span class="subcategory-label">{subcategoryLabel(sub.key,locale)}</span>
       <span class="subcategory-count" title={copy.progressHint}>{sub.count.toLocaleString(locale)} / {sub.total.toLocaleString(locale)}</span>
      </button>
@@ -456,13 +464,7 @@
        <span class="item-name">{nameFor(item)}</span>
        <span class="item-status" class:has={has}>{has?'✓ '+copy.recorded:copy.unrecorded}</span>
       </button>
-      {#if direct}<button type="button" class="date-button" title={copy.editDate} aria-label={copy.editDate+': '+nameFor(item)} disabled={busy} onclick={()=>editDate(item[0])}>◷</button>{/if}
-      {#if editId===item[0] && direct}
-       <div class="date-panel">
-        <label>{copy.editDate}<input type="datetime-local" step="1" bind:value={dateValue}/></label>
-        <div><button type="button" class="primary" disabled={busy||!dateValue} onclick={applyDate}>{copy.apply}</button><button type="button" onclick={()=>editId=null}>{copy.cancel}</button></div>
-       </div>
-      {/if}
+      {#if direct}<button type="button" class="date-button" title={copy.editDate} aria-label={copy.editDate+': '+nameFor(item)} disabled={busy} onclick={e=>void editDate(item[0],e.currentTarget)}>◷</button>{/if}
      </article>
     {/each}
    </div>
@@ -475,4 +477,38 @@
    {/if}
   {/if}
  </main>
+ <dialog class="date-dialog" bind:this={dateDialogEl} onclose={onDateDialogClosed} oncancel={e=>{if(busy)e.preventDefault()}}>
+  {#if dateDialogItem && dateDialogTick!==null}
+   {@const sprite=iconPack?.group===selectedGroup?iconPack.entries[String(dateDialogItem[0])]:undefined}
+   <form class="date-dialog-inner" onsubmit={e=>{e.preventDefault();void applyDate()}}>
+    <div class="date-dialog-heading">
+     <h2>{copy.editDate}</h2>
+     <button type="button" class="date-dialog-close" aria-label={copy.cancel} disabled={busy} onclick={closeDateDialog}>×</button>
+    </div>
+    <div class="date-dialog-item">
+     <span class="date-dialog-art" aria-hidden="true">
+      {#if sprite}
+       <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
+      {:else}
+       <span class="item-art-empty">✧</span>
+      {/if}
+     </span>
+     <div class="date-dialog-detail"><strong>{nameFor(dateDialogItem)}</strong><span>{'✓ '+copy.recorded}</span></div>
+    </div>
+    <label class="date-dialog-field">
+     <span>{copy.editDate}</span>
+     <input type="datetime-local" step="1" required bind:value={dateValue} oninput={()=>dateValidation=''}/>
+    </label>
+    {#if dateValidation}<p class="date-dialog-error" role="alert">{dateValidation}</p>{/if}
+    <div class="date-dialog-actions">
+     {#if snapshot?.membershipEdit}
+      <button type="button" class="date-dialog-clear" disabled={busy} onclick={()=>void clearDate()}>{copy.unsetRecorded}</button>
+     {/if}
+     <span class="date-dialog-spacer"></span>
+     <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeDateDialog}>{copy.cancel}</button>
+     <button type="submit" class="primary" disabled={busy||!dateValue||!dateChanged}>{copy.apply}</button>
+    </div>
+   </form>
+  {/if}
+ </dialog>
 </div>
