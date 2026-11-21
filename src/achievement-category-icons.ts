@@ -32,7 +32,7 @@ export function decodeAchievementCategoryAtlas(
  const bySaveGuid=new Map<string,CategorySprite>(),seenSource=new Set<string>(),seenSprite=new Set<string>();
  for(let i=0;i<63;i++){
   const c=meta.categories[i] as Record<string,unknown>|null;
-  const saveGuid=hierarchy.groups[i]?.guid,sourceKey=index.get(saveGuid)?.key;
+  const saveGuid=hierarchy.groups[i]!.guid,sourceKey=index.get(saveGuid)?.key;
   if(!c||typeof c!=='object'||Array.isArray(c)||c.index!==i||c.sourceKey!==sourceKey||
    typeof c.sourceGuid!=='string'||!SOURCE_GUID.test(c.sourceGuid)||seenSource.has(c.sourceGuid)||
    typeof c.spritePathId!=='string'||!PATH_ID.test(c.spritePathId)||seenSprite.has(c.spritePathId)||
