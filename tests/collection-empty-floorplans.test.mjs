@@ -78,7 +78,8 @@ test('UI does not gate native collection display on label verification or saved 
  assert.doesNotMatch(app,/!nameFor\(item\)/);
  assert.match(app,/const has=showVariants\?direct:recordIds\.length>0/);
  assert.match(app,/recorded\[String\(item\[0\]\)\]/);
- assert.match(app,/item\[4\]===0/,'existing source safety gate is unchanged');
+ assert.match(app,/mayCreateCollectionHistory\(item,snapshot\.membershipEdit,snapshot\.version,catalog\?\.version\)/);
+ assert.match(read('../src/collection-eligibility.ts'),/item\[4\]===0/,'ordinary source safety gate is unchanged');
  assert.match(app,/\{#if matching\.length===0\}/);
  const copy=read('../src/ui-copy.ts');
  assert.match(copy,/"unverifiedItem": "名称未確認"/);
