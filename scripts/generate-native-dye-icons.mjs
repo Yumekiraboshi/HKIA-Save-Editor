@@ -209,6 +209,29 @@ async function main(){
     const original=ctx.getImageData(0,0,96,96);
     const mask=globalThis.__hkiaSourceIconColors.sourceIconDyeRegions(
      srcKey,original.data,96,96,{url:'',x,y,group,sheet,cell});
+    let sourceAudit=null;
+    if(group==='collection_group_teagarden'&&sheet===0&&cell===101&&p.dye===1292){
+     const px=original.data;
+     let visible=0,neutral=0,secondary=0,chromatic=0;
+     let minX=96,maxX=0,minY=96,maxY=0;
+     for(let i=0;i<96*96;i++){
+      const j=i*4;if(px[j+3]<64)continue;
+      const x=i%96,y=Math.floor(i/96);
+      minX=Math.min(minX,x);maxX=Math.max(maxX,x);
+      minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+      visible++;
+      const r=px[j],g=px[j+1],b=px[j+2];
+      const ch=Math.max(r,g,b)-Math.min(r,g,b);
+      const lum=.2126*r+.7152*g+.0722*b;
+      if(ch>48)chromatic++;
+      if(ch<=40&&lum>=45){
+       neutral++;
+       if(x>=50&&x<=82&&y>=24&&y<=74)secondary++;
+      }
+     }
+     sourceAudit={visible,neutral,secondary,chromatic,minX,maxX,minY,maxY,
+      accepted:mask!==undefined};
+    }
     const recolored=globalThis.__hkiaSourceIconColors.recolorDyePixels(
      original.data,96,96,p,mask);
     if(!recolored)return null;
@@ -218,11 +241,12 @@ async function main(){
     }
     original.data.set(recolored.pixels);
     ctx.putImageData(original,0,0);
-    return {png:canvas.toDataURL('image/png').split(',')[1],
+    return {sourceAudit,png:canvas.toDataURL('image/png').split(',')[1],
      changed:recolored.changed,
      channels:[...new Set(mask??[1])].filter(n=>n>0).sort((a,b)=>a-b)};
    },{file:cacheKey,sheet,cell,srcKey,group,p});
    if(!result){notColorable++;continue;}
+   if(result.sourceAudit)console.log('HKIA_FLOWER_CLIP_ORIGINAL_PIXEL_AUDIT '+JSON.stringify(result.sourceAudit));
    const output=Buffer.from(result.png,'base64');
    if(output.toString('hex',0,8)!=='89504e470d0a1a0a'||
     output.readUInt32BE(16)!==96||output.readUInt32BE(20)!==96)
