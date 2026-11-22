@@ -26,6 +26,7 @@
  import {loadLocaleIndex,loadGameLabels,EMPTY_LABELS,type GameLabels} from './game-localization';
  import {loadIconPack,type IconPack} from './icon-packs';
  import {loadNativeDyePalettes,type NativeDyePalettes} from './native-dye-palettes';
+  import {nativeDyeRing} from './native-dye-ring';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
  import {searchAllCollectionItems,collectionDisplayName,filterCollectionItems} from './collection-search';
@@ -995,7 +996,8 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
     {#each subgroups as sub (sub.key)}
      {@const sprite=sub.previewId!==null&&iconPack?.group===selectedGroup?iconPack.entries[String(sub.previewId)]:undefined}
      <button type="button" class="subcategory-card" onclick={()=>selectSubcategory(sub.key)}>
-      <span class="subcategory-art" aria-hidden="true">
+      <span class="subcategory-art" class:native-dye-preview={Boolean(sprite&&sub.previewId!==null&&nativeDyePalettes[String(sub.previewId)])}
+        style:--native-dye-ring={sprite&&sub.previewId!==null?nativeDyeRing(nativeDyePalettes[String(sub.previewId)]):undefined} aria-hidden="true">
        {#if sprite}
         <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
        {:else}
@@ -1049,7 +1051,8 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
       <button type="button" class="item-toggle" aria-pressed={has} aria-label={(has?copy.unsetRecorded:copy.setRecorded)+': '+nameFor(item)}
        title={mayToggle?(has?copy.unsetRecorded:copy.setRecorded):!showVariants&&recordIds.length>0?copy.variantsToEdit:copy.unsafe} disabled={busy||!mayToggle}
        onclick={()=>void change(item[0],direct?null:EPOCH+BigInt(Date.now())*10000n)}>
-       <span class="item-art" aria-hidden="true">
+       <span class="item-art" class:native-dye-preview={Boolean(sprite&&nativeDyePalettes[String(item[0])])}
+        style:--native-dye-ring={sprite?nativeDyeRing(nativeDyePalettes[String(item[0])]):undefined} aria-hidden="true">
         {#if sprite}
          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
         {:else}
@@ -1091,7 +1094,8 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
      <button type="button" class="date-dialog-close" aria-label={copy.cancel} disabled={busy} onclick={closeDateDialog}>×</button>
     </div>
     <div class="date-dialog-item">
-     <span class="date-dialog-art" aria-hidden="true">
+     <span class="date-dialog-art" class:native-dye-preview={Boolean(sprite&&nativeDyePalettes[String(dateDialogItem[0])])}
+      style:--native-dye-ring={sprite?nativeDyeRing(nativeDyePalettes[String(dateDialogItem[0])]):undefined} aria-hidden="true">
       {#if sprite}
        <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
       {:else}
