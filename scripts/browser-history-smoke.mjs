@@ -378,7 +378,7 @@ async function run(){
  await captured.waitFor({timeout:30_000});
  assert.equal(await captured.evaluate(el=>getComputedStyle(el).backgroundSize),'contain',
   'verified colorway assets preserve their natural aspect ratio');
- assert.match(await captured.evaluate(el=>getComputedStyle(el).backgroundImage),/704486536\\.png/,
+ assert.ok((await captured.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/704486536.png'),
   'verified image uses direct static item-specific pixels rather than a recolored Blob');
  await finalSearch.fill('Orange Archer Hat');
  await page.locator('.collection-search-result').first().click();
