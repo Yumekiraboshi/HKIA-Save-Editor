@@ -227,9 +227,12 @@ function highTeaFlowerClipRegions(
   regions[i]=rightBlossom?2:1;
   if(rightBlossom)secondary++;
  }
- // Never project the guessed petal mask onto changed/non-floral art.
+ // Original Steam v3.0.1 source cell 101 measured 3,502 visible pixels,
+ // 2,336 neutral petals, 1,222 right-petal candidates and 1,081
+ // chromatic decoration pixels. Keep that original non-neutral detail.
+ // Never project this 2D mask onto changed/non-floral art.
  if(visible<650||visible>5300||neutral<380||
-  neutral<visible*.44||chromatic>380||
+  neutral<visible*.44||chromatic>1350||
   secondary<75||secondary>1750)return undefined;
  return regions;
 }
