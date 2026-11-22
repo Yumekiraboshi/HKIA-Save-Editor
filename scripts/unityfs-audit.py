@@ -159,7 +159,7 @@ def inspect_serialized(b):
         if dependencies>10000 or pos>len(b):
             raise InvalidAsset('invalid type references')
         types.append(cls)
-    count=integer(b,pos,4,endian);pos=(pos+7)&~3
+    count=integer(b,pos,4,endian);pos=(pos+3)&~3
     if count>2000000:raise InvalidAsset('object count limit')
     names=[]
     classes=collections.Counter()
