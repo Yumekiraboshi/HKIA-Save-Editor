@@ -1,5 +1,6 @@
 import type {SpriteCell} from './icon-packs';
 import type {NativeDyePalette} from './native-dye-palettes';
+import {sourceIconDyeRegions} from './dye-icon-regions';
 
 const SIDE=96;
 const MAX_SHEETS=8;
@@ -43,6 +44,21 @@ export function recolorDyePixels(
  if(neutral.length<16)return null;
  neutral.sort((a,b)=>a-b);
  const reference=Math.max(75,neutral[neutral.length>>1]);
+ const channelReferences=[reference,reference,reference,reference,reference];
+ if(channelMask){
+  const values:Array<number[]>=[[],[],[],[],[]];
+  for(let i=0;i<channelMask.length;i++){
+   const channel=channelMask[i]-1,offset=i*4;
+   if(channel<0||channel>4||input[offset+3]<64)continue;
+   values[channel].push(.2126*input[offset]+.7152*input[offset+1]+.0722*input[offset+2]);
+  }
+  for(let channel=1;channel<5;channel++){
+   const sampled=values[channel];
+   if(sampled.length<8)continue;
+   sampled.sort((a,b)=>a-b);
+   channelReferences[channel]=Math.max(55,sampled[sampled.length>>1]);
+  }
+ }
  const output=new Uint8ClampedArray(input);
  let changed=0;
  for(let i=0;i<input.length;i+=4){
@@ -53,20 +69,23 @@ export function recolorDyePixels(
   // Already-colored trim is not a verified dye channel: leave it untouched.
   const neutrality=clamp((70-chroma)/34,0,1);
   const lum=.2126*r+.7152*g+.0722*b;
-  // Preserve black outlines and near-white reflections rather than tinting
-  // them into artificial dark/light blocks.
-  const shadows=clamp((lum-33)/49,0,1);
-  const highlights=clamp((252-lum)/29,0,1);
-  const strength=neutrality*shadows*highlights;
-  if(strength<=.015)continue;
   const targetIndex=channelMask?channelMask[i>>2]-1:0;
   if(targetIndex<0||targetIndex>=colors.length)continue;
   const color=colors[targetIndex];
   if(!color)continue;
-  const shade=clamp(.66+.34*lum/reference,0.25,1.55);
+  // A source-derived colored decorative region must not be rejected as
+  // "nonneutral" just because the original image already has orange/gold.
+  // Only explicitly tagged pixels bypass that generic neutrality test.
+  const eligible=channelMask&&targetIndex>0?1:neutrality;
+  const shadows=clamp((lum-33)/49,0,1);
+  const highlights=clamp((252-lum)/29,0,1);
+  const strength=eligible*shadows*highlights;
+  if(strength<=.015)continue;
+  const channelReference=channelReferences[targetIndex];
+  const shade=clamp(.66+.34*lum/channelReference,0.25,1.55);
   let different=false;
   for(let channel=0;channel<3;channel++){
-   const lit=clamp(color[channel]*shade+(lum-reference)*.27);
+   const lit=clamp(color[channel]*shade+(lum-channelReference)*.27);
    const value=Math.round(input[i+channel]*(1-strength)+lit*strength);
    if(Math.abs(value-input[i+channel])>=3)different=true;
    output[i+channel]=value;
@@ -96,7 +115,7 @@ function toBlob(canvas:HTMLCanvasElement):Promise<Blob>{
   canvas.toBlob(blob=>blob?resolve(blob):reject(Error('DYE_IMAGE_ENCODE')),'image/webp',.92);
  });
 }
-async function render(sprite:SpriteCell,palette:NativeDyePalette):Promise<Blob|null>{
+async function render(sprite:SpriteCell,palette:NativeDyePalette,sourceKey:string):Promise<Blob|null>{
  const image=await loadSheet(sprite.url);
  const canvas=document.createElement('canvas');
  canvas.width=SIDE;canvas.height=SIDE;
@@ -104,7 +123,8 @@ async function render(sprite:SpriteCell,palette:NativeDyePalette):Promise<Blob|n
  if(!context)throw Error('DYE_IMAGE_CANVAS');
  context.drawImage(image,sprite.x,sprite.y,SIDE,SIDE,0,0,SIDE,SIDE);
  const pixels=context.getImageData(0,0,SIDE,SIDE);
- const result=recolorDyePixels(pixels.data,SIDE,SIDE,palette);
+ const mask=sourceIconDyeRegions(sourceKey,pixels.data,SIDE,SIDE);
+ const result=recolorDyePixels(pixels.data,SIDE,SIDE,palette,mask);
  if(!result)return null;
  pixels.data.set(result.pixels);
  context.putImageData(pixels,0,0);
@@ -113,10 +133,10 @@ async function render(sprite:SpriteCell,palette:NativeDyePalette):Promise<Blob|n
 /** Lazily produce a 96px WebP for the requested Item ID / native dye.
  * Coalesce identical rendering work, retain a small LRU of blobs, and let
  * the calling component revoke its own object URL when unmounted. */
-export function renderDyeSprite(sprite:SpriteCell,palette:NativeDyePalette):Promise<Blob|null>{
- const key=sprite.url+'|'+sprite.x+':'+sprite.y+'|'+palette.dye;
+export function renderDyeSprite(sprite:SpriteCell,palette:NativeDyePalette,sourceKey=''):Promise<Blob|null>{
+ const key=sprite.url+'|'+sprite.x+':'+sprite.y+'|'+palette.dye+'|'+sourceKey;
  const found=rendered.get(key);
  if(found)return found;
- const promise=render(sprite,palette).catch(()=>{rendered.delete(key);return null});
+ const promise=render(sprite,palette,sourceKey).catch(()=>{rendered.delete(key);return null});
  return remember(rendered,key,promise,MAX_RENDERED);
 }
