@@ -7,7 +7,7 @@
   sprite:SpriteCell;palette:NativeDyePalette;sourceKey?:string;exactArtUrl?:string
  }=$props();
  let displayedUrl=$state<string|null>(null);
- let imageSource=$state<'original'|'approximation'|'game-capture'>('original');
+ let imageSource=$state<'original'|'approximation'|'game-render'>('original');
 
  $effect(()=>{
   const cell=sprite,colors=palette,key=sourceKey,exact=exactArtUrl;
@@ -25,14 +25,14 @@
    });
   };
   if(exact){
-   // Per-ID, locally hosted verified captured image takes priority over
+   // Per-ID, locally hosted game-generated image takes priority over
    // guessed 2D recoloring. Failed/corrupt/missing files fall back safely.
    const picture=new Image();
    picture.src=exact;
    void picture.decode().then(()=>{
     if(canceled)return;
     displayedUrl=exact;
-    imageSource='game-capture';
+    imageSource='game-render';
    }).catch(renderApproximation);
   }else renderApproximation();
 
@@ -49,6 +49,6 @@
  data-dye-rendered={displayedUrl!==null?'true':'false'}
  data-dye-source={imageSource}
  style:background-image={'url("'+(displayedUrl??sprite.url)+'")'}
- style:background-position={imageSource==='game-capture'?'center':displayedUrl?'0px 0px':'-'+sprite.x+'px -'+sprite.y+'px'}
- style:background-size={imageSource==='game-capture'?'contain':displayedUrl?'96px 96px':undefined}
- style:background-repeat={imageSource==='game-capture'?'no-repeat':undefined}></span>
+ style:background-position={imageSource==='game-render'?'center':displayedUrl?'0px 0px':'-'+sprite.x+'px -'+sprite.y+'px'}
+ style:background-size={imageSource==='game-render'?'contain':displayedUrl?'96px 96px':undefined}
+ style:background-repeat={imageSource==='game-render'?'no-repeat':undefined}></span>
