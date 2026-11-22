@@ -363,7 +363,8 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
  function historyEntryChange(i:number):string{
-  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy);
+  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired)||
+   (tabHistory[i]?.paired?hCopy.paired:'');
  }
  function historyEntryLabel(entry:HistoryRecord):string{
   if(entry.scope==='collections'){
@@ -371,7 +372,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
    return item?nameFor(item):'#'+String(entry.itemId);
   }
   if(!entry.guid)return hCopy.title;
-  return achievementName(achievementGuid(entry.guid),0)+(entry.paired?' · '+hCopy.paired:'');
+  return achievementName(achievementGuid(entry.guid),0);
  }
  function update(s:SaveSnapshot){snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));}
  /** Verify a restored native journal reproduces the locally persisted net edits.
