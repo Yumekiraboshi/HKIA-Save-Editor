@@ -374,3 +374,41 @@ Wiki art, artificial colors, CSS rings or new 3D renderings are used.
 
 Together with the previous nine-family Marching Band batch, the
 21 original Marching Band families comprise 273 native colorways.
+
+## Further game-original two-tone icon families (13 additional sources)
+
+The Steam v3.0.1 game-authored UiIcon pack indices and dye palette map
+383 more Item IDs across 13 exact, shared original source cells:
+
+| Original game pack | Sheet/cell | Native colorway family | Items |
+| --- | --- | --- | ---: |
+| collection_group_teagarden | 000/028 | High Tea Waistcoat | 42 |
+| collection_group_teagarden | 000/025 | High Tea Flower Bonnet | 40 |
+| collection_group_teagarden | 000/063 | High Tea Open Tailcoat | 40 |
+| collection_group_teagarden | 000/095 | High Tea Patterned Tailcoat | 40 |
+| collection_group_teagarden | 000/107 | High Tea Elegant Dress | 38 |
+| collection_group_teagarden | 000/106 | High Tea Dress | 38 |
+| collection_group_teagarden | 000/052 | High Tea Long Sleeved Dress | 36 |
+| collection_group_teagarden | 000/105 | High Tea Great Coat | 34 |
+| collections_group_clothing | 000/039 | Browline Glasses | 12 |
+| collections_group_events | 002/081 | Soccer Jersey | 18 |
+| collections_group_events | 004/109 | Floral Grass Skirt | 12 |
+| collections_group_events | 005/074 | Floral Beachcomber Hat | 11 |
+| collections_group_events | 007/121 | Vaporwave Eclectic Outfit | 22 |
+
+All new families contain original Item IDs with the same native
+first dye but different second dye. A source-cell-specific 2D
+approximation now recolors neutral ribbon, lens, trim, decorative
+fabric or secondary cloth panels with the **actual native palette
+channel 2**; other neutral pixels use channel 1. Alpha, original
+silhouette, shading, outlines and pre-colored details are preserved.
+
+An item pair may still be indistinguishable if both original dye
+channels 1 and 2 are identical but higher native channels differ;
+no unverified third/fourth/fifth channel assignment is invented.
+
+**Fidelity boundary:** These IDs, icons and dye colors are genuine
+source-game records; the pixel region is inferred from the native
+96px 2D sprite, **not** a recovered Unity material/shader mask.
+All preview PNGs remain appropriately labelled approximate rather
+than pixel-perfect game 3D renders. No Wiki images or color rings.
