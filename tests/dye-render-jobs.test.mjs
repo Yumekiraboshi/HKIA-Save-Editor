@@ -114,3 +114,43 @@ test('metadata-only original-game CAB dependency resolver passes synthetic Unity
  assert.equal(result.status,0,result.stderr);
  assert.match(result.stdout,/UNITYFS_CAB_RESOLVER_SELFTEST_OK/);
 });
+
+test('original Archer Renderers identify two actual external Material CABs by lossless 64-bit PPtrs',()=>{
+ const renderers=archer.serialized.rendererMaterialReferences;
+ assert.equal(renderers.length,2);
+ const [mesh,skin]=renderers;
+ assert.equal(mesh.class,'MeshRenderer');
+ assert.equal(mesh.objectPathId,'-3122190711953220886');
+ assert.deepEqual(mesh.materials,[{
+  slot:0,fileId:2,pathId:'-8051441427883450333',
+  externalCAB:'CAB-6d01000bf1aa6b026bad1ed5b70c73c7'
+ }]);
+ assert.equal(skin.class,'SkinnedMeshRenderer');
+ assert.equal(skin.objectPathId,'8603473947824341167');
+ assert.deepEqual(skin.materials,[{
+  slot:0,fileId:3,pathId:'6824069125264728142',
+  externalCAB:'CAB-46b8f8fe122147493b3113f7c1c8cd0f'
+ }]);
+ const otherSkin=shirt.nodes[0].rendererMaterialReferences.find(x=>x.class==='SkinnedMeshRenderer');
+ assert.equal(otherSkin.materials[0].pathId,skin.materials[0].pathId);
+ assert.equal(otherSkin.materials[0].externalCAB,skin.materials[0].externalCAB);
+ assert.equal(otherSkin.materials[0].fileId,2,'file IDs are local to each source');
+ const known=read('../data/unityfs-audit/archer-cab-resolution.v3.0.1.json');
+ assert.deepEqual(known.unresolvedMaterialCABs,[mesh.materials[0].externalCAB,skin.materials[0].externalCAB]);
+ assert.equal(known.confirmed[0].contains.MonoScript,1546);
+ assert.equal(known.confirmed[0].sha256,'2be9445adfb193570f910a22afec50c332a1b02435388b459869377764893de4');
+});
+
+test('render job exposes actual source renderer material CAB dependencies, not speculative names',()=>{
+ const job=prepareDyeRender('1286846063',original);
+ assert.deepEqual(job.requiredMaterialCABs,[
+  'CAB-46b8f8fe122147493b3113f7c1c8cd0f',
+  'CAB-6d01000bf1aa6b026bad1ed5b70c73c7'
+ ]);
+ assert.equal(job.materialSlots[1].materials[0].pathId,'6824069125264728142');
+ assert.equal(job.materialSlots[0].materials[0].fileId,2);
+ const missingRefs={...archer,serialized:{...archer.serialized,rendererMaterialReferences:[]}};
+ assert.throws(()=>prepareDyeRender('1286846063',{...original,audits:{
+  imagination_archer_costume:missingRefs
+ }}),/DYE_JOB_MISSING_MATERIAL_PPTRS/);
+});
