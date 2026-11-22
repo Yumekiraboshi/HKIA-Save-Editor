@@ -5,7 +5,16 @@ on:
   pull_request:
   workflow_dispatch:
 jobs:
+  architecture:
+    name: architecture
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce Rust/WASM architecture contract
+        run: node scripts/check-architecture.mjs
+
   test:
+    needs: architecture
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
