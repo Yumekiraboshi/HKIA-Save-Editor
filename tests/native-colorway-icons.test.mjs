@@ -8,7 +8,7 @@ const {outputFiles}=await build({
  entryPoints:[fileURLToPath(new URL('../src/native-colorway-icons.ts',import.meta.url))],
  bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'
 });
-const {parseNativeColorwayIcons}=await import('data:text/javascript;base64,'+
+const {parseNativeColorwayIcons,loadNativeColorwayIcons}=await import('data:text/javascript;base64,'+
  Buffer.from(outputFiles[0].text).toString('base64'));
 const sample={
  file:'1286846063.png',sha256:'a'.repeat(64),sourceSheetSha256:'b'.repeat(64),
@@ -20,7 +20,28 @@ const wrap=(records)=>({schema:'HKIA.NativeColorwayIcons.1',version:'3.0.1',reco
 test('source HKIA UiIcon colorways resolve only original static item thumbnails',()=>{
  assert.deepEqual(parseNativeColorwayIcons(wrap({}),'/HKIA-Save-Editor/'),{});
  const result=parseNativeColorwayIcons(wrap({'1286846063':sample}),'/HKIA-Save-Editor/');
- assert.deepEqual(result,{'1286846063':'/HKIA-Save-Editor/native-colorways/1286846063.png'});
+ assert.deepEqual(result,{'1286846063':'/HKIA-Save-Editor/native-colorways/1286846063.png?v='+sample.sha256});
+});
+test('a new game-icon PNG digest invalidates the old browser cache URL',()=>{
+ const first=parseNativeColorwayIcons(wrap({'1286846063':sample}),'/');
+ const revised=parseNativeColorwayIcons(wrap({'1286846063':{...sample,sha256:'c'.repeat(64)}}),'/');
+ assert.notEqual(first['1286846063'],revised['1286846063']);
+ assert.match(first['1286846063'],/^\/native-colorways\/1286846063\.png\?v=[a-f0-9]{64}$/);
+ assert.equal(first['1286846063'],parseNativeColorwayIcons(wrap({'1286846063':sample}),'/')['1286846063'],
+  'unchanged source game sprite uses a reusable cache URL');
+});
+test('native colorway manifest is revalidated rather than permanently cached',async()=>{
+ const prior=globalThis.fetch;
+ const calls=[];
+ globalThis.fetch=async (...args)=>{
+  calls.push(args);
+  return {ok:true,json:async()=>wrap({'1286846063':sample})};
+ };
+ try {
+  const result=await loadNativeColorwayIcons('/HKIA-Save-Editor/');
+  assert.equal(result['1286846063'],'/HKIA-Save-Editor/native-colorways/1286846063.png?v='+sample.sha256);
+  assert.deepEqual(calls,[['/HKIA-Save-Editor/native-colorways/index.json',{cache:'no-cache'}]]);
+ } finally {globalThis.fetch=prior}
 });
 test('refuse arbitrary images, remote sources, missing hashes and false accuracy labels',()=>{
  const mistakes=[

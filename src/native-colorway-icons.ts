@@ -39,12 +39,17 @@ export function parseNativeColorwayIcons(raw:unknown,base:string):Record<string,
    !Array.isArray(record.channels)||record.channels.length===0||
    record.channels.some(channel=>!Number.isInteger(channel)||channel<1||channel>5))
    throw Error('NATIVE_COLORWAY_RECORD_INVALID');
-  result[id]=base+'native-colorways/'+id+'.png';
+  // The generated filename is stable across deployments, but its pixel data is not.
+  // Pin the URL to the source-verified PNG digest so a newly generated
+  // colorway never silently reuses a previous browser/CDN cache entry.
+  result[id]=base+'native-colorways/'+id+'.png?v='+record.sha256;
  }
  return result;
 }
 export async function loadNativeColorwayIcons(base:string):Promise<Record<string,string>>{
- const response=await fetch(base+'native-colorways/index.json',{cache:'force-cache'});
+ // Revalidate the manifest on each editor load. Its per-item PNG digests
+ // provide immutable URLs after validation, preserving normal image caching.
+ const response=await fetch(base+'native-colorways/index.json',{cache:'no-cache'});
  if(!response.ok)throw Error('NATIVE_COLORWAY_INDEX_NOT_FOUND');
  return parseNativeColorwayIcons(await response.json(),base);
 }
