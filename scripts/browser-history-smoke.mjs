@@ -231,19 +231,20 @@ async function run(){
  // but distinct second dyes. Assert that the displayed original 96px PNG
  // changes, not that an added ring, chip or different 3D pose appears.
  async function checkBandedHatPair(name1,id1,name2,id2){
-  await search.fill(name1);
-  // Select the exact native item name: e.g. 'White' also matches 'Off White'.
-  await page.locator('.collection-search-result-name')
-   .filter({hasText:new RegExp('^'+name1+'
-  await first.waitFor({timeout:30_000});
-  const firstPixels=await sampledSprite(first);
-  await search.fill(name2);
-  await page.locator('.collection-search-result-name')
-   .filter({hasText:new RegExp('^'+name2+'
-  await second.waitFor({timeout:30_000});
-  const secondPixels=await sampledSprite(second);
+  // Selecting the first result is wrong for overlapping names such as
+  // White Camp Counselor Skort / Off White Camp Counselor Skort.
+  async function findNativeIcon(name,id){
+   await search.fill(name);
+   await page.locator('.collection-search-result-name')
+    .filter({hasText:new RegExp('^'+name+'$')}).first().click();
+   const sprite=page.locator('#collection-item-'+id+' .item-sprite[data-dye-source="native-icon"]');
+   await sprite.waitFor({timeout:30_000});
+   return sampledSprite(sprite);
+  }
+  const firstPixels=await findNativeIcon(name1,id1);
+  const secondPixels=await findNativeIcon(name2,id2);
   assert.notEqual(firstPixels.hash,secondPixels.hash,
-   'the original banded hat icon must visibly use the second native dye channel');
+   'original native source icon pixels must distinguish the game's secondary dye');
  }
  await checkBandedHatPair('White and Yellow High Tea Banded Tophat',522640238,
   'White and Sky High Tea Banded Tophat',571486471);
