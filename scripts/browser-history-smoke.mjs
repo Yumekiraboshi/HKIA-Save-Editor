@@ -288,6 +288,22 @@ async function run(){
  await checkBandedHatPair('White and Green High Tea Elegant Hat',77149467,
   'White and Sky High Tea Elegant Hat',370872413);
 
+ // Steam v3.0.1 native Empire Waist Dress (38 shared-icon colorways).
+ await checkBandedHatPair('White and Sky High Tea Empire Waist Dress',17843192,
+  'White and Green High Tea Empire Waist Dress',2042637840);
+
+ // Nine Marching Band garment/accessory families (13 colors apiece):
+ // representative hat, trousers, shirt and skirt shown using the same
+ // game UiIcon artwork with native channel 2 altering the pixels.
+ await checkBandedHatPair('Blue Marching Band Two Toned Feather Cap',379278661,
+  'Orange Marching Band Two Toned Feather Cap',381629095);
+ await checkBandedHatPair('Blue Marching Band Buttoned Pants',28017165,
+  'Blush Marching Band Buttoned Pants',216882722);
+ await checkBandedHatPair('Blue Marching Band Sashed Shirt',90804870,
+  'Orange Marching Band Sashed Shirt',393663149);
+ await checkBandedHatPair('Warm Pink Marching Band Buttoned Skirt',102581461,
+  'Black Marching Band Buttoned Skirt',213537409);
+
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();
