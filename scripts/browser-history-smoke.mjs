@@ -265,6 +265,8 @@ async function run(){
  // The separate confirmation path actually applies the destructive edits.
  // Undo/redo recovery assertions above are unaffected by this final smoke.
  await page.setViewportSize({width:1360,height:840});
+ await search.fill('Floorplan');
+ await page.locator('.collection-search-result').first().click();
  const dateButton=page.locator('article.item-tile button.date-button').first();
  await dateButton.waitFor();
  await dateButton.click();
@@ -276,6 +278,9 @@ async function run(){
  await page.locator('article.item-tile button.item-toggle[aria-pressed="false"]').first().waitFor();
 
  await chooseTab(page,1);
+ if(await page.locator('.achievement-category-grid').count()){
+  await page.locator('.achievement-category-grid button.achievement-category-card').last().click();
+ }
  const achievementsAfterReload=page.locator('.achievement-item-grid button.achievement-toggle:not([disabled])');
  await achievementsAfterReload.first().click(); // restore completed status
  await page.locator('.achievement-item-grid button.achievement-toggle[aria-pressed="true"]').first().waitFor();
