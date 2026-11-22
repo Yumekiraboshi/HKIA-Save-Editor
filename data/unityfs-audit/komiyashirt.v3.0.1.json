@@ -39,24 +39,24 @@
       "rendererMaterialReferences": [
         {
           "class": "MeshRenderer",
-          "objectPathId": 6267642576144124000,
+          "objectPathId": "6267642576144124274",
           "materials": [
             {
               "slot": 0,
               "fileId": 0,
-              "pathId": -8957885102818627000,
+              "pathId": "-8957885102818627004",
               "externalCAB": null
             }
           ]
         },
         {
           "class": "SkinnedMeshRenderer",
-          "objectPathId": 172866389820919840,
+          "objectPathId": "172866389820919831",
           "materials": [
             {
               "slot": 0,
               "fileId": 2,
-              "pathId": 6824069125264728000,
+              "pathId": "6824069125264728142",
               "externalCAB": "CAB-46b8f8fe122147493b3113f7c1c8cd0f"
             }
           ]
