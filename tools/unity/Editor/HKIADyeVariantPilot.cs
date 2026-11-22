@@ -77,6 +77,9 @@ public static class HKIADyeVariantPilot
             var jobPath=Arg(args,"--hkia-job");
             var bundlePath=Arg(args,"--hkia-bundle");
             var previewPath=Arg(args,"--hkia-preview");
+            var previewFull=Path.GetFullPath(previewPath).Replace('\\','/');
+            Require(previewFull.Contains("/staging/"),
+                "HKIA_RENDER_OUTPUT_MUST_BE_IN_STAGING");
             var unsafePreview=Array.IndexOf(args,"--hkia-allow-unverified-preview")>=0;
             var job=JsonUtility.FromJson<Job>(File.ReadAllText(jobPath));
             Require(job!=null && job.schema=="HKIA.DyeRenderJob.1",
