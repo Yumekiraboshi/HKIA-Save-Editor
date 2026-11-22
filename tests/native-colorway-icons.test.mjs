@@ -1,0 +1,59 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {build} from 'esbuild';
+import {fileURLToPath} from 'node:url';
+import {test} from 'node:test';
+
+const {outputFiles}=await build({
+ entryPoints:[fileURLToPath(new URL('../src/native-colorway-icons.ts',import.meta.url))],
+ bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'
+});
+const {parseNativeColorwayIcons}=await import('data:text/javascript;base64,'+
+ Buffer.from(outputFiles[0].text).toString('base64'));
+const sample={
+ file:'1286846063.png',sha256:'a'.repeat(64),sourceSheetSha256:'b'.repeat(64),
+ group:'collections_group_events',sheet:10,cell:103,dye:284,changedPixels:1200,
+ sourceType:'original-uiicon-pixel-recolor',fidelity:'approximate',channels:[1,2,3]
+};
+const wrap=(records)=>({schema:'HKIA.NativeColorwayIcons.1',version:'3.0.1',records});
+
+test('source HKIA UiIcon colorways resolve only original static item thumbnails',()=>{
+ assert.deepEqual(parseNativeColorwayIcons(wrap({}),'/HKIA-Save-Editor/'),{});
+ const result=parseNativeColorwayIcons(wrap({'1286846063':sample}),'/HKIA-Save-Editor/');
+ assert.deepEqual(result,{'1286846063':'/HKIA-Save-Editor/native-colorways/1286846063.png'});
+});
+test('refuse arbitrary images, remote sources, missing hashes and false accuracy labels',()=>{
+ const mistakes=[
+  {file:'https://example.com/1286846063.png'},
+  {file:'../1286846063.png'},{file:'935642973.png'},
+  {sha256:'bad'}, {sourceSheetSha256:'bad'},
+  {group:'../../something'},{cell:144},{sheet:-1},
+  {channels:[0,2]}, {channels:[6]}, {channels:[]},
+  {fidelity:'verified-game-shader'}, {sourceType:'3d-render'},
+  {changedPixels:0}
+ ];
+ for(const bad of mistakes){
+  assert.throws(()=>parseNativeColorwayIcons(wrap({'1286846063':{...sample,...bad}}),'/'),
+   /NATIVE_COLORWAY_RECORD_INVALID/);
+ }
+ for(const base of ['https://another.site/','//evil.test/','/a/../b/','foo/']){
+  assert.throws(()=>parseNativeColorwayIcons(wrap({'1286846063':sample}),base),
+   /NATIVE_COLORWAY_INDEX_INVALID/);
+ }
+});
+test('all native colorway UI views use original game-icon assets and keep per-item fallback',()=>{
+ const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
+ const sprite=readFileSync(new URL('../src/DyeSprite.svelte',import.meta.url),'utf8');
+ const generator=readFileSync(new URL('../scripts/generate-native-dye-icons.mjs',import.meta.url),'utf8');
+ assert.match(app,/loadNativeColorwayIcons\(import\.meta\.env\.BASE_URL\)/);
+ assert.equal((app.match(/previewUrl=\{nativeColorwayIcons/g)||[]).length,3);
+ assert.match(sprite,/imageSource='native-icon'/);
+ assert.match(sprite,/\.catch\(renderApproximation\)/);
+ assert.match(sprite,/URL\.revokeObjectURL\(createdUrl\)/);
+ assert.match(generator,/collectNativeSprites/);
+ assert.match(generator,/sourceIconDyeRegions/);
+ assert.match(generator,/recolorDyePixels/);
+ assert.match(generator,/DYE_ICON_SOURCE_ALPHA_CHANGED/);
+ assert.doesNotMatch(generator,/wiki\.gg|ImageGen|UnityEditor|UnityEngine/);
+ assert.match(generator,/fidelity:'approximate'/);
+});
