@@ -41,7 +41,7 @@ for(const p of illegalRuntimeJs)
 
 const legacyRules=new Map([
  ['src/achievement-parent-auto.ts',new Set([
-  'planCategoryParentCompletion','planMissingCategoryParentCompletion',
+  'planParent','planCategoryParentCompletion','planMissingCategoryParentCompletion',
   'planCategoryParentRevocation','planCategoryParentDateSync'
  ])],
  ['src/achievement-quick.ts',new Set(['toggleAchievementState'])],
@@ -53,8 +53,9 @@ const transportAdapters=new Set([
  'src/editor.worker.ts','src/worker-client.ts','src/achievement-draft.ts',
  'src/achievement-worker-payload.ts','src/history-details.ts'
 ]);
-const mutationName=/\b(?:export\s+)?(?:async\s+)?function\s+((?:plan|toggle|mutate|patch|apply|encode|decode|serialize)\w*(?:Achievement|Collection|Parent|Save)\w*)\s*\(/g;
-const mutationVariable=/\b(?:export\s+)?(?:const|let)\s+((?:plan|toggle|mutate|patch|apply|encode|decode|serialize)\w*(?:Achievement|Collection|Parent|Save)\w*)\s*=/g;
+// Read-only metadata decoding is allowed in TypeScript; native save codecs are not.
+const mutationName=/\b(?:export\s+)?(?:async\s+)?function\s+((?:(?:plan|toggle|mutate|patch|apply)\w*(?:Achievement|Collection|Parent|Save)\w*|(?:decode|encode|parse|serialize)(?:Save|SaveGame|Archive|Schema|MessagePack|LZ4)\w*))\s*\(/g;
+const mutationVariable=/\b(?:export\s+)?(?:const|let)\s+((?:(?:plan|toggle|mutate|patch|apply)\w*(?:Achievement|Collection|Parent|Save)\w*|(?:decode|encode|parse|serialize)(?:Save|SaveGame|Archive|Schema|MessagePack|LZ4)\w*))\s*=/g;
 
 for(const p of source){
  if(!/\.(?:ts|svelte)$/i.test(p))continue;
