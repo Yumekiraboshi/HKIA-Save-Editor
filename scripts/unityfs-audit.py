@@ -182,8 +182,24 @@ def inspect_serialized(b):
         try:name=obj[nameoff+4:nameoff+4+name_len].decode('utf-8')
         except UnicodeDecodeError:continue
         if name not in names:names.append(name)
+    script_refs=integer(b,pos,4,endian);pos+=4
+    if script_refs>10000:raise InvalidAsset('invalid script reference count')
+    pos+=12*script_refs
+    external_count=integer(b,pos,4,endian);pos+=4
+    if external_count>10000:raise InvalidAsset('invalid external reference count')
+    external_paths=[]
+    for _ in range(external_count):
+        unused,pos=cstring(b,pos)
+        if pos+20>len(b):raise InvalidAsset('truncated external reference')
+        pos+=16 # GUID
+        pos+=4 # external asset type
+        external,pos=cstring(b,pos)
+        if not external.startswith('archive:/CAB-'):
+            raise InvalidAsset('non-CAB external path')
+        external_paths.append(external)
     return {'serializedFileVersion':version,
             'serializedUnityVersion':unity_version,
+            'externalAssetPaths':external_paths,
             'objectCount':count,
             'classCounts':dict(sorted(classes.items())),
             'gameObjectNames':names,
