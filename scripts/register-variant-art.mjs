@@ -1,11 +1,14 @@
 #!/usr/bin/env node
-/** Register an independently sourced, manually verified, background-transparent
- * in-game clothing capture. Strictly local: never fetches wiki pages or
- * uploads the user's save, and never accepts a palette-rendered approximation.
+/** Register a transparent variant image actually rendered from the game's
+ * original UnityFS mesh, textures and dye parameters. No wiki image reuse.
  *
  * node scripts/register-variant-art.mjs --id 704486536
- *   --image /path/to/source-capture.png
- *   --source https://hellokittyislandadventure.wiki.gg/wiki/File:Ice_Cream_Archer_Hat.png
+ *   --image /path/to/game-render/704486536.png
+ *   --source-bundle l_basicstyle_fullbody_imaginationarcher
+ *
+ * This importer validates format and metadata, NOT visual material fidelity.
+ * Material/shader matching and legitimate provenance must be verified by the
+ * game-asset rendering pipeline before this command is run.
  */
 import {readFileSync,writeFileSync,existsSync,mkdirSync,renameSync} from 'node:fs';
 import {resolve} from 'node:path';
@@ -23,13 +26,13 @@ for(let i=2;i<process.argv.length;i+=2){
  values[key]=value;
 }
 const args=Object.keys(values).sort().join(',');
-if(args!=='--id,--image,--source')throw Error('Only --id, --image, --source are supported');
-const id=values['--id'],input=resolve(values['--image']),source=values['--source'];
+if(args!=='--id,--image,--source-bundle')throw Error('Only --id, --image, --source-bundle are supported');
+const id=values['--id'],input=resolve(values['--image']),bundle=values['--source-bundle'];
+const source='unityfs:'+bundle;
 if(!/^[1-9][0-9]{0,9}$/.test(id)||!native[id])throw Error('Not a verified game dyeable Item ID');
-if(!source.startsWith('https://hellokittyislandadventure.wiki.gg/wiki/File:')||
- source.length>360)throw Error('Source must identify an official-wiki image file page');
-// Images are registered ONLY when a human has verified the correct on-screen
-// game variant and the source attribution. Filename matching alone is not proof.
+if(!/^l_[a-z0-9][a-z0-9._-]{4,180}$/.test(bundle))throw Error('Expected a game UnityFS source bundle name');
+// An asset bundle name alone cannot prove that a rendering reproduced the
+// original game shader; it only records provenance for subsequent review.
 const bytes=readFileSync(input);
 if(bytes.length>2_000_000||bytes.length<50||
  bytes.subarray(0,8).toString('hex')!=='89504e470d0a1a0a')
@@ -50,7 +53,7 @@ if(existsSync(destination)&&createHash('sha256').update(readFileSync(destination
  throw Error('Existing image bytes differ; investigate before replacing');
 mkdirSync(folder,{recursive:true});
 if(!existsSync(destination))writeFileSync(destination,bytes,{flag:'wx'});
-manifest.records[id]={file,sha256:hash,provenance:'verified-game-capture',source};
+manifest.records[id]={file,sha256:hash,provenance:'game-render',source};
 const next=Object.fromEntries(Object.entries(manifest.records).sort((a,b)=>Number(a[0])-Number(b[0])));
 const temp=registry+'.tmp';
 writeFileSync(temp,JSON.stringify({...manifest,records:next},null,2)+'\n');
