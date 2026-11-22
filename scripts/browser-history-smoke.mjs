@@ -354,8 +354,8 @@ async function run(){
  );
  const fakeRecord=id=>({
   file:id+'.png',sha256:'a'.repeat(64),
-  provenance:'verified-game-capture',
-  source:'https://hellokittyislandadventure.wiki.gg/wiki/File:Test_Colorway.png'
+  provenance:'game-render',
+  source:'unityfs:l_basicstyle_fullbody_imaginationarcher'
  });
  await page.route('**/variant-art/index.json',route=>route.fulfill({
   status:200,contentType:'application/json',
@@ -374,7 +374,7 @@ async function run(){
  const finalSearch=page.locator('.collection-controls input[type="search"]');
  await finalSearch.fill('Ice Cream Archer Hat');
  await page.locator('.collection-search-result').first().click();
- const captured=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-capture"]');
+ const captured=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-render"]');
  await captured.waitFor({timeout:30_000});
  assert.equal(await captured.evaluate(el=>getComputedStyle(el).backgroundSize),'contain',
   'verified colorway assets preserve their natural aspect ratio');
