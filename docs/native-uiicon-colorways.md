@@ -42,6 +42,10 @@ node scripts/generate-native-dye-icons.mjs \
 node scripts/generate-native-dye-icons.mjs \
   --group collections_group_events --all \
   --out staging/native-colorways
+
+# Production: every shipped original game icon pack group
+node scripts/generate-native-dye-icons.mjs \
+  --all-groups --out dist/native-colorways
 ```
 
 The game-derived inputs are only `public/item-packs/<group>.zip` (and its
@@ -77,3 +81,37 @@ thumbnails in place of the original UiIcon.
 - Batch export source-verified item IDs without changing their original
   silhouette or metadata.
 - Keep all 3D audit output outside the final item icon display.
+
+The all-group export conservatively **skips Item IDs present in multiple icon groups** because selecting the first group could serve the wrong category icon. It also skips shared icons with no safe detectable dye regions, leaving the browser's original UiIcon fallback in place. Its manifest records `sourceGroups`, `uniqueCandidates`, `ambiguous`, `unmatched`, `uncolorable` and `generated` counts. CI checks each output's 96×96 PNG dimensions, native source pack group, exact original sheet/cell and SHA-256; it never silently marks color placement as game-shader-accurate.
+
+
+## Verified all-group coverage and collision prioritization
+
+CI generated and validated **5,383 of 5,383** original-game dyeable
+Item ID icons from **25 original icon ZIP groups**. No ID was unmapped,
+ambiguous between groups or ineligible for the neutral-fabric recolorer.
+The 25 groups are the logical packs; the events pack is physically
+split into six ZIP files.
+
+This is **coverage of approximate pixel recoloring**, not verification of
+five-channel material accuracy. A colorway's individual PNG can still be
+visually identical to a different full-palette colorway when the source
+96px art has only one verified recolorable region.
+
+The audit tool specifically detects this case rather than hiding it with
+additional guessed dye regions:
+
+```bash
+node scripts/audit-native-colorway-collisions.mjs dist/native-colorways
+```
+
+It generates `dist/native-colorways/qa.json` with the number of shared
+original UiIcon families, total colorways, images that are identical
+despite different full five-channel palettes, and the 60 highest-priority
+shared source icons for obtaining genuine channel masks. It never adds
+visual overlays or changes any item/save data.
+
+Each static PNG is checked against the exact original item's
+`<group>/<sheet>/<cell>` source index, original WebP sheet SHA-256 and
+generated PNG SHA-256. Ambiguous or uncolorable originals automatically
+fall back to their native source icon in the browser.

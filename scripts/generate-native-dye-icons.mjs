@@ -8,13 +8,15 @@
  *   --ids 1286846063,935642973 --out dist/native-colorways
  * node scripts/generate-native-dye-icons.mjs \
  *   --group collections_group_events --all --out staging/native-colorways
+ * node scripts/generate-native-dye-icons.mjs \
+ *   --all-groups --out dist/native-colorways
  *
  * Output is visibly marked as an APPROXIMATION until each original UiIcon
  * channel mask has been authenticated against the source game renderer.
  * This is not the source-accurate image index in public/variant-art.
  */
-import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
-import {resolve,dirname,join} from 'node:path';
+import {readFileSync,writeFileSync,mkdirSync,readdirSync} from 'node:fs';
+import {resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {build} from 'esbuild';
@@ -97,29 +99,66 @@ async function sourceRecolorScript(){
  return result.outputFiles[0].text;
 }
 function parseArgs(argv){
- let group='collections_group_events',ids=null,out=null,all=false;
+ let group='collections_group_events',ids=null,out=null,all=false,allGroups=false,explicitGroup=false;
  for(let p=0;p<argv.length;p++){
-  if(argv[p]==='--group')group=argv[++p];
+  if(argv[p]==='--group'){group=argv[++p];explicitGroup=true;}
   else if(argv[p]==='--out')out=argv[++p];
   else if(argv[p]==='--ids')ids=argv[++p]?.split(',');
   else if(argv[p]==='--all')all=true;
+  else if(argv[p]==='--all-groups')allGroups=true;
   else throw Error('DYE_ICON_ARGS_INVALID '+argv[p]);
  }
- if(!out||!GROUP.test(group)||all&&ids)throw Error('DYE_ICON_ARGS_INVALID');
- if(!all&&!ids)ids=DEFAULT_IDS;
- if(!all&&(ids.length===0||ids.some(id=>!ID.test(id))))throw Error('DYE_ICON_IDS_INVALID');
- return {group,out:resolve(out),all,ids};
+ if(!out||!GROUP.test(group)||all&&ids||allGroups&&(all||ids||explicitGroup))
+  throw Error('DYE_ICON_ARGS_INVALID');
+ if(!all&&!allGroups&&!ids)ids=DEFAULT_IDS;
+ if(!all&&!allGroups&&(ids.length===0||ids.some(id=>!ID.test(id))))
+  throw Error('DYE_ICON_IDS_INVALID');
+ return {group,out:resolve(out),all,ids,allGroups};
+}
+export function sourceIconGroups(){
+ return readdirSync(join(ROOT,'public/item-packs'))
+  .filter(name=>/^(?:collection|collections)_group_[a-z]+\.zip$/.test(name))
+  .map(name=>name.slice(0,-4)).sort();
+}
+/** Resolve genuine game Item ID keys only once across pack groups.
+ * If an Item ID resolves to different packed icon sources, omit the static
+ * image rather than silently substituting the wrong category artwork.
+ * Those ambiguous IDs still render via the original in-browser icon pack.
+ */
+export function selectGameIconSources({groups,palette,itemKeys,ids=null}){
+ const selected=new Map(),ambiguous=new Set();
+ let nativeMatches=0;
+ for(const group of groups){
+  const pack=collectNativeSprites(group);
+  for(const [id,sprite] of pack.sprites){
+   if(ids&&!ids.has(id))continue;
+   if(!palette[id]||!String(itemKeys.get(id)??'').startsWith('item_c_dyeable_'))continue;
+   nativeMatches++;
+   if(ambiguous.has(id))continue;
+   const prior=selected.get(id);
+   if(prior){
+    // Multiple categories can refer to one Item ID but show different
+    // icons. Without a stable universal source, the safe fallback is the
+    // category's own source icon rather than the first arbitrary pack.
+    ambiguous.add(id);
+    selected.delete(id);
+   }else selected.set(id,{group,...sprite,files:pack.files});
+  }
+ }
+ return {selected,ambiguous,nativeMatches};
 }
 async function main(){
- const {group,out,all,ids}=parseArgs(process.argv.slice(2));
+ const {group,out,all,ids,allGroups}=parseArgs(process.argv.slice(2));
  const palette=readJson('public/native-dye-palettes.json');
  const catalog=readJson('public/catalog.json');
  const itemKeys=new Map(catalog.items.map(row=>[String(row[0]),row[1]]));
- const {sprites,files}=collectNativeSprites(group);
- const requested=all?[...sprites.keys()].filter(id=>palette.records[id]):ids;
- for(const id of requested){
-  if(!sprites.has(id)||!palette.records[id]||
-   !String(itemKeys.get(id)??'').startsWith('item_c_dyeable_'))
+ const groups=allGroups?sourceIconGroups():[group];
+ const requestedIds=!all&&!allGroups?new Set(ids):null;
+ const {selected,ambiguous,nativeMatches}=selectGameIconSources({
+  groups,palette:palette.records,itemKeys,ids:requestedIds
+ });
+ if(requestedIds){
+  for(const id of requestedIds)if(!selected.has(id))
    throw Error('DYE_ICON_NOT_SOURCE_VERIFIED '+id);
  }
  mkdirSync(out,{recursive:true});
@@ -127,16 +166,22 @@ async function main(){
  const browser=await chromium.launch({headless:true,executablePath:installedChrome(),
   args:['--no-sandbox','--disable-dev-shm-usage']});
  const records={};
+ let notColorable=0;
  try{
   const page=await browser.newPage();
   await page.goto('about:blank');
   await page.addScriptTag({content:bundle});
   const pageCache=new Set();
-  const ordered=requested.slice().sort((a,b)=>Number(a)-Number(b));
-  for(const id of ordered){
-   const {sheet,cell}=sprites.get(id);
+  // Group and sheet locality avoids repeatedly decoding large source
+  // atlases when regenerating thousands of variants.
+  const ordered=[...selected].sort((a,b)=>
+   a[1].group.localeCompare(b[1].group)||
+   a[1].sheet-b[1].sheet||a[1].cell-b[1].cell||Number(a[0])-Number(b[0]));
+  for(const [id,sprite] of ordered){
+   const {group,sheet,cell,files}=sprite;
    const file='sheet-'+String(sheet).padStart(3,'0')+'.webp';
-   if(!pageCache.has(file)){
+   const cacheKey=group+'/'+file;
+   if(!pageCache.has(cacheKey)){
     const bytes=files.get(file);
     const base64=bytes.toString('base64');
     await page.evaluate(async ({key,base64})=>{
@@ -144,8 +189,13 @@ async function main(){
      image.src='data:image/webp;base64,'+base64;
      await image.decode();
      (globalThis.__hkiaSheets??=new Map()).set(key,image);
-    },{key:file,base64});
-    pageCache.add(file);
+    },{key:cacheKey,base64});
+    pageCache.add(cacheKey);
+    if(pageCache.size>8){
+     const evicted=pageCache.values().next().value;
+     pageCache.delete(evicted);
+     await page.evaluate(key=>globalThis.__hkiaSheets.delete(key),evicted);
+    }
    }
    const p=palette.records[id];
    const srcKey=itemKeys.get(id);
@@ -171,8 +221,8 @@ async function main(){
     return {png:canvas.toDataURL('image/png').split(',')[1],
      changed:recolored.changed,
      channels:[...new Set(mask??[1])].filter(n=>n>0).sort((a,b)=>a-b)};
-   },{file,sheet,cell,srcKey,group,p});
-   if(!result)continue;
+   },{file:cacheKey,sheet,cell,srcKey,group,p});
+   if(!result){notColorable++;continue;}
    const output=Buffer.from(result.png,'base64');
    if(output.toString('hex',0,8)!=='89504e470d0a1a0a'||
     output.readUInt32BE(16)!==96||output.readUInt32BE(20)!==96)
@@ -186,14 +236,20 @@ async function main(){
    };
   }
  }finally{await browser.close()}
+ const unmatched=Object.keys(palette.records).length-selected.size-ambiguous.size;
  const manifest={
   schema:'HKIA.NativeColorwayIcons.1',version:'3.0.1',
   notice:'Original HKIA UiIcon pixels + original native dye palette; material-channel placement is still approximate.',
+  coverage:{sourceGroups:groups.length,uniqueCandidates:selected.size,
+   nativeMatches,ambiguous:ambiguous.size,unmatched,
+   generated:Object.keys(records).length,uncolorable:notColorable},
   records
  };
  writeFileSync(join(out,'index.json'),JSON.stringify(manifest));
  console.log('Native game UiIcon colorways generated: '+Object.keys(records).length+
-  ' / '+requested.length+' requested; '+out);
+  ' / '+selected.size+' eligible source-unique IDs; '+
+  ambiguous.size+' ambiguous; '+unmatched+' without unique original pack; '+
+  notColorable+' unchanged (no detectable dye regions); '+out);
 }
 const called=process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url);
 if(called)await main();

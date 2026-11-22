@@ -4,6 +4,7 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {resolve,join} from 'node:path';
 import assert from 'node:assert/strict';
+import {collectNativeSprites} from './generate-native-dye-icons.mjs';
 
 const folder=resolve(process.argv[2]??'dist/native-colorways');
 const manifest=JSON.parse(readFileSync(join(folder,'index.json'),'utf8'));
@@ -11,11 +12,29 @@ assert.equal(manifest.schema,'HKIA.NativeColorwayIcons.1');
 assert.equal(manifest.version,'3.0.1');
 const records=manifest.records;
 const files=readdirSync(folder).filter(x=>x.endsWith('.png'));
+const indexedGroups=new Map();
+const indexedSheetHashes=new Map();
+const coverage=manifest.coverage;
+assert.ok(coverage&&Number.isInteger(coverage.sourceGroups)&&coverage.sourceGroups>0);
+assert.equal(coverage.uniqueCandidates,coverage.generated+coverage.uncolorable);
+assert.equal(coverage.generated,files.length);
+assert.ok(coverage.nativeMatches>=coverage.generated);
+assert.ok(coverage.ambiguous>=0&&coverage.unmatched>=0);
 assert.equal(files.length,Object.keys(records).length,'no untracked colorway images');
 for(const [id,r] of Object.entries(records)){
  assert.match(id,/^[1-9][0-9]{0,9}$/);
  assert.equal(r.file,id+'.png');
  assert.equal(r.sourceType,'original-uiicon-pixel-recolor');
+ if(!indexedGroups.has(r.group))indexedGroups.set(r.group,collectNativeSprites(r.group));
+ const originalPack=indexedGroups.get(r.group);
+ assert.deepEqual(originalPack.sprites.get(id),{sheet:r.sheet,cell:r.cell},
+  'the image must be produced from the same item ID original game icon');
+ const sheetFile='sheet-'+String(r.sheet).padStart(3,'0')+'.webp';
+ const cacheKey=r.group+'/'+sheetFile;
+ if(!indexedSheetHashes.has(cacheKey))indexedSheetHashes.set(cacheKey,
+  createHash('sha256').update(originalPack.files.get(sheetFile)).digest('hex'));
+ assert.equal(r.sourceSheetSha256,indexedSheetHashes.get(cacheKey),
+  'source icon atlas fingerprint must match the original shipped game asset');
  assert.equal(r.fidelity,'approximate','never claim exact game shader rendering');
  assert.ok(r.changedPixels>8);
  assert.ok(r.channels.length>=1&&r.channels.every(n=>Number.isInteger(n)&&n>=1&&n<=5));
@@ -39,4 +58,7 @@ for(const [left,right] of [
  assert.notEqual(records[left].sha256,records[right].sha256,
   'game source icon must have visibly distinct dyed pixel output for this variant pair');
 }
-console.log('HKIA_ORIGINAL_UICON_COLORWAYS_VERIFIED '+files.length);
+console.log('HKIA_ORIGINAL_UICON_COLORWAYS_VERIFIED '+files.length+
+ ' / '+coverage.uniqueCandidates+' source-unique, '+coverage.ambiguous+
+ ' ambiguous, '+coverage.unmatched+' unmapped, '+coverage.uncolorable+' uncolorable across '+
+ coverage.sourceGroups+' game pack groups');
