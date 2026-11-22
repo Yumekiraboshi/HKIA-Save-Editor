@@ -1,8 +1,8 @@
-type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type AchievementValue = {complete:boolean;current:number;completed:[bigint,number]|null};
 type AchievementPatch = {guid:number[];before:AchievementValue;after:AchievementValue};
 type AchievementDraftPatch = {guid:number[];before:AchievementValue|null;after:AchievementValue};
-type Request = { id:number; action:Action; checkpoint?:Uint8Array; scope?:'collections'|'achievements'; target?:number; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];guid?:number[];beforeValue?:AchievementValue;afterValue?:AchievementValue };
+type Request = { id:number; action:Action; checkpoint?:Uint8Array; scope?:'collections'|'achievements'; target?:number; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];guid?:number[];nowMs?:number;beforeValue?:AchievementValue;afterValue?:AchievementValue };
 type Transport = { postMessage(data:unknown, transfer?:Transferable[]):void; onmessage:((event:MessageEvent<Request>)=>void)|null };
 type Engine = {
  memory:WebAssembly.Memory;
@@ -20,6 +20,7 @@ type Engine = {
   ...args:[number,number,number,number,number,number,bigint,number,number,number,number,bigint,number,number,
    number,number,number,number,number,number,bigint,number,number,number,number,bigint,number,number]
  ):number;
+ hkia_achievement_toggle_plan(g0:number,g1:number,g2:number,g3:number,nowMs:bigint):number;
  hkia_achievement_snapshot():number;
  hkia_counter_snapshot():number;
  hkia_undo():number; hkia_redo():number; hkia_reset():number; hkia_history_snapshot():number; hkia_history_jump(scope:number,target:number):number; hkia_history_checkpoint():number; hkia_history_restore():number;
@@ -175,6 +176,24 @@ async function execute(r:Request):Promise<unknown>{
    const a=r.expected??null,b=r.next??null;
    if(e.hkia_change(r.itemId,a===null?0:1,a??0n,b===null?0:1,b??0n)!==0)throw Error('変更できませんでした。元の値か編集条件が一致しません。');
    return snapshot(e);
+  }
+  case 'achievement-plan-toggle':{
+   const guid=r.guid,nowMs=r.nowMs;
+   if(!Array.isArray(guid)||guid.length!==4||
+    guid.some(n=>!Number.isInteger(n)||n<0||n>0xffffffff)||
+    typeof nowMs!=='number'||!Number.isSafeInteger(nowMs)||
+    nowMs<0||nowMs>253402300799000)throw Error('ACH_TOGGLE_INVALID');
+   if(e.hkia_achievement_toggle_plan(...guid as [number,number,number,number],BigInt(nowMs))!==0)
+    throw Error('ACH_TOGGLE_UNSUPPORTED');
+   const b=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+   if(b.length!==18||b[0]>1||b[5]>1)throw Error('ACH_TOGGLE_RESPONSE_INVALID');
+   const v=new DataView(b.buffer,b.byteOffset,b.byteLength);
+   const value:AchievementValue={
+    complete:b[0]===1,current:v.getFloat32(1,true),
+    completed:b[5]===1?[v.getBigInt64(6,true),v.getUint32(14,true)]:null
+   };
+   if(!validAchievement(value))throw Error('ACH_TOGGLE_RESPONSE_INVALID');
+   return value;
   }
   case 'achievement':{
    if(!changeAchievement(e,r.guid,r.beforeValue,r.afterValue))throw Error('実績を変更できませんでした。編集条件を確認してください。');

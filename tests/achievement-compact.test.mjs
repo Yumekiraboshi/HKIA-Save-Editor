@@ -8,33 +8,28 @@ async function imported(path){
  const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL(path,import.meta.url))],bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
  return import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 }
-const [quick,copy]=await Promise.all([imported('../src/achievement-quick.ts'),imported('../src/achievement-compact-ui.ts')]);
+const copy=await imported('../src/achievement-compact-ui.ts');
+const core=readFileSync(new URL('../core/src/achievement.rs',import.meta.url),'utf8');
+const wasm=readFileSync(new URL('../wasm/src/lib.rs',import.meta.url),'utf8');
 const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
 const css=readFileSync(new URL('../src/style.css',import.meta.url),'utf8');
 
-test('one click earns a source-defined achievement at its exact goal and time',()=>{
- const before={complete:false,current:2.25,completed:null};
- const after=quick.toggleAchievementState(before,1795251723456,10);
- assert.deepEqual(after,{complete:true,current:10,completed:[1795251723n,456000000]});
- assert.deepEqual(before,{complete:false,current:2.25,completed:null});
- assert.equal(quick.toggleAchievementState({complete:false,current:0,completed:null},0,1).current,1);
- assert.throws(()=>quick.toggleAchievementState(before,-1,10),/ACH_QUICK_TOGGLE_INVALID/);
- assert.throws(()=>quick.toggleAchievementState(before,Number.NaN,10),/ACH_QUICK_TOGGLE_INVALID/);
- assert.throws(()=>quick.toggleAchievementState({...before,current:-1},Date.now(),10),/ACH_QUICK_TOGGLE_INVALID/);
- assert.throws(()=>quick.toggleAchievementState(before,Date.now(),0),/ACH_QUICK_TOGGLE_INVALID/);
+test('one-click state, source goal and original timestamp are planned in Rust, not TS',()=>{
+ assert.match(core,/pub fn plan_toggle_v301\(/);
+ assert.match(core,/crate::achievement_keys::progress_goal_v301\(guid\)/);
+ assert.match(core,/completed:Some\(\(now_ms\/1000,\(now_ms%1000\) as u32\*1_000_000\)\)/);
+ assert.match(wasm,/pub extern "C" fn hkia_achievement_toggle_plan\(/);
+ assert.match(wasm,/if version!="3\.0\.0"&&version!="3\.0\.1"\{return 1\}/);
+ assert.doesNotMatch(app,/from '.\/achievement-quick'/);
 });
 
-test('revoking completion keeps partial progress but clamps overflow below goal; Undo retains saved snapshot',()=>{
- const source={complete:true,current:12.5,completed:[1795251723n,123456700]};
- const changed=quick.toggleAchievementState(source,1800000000000,10);
- assert.deepEqual(changed,{complete:false,current:9,completed:null});
- assert.deepEqual(source,{complete:true,current:12.5,completed:[1795251723n,123456700]});
- const once=quick.toggleAchievementState(changed,1795251723456,10);
- assert.deepEqual(once,{complete:true,current:10,completed:[1795251723n,456000000]});
- assert.equal(quick.toggleAchievementState({complete:true,current:3,completed:null},Date.now(),10).current,3);
- assert.equal(quick.toggleAchievementState({complete:true,current:1,completed:null},Date.now(),1).current,0);
- assert.equal(quick.toggleAchievementState(source,1800000000000).current,source.current,'unknown source goal must not be invented');
- assert.equal(quick.toggleAchievementState(changed,1795251723456).current,changed.current,'unknown source goal must not be invented');
+test('revocation and missing-source handling are Rust-defined, existing CAS and Undo remain native',()=>{
+ assert.match(core,/before\.current\.min\(goal-1\.0\)/);
+ assert.match(core,/let goal=crate::achievement_keys::progress_goal_v301\(guid\)\.ok_or\(Error::Schema\)\?/);
+ assert.match(wasm,/e\.achievement_value\(guid\)/);
+ assert.match(wasm,/a\.reply=bytes;0/);
+ assert.match(app,/planAchievementToggle\(guid,Date\.now\(\)\)/);
+ assert.match(app,/changeAchievementWithParent\(live,next\)/);
 });
 
 test('collection-like achievement cards create source-defined absent records on user click and keep a separate date popup',()=>{
@@ -48,7 +43,7 @@ test('collection-like achievement cards create source-defined absent records on 
    'onclick={e=>void quickToggleAchievement(item,e.currentTarget,title)}',
    'if(item.row)void openAchievement(item.row',
    'disabled={busy||(!item.row&&(snapshot.version',
-   'toggleAchievementState(prior,Date.now(),target)',
+   'planAchievementToggle(guid,Date.now())',
    'changeAchievement(live.guid,live.value,next)',
    'await persistDraft()',
    'bind:this={achievementDialogEl}',

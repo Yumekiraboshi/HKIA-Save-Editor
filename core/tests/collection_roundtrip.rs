@@ -798,3 +798,34 @@ fn checkpoint_recovery_rejects_corrupted_stale_or_trailing_data_atomically(){
  assert!(editor.restore_history(&before).is_err());
  assert_eq!(editor.history_checkpoint().unwrap(),before);
 }
+
+#[test]
+fn v301_native_planned_achievement_create_revoke_and_export_roundtrip(){
+ use hkia_save_core::achievement::{AchievementValue,plan_toggle_v301};
+ // Genuine source-verified local achievement GUID (native goal=12), used
+ // only in a synthetic slot. No personal save or fabricated game ID.
+ let guid=[15182560,1296854392,3253409457,3976879535];
+ let original=slot("3.0.1");
+ let mut editor=Editor::open(original.clone()).unwrap();
+ assert_eq!(editor.achievement_value(guid),None);
+ let empty=AchievementValue{complete:false,current:0.0,completed:None};
+ let completed=plan_toggle_v301(guid,empty,1_795_251_723_456).unwrap();
+ assert_eq!(completed.current,12.0);
+ editor.create_achievement(guid,completed).unwrap();
+ assert_eq!(editor.achievement_value(guid),Some(completed));
+ assert!(editor.undo());
+ assert_eq!(editor.achievement_value(guid),None);
+ assert!(editor.redo());
+ let saved=editor.export().unwrap();
+ assert_eq!(original,slot("3.0.1"),"original synthetic save is immutable");
+ let mut reopened=Editor::open(saved).unwrap();
+ assert_eq!(reopened.achievement_value(guid),Some(completed));
+ let revoked=plan_toggle_v301(guid,completed,1_795_251_723_999).unwrap();
+ assert_eq!(revoked,AchievementValue{complete:false,current:11.0,completed:None});
+ reopened.change_achievement(guid,completed,revoked).unwrap();
+ assert_eq!(Editor::open(reopened.export().unwrap()).unwrap().achievement_value(guid),Some(revoked));
+ assert!(reopened.undo());
+ assert_eq!(reopened.achievement_value(guid),Some(completed));
+ assert!(reopened.redo());
+ assert_eq!(reopened.achievement_value(guid),Some(revoked));
+}

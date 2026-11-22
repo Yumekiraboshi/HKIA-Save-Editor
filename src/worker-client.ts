@@ -25,7 +25,7 @@ export type SaveSnapshot={
  achievements:AchievementEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -81,6 +81,13 @@ export function completeChildWithNewParent(
    workerAchievementDraftPatch({guid:parent.guid,before:null,after:parent.after})
   ]
  }) as Promise<SaveSnapshot>;
+}
+/** Rust derives the source-v3.0.1 native goal and timestamp. Planning is
+ * read-only; normal change/create/pair CAS still commits the operation. */
+export function planAchievementToggle(guid:AchievementEntry['guid'],nowMs:number):Promise<AchievementValue>{
+ return rpc('achievement-plan-toggle',{
+  guid:workerAchievementGuid(guid),nowMs
+ }) as Promise<AchievementValue>;
 }
 export function changeAchievement(guid:AchievementEntry['guid'],beforeValue:AchievementValue,afterValue:AchievementValue):Promise<SaveSnapshot>{
  return rpc('achievement',{

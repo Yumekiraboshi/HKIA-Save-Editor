@@ -44,7 +44,6 @@ const legacyRules=new Map([
   'planParent','planCategoryParentCompletion','planMissingCategoryParentCompletion',
   'planCategoryParentRevocation','planCategoryParentDateSync'
  ])],
- ['src/achievement-quick.ts',new Set(['toggleAchievementState'])],
  ['src/achievement-progress.ts',new Set(['achievementProgressTarget'])],
  ['src/collection-eligibility.ts',new Set(['mayCreateCollectionHistory'])]
 ]);
