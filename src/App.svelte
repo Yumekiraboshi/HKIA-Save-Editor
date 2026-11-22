@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,createAchievement,createAchievementWithParent,completeChildWithNewParent,changeAchievement,changeAchievementPair,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,createAchievement,createAchievementWithParent,completeChildWithNewParent,changeAchievement,changeAchievementPair,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch,type HistoryRecord} from './worker-client';
  import {planCategoryParentCompletion,planMissingCategoryParentCompletion,planCategoryParentRevocation,planCategoryParentDateSync} from './achievement-parent-auto';
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
@@ -9,7 +9,6 @@
  import {loadSourceItemNames,type SourceItemNames} from './source-names';
  import {decodeHistoryDetails,formatHistoryChange} from './history-details';
  import {compactAchievementCopy} from './achievement-compact-ui';
- import {toggleAchievementState} from './achievement-quick';
  import {removalConfirmationCopy} from './removal-confirmation';
  import {achievementProgressTarget} from './achievement-progress';
  import {achievementFactsCopy} from './achievement-facts-ui';
@@ -680,17 +679,12 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
   }
   busy=true;error='';
   try{
-   const target=achievementProgressTarget(
-    achievementGroupHierarchy?.byGuid.get(item.guid)?.children.length??null,
-    achievementFacts.get(item.guid)?.threshold??null
-   );
-   if(target===null&&achievementIndex.has(item.guid)){error=achCopy.goalUnavailable;return;}
-   const prior:AchievementValue=live?.value??{complete:false,current:0,completed:null};
-   const next=toggleAchievementState(prior,Date.now(),target);
+   const guid=item.guid.split(':').map(word=>parseInt(word,16)) as AchievementEntry['guid'];
+   // Rust alone determines goal, progress clamp and recorded completion time.
+   const next=await planAchievementToggle(guid,Date.now());
    if(live){
     update(await changeAchievementWithParent(live,next));
    }else{
-    const guid=item.guid.split(':').map(word=>parseInt(word,16)) as AchievementEntry['guid'];
     const parent=planCategoryParentCompletion(achievementGroupHierarchy,snapshot.achievements,guid,next);
     const missingParent=parent?null:planMissingCategoryParentCompletion(achievementGroupHierarchy,snapshot.achievements,guid,next);
     update(await (parent?createAchievementWithParent(guid,next,parent):
