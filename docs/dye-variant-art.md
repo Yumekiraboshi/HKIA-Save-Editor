@@ -134,7 +134,10 @@ The experimental Unity Editor implementation is
 unpublished staging PNG path with `--hkia-preview`. An explicit
 `--hkia-allow-unverified-preview` permits a **diagnostic** attempt,
 but the script refuses missing materials, shader properties or `_BaseMap`
-textures. It does not register the output in the public image index.
+textures. After the CAB resolver has identified original external UnityFS files,
+pass each with a repeated `--hkia-dependency /path/to/dependency-bundle`
+argument; the diagnostic renderer loads them before instantiating the prefab.
+It does not register the output in the public image index.
 
 **Not yet completed:** recover Archer's external materials, full dye shader
 channel behavior, texture dependencies, correct pose and camera orientation,
