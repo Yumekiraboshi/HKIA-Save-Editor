@@ -44,15 +44,15 @@ pub fn plan_toggle_v301(
 #[cfg(test)]mod native_toggle_tests{
  use super::*;
  #[test]fn source_goal_and_clock_cas_values_are_precise(){
-  // Source GUID with goal=100; the saved state is not rewritten by planning.
+  // Source GUID with goal=12; the saved state is not rewritten by planning.
   let guid=[15182560,1296854392,3253409457,3976879535];
   let before=AchievementValue{complete:false,current:999.0,completed:None};
   let after=plan_toggle_v301(guid,before,1_795_251_723_456).unwrap();
-  assert_eq!(after,AchievementValue{complete:true,current:100.0,
+  assert_eq!(after,AchievementValue{complete:true,current:12.0,
     completed:Some((1_795_251_723,456_000_000))});
   assert_eq!(before.current,999.0);
   assert_eq!(plan_toggle_v301(guid,after,1_795_251_723_999).unwrap(),
-   AchievementValue{complete:false,current:99.0,completed:None});
+   AchievementValue{complete:false,current:11.0,completed:None});
   assert!(plan_toggle_v301([0;4],before,1_795_251_723_456).is_err());
   assert!(plan_toggle_v301(guid,before,-1).is_err());
   assert!(plan_toggle_v301(guid,before,253_402_300_799_001).is_err());
