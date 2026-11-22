@@ -72,6 +72,37 @@ pub extern "C" fn hkia_achievement_parent_create(
  })
 }
 
+/// Read-only Rust achievement click planning. No saved byte is changed
+/// until the caller submits the returned value through normal native CAS.
+/// 18-byte response: complete/u8, progress/f32, has_date/u8,
+/// seconds/i64, nanoseconds/u32 (all numeric fields little endian).
+#[no_mangle]
+pub extern "C" fn hkia_achievement_toggle_plan(
+ g0:u32,g1:u32,g2:u32,g3:u32,now_ms:i64
+)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  if e.version()!="3.0.1"{return 1}
+  let guid=[g0,g1,g2,g3];
+  let before=e.achievement_value(guid).unwrap_or(
+   hkia_save_core::achievement::AchievementValue{
+    complete:false,current:0.0,completed:None
+   });
+  let after=match hkia_save_core::achievement::plan_toggle_v301(guid,before,now_ms){
+   Ok(value)=>value,Err(_)=>return 1
+  };
+  let mut bytes=Vec::with_capacity(18);
+  bytes.push(u8::from(after.complete));
+  bytes.extend(after.current.to_bits().to_le_bytes());
+  bytes.push(u8::from(after.completed.is_some()));
+  let (seconds,nanos)=after.completed.unwrap_or((0,0));
+  bytes.extend(seconds.to_le_bytes());
+  bytes.extend(nanos.to_le_bytes());
+  a.reply=bytes;0
+ })
+}
+
 // Source-validated, version-gated new AchievementModel (Union 16).
 #[no_mangle]
 pub extern "C" fn hkia_achievement_create(
