@@ -47,7 +47,7 @@ test('strict index rejects cross-origin links, wrong source IDs, traversal and m
    /VARIANT_ART_BASE_INVALID/);
  }
  assert.throws(()=>parseVariantArtIndex(wrap({'0':example}),'/'),/VARIANT_ART_RECORD_INVALID/);
- assert.throws(()=>parseVariantArtIndex(wrap({'__proto__':example}),'/'),/VARIANT_ART_RECORD_INVALID/);
+ assert.throws(()=>parseVariantArtIndex(wrap(Object.fromEntries([['__proto__',example]])),'/'),/VARIANT_ART_RECORD_INVALID/);
  assert.throws(()=>parseVariantArtIndex({...wrap({}),version:'1.0'},'/'),/VARIANT_ART_INDEX_INVALID/);
 });
 
