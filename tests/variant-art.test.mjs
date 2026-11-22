@@ -103,7 +103,7 @@ test('the collection selects exact captures first in all three places and never 
  assert.match(sprite,/\.catch\(renderApproximation\)/);
  assert.match(sprite,/data-dye-source=\{imageSource\}/);
  assert.match(sprite,/imageSource='game-render'/);
- assert.match(sprite,/background-size=\{imageSource==='game-capture'\?'contain'/);
+ assert.match(sprite,/background-size=\{imageSource==='game-render'\?'contain'/);
  assert.match(sprite,/URL\.revokeObjectURL\(createdUrl\)/);
  for(const prohibited of [/native-dye-ring/,/native-dye-swatch/,/native-dye-preview/]){
   assert.doesNotMatch(app,prohibited);
