@@ -340,3 +340,37 @@ colors are verified; the pixel-region placement is estimated from
 the original 2D icon, **not** derived from the actual game Unity
 five-channel 3D material/shader masks. Do not claim pixel-perfect
 reproduction of the 3D in-game dye system.
+
+## Additional 12 source-original Marching Band colorway families
+
+Game-authoritative Steam v3.0.1 `collections_group_events` native
+UiIcon source index maps **12 more original 13-colorway families**,
+156 additional Item IDs, to the following exact 96px atlas cells:
+
+| Sheet/cell | Original game family | Source Item IDs |
+| --- | --- | ---: |
+| 005/040 | Marching Band Ornate Shirt | 13 |
+| 005/091 | Marching Band Drum | 13 |
+| 005/093 | Marching Band Two Toned Shirt | 13 |
+| 006/072 | Marching Band Two Toned Skirt | 13 |
+| 007/001 | Marching Band Lined Pants | 13 |
+| 007/011 | Marching Band Cape | 13 |
+| 007/130 | Marching Band Peaked Cap | 13 |
+| 007/034 | Marching Band Two Toned Cap | 13 |
+| 007/056 | Marching Band Track Pants | 13 |
+| 008/056 | Marching Band Shako Cap | 13 |
+| 009/033 | Marching Band Lined Skirt | 13 |
+| 009/122 | Marching Band Tall Feather Cap | 13 |
+
+All 12 families use original palette channel 1 `#3a3840` on
+every member, but 13 distinct real game channel-2 colors. In each
+exact source cell, the original gray fabric, trim, band, plume, side
+panel or instrument accent is recolored using native channel 2,
+preserving original source alpha and shading. The native PNG identity
+and dye color data are verified from game archives. The masks are
+guarded, asset-cell-specific **approximate 2D segmentations**, not
+independently verified five-channel Unity 3D material masks. No
+Wiki art, artificial colors, CSS rings or new 3D renderings are used.
+
+Together with the previous nine-family Marching Band batch, the
+21 original Marching Band families comprise 273 native colorways.

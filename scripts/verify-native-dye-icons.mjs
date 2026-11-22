@@ -147,7 +147,19 @@ const nativeTwoToneSources=[
  ['collections_group_events',3,47,13],
  ['collections_group_events',4,111,13],
  ['collections_group_events',5,120,13],
- ['collections_group_events',5,34,13]
+ ['collections_group_events',5,34,13],
+ ['collections_group_events',5,40,13],
+ ['collections_group_events',5,91,13],
+ ['collections_group_events',5,93,13],
+ ['collections_group_events',6,72,13],
+ ['collections_group_events',7,1,13],
+ ['collections_group_events',7,11,13],
+ ['collections_group_events',7,130,13],
+ ['collections_group_events',7,34,13],
+ ['collections_group_events',7,56,13],
+ ['collections_group_events',8,56,13],
+ ['collections_group_events',9,33,13],
+ ['collections_group_events',9,122,13]
 ];
 const originalPalette=JSON.parse(readFileSync('public/native-dye-palettes.json','utf8')).records;
 for(const [group,sheet,cell,total] of nativeTwoToneSources){
