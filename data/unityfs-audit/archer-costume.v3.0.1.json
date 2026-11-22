@@ -29,7 +29,12 @@
     },
     "verifiedGameObject": "BasicStyle_FullBody_ImaginationArcher",
     "hasEmbeddedMaterial": false,
-    "hasEmbeddedTexture2D": false
+    "hasEmbeddedTexture2D": false,
+    "externalCABs": [
+      "CAB-2383a36f15413272ed26f383f73f6431",
+      "CAB-6d01000bf1aa6b026bad1ed5b70c73c7",
+      "CAB-46b8f8fe122147493b3113f7c1c8cd0f"
+    ]
   },
-  "blocker": "Original bundle has no embedded Material or Texture2D. External renderer dependencies and correct shader dye semantics must be resolved before publishing an exact game-derived render."
+  "blocker": "Three external CAB references occur in the original serialized dependency table. Their source UnityFS bundle filenames and renderer shader bindings remain to be resolved; this source bundle contains no Material/Texture2D."
 }
