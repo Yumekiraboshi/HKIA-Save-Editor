@@ -42,6 +42,24 @@ function snapshot(){
  return {entries,dirty:b[2],canUndo:b[3],canRedo:b[4]};
 }
 load(slot);
+// Read-only source-v3.0.1 native click plan: unknown IDs and invalid clock
+// are rejected without modifying the original session or its history.
+assert.ok(e.hkia_achievement_toggle_plan,'missing Rust-only achievement planner ABI');
+const verifiedGuid=[15182560,1296854392,3253409457,3976879535];
+assert.equal(e.hkia_achievement_toggle_plan(...verifiedGuid,1795251723456n),0);
+{
+ const p=e.hkia_reply_ptr(),n=e.hkia_reply_len();
+ assert.equal(n,18);
+ const v=new DataView(e.memory.buffer,p,n);
+ assert.equal(v.getUint8(0),1);
+ assert.equal(v.getFloat32(1,true),12,'source goal must come from Rust native facts');
+ assert.equal(v.getUint8(5),1);
+ assert.equal(v.getBigInt64(6,true),1795251723n);
+ assert.equal(v.getUint32(14,true),456000000);
+}
+assert.equal(snapshot().dirty,0,'planning must not edit the loaded save');
+assert.equal(e.hkia_achievement_toggle_plan(0,0,0,0,1795251723456n),1);
+assert.equal(e.hkia_achievement_toggle_plan(...verifiedGuid,-1n),1);
 assert.equal(e.hkia_achievement_snapshot(),0);
 assert.equal(e.hkia_reply_len(),72);
 const ag=[1,0,0,1];
