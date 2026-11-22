@@ -237,6 +237,54 @@ function highTeaFlowerClipRegions(
  return regions;
 }
 
+/**
+ * High Tea Frilled Bonnet: 41 genuine Steam v3.0.1 dyeable variants
+ * reference ONE original collection_group_teagarden UiIcon, sheet 0
+ * cell 4. Native White-and-{Yellow,Sky,Green,Periwinkle} item palettes
+ * share channel 1 but have different source-native channel 2.
+ *
+ * The actual icon has a neutral cloth bonnet and a narrow visible
+ * central/diagonal band. The band gets palette channel 2 while the
+ * surrounding neutral fabric receives channel 1. This is a guarded,
+ * image-derived 2D approximation, NOT the Unity material's exact
+ * five-channel 3D shader mask. Do not invent new dye values or art.
+ */
+function highTeaFrilledBonnetRegions(
+ sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
+ origin?:SpriteCell
+):Uint8Array|undefined{
+ if(!sourceKey.startsWith('item_c_dyeable_')||
+  origin?.group!=='collection_group_teagarden'||
+  origin.sheet!==0||origin.cell!==4||
+  width!==96||height!==96||input.length!==96*96*4)return undefined;
+ const regions=new Uint8Array(width*height);
+ let visible=0,neutral=0,band=0,chromatic=0;
+ for(let i=0;i<regions.length;i++){
+  const p=i*4;
+  if(input[p+3]<64)continue;
+  visible++;
+  const r=input[p],g=input[p+1],b=input[p+2];
+  const chroma=Math.max(r,g,b)-Math.min(r,g,b);
+  const luminance=.2126*r+.7152*g+.0722*b;
+  if(chroma>48)chromatic++;
+  // Keep the source's existing dark outline, metal and colored details.
+  if(chroma>43||luminance<40)continue;
+  neutral++;
+  const x=i%96,y=Math.floor(i/96);
+  // Bonnet's central ribbon: a slightly diagonal narrow stripe.
+  // Region estimated solely from its original 96px UiIcon silhouette.
+  const ribbonX=39+(y-20)*.27;
+  const onRibbon=y>=23&&y<=72&&Math.abs(x-ribbonX)<=6;
+  regions[i]=onRibbon?2:1;
+  if(onRibbon)band++;
+ }
+ // Changed source art must fall back rather than acquire this mask.
+ if(visible<900||visible>5900||neutral<550||
+  neutral<visible*.35||chromatic>1900||
+  band<65||band>900)return undefined;
+ return regions;
+}
+
 function distanceToSegment(x:number,y:number,ax:number,ay:number,bx:number,by:number):number{
  const dx=bx-ax,dy=by-ay;
  const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy)));
@@ -307,6 +355,8 @@ export function sourceIconDyeRegions(
  sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
  origin?:SpriteCell
 ):Uint8Array|undefined{
+ const bonnet=highTeaFrilledBonnetRegions(sourceKey,input,width,height,origin);
+ if(bonnet)return bonnet;
  const flowerClip=highTeaFlowerClipRegions(sourceKey,input,width,height,origin);
  if(flowerClip)return flowerClip;
  const skort=campCounselorSkortRegions(sourceKey,input,width,height,origin);

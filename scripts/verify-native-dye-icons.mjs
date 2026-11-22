@@ -60,7 +60,10 @@ for(const [left,right] of [
  ['1516271219','2089088060'],
  ['290453986','808145972'],
  ['290453986','911692875'],
- ['290453986','1473720360']
+ ['290453986','1473720360'],
+ ['1265055643','1046324850'],
+ ['1265055643','1893329026'],
+ ['1265055643','535112962']
 ]){
  if(!records[left]||!records[right])continue;
  assert.equal(records[left].group,records[right].group);
@@ -89,6 +92,15 @@ for(const id of ['290453986','808145972','911692875','1473720360']){
  assert.equal(records[id].cell,101);
  assert.ok(records[id].channels.includes(2),
   'native Flower Clip PNG must apply original game palette channel 2: '+id);
+}
+// Same-first native palette on verified 000/004 Frilled Bonnet source.
+for(const id of ['1265055643','1046324850','1893329026','535112962']){
+ if(!records[id])continue;
+ assert.equal(records[id].group,'collection_group_teagarden');
+ assert.equal(records[id].sheet,0);
+ assert.equal(records[id].cell,4);
+ assert.ok(records[id].channels.includes(2),
+  'native Frilled Bonnet PNG must use original second dye: '+id);
 }
 console.log('HKIA_ORIGINAL_UICON_COLORWAYS_VERIFIED '+files.length+
  ' / '+coverage.uniqueCandidates+' source-unique, '+coverage.ambiguous+

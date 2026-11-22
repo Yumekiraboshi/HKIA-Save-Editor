@@ -269,6 +269,11 @@ async function run(){
  await checkBandedHatPair('White and Yellow High Tea Flower Clip',290453986,
   'White and Sky High Tea Flower Clip',808145972);
 
+ // Original Frilled Bonnet sprite is shared by 41 variants. Confirm
+ // distinct native second dyes change bitmap pixels, not a CSS swatch.
+ await checkBandedHatPair('White and Yellow High Tea Frilled Bonnet',1265055643,
+  'White and Sky High Tea Frilled Bonnet',1046324850);
+
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();

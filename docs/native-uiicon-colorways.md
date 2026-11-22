@@ -228,3 +228,26 @@ art refuses the specialized mask.
 not a verified Unity shader/material texture mask. The colors, item
 identities and original UiIcon source are verified, but the precise
 game-rendered 3D material assignment remains unconfirmed.
+
+## High Tea Frilled Bonnet: original source-ribbon distinction
+
+Steam v3.0.1 `collection_group_teagarden` UiIcon sheet `000`,
+cell `004` maps to **41 original High Tea Frilled Bonnet Item IDs**.
+Four verified game-native palettes have the same first channel
+(`#fdf7e6`): White and Yellow (1265055643) uses second color
+`#fede49`, White and Sky (1046324850) uses `#bbf2ef`,
+White and Green (1893329026) uses `#78d244`, and White and
+Periwinkle (535112962) uses `#afb4fd`.
+
+For the precise source cell only, a guarded 96px 2D region estimate
+applies channel 2 to the visibly narrow central/diagonal bonnet ribbon
+and channel 1 to the other neutral cloth, while preserving the original
+game icon's transparent silhouette, darker outline and detailing.
+This does not import Wiki graphics, fake swatches or alternate models.
+Unrecognized/non-neutral art fails closed to the generic original-icon
+path.
+
+**Fidelity limit:** The original Item IDs, source UiIcon and dye
+palette are verified. This **2D ribbon segmentation is approximate**,
+not a recovered or independently verified five-channel Unity shader
+material mask.
