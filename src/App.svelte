@@ -26,6 +26,8 @@
  import {localizedCopy} from './ui-locales';
  import {loadLocaleIndex,loadGameLabels,EMPTY_LABELS,type GameLabels} from './game-localization';
  import {loadIconPack,type IconPack} from './icon-packs';
+ import {loadNativeDyePalettes,type NativeDyePalettes} from './native-dye-palettes';
+ import DyeSprite from './DyeSprite.svelte';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
  import {searchAllCollectionItems,collectionDisplayName,filterCollectionItems} from './collection-search';
@@ -97,6 +99,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  let baseline=new Map<number,bigint>();
  let draftWrites:Promise<void>=Promise.resolve();
  let iconPack:IconPack|null=$state(null);
+ let nativeDyePalettes:NativeDyePalettes=$state({});
  let iconEpoch=0;
  let iconError=$state(false);
  let loadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
@@ -152,6 +155,9 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  const dateChanged=$derived(dateDialogTick!==null&&dateValue!==toDateTimeValue(dateDialogTick));
 
  onMount(()=>{
+  // Exact game dye palettes, used exclusively for recoloring item image pixels.
+  void loadNativeDyePalettes(import.meta.env.BASE_URL)
+   .then(palettes=>nativeDyePalettes=palettes).catch(()=>{});
   browserLanguage=detectLocale(navigator.languages?.length?navigator.languages:[navigator.language||'en']);
   try{
    const savedLang=localStorage.getItem('hkia-display-locale');
@@ -1048,7 +1054,11 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
      <button type="button" class="subcategory-card" onclick={()=>selectSubcategory(sub.key)}>
       <span class="subcategory-art" aria-hidden="true">
        {#if sprite}
+        {#if sub.previewId!==null&&nativeDyePalettes[String(sub.previewId)]}
+         <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(sub.previewId)]}/>
+        {:else}
         <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
+        {/if}
        {:else}
         <span class="subcategory-art-empty">✧</span>
        {/if}
@@ -1092,7 +1102,11 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
        onclick={e=>void toggleCollection(item[0],nameFor(item),e.currentTarget)}>
        <span class="item-art" aria-hidden="true">
         {#if sprite}
+         {#if nativeDyePalettes[String(item[0])]}
+          <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item[0])]}/>
+         {:else}
          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
+         {/if}
         {:else}
          <span class="item-art-empty">✧</span>
         {/if}
@@ -1127,7 +1141,11 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
     <div class="date-dialog-item">
      <span class="date-dialog-art" aria-hidden="true">
       {#if sprite}
+       {#if nativeDyePalettes[String(dateDialogItem[0])]}
+        <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(dateDialogItem[0])]}/>
+       {:else}
        <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
+       {/if}
       {:else}
        <span class="item-art-empty">✧</span>
       {/if}
