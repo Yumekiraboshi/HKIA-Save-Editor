@@ -205,3 +205,26 @@ invented dye values are used.
 original icon's visible fabric, *not* independently recovered from
 Unity's 3D five-channel shader material masks. Output must be treated as
 an approximate 2D preview, not pixel-perfect game rendering.
+
+## High Tea Flower Clip: native second-channel blossoms
+
+The original Steam v3.0.1 `collection_group_teagarden` UiIcon
+sheet `000`, cell `101` is shared by **45** exactly mapped native
+High Tea Flower Clip Item IDs. Its game-authored palette includes
+White and Yellow (290453986), White and Sky (808145972),
+White and Green (911692875) and White and Periwinkle (1473720360).
+All four use native channel 1 `#fdf7e6` but have different native
+channel 2 colors (`#fede49`, `#bbf2ef`, `#78d244`, `#afb4fd`).
+
+A source-cell-gated, conservative 2D image region applies the verified
+second dye to the visible right-hand flower petals and channel 1 to
+other neutral petals. The original game UiIcon's 96×96 silhouette,
+transparency, shading and non-neutral decoration remain unchanged.
+There are no overlaid rings, color swatches, external Wiki assets or
+invented Item IDs. Any mismatched source cell or non-neutral source
+art refuses the specialized mask.
+
+**Fidelity limit:** This is an image-derived 2D segmentation,
+not a verified Unity shader/material texture mask. The colors, item
+identities and original UiIcon source are verified, but the precise
+game-rendered 3D material assignment remains unconfirmed.

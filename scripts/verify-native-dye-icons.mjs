@@ -57,7 +57,10 @@ for(const [left,right] of [
  ['1645062322','114494397'],
  ['1962363087','2051283646'],
  ['60984945','1976756152'],
- ['1516271219','2089088060']
+ ['1516271219','2089088060'],
+ ['290453986','808145972'],
+ ['290453986','911692875'],
+ ['290453986','1473720360']
 ]){
  if(!records[left]||!records[right])continue;
  assert.equal(records[left].group,records[right].group);
@@ -77,6 +80,16 @@ for(const [left,right] of [
   assert.ok(records[id].channels.includes(2),
    'source Camp Counselor Skort PNG must truly apply native channel 2: '+id);
  }
+// Original Steam v3.0.1 UiIcon 000/101 must actually render both source
+// dye channels, not just produce distinct hashes from unrelated pixels.
+for(const id of ['290453986','808145972','911692875','1473720360']){
+ if(!records[id])continue;
+ assert.equal(records[id].group,'collection_group_teagarden');
+ assert.equal(records[id].sheet,0);
+ assert.equal(records[id].cell,101);
+ assert.ok(records[id].channels.includes(2),
+  'native Flower Clip PNG must apply original game palette channel 2: '+id);
+}
 console.log('HKIA_ORIGINAL_UICON_COLORWAYS_VERIFIED '+files.length+
  ' / '+coverage.uniqueCandidates+' source-unique, '+coverage.ambiguous+
  ' ambiguous, '+coverage.unmatched+' unmapped, '+coverage.uncolorable+' uncolorable across '+

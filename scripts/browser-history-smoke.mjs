@@ -264,6 +264,11 @@ async function run(){
  await checkBandedHatPair('Green Camp Counselor Skort',1962363087,
   'Green and Brown Camp Counselor Skort',2051283646);
 
+ // The same original Flower Clip UiIcon must show different native
+ // second palette colors in the *image*, not a ring or color swatch.
+ await checkBandedHatPair('White and Yellow High Tea Flower Clip',290453986,
+  'White and Sky High Tea Flower Clip',808145972);
+
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();
