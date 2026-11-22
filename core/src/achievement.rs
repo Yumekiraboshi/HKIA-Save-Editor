@@ -41,6 +41,24 @@ pub fn plan_toggle_v301(
  Ok(after)
 }
 
+/// A v3.0.0 or already-present but source-unmapped achievement can still
+/// be toggled safely: preserve its saved float progress byte-for-byte and
+/// change only the boolean and click timestamp. Never create an unknown GUID
+/// or invent a threshold. WASM callers must verify the record exists first.
+pub fn plan_toggle_existing_without_goal(
+ before:AchievementValue,now_ms:i64
+)->Result<AchievementValue,Error>{
+ if !valid(before)||!(0..=253_402_300_799_000).contains(&now_ms){return Err(Error::Schema)}
+ let after=if before.complete{
+  AchievementValue{complete:false,current:before.current,completed:None}
+ }else{
+  AchievementValue{complete:true,current:before.current,
+   completed:Some((now_ms/1000,(now_ms%1000) as u32*1_000_000))}
+ };
+ if !valid(after){return Err(Error::Schema)}
+ Ok(after)
+}
+
 #[cfg(test)]mod native_toggle_tests{
  use super::*;
  #[test]fn source_goal_and_clock_cas_values_are_precise(){
@@ -56,6 +74,15 @@ pub fn plan_toggle_v301(
   assert!(plan_toggle_v301([0;4],before,1_795_251_723_456).is_err());
   assert!(plan_toggle_v301(guid,before,-1).is_err());
   assert!(plan_toggle_v301(guid,before,253_402_300_799_001).is_err());
+ }
+ #[test]fn saved_unknown_or_old_version_toggles_without_inventing_progress(){
+  let known_only_from_save=AchievementValue{complete:false,current:2.25,completed:None};
+  let completed=plan_toggle_existing_without_goal(known_only_from_save,1_795_251_723_456).unwrap();
+  assert_eq!(completed.current.to_bits(),known_only_from_save.current.to_bits());
+  assert_eq!(completed.completed,Some((1_795_251_723,456_000_000)));
+  let revoked=plan_toggle_existing_without_goal(completed,1_795_251_723_999).unwrap();
+  assert_eq!(revoked,known_only_from_save);
+  assert!(plan_toggle_existing_without_goal(known_only_from_save,-1).is_err());
  }
  #[test]fn category_uses_actual_native_child_count_not_sentinel(){
   // First sorted parent has 5 children, despite native counter sentinel 1.
