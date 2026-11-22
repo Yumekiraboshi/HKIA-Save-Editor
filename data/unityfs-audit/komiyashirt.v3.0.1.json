@@ -31,7 +31,11 @@
         "SkinnedMeshRenderer": 1,
         "Texture2D": 3,
         "Transform": 56
-      }
+      },
+      "externalCABs": [
+        "CAB-2383a36f15413272ed26f383f73f6431",
+        "CAB-46b8f8fe122147493b3113f7c1c8cd0f"
+      ]
     },
     {
       "name": "CAB-e2c23494312853194a50bfd8babbb423.resS",
@@ -39,5 +43,5 @@
       "kind": "externalTextureStream"
     }
   ],
-  "note": "Material and Texture2D embedded for this shirt, unlike Archer. This does not establish that shirt texture channels match the Archer dye shader."
+  "note": "Material and three Texture2D are embedded. Two external CAB references overlap with Archer, but the precise shader/material bindings are not yet verified."
 }
