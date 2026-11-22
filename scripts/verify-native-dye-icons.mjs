@@ -49,7 +49,8 @@ for(const [left,right] of [
  ['704486536','585726126'],
  ['1286846063','935642973'],
  ['237080181','556476907'],
- ['307168230','404567552']
+ ['307168230','404567552'],
+ ['156787090','351352504']
 ]){
  if(!records[left]||!records[right])continue;
  assert.equal(records[left].group,records[right].group);
