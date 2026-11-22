@@ -134,6 +134,57 @@ for(const id of ['77149467','370872413','2022277447']){
  assert.ok(records[id].channels.includes(2),
   'game-original Elegant Hat bitmap must use second dye channel: '+id);
 }
+// Batch source-audited two-tone families. The original item-pack index
+// and per-colorway PNG signatures, not a manually curated palette list,
+// determine precisely which native variants belong to each original cell.
+const nativeTwoToneSources=[
+ ['collection_group_teagarden',0,74,38],
+ ['collections_group_events',0,38,13],
+ ['collections_group_events',1,29,13],
+ ['collections_group_events',1,92,13],
+ ['collections_group_events',2,118,13],
+ ['collections_group_events',2,64,13],
+ ['collections_group_events',3,47,13],
+ ['collections_group_events',4,111,13],
+ ['collections_group_events',5,120,13],
+ ['collections_group_events',5,34,13]
+];
+const originalPalette=JSON.parse(readFileSync('public/native-dye-palettes.json','utf8')).records;
+for(const [group,sheet,cell,total] of nativeTwoToneSources){
+ const gamePack=indexedGroups.get(group);
+ assert.ok(gamePack,'original source atlas must be available: '+group);
+ const ids=[...gamePack.sprites].filter(([,origin])=>
+  origin.sheet===sheet&&origin.cell===cell).map(([id])=>id);
+ assert.equal(ids.length,total,'original Item ID family size '+group+'/'+sheet+'/'+cell);
+ const familyRecords=ids.map(id=>{
+  const r=records[id];
+  assert.ok(r,'missing native PNG for original Item ID '+id);
+  assert.equal(r.group,group);
+  assert.equal(r.sheet,sheet);
+  assert.equal(r.cell,cell);
+  assert.ok(r.channels.includes(2),
+   'source-native 2nd dye must recolor real icon pixels: '+id);
+  return [id,r];
+ });
+ if(group==='collections_group_events'){
+  // Every 13-item Marching Band family has ONE shared dark source
+  // primary dye but 13 distinct game-defined second dye colors.
+  assert.deepEqual([...new Set(ids.map(id=>originalPalette[id].colors[0]))],
+   ['#3a3840']);
+  assert.equal(new Set(ids.map(id=>originalPalette[id].colors[1])).size,13);
+  assert.equal(new Set(familyRecords.map(([,r])=>r.sha256)).size,13,
+   'all 13 game variants must be visually distinguishable: '+sheet+'/'+cell);
+ }else{
+  // All confirmed same-primary / distinct-second dress combinations
+  // must be visibly distinct, even if other material channels are unknown.
+  for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){
+   const a=originalPalette[ids[i]].colors,b=originalPalette[ids[j]].colors;
+   if(a[0]===b[0]&&a[1]!==b[1])
+    assert.notEqual(records[ids[i]].sha256,records[ids[j]].sha256,
+     'native 2nd-color Empire Waist Dress variant collision '+ids[i]+'/'+ids[j]);
+  }
+ }
+}
 console.log('HKIA_ORIGINAL_UICON_COLORWAYS_VERIFIED '+files.length+
  ' / '+coverage.uniqueCandidates+' source-unique, '+coverage.ambiguous+
  ' ambiguous, '+coverage.unmatched+' unmapped, '+coverage.uncolorable+' uncolorable across '+
