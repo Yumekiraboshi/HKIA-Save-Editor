@@ -117,22 +117,49 @@ async function run(){
  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
 
  const search=page.locator('.collection-controls input[type="search"]');
- // Shared game-source thumbnails remain, but no dye ring or color chips may appear.
+ // A shared source sprite must become two different image bitmaps, not
+ // an unchanged gray icon with a colored border or swatch beneath it.
+ async function sampledSprite(locator){
+  return locator.evaluate(async el=>{
+   const style=getComputedStyle(el).backgroundImage;
+   const url=style.match(/^url\\(["']?(.+?)["']?\\)$/)?.[1];
+   if(!url)throw Error('DYE_IMAGE_STYLE_MISSING');
+   const image=new Image();
+   image.src=url;
+   await image.decode();
+   const canvas=document.createElement('canvas');
+   canvas.width=96;canvas.height=96;
+   const ctx=canvas.getContext('2d',{willReadFrequently:true});
+   ctx.drawImage(image,0,0,96,96);
+   const px=ctx.getImageData(0,0,96,96).data;
+   let hash=2166136261,r=0,g=0,b=0,n=0;
+   for(let i=0;i<px.length;i+=4){
+    if(px[i+3]<90)continue;
+    hash=Math.imul(hash^px[i],16777619)>>>0;
+    hash=Math.imul(hash^px[i+1],16777619)>>>0;
+    hash=Math.imul(hash^px[i+2],16777619)>>>0;
+    r+=px[i];g+=px[i+1];b+=px[i+2];n++;
+   }
+   return {hash,r:r/n,g:g/n,b:b/n,count:n};
+  });
+ }
  await search.fill('Ice Cream Archer Hat');
  await page.locator('.collection-search-result').first().click();
- await page.locator('#collection-item-704486536 .item-sprite').waitFor({timeout:20_000});
- assert.equal(await page.locator('#collection-item-704486536 .native-dye-swatch').count(),0);
- assert.equal(await page.locator('#collection-item-704486536 .native-dye-preview').count(),0);
+ const iceSprite=page.locator('#collection-item-704486536 .item-sprite[data-dye-rendered="true"]');
+ await iceSprite.waitFor({timeout:30_000});
+ const icePixels=await sampledSprite(iceSprite);
+ assert.ok(icePixels.count>75&&icePixels.r>icePixels.g+8,'Ice Cream Archer Hat should recolor its gray fabric pink');
  await search.fill('Orange Archer Hat');
  await page.locator('.collection-search-result').first().click();
- await page.locator('#collection-item-585726126 .item-sprite').waitFor({timeout:20_000});
- assert.equal(await page.locator('#collection-item-585726126 .native-dye-swatch').count(),0);
- assert.equal(await page.locator('#collection-item-585726126 .native-dye-preview').count(),0);
- assert.equal(await page.locator('.shared-dyeable-icon-note').count(),0);
- const artAfterRemoval=await page.locator('#collection-item-585726126 .item-art').evaluate(el=>
-  getComputedStyle(el,'::before').backgroundImage);
- assert.equal(artAfterRemoval,'none');
-
+ const orangeSprite=page.locator('#collection-item-585726126 .item-sprite[data-dye-rendered="true"]');
+ await orangeSprite.waitFor({timeout:30_000});
+ const orangePixels=await sampledSprite(orangeSprite);
+ assert.ok(orangePixels.g>orangePixels.b+6,'Orange Archer Hat should recolor its gray fabric yellow');
+ assert.notEqual(icePixels.hash,orangePixels.hash,'shared native icon must produce separate dyed bitmap pixels');
+ assert.equal(await page.locator('.native-dye-swatch,.native-dye-preview,.shared-dyeable-icon-note').count(),0);
+ assert.equal(await page.locator('#collection-item-585726126 .item-art').evaluate(el=>
+  getComputedStyle(el,'::before').backgroundImage),'none');
+ 
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();
