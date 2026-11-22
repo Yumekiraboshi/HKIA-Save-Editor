@@ -58,6 +58,16 @@ assert.equal(e.hkia_achievement_toggle_plan(...verifiedGuid,1795251723456n),0);
  assert.equal(v.getUint32(14,true),456000000);
 }
 assert.equal(snapshot().dirty,0,'planning must not edit the loaded save');
+// Synthetic pre-existing unmapped GUID: preserve the native float progress,
+// unlike creating an unverified/absent achievement (which must fail closed).
+assert.equal(e.hkia_achievement_toggle_plan(1,0,0,1,1795251723456n),0);
+{
+ const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+ assert.equal(v.getUint8(0),1);
+ assert.equal(v.getFloat32(1,true),1);
+ assert.equal(v.getBigInt64(6,true),1795251723n);
+}
+assert.equal(snapshot().dirty,0);
 assert.equal(e.hkia_achievement_toggle_plan(0,0,0,0,1795251723456n),1);
 assert.equal(e.hkia_achievement_toggle_plan(...verifiedGuid,-1n),1);
 assert.equal(e.hkia_achievement_snapshot(),0);
