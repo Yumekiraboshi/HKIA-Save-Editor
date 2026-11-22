@@ -9,6 +9,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using UnityEditor;
 using UnityEngine;
@@ -43,6 +44,11 @@ public static class HKIADyeVariantPilot
             throw new InvalidOperationException("Missing "+key);
         return all[index+1];
     }
+    private static IEnumerable<string> AllArgs(string[] args,string flag)
+    {
+        for(int i=0;i+1<args.Length;i++)
+            if(args[i]==flag) yield return args[i+1];
+    }
     private static void Require(bool ok,string message)
     {
         if (!ok) throw new InvalidOperationException(message);
@@ -69,6 +75,7 @@ public static class HKIADyeVariantPilot
     {
         GameObject instance=null,camObject=null,lightObject=null;
         AssetBundle bundle=null;
+        var dependencies=new List<AssetBundle>();
         RenderTexture target=null;
         RenderTexture oldActive=RenderTexture.active;
         try
@@ -95,6 +102,18 @@ public static class HKIADyeVariantPilot
             Require(job.publishable || unsafePreview,
                 "HKIA_RENDER_UNVERIFIED_MATERIALS_BLOCK_PUBLICATION");
 
+            // Load original UnityFS dependencies before instantiating the
+            // source prefab. Only explicitly supplied local files are used.
+            // The CAB resolver must identify these ahead of time.
+            foreach(string dependencyPath in AllArgs(args,"--hkia-dependency"))
+            {
+                Require(File.Exists(dependencyPath),"HKIA_RENDER_DEPENDENCY_FILE_MISSING");
+                Require(Path.GetFullPath(dependencyPath)!=Path.GetFullPath(bundlePath),
+                    "HKIA_RENDER_DEPENDENCY_REPEATS_ROOT_BUNDLE");
+                var external=AssetBundle.LoadFromFile(dependencyPath);
+                Require(external!=null,"HKIA_RENDER_DEPENDENCY_LOAD_FAILED "+dependencyPath);
+                dependencies.Add(external);
+            }
             bundle=AssetBundle.LoadFromFile(bundlePath);
             Require(bundle!=null,"HKIA_RENDER_UNITYFS_LOAD_FAILED");
             var prefabs=bundle.LoadAllAssets<GameObject>();
@@ -197,6 +216,7 @@ public static class HKIADyeVariantPilot
             if(camObject!=null)UnityEngine.Object.DestroyImmediate(camObject);
             if(instance!=null)UnityEngine.Object.DestroyImmediate(instance);
             if(bundle!=null)bundle.Unload(false);
+            foreach(var external in dependencies)if(external!=null)external.Unload(false);
         }
     }
 }
