@@ -36,7 +36,7 @@ test('two archer-hat colorways share native artwork but have distinct exact pale
  assert.notDeepEqual(ice.colors,orange.colors);
 });
 
-test('the game palette database remains intact for future image recoloring but generates no UI overlays',()=>{
+test('real dye pixels replace the original neutral source only for verified dye item IDs; no overlays',()=>{
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  const css=readFileSync(new URL('../src/style.css',import.meta.url),'utf8');
  const indexed=readFileSync(new URL('../src/native-dye-palettes.ts',import.meta.url),'utf8');
@@ -45,7 +45,9 @@ test('the game palette database remains intact for future image recoloring but g
  assert.match(app,/class="subcategory-art" aria-hidden="true"/);
  assert.match(app,/class="item-art" aria-hidden="true"/);
  assert.match(app,/class="date-dialog-art" aria-hidden="true"/);
- for(const prohibited of [/nativeDyeRing/,/nativeDyePalettes/,/native-dye-ring/,/native-dye-swatch/,/native-dye-preview/,/hasSharedDyeableIcon/,/sharedDyeableIcon/]){
+ assert.match(app,/loadNativeDyePalettes\(import\.meta\.env\.BASE_URL\)/);
+ assert.match(app,/import DyeSprite from '\.\/DyeSprite\.svelte'/);
+ for(const prohibited of [/nativeDyeRing/,/native-dye-ring/,/native-dye-swatch/,/native-dye-preview/,/hasSharedDyeableIcon/,/sharedDyeableIcon/]){
   assert.doesNotMatch(app,prohibited);
   assert.doesNotMatch(css,prohibited);
  }
