@@ -44,6 +44,17 @@ export function prepareDyeRender(itemId,{catalog,palettes,families,recipes,audit
   throw Error('DYE_JOB_INVALID_RECIPE');
  if(!Array.isArray(family.verifiedMaterialDependencies))
   throw Error('DYE_JOB_MISSING_MATERIAL_DEPENDENCIES');
+ const rendererRefs=audit.serialized.rendererMaterialReferences;
+ if(!Array.isArray(rendererRefs)||rendererRefs.length<1)
+  throw Error('DYE_JOB_MISSING_MATERIAL_PPTRS');
+ const requiredMaterialCABs=[...new Set(
+  rendererRefs.flatMap(renderer=>renderer.materials.map(material=>material.externalCAB)
+   .filter(Boolean))
+ )].sort();
+ if(!requiredMaterialCABs.length||
+  requiredMaterialCABs.some(cab=>!/^CAB-[0-9a-f]{32}$/.test(cab)||
+   !audit.serialized.externalCABs.includes(cab)))
+  throw Error('DYE_JOB_INVALID_MATERIAL_PPTRS');
  const ready=family.rendererStatus==='ready'&&
   family.verifiedMaterialDependencies.length>0&&
   family.verifiedShaderPaletteMask===true&&
@@ -55,6 +66,8 @@ export function prepareDyeRender(itemId,{catalog,palettes,families,recipes,audit
   originalUnityFS:family.originalUnityFS,
   prefabGameObject:family.originalGameObject,
   sourceAuditSha256:audit.sha256,
+  requiredMaterialCABs,
+  materialSlots:rendererRefs,
   palette:{dye:palette.dye,colors:palette.colors},
   renderer:{...recipe,ready,verifiedMaterialDependencies:family.verifiedMaterialDependencies},
   outputRelative:'staging/variant-art/'+itemId+'.png',
