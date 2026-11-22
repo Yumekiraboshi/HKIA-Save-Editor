@@ -126,6 +126,12 @@ async function run(){
   'rgb(255, 187, 250)','rgb(194, 254, 255)','rgb(249, 250, 255)',
   'rgb(255, 187, 250)','rgb(249, 250, 255)'
  ]);
+ const iceRing=await page.locator('#collection-item-704486536 .item-art.native-dye-preview').evaluate(el=>({
+  palette:el.style.getPropertyValue('--native-dye-ring'),
+  background:getComputedStyle(el,'::before').backgroundImage
+ }));
+ assert.match(iceRing.palette,/#ffbbfa 0\.0000deg 72\.0000deg/);
+ assert.notEqual(iceRing.background,'none');
  await search.fill('Orange Archer Hat');
  await page.locator('.collection-search-result').first().click();
  const orange=page.locator('#collection-item-585726126 .native-dye-swatch');
@@ -134,6 +140,14 @@ async function run(){
   'rgb(254, 255, 189)','rgb(255, 179, 55)','rgb(253, 217, 0)',
   'rgb(255, 198, 21)','rgb(253, 217, 0)'
  ]);
+
+ const orangeRing=await page.locator('#collection-item-585726126 .item-art.native-dye-preview').evaluate(el=>({
+  palette:el.style.getPropertyValue('--native-dye-ring'),
+  background:getComputedStyle(el,'::before').backgroundImage
+ }));
+ assert.match(orangeRing.palette,/#feffbd 0\.0000deg 72\.0000deg/);
+ assert.notEqual(orangeRing.background,'none');
+ assert.notEqual(orangeRing.palette,iceRing.palette);
 
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
