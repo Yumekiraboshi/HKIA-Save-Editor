@@ -10,6 +10,51 @@
 
 import type {SpriteCell} from './icon-packs';
 
+/**
+ * Crew Medic Outfit: native events UiIcon sheet 000, cell 071.
+ * All 17 verified v3.0.1 source colorways share palette #1 = #ebe4e7,
+ * while the game-authored palette #2 is the variant-defining color.
+ *
+ * The game icon is one neutral/grayscale tunic with no baked-in 2D
+ * material-channel boundaries. We therefore color its *neutral main
+ * fabric* with the native second dye channel. This fixes 17 identical
+ * thumbnails while preserving the 96px source silhouette, texture and
+ * alpha. The placement is a 2D visual approximation and is NOT proof of
+ * the 3D shader's exact material-channel assignment.
+ */
+function crewMedicVariantFabric(
+ sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
+ origin?:SpriteCell
+):Uint8Array|undefined{
+ if(!sourceKey.startsWith('item_c_dyeable_')||
+  origin?.group!=='collections_group_events'||origin.sheet!==0||
+  origin.cell!==71||width!==96||height!==96||
+  input.length!==96*96*4)return undefined;
+ const mask=new Uint8Array(width*height);
+ let visible=0,neutralFabric=0,chromatic=0;
+ for(let i=0;i<mask.length;i++){
+  const p=i*4,alpha=input[p+3];
+  if(alpha<64)continue;
+  visible++;
+  const r=input[p],g=input[p+1],b=input[p+2];
+  const chroma=Math.max(r,g,b)-Math.min(r,g,b);
+  const lum=.2126*r+.7152*g+.0722*b;
+  if(chroma>45)chromatic++;
+  if(chroma<=36&&lum>=55){
+   mask[i]=2;
+   neutralFabric++;
+  }
+ }
+ const alphaAt=(x:number,y:number)=>input[(y*96+x)*4+3];
+ // These counts and silhouette anchors were measured on the original
+ // Steam v3.0.1 96px cell, not generated or guessed item icons.
+ if(visible<4200||visible>4650||
+  neutralFabric<4150||neutralFabric>4600||chromatic>18||
+  alphaAt(47,16)<180||alphaAt(47,45)<225||
+  alphaAt(47,75)<180||alphaAt(10,40)>80)return undefined;
+ return mask;
+}
+
 function distanceToSegment(x:number,y:number,ax:number,ay:number,bx:number,by:number):number{
  const dx=bx-ax,dy=by-ay;
  const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy)));
@@ -80,6 +125,8 @@ export function sourceIconDyeRegions(
  sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
  origin?:SpriteCell
 ):Uint8Array|undefined{
+ const crew=crewMedicVariantFabric(sourceKey,input,width,height,origin);
+ if(crew)return crew;
  const school=schoolNecklineRegions(sourceKey,input,width,height,origin);
  if(school)return school;
  if(!sourceKey.startsWith('item_c_dyeable_icarcheroutfit_')||

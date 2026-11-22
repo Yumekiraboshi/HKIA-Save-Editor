@@ -214,3 +214,68 @@ test('source-atlas anchored School Jacket and School Sweater Vest resolve same-m
    undefined,'changed original art refuses speculative multi-channel recoloring');
  }
 });
+
+test('native Crew Medic Outfit: all 17 original Item IDs share channel 1 but differ on channel 2',()=>{
+ const bytes=readFileSync(new URL('../public/item-packs/collections_group_events.zip',import.meta.url));
+ const nameLength=bytes.readUInt16LE(26),extraLength=bytes.readUInt16LE(28);
+ assert.equal(bytes.toString('utf8',30,30+nameLength),'index.json');
+ const offset=30+nameLength+extraLength;
+ const index=JSON.parse(bytes.subarray(offset,offset+bytes.readUInt32LE(18)).toString('utf8'));
+ const crew=index.records.filter(([,sheet,cell])=>sheet===0&&cell===71).map(([id])=>id);
+ assert.equal(crew.length,17);
+ const gameNames=JSON.parse(readFileSync(new URL('../public/source-names/en.json',import.meta.url),'utf8')).names;
+ const secondary=new Set();
+ for(const itemId of crew){
+  assert.match(gameNames[String(itemId)],/ Crew Medic Outfit$/);
+  const p=raw.records[String(itemId)];
+  assert.ok(p);
+  assert.equal(p.colors[0],'#ebe4e7','all native first-channel colors are identical');
+  assert.match(p.colors[1],/^#[0-9a-f]{6}$/,'the game supplies the variant color');
+  secondary.add(p.colors[1]);
+ }
+ assert.equal(secondary.size,17,'every source Crew Medic variant has a different native second color');
+});
+
+test('source-anchored Crew Medic recolors pixels with native second channel only, keeping alpha and safety gates',async()=>{
+ const output=await build({
+  entryPoints:[fileURLToPath(new URL('../src/dye-icon-regions.ts',import.meta.url))],
+  bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'
+ });
+ const {sourceIconDyeRegions}=await import('data:text/javascript;base64,'+
+  Buffer.from(output.outputFiles[0].text).toString('base64'));
+ const pixels=new Uint8ClampedArray(96*96*4);
+ // Source-art profile surrogate: ~4,400 opaque neutral tunic pixels,
+ // a transparent corner and opaque center.
+ for(let y=12;y<80;y++)for(let x=15;x<81;x++){
+  const p=(y*96+x)*4;
+  pixels[p]=145;pixels[p+1]=142;pixels[p+2]=139;pixels[p+3]=255;
+ }
+ const source={group:'collections_group_events',sheet:0,cell:71};
+ const mask=sourceIconDyeRegions('item_c_dyeable_crewmock',pixels,96,96,source);
+ assert.ok(mask);
+ assert.equal(mask[45*96+47],2,'neutral fabric uses the variable game palette channel');
+ assert.equal(mask[0],0,'transparent pixel is untouched');
+ const blue=raw.records['156787090'],maroon=raw.records['351352504'];
+ assert.equal(blue.colors[0],maroon.colors[0]);
+ assert.notEqual(blue.colors[1],maroon.colors[1]);
+ const b=recolorDyePixels(pixels,96,96,blue,mask);
+ const m=recolorDyePixels(pixels,96,96,maroon,mask);
+ assert.ok(b&&m);
+ const p=(45*96+47)*4;
+ assert.ok(b.pixels[p+2]>b.pixels[p]+65,'Blue Crew Medic uses original blue channel 2');
+ assert.ok(m.pixels[p]>m.pixels[p+2]+30,'Maroon Crew Medic uses original maroon channel 2');
+ assert.notDeepEqual([...b.pixels.slice(p,p+3)],[...m.pixels.slice(p,p+3)]);
+ for(let i=3;i<pixels.length;i+=4)assert.equal(b.pixels[i],pixels[i]);
+ assert.equal(sourceIconDyeRegions('item_c_dyeable_crewmock',pixels,96,96),undefined);
+ assert.equal(sourceIconDyeRegions('item_c_dyeable_crewmock',pixels,96,96,
+  {...source,sheet:1}),undefined);
+ assert.equal(sourceIconDyeRegions('item_c_dyeable_crewmock',pixels,96,96,
+  {...source,cell:70}),undefined);
+ assert.equal(sourceIconDyeRegions('item_unknown',pixels,96,96,source),undefined);
+ const replaced=new Uint8ClampedArray(pixels);
+ for(let i=0;i<replaced.length;i+=4)if(replaced[i+3]){
+  replaced[i]=210;replaced[i+1]=17;replaced[i+2]=17;
+ }
+ assert.equal(sourceIconDyeRegions('item_c_dyeable_crewmock',replaced,96,96,source),
+  undefined,'replaced game artwork fails closed rather than accepting old color geometry');
+});
