@@ -274,6 +274,15 @@ async function run(){
  await checkBandedHatPair('White and Yellow High Tea Frilled Bonnet',1265055643,
   'White and Sky High Tea Frilled Bonnet',1046324850);
 
+ // Same-source Triangle Shades (34 native colorways) differ only in
+ // the lens dye for these pairs. Check source PNG pixels, not CSS swatches.
+ await checkBandedHatPair('White Triangle Shades',84070359,
+  'White and Black Triangle Shades',833990488);
+ await checkBandedHatPair('Blue Triangle Shades',1676813114,
+  'Blue and Black Triangle Shades',849273304);
+ await checkBandedHatPair('Black Triangle Shades',1944643209,
+  'Full Black Triangle Shades',1039676870);
+
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();
