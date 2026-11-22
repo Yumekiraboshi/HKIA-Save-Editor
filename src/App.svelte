@@ -1055,7 +1055,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
       <span class="subcategory-art" aria-hidden="true">
        {#if sprite}
         {#if sub.previewId!==null&&nativeDyePalettes[String(sub.previewId)]}
-         <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(sub.previewId)]}/>
+         <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(sub.previewId)]} sourceKey={catalog?.items.find(x=>x[0]===sub.previewId)?.[1]??''}/>
         {:else}
         <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
         {/if}
@@ -1103,7 +1103,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
        <span class="item-art" aria-hidden="true">
         {#if sprite}
          {#if nativeDyePalettes[String(item[0])]}
-          <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item[0])]}/>
+          <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item[0])]} sourceKey={item[1]}/>
          {:else}
          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
          {/if}
@@ -1142,7 +1142,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
      <span class="date-dialog-art" aria-hidden="true">
       {#if sprite}
        {#if nativeDyePalettes[String(dateDialogItem[0])]}
-        <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(dateDialogItem[0])]}/>
+        <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(dateDialogItem[0])]} sourceKey={dateDialogItem[1]}/>
        {:else}
        <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
        {/if}
