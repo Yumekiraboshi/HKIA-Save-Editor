@@ -171,3 +171,46 @@ python scripts/resolve-unityfs-cabs.py \
 It prints matching original bundle relative paths and their SHA-256 values;
 if any CAB remains unresolved, it exits with code 3. This is a build/debug
 tool only and does not process save files or publish game binaries.
+
+## Renderer-level external Material references (original v3.0.1)
+
+The source `MeshRenderer` and `SkinnedMeshRenderer` records were read at
+the actual `m_Materials` PPtr array in Unity SerializedFile v22. The
+`fileID` is **local to each serialized file**; the 64-bit `pathID` is
+saved as a decimal string to avoid JavaScript precision loss.
+
+| Original Renderer | Local fileID | External Material CAB | Material pathID |
+|---|---:|---|---|
+| Archer MeshRenderer | 2 | `CAB-6d01000bf1aa6b026bad1ed5b70c73c7` | `-8051441427883450333` |
+| Archer SkinnedMeshRenderer | 3 | `CAB-46b8f8fe122147493b3113f7c1c8cd0f` | `6824069125264728142` |
+| Komiya Shirt SkinnedMeshRenderer | 2 | `CAB-46b8f8fe122147493b3113f7c1c8cd0f` | `6824069125264728142` |
+
+Thus the Archer's main SkinnedMeshRenderer and the Komiya Shirt explicitly
+reference the **same original Material object**. This is stronger
+evidence than merely finding the same external CAB among bundle dependencies.
+The actual serialized Material object, shader, texture bindings and
+shader mask semantics still need to be resolved from the source CAB.
+
+The Archer's third dependency
+`CAB-2383a36f15413272ed26f383f73f6431` was found in the
+original game file named `2383a36f15413272ed26f383f73f6431`:
+SHA-256 `2be9445adfb193570f910a22afec50c332a1b02435388b459869377764893de4`,
+80,111 bytes. Its serialized contents are **1,546 MonoScripts and one
+AssetBundle**, not a clothing Material. This source resolution is recorded
+in `data/unityfs-audit/archer-cab-resolution.v3.0.1.json`.
+
+To search *only* the two confirmed Material CABs, rather than all three
+external dependencies:
+
+```bash
+python scripts/resolve-unityfs-cabs.py \
+  --root /path/to/HKIA/StreamingAssets/aa/StandaloneWindows64 \
+  --materials-only
+```
+
+The auditor's `rendererMaterialReferences` output and
+`scripts/prepare-dye-render.mjs` now carry each exact Material CAB,
+fileID and string-valued 64-bit pathID into the original-game render job.
+Neither the source bundle locations for the two Material CABs nor their
+rendering correctness are asserted until the original UnityFS bundles
+are found and inspected.
