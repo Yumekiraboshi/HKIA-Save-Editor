@@ -412,3 +412,46 @@ source-game records; the pixel region is inferred from the native
 96px 2D sprite, **not** a recovered Unity material/shader mask.
 All preview PNGs remain appropriately labelled approximate rather
 than pixel-perfect game 3D renders. No Wiki images or color rings.
+
+## Sports, Vaporwave, Lolita and related original colorway groups
+
+The original Steam v3.0.1 `collections_group_events` source-game
+UiIcon index and dye palette verify a further **317 original Item IDs**
+sharing one neutral source sprite within each of these 17 families:
+
+| Sheet/cell | Game family | Original Item IDs |
+| --- | --- | ---: |
+| 001/048 | Sports Shorts | 20 |
+| 004/039 | Vaporwave Wireframe Hat | 23 |
+| 010/018 | Vaporwave Wireframe Pants | 23 |
+| 007/048 | Vaporwave Sunset Backpack | 22 |
+| 004/045 | Vaporwave Wireframe Glasses | 23 |
+| 008/137 | Vaporwave Wireframe Shirt | 23 |
+| 007/139 | Basketball Jersey | 18 |
+| 006/058 | Feathered Wings | 18 |
+| 008/059 | Parade Dress | 11 |
+| 010/063 | Origami Armor | 11 |
+| 005/010 | Lolita Mini Hat | 17 |
+| 006/021 | Gothic Lolita Dress | 16 |
+| 010/089 | Tube Top | 20 |
+| 004/110 | Tropical Shirt | 20 |
+| 003/019 | Spooky Lolita Dress | 17 |
+| 010/069 | Lolita Lace Bows | 18 |
+| 009/116 | Gothic Lolita Suit | 17 |
+
+Each source family has at least one verified game-authored same-first
+color / different-second color pair. Rather than showing identical
+thumbnails with overlaid rings, the original game UiIcon's neutral
+fabric/accent pixels directly receive the source-native channel 2
+color (and the rest channel 1), retaining original alpha, shape,
+texture, dark outline and pre-colored parts. Every source cell is
+checked against the shipped game atlas index; changed or unrelated
+art fails closed to the general source-icon fallback.
+
+**Accuracy:** IDs, game palette values, original icon locations and
+PNG origin are verified. The trim/cloth/feather/lens pixel region
+location is a guarded, estimated **2D image segmentation**; the
+Unity five-channel material shader masks have *not* been recovered
+or proven equivalent. Higher channels with unknown pixel positions
+are not fabricated. No Wiki art, invented items, CSS swatches,
+replacement 3D renders or save editing changes.

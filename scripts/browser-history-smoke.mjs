@@ -335,6 +335,21 @@ async function run(){
  await checkBandedHatPair('Orange and Black Vaporwave Eclectic Outfit',445316921,
   'Orange and Sky Vaporwave Eclectic Outfit',1117633216);
 
+ // Additional real source icon two-tone categories: compare the
+ // actual 96px game-pixel PNG, never visual rings/swatch overlays.
+ await checkBandedHatPair('Black and Pink Sports Shorts',163071063,
+  'Black and Green Sports Shorts',171970878);
+ await checkBandedHatPair('Cyan and Magenta Vaporwave Wireframe Hat',20593879,
+  'Cyan Vaporwave Wireframe Hat',528999373);
+ await checkBandedHatPair('Cyan Vaporwave Wireframe Shirt',202845689,
+  'Cyan and Magenta Vaporwave Wireframe Shirt',910147886);
+ await checkBandedHatPair('Black and Green Basketball Jersey',149555759,
+  'Black and Violet Basketball Jersey',353689638);
+ await checkBandedHatPair('Black Feathered Wings',850228512,
+  'Orange Feathered Wings',1128116806);
+ await checkBandedHatPair('Dusky Twilight Origami Armor',739815033,
+  'Purple Bee Origami Armor',1228749228);
+
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();

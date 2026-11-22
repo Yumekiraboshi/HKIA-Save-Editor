@@ -172,7 +172,24 @@ const nativeTwoToneSources=[
  ['collections_group_events',2,81,18],
  ['collections_group_events',4,109,12],
  ['collections_group_events',5,74,11],
- ['collections_group_events',7,121,22]
+ ['collections_group_events',7,121,22],
+ ['collections_group_events',1,48,20],
+ ['collections_group_events',4,39,23],
+ ['collections_group_events',10,18,23],
+ ['collections_group_events',7,48,22],
+ ['collections_group_events',4,45,23],
+ ['collections_group_events',8,137,23],
+ ['collections_group_events',7,139,18],
+ ['collections_group_events',6,58,18],
+ ['collections_group_events',8,59,11],
+ ['collections_group_events',10,63,11],
+ ['collections_group_events',5,10,17],
+ ['collections_group_events',6,21,16],
+ ['collections_group_events',10,89,20],
+ ['collections_group_events',4,110,20],
+ ['collections_group_events',3,19,17],
+ ['collections_group_events',10,69,18],
+ ['collections_group_events',9,116,17]
 ];
 const originalPalette=JSON.parse(readFileSync('public/native-dye-palettes.json','utf8')).records;
 const originalItemNames=JSON.parse(readFileSync('public/source-names/en.json','utf8')).names;
