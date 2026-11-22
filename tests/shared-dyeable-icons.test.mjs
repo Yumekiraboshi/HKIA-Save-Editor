@@ -59,7 +59,7 @@ test('shared original icons render without dye rings, swatches, or explanatory b
  assert.doesNotMatch(copy,/sharedDyeableIcon/);
  assert.doesNotMatch(localized,/sharedDyeableIcon/);
  assert.doesNotMatch(style,/\\.item-sprite\\{[^}]*filter:(?:grayscale|saturate)/);
- assert.match(read('../src/icon-packs.ts'),/entries\\[String\\(id\\)\\]=\\{url,x:\\(cell%12\\)\\*96,y:Math\\.floor\\(cell\\/12\\)\\*96\\}/);
+ assert.ok(read('../src/icon-packs.ts').includes('entries[String(id)]={url,x:(cell%12)*96,y:Math.floor(cell/12)*96}'));
 });
 
 test('native icon pack contains one precise sprite location for both variants with no fabricated recolour',()=>{
