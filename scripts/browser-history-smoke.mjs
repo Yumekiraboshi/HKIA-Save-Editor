@@ -140,7 +140,8 @@ async function run(){
     hash=Math.imul(hash^px[i+2],16777619)>>>0;
     r+=px[i];g+=px[i+1];b+=px[i+2];n++;
    }
-   return {hash,r:r/n,g:g/n,b:b/n,count:n};
+   function pixelAt(x,y){const i=(y*96+x)*4;return [px[i],px[i+1],px[i+2]];}
+   return {hash,r:r/n,g:g/n,b:b/n,count:n,strap:pixelAt(47,30),buckle:pixelAt(43,50)};
   });
  }
  await search.fill('Ice Cream Archer Hat');
@@ -160,6 +161,25 @@ async function run(){
  assert.equal(await page.locator('#collection-item-585726126 .item-art').evaluate(el=>
   getComputedStyle(el,'::before').backgroundImage),'none');
  
+ // The game-source Archer Costume thumbnail has three distinct regions.
+ // Verify channel 2 changes the existing ochre strap and channel 3 the
+ // existing golden buckle, in addition to the already working tunic color.
+ await search.fill('Ice Cream Archer Costume');
+ await page.locator('.collection-search-result').first().click();
+ const creamCostume=page.locator('#collection-item-1286846063 .item-sprite[data-dye-rendered="true"]');
+ await creamCostume.waitFor({timeout:30_000});
+ const creamPixels=await sampledSprite(creamCostume);
+ await search.fill('Orange Archer Costume');
+ await page.locator('.collection-search-result').first().click();
+ const orangeCostume=page.locator('#collection-item-935642973 .item-sprite[data-dye-rendered="true"]');
+ await orangeCostume.waitFor({timeout:30_000});
+ const orangeCostumePixels=await sampledSprite(orangeCostume);
+ assert.notEqual(creamPixels.hash,orangeCostumePixels.hash);
+ assert.ok(creamPixels.strap[2]>creamPixels.strap[0]+15,'source ochre band becomes cyan in Ice Cream');
+ assert.ok(orangeCostumePixels.strap[0]>orangeCostumePixels.strap[2]+40,'source band becomes orange in Orange');
+ assert.ok(creamPixels.buckle[2]>creamPixels.buckle[0]*.65,'source buckle becomes pale with Ice Cream');
+ assert.ok(orangeCostumePixels.buckle[0]>orangeCostumePixels.buckle[2]+50,'source buckle becomes gold with Orange');
+
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();
