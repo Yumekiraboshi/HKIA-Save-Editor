@@ -299,3 +299,44 @@ items, or 3D renders are introduced.
 are verified game data. The 2D ribbon placement is image-derived
 approximation, **not** a recovered five-channel Unity material mask.
 Pixel-perfect correspondence with the actual 3D renderer is unverified.
+
+## Native High Tea Empire Waist Dress and Marching Band batch
+
+Original HKIA Steam v3.0.1 packs have ten independently source-mapped
+two-tone UiIcon families, whose item palette channel 2 was not yet
+shown in the generated 2D colorway artwork.
+
+| Original pack group | Sheet/cell | Native family | Game Item IDs |
+| --- | --- | --- | ---: |
+| collection_group_teagarden | 000/074 | High Tea Empire Waist Dress | 38 |
+| collections_group_events | 000/038 | Marching Band Two Toned Feather Cap | 13 |
+| collections_group_events | 001/029 | Marching Band Peaked Feather Cap | 13 |
+| collections_group_events | 001/092 | Marching Band Buttoned Pants | 13 |
+| collections_group_events | 002/118 | Marching Band Shako Feather Cap | 13 |
+| collections_group_events | 002/064 | Marching Band Badged Shirt | 13 |
+| collections_group_events | 003/047 | Marching Band Sashed Shirt | 13 |
+| collections_group_events | 004/111 | Marching Band Tall Cap | 13 |
+| collections_group_events | 005/120 | Marching Band Two Toned Pants | 13 |
+| collections_group_events | 005/034 | Marching Band Buttoned Skirt | 13 |
+
+Each of the nine original Marching Band families uses the same first
+source-native dye value `#3a3840` on all 13 variants, but its second
+native dye value differs for each one. The original image must therefore
+recolor the contrasting trim/feather/panel pixels to differentiate the
+game's actual IDs. The Empire Waist Dress likewise has multiple
+same-first-color / different-second-color game-native pairs.
+
+The 96×96 original game UiIcon sprite and all native palette values
+are retained, including alpha, shape and original dark/colored details.
+A source-cell-gated, fail-closed **approximate 2D** profile recolors
+neutral pixels in the selected trim, plume, sash or cloth panel with
+native channel 2. No Wiki art, fake item IDs, added color swatches,
+rings, alternate models or remotely hosted save processing are used.
+If the expected neutral source art cannot be recognized, the source
+sprite retains its existing generic fallback.
+
+**Rendering fidelity:** source Item IDs, cell positions and palette
+colors are verified; the pixel-region placement is estimated from
+the original 2D icon, **not** derived from the actual game Unity
+five-channel 3D material/shader masks. Do not claim pixel-perfect
+reproduction of the 3D in-game dye system.
