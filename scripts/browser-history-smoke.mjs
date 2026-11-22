@@ -320,6 +320,21 @@ async function run(){
  await checkBandedHatPair('Blue Marching Band Tall Feather Cap',325925840,
   'Violet Marching Band Tall Feather Cap',556290317);
 
+ // Additional source-verified 2D colorways: check actual PNG pixels,
+ // including neutral cloth, flower trim, glasses, athletic and event art.
+ await checkBandedHatPair('White and Periwinkle High Tea Waistcoat',17354545,
+  'White and Green High Tea Waistcoat',1147294046);
+ await checkBandedHatPair('Teal High Tea Flower Bonnet',47018878,
+  'Teal and Tan High Tea Flower Bonnet',470675088);
+ await checkBandedHatPair('Tan & Cream Browline Glasses',107645723,
+  'Tan & White Browline Glasses',1036340124);
+ await checkBandedHatPair('Black Soccer Jersey',425986517,
+  'Black and Red Soccer Jersey',711193726);
+ await checkBandedHatPair('Orange Floral Grass Skirt',25506912,
+  'Blush Floral Grass Skirt',83743124);
+ await checkBandedHatPair('Orange and Black Vaporwave Eclectic Outfit',445316921,
+  'Orange and Sky Vaporwave Eclectic Outfit',1117633216);
+
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();

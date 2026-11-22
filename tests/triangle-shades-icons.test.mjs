@@ -90,8 +90,10 @@ test('replaced, unmatched, incorrectly located or non-dyeable source art never r
  const pixels=neutralFixture(),key='item_c_dyeable_triangle_shades';
  assert.equal(sourceIconDyeRegions(key,pixels,96,96),undefined);
  assert.equal(sourceIconDyeRegions('not_dyeable',pixels,96,96,source),undefined);
+ // Cell 39 is now a verified original Browline Glasses source, so test
+ // rejection against truly unrelated, still-unsupported source cell 37.
  for(const wrong of [
-  {...source,cell:39},{...source,sheet:1},
+  {...source,cell:37},{...source,sheet:1},
   {...source,group:'collection_group_teagarden'}
  ])assert.equal(sourceIconDyeRegions(key,pixels,96,96,wrong),undefined);
  const recoloredArt=new Uint8ClampedArray(pixels);

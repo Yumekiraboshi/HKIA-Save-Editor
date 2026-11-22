@@ -159,9 +159,23 @@ const nativeTwoToneSources=[
  ['collections_group_events',7,56,13],
  ['collections_group_events',8,56,13],
  ['collections_group_events',9,33,13],
- ['collections_group_events',9,122,13]
+ ['collections_group_events',9,122,13],
+ ['collection_group_teagarden',0,28,42],
+ ['collection_group_teagarden',0,25,40],
+ ['collection_group_teagarden',0,63,40],
+ ['collection_group_teagarden',0,95,40],
+ ['collection_group_teagarden',0,107,38],
+ ['collection_group_teagarden',0,106,38],
+ ['collection_group_teagarden',0,52,36],
+ ['collection_group_teagarden',0,105,34],
+ ['collections_group_clothing',0,39,12],
+ ['collections_group_events',2,81,18],
+ ['collections_group_events',4,109,12],
+ ['collections_group_events',5,74,11],
+ ['collections_group_events',7,121,22]
 ];
 const originalPalette=JSON.parse(readFileSync('public/native-dye-palettes.json','utf8')).records;
+const originalItemNames=JSON.parse(readFileSync('public/source-names/en.json','utf8')).names;
 for(const [group,sheet,cell,total] of nativeTwoToneSources){
  const gamePack=indexedGroups.get(group);
  assert.ok(gamePack,'original source atlas must be available: '+group);
@@ -178,7 +192,7 @@ for(const [group,sheet,cell,total] of nativeTwoToneSources){
    'source-native 2nd dye must recolor real icon pixels: '+id);
   return [id,r];
  });
- if(group==='collections_group_events'){
+ if(group==='collections_group_events'&&ids.every(id=>originalItemNames[id]?.includes('Marching Band'))){
   // Every 13-item Marching Band family has ONE shared dark source
   // primary dye but 13 distinct game-defined second dye colors.
   assert.deepEqual([...new Set(ids.map(id=>originalPalette[id].colors[0]))],
@@ -187,13 +201,13 @@ for(const [group,sheet,cell,total] of nativeTwoToneSources){
   assert.equal(new Set(familyRecords.map(([,r])=>r.sha256)).size,13,
    'all 13 game variants must be visually distinguishable: '+sheet+'/'+cell);
  }else{
-  // All confirmed same-primary / distinct-second dress combinations
+  // Every verified same-primary / distinct-second source variant pair
   // must be visibly distinct, even if other material channels are unknown.
   for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){
    const a=originalPalette[ids[i]].colors,b=originalPalette[ids[j]].colors;
    if(a[0]===b[0]&&a[1]!==b[1])
     assert.notEqual(records[ids[i]].sha256,records[ids[j]].sha256,
-     'native 2nd-color Empire Waist Dress variant collision '+ids[i]+'/'+ids[j]);
+     'native second-dye item icon collision '+group+'/'+sheet+'/'+cell+': '+ids[i]+'/'+ids[j]);
   }
  }
 }
