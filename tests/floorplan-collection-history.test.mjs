@@ -60,6 +60,7 @@ test('the actual collection item toggle, not just its display, checks the new wh
  assert.match(app,/mayCreateCollectionHistory\(item,snapshot\.membershipEdit,snapshot\.version,catalog\?\.version\)/);
  assert.match(app,/\{@const mayToggle=showVariants\?/);
  assert.match(app,/disabled=\{busy\|\|!mayToggle\}/);
- assert.match(app,/onclick=\{\(\)=>void change\(item\[0\],direct\?null:EPOCH\+BigInt\(Date\.now\(\)\)\*10000n\)\}/);
+ assert.ok(app.includes('onclick={e=>void toggleCollection(item[0],nameFor(item),e.currentTarget)}'));
+ assert.ok(app.includes('if(!snapshot.membershipEdit)return;'));
  assert.match(read('../src/collection-eligibility.ts'),/collection_group_floorplans/);
 });

@@ -45,7 +45,7 @@ test('collection-like achievement cards create source-defined absent records on 
    'class="item-tile achievement-tile"',
    'class="item-toggle achievement-toggle"',
    'class="date-button achievement-dialog-button"',
-   'onclick={()=>void quickToggleAchievement(item)}',
+   'onclick={e=>void quickToggleAchievement(item,e.currentTarget,title)}',
    'if(item.row)void openAchievement(item.row',
    'disabled={busy||(!item.row&&(snapshot.version',
    'toggleAchievementState(prior,Date.now(),target)',

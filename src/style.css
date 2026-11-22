@@ -280,3 +280,22 @@
 }
 .native-dye-preview>.item-sprite{position:relative;z-index:1}
 .native-dye-preview>.native-dye-swatches{z-index:2}
+
+/* Explicit, keyboard-accessible guard for edits that erase recorded dates.
+   The native modal also works above the existing collection date dialog. */
+.removal-confirm-dialog{
+ width:min(440px,calc(100vw - 28px));max-width:calc(100vw - 28px);
+ max-height:calc(100dvh - 32px);overflow:auto;margin:auto;padding:0;
+ border:1px solid var(--line);border-radius:17px;background:var(--panel);
+ color:var(--ink);box-shadow:0 24px 90px #0006
+}
+.removal-confirm-dialog::backdrop{background:#0a081ac4;backdrop-filter:blur(3px)}
+.removal-confirm-inner{display:flex;flex-direction:column;gap:16px;padding:24px;min-width:0}
+.removal-confirm-inner .date-dialog-heading h2{font-size:17px}
+.removal-confirm-name{display:block;max-width:100%;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.removal-confirm-warning{font-size:12px;color:var(--muted);line-height:1.75}
+.removal-confirm-inner .date-dialog-actions{margin-top:7px}
+.removal-confirm-inner .date-dialog-actions button{padding:10px 14px;border-radius:9px;font-size:12px;font-weight:700}
+.removal-confirm-action{background:var(--danger);color:white}
+.removal-confirm-action:hover:not(:disabled){filter:brightness(.94)}
+@media(max-width:730px){.removal-confirm-inner{padding:17px;gap:13px}}
