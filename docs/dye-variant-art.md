@@ -141,3 +141,30 @@ channel behavior, texture dependencies, correct pose and camera orientation,
 and validate an actual rendered PNG. Source audits and job generation do
 not satisfy those remaining rendering requirements. Neither the Python
 audit nor the C# prototype is a 5,383-image renderer today.
+
+
+## Verified external UnityFS dependency references
+
+The Archer SerializedFile directly lists the following three external CABs
+in this order:
+
+- `CAB-2383a36f15413272ed26f383f73f6431`
+- `CAB-6d01000bf1aa6b026bad1ed5b70c73c7`
+- `CAB-46b8f8fe122147493b3113f7c1c8cd0f`
+
+The separate Komiya Shirt references the first and third CAB. These exact
+references were extracted from original serialized asset metadata—not
+inferred from names. The actual source bundle filenames and texture/Shader
+semantics are **not yet resolved**.
+
+The dependency scanner locates them by reading only the compressed UnityFS
+directory metadata, avoiding costly mesh/texture decompression:
+
+```bash
+python scripts/resolve-unityfs-cabs.py \
+  --root /path/to/HKIA/StreamingAssets/aa/StandaloneWindows64
+```
+
+It prints matching original bundle relative paths and their SHA-256 values;
+if any CAB remains unresolved, it exits with code 3. This is a build/debug
+tool only and does not process save files or publish game binaries.
