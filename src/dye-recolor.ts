@@ -123,7 +123,7 @@ async function render(sprite:SpriteCell,palette:NativeDyePalette,sourceKey:strin
  if(!context)throw Error('DYE_IMAGE_CANVAS');
  context.drawImage(image,sprite.x,sprite.y,SIDE,SIDE,0,0,SIDE,SIDE);
  const pixels=context.getImageData(0,0,SIDE,SIDE);
- const mask=sourceIconDyeRegions(sourceKey,pixels.data,SIDE,SIDE);
+ const mask=sourceIconDyeRegions(sourceKey,pixels.data,SIDE,SIDE,sprite);
  const result=recolorDyePixels(pixels.data,SIDE,SIDE,palette,mask);
  if(!result)return null;
  pixels.data.set(result.pixels);
