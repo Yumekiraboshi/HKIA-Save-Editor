@@ -244,7 +244,7 @@ async function run(){
   const firstPixels=await findNativeIcon(name1,id1);
   const secondPixels=await findNativeIcon(name2,id2);
   assert.notEqual(firstPixels.hash,secondPixels.hash,
-   'original native source icon pixels must distinguish the game's secondary dye');
+   'original source icon pixels must distinguish native secondary dye colors');
  }
  await checkBandedHatPair('White and Yellow High Tea Banded Tophat',522640238,
   'White and Sky High Tea Banded Tophat',571486471);
