@@ -88,6 +88,20 @@ def resolve(root,targets):
             'skippedMalformedBundles':invalid,
             'unresolved':sorted(k for k,v in result.items() if not v)}
 
+def material_cabs(audit):
+    """Only CABs proven referenced by an actual Renderer material PPtr."""
+    references=audit['serialized']['rendererMaterialReferences']
+    wanted=set()
+    for renderer in references:
+        for material in renderer['materials']:
+            cab=material['externalCAB']
+            if cab is not None:
+                if cab not in audit['serialized']['externalCABs']:
+                    raise auditor.InvalidAsset('renderer references unknown CAB')
+                wanted.add(cab)
+    if not wanted:raise auditor.InvalidAsset('no external Renderer materials')
+    return sorted(wanted)
+
 def self_test():
     # A synthetic UnityFS v8 file with a metadata-only CAB entry and a
     # single raw content block (no original copyrighted game bytes).
@@ -111,6 +125,10 @@ def self_test():
         result=resolve(Path(tmp),[name[:-1].decode()])
         assert result['unresolved']==[]
         assert result['candidates'][name[:-1].decode()][0]['bundleSha256']==file_hash(path)
+    audit={'serialized':{'externalCABs':['CAB-'+'0'*32,'CAB-'+'1'*32],
+      'rendererMaterialReferences':[{'materials':[
+       {'externalCAB':'CAB-'+'1'*32},{'externalCAB':None}]}]}}
+    assert material_cabs(audit)==['CAB-'+'1'*32]
     print('UNITYFS_CAB_RESOLVER_SELFTEST_OK')
 
 def main():
@@ -118,13 +136,14 @@ def main():
     args.add_argument('--root',type=Path)
     args.add_argument('--audit',type=Path,default=HERE.parent/'data/unityfs-audit/archer-costume.v3.0.1.json')
     args.add_argument('--self-test',action='store_true')
+    args.add_argument('--materials-only',action='store_true',help='restrict CAB scan to audited Renderer material references')
     cli=args.parse_args()
     try:
         if cli.self_test:self_test();return 0
         if cli.root is None or not cli.root.is_dir():
             args.error('existing --root game asset folder required')
         audit=json.loads(cli.audit.read_text(encoding='utf8'))
-        refs=audit['serialized']['externalCABs']
+        refs=material_cabs(audit) if cli.materials_only else audit['serialized']['externalCABs']
         result=resolve(cli.root,refs)
         print(json.dumps(result,indent=2))
         # Missing CABs are explicit blockers, never silently marked resolved.
