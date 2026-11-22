@@ -1,0 +1,43 @@
+{
+  "schema": "HKIA.UnityFSAudit.1",
+  "version": "3.0.1",
+  "source": "original-game-unityfs",
+  "bundle": "l_nisetamastyle_shirt_komiyashirt",
+  "sha256": "15f7d3143c88202f4866f9ee1c35e45416d87dfc03ab1a7a5e888103b8ff0163",
+  "compressedBytes": 238954,
+  "unityfs": {
+    "format": 8,
+    "compression": 3,
+    "blockCount": 8,
+    "nodeCount": 2,
+    "unpackedBytes": 1001211
+  },
+  "nodes": [
+    {
+      "name": "CAB-e2c23494312853194a50bfd8babbb4231",
+      "bytes": 127323,
+      "version": 22,
+      "objectCount": 123,
+      "gameObject": "NisetamaStyle_Shirt_KomiyaShirt",
+      "classCounts": {
+        "AnimationClip": 1,
+        "AssetBundle": 1,
+        "GameObject": 56,
+        "Material": 1,
+        "Mesh": 1,
+        "MeshFilter": 1,
+        "MeshRenderer": 1,
+        "MonoBehaviour": 1,
+        "SkinnedMeshRenderer": 1,
+        "Texture2D": 3,
+        "Transform": 56
+      }
+    },
+    {
+      "name": "CAB-e2c23494312853194a50bfd8babbb4231.resS",
+      "bytes": 873888,
+      "kind": "externalTextureStream"
+    }
+  ],
+  "note": "Material and Texture2D embedded for this shirt, unlike Archer. This does not establish that shirt texture channels match the Archer dye shader."
+}
