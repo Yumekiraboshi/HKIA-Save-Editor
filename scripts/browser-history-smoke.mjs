@@ -254,6 +254,14 @@ async function run(){
  await checkBandedHatPair('White and Yellow High Tea Tophat',1542238429,
   'White and Sky High Tea Tophat',643288523);
 
+ // All twenty-two original Camp Counselor Skort variants share the
+ // same neutral game UiIcon. The actual second dye color distinguishes
+ // same-primary two-tone skorts in the IMAGE pixels, not a UI swatch.
+ await checkBandedHatPair('White Camp Counselor Skort',1645062322,
+  'White and Black Camp Counselor Skort',114494397);
+ await checkBandedHatPair('Green Camp Counselor Skort',1962363087,
+  'Green and Brown Camp Counselor Skort',2051283646);
+
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();
