@@ -144,7 +144,7 @@ def renderer_material_references(obj,endian):
         path_id=struct.unpack_from(endian+'q',obj,80+12*slot)[0]
         if file_id<0:
             raise InvalidAsset('negative Renderer material file ID')
-        references.append({'slot':slot,'fileId':file_id,'pathId':path_id})
+        references.append({'slot':slot,'fileId':file_id,'pathId':str(path_id)})
     return references
 
 def inspect_serialized(b):
@@ -198,7 +198,7 @@ def inspect_serialized(b):
         if cls in (23,137):
             renderer_refs.append({
                 'class':CLASS[cls],
-                'objectPathId':struct.unpack_from(endian+'q',b,pos-24)[0],
+                'objectPathId':str(struct.unpack_from(endian+'q',b,pos-24)[0]),
                 'materials':renderer_material_references(obj,endian)
             })
             continue
@@ -269,7 +269,7 @@ def self_test():
     encoded=bytearray(88)
     struct.pack_into('<Iiq',encoded,72,1,3,6824069125264728142)
     assert renderer_material_references(encoded,'<')==[
-        {'slot':0,'fileId':3,'pathId':6824069125264728142}]
+        {'slot':0,'fileId':3,'pathId':'6824069125264728142'}]
     struct.pack_into('<I',encoded,72,1000)
     try:renderer_material_references(encoded,'<')
     except InvalidAsset:pass
