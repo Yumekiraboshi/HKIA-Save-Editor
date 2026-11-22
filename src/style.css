@@ -233,7 +233,10 @@
 .history-list button:hover:not(:disabled){background:var(--hover)}
 .history-list button.active{background:var(--accent-soft);color:var(--accent);font-weight:750}
 .history-step{display:inline-flex;flex:none;align-items:center;justify-content:center;width:23px;height:23px;border:1px solid var(--line);border-radius:50%;font-size:10px;font-variant-numeric:tabular-nums}
-.history-text{min-width:0;flex:1;overflow-wrap:anywhere}
+.history-text{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px;overflow-wrap:anywhere}
+.history-item-name{font-weight:700}
+.history-change{font-size:11px;line-height:1.5;font-weight:400;color:var(--muted);font-variant-numeric:tabular-nums;white-space:normal;overflow-wrap:anywhere}
+.history-list button.active .history-change{color:var(--ink)}
 .history-current{font-size:13px;flex:none}
 :root[dir="rtl"] .history-popover{right:auto;left:0}
 @media(max-width:730px){

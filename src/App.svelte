@@ -5,7 +5,9 @@
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
- import {historyCopy} from './history-copy';
+ import {historyCopy,historyDetailCopy} from './history-copy';
+ import {loadSourceItemNames,type SourceItemNames} from './source-names';
+ import {decodeHistoryDetails,formatHistoryChange} from './history-details';
  import {compactAchievementCopy} from './achievement-compact-ui';
  import {toggleAchievementState} from './achievement-quick';
  import {achievementProgressTarget} from './achievement-progress';
@@ -61,6 +63,8 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  let achievementValidation=$state('');
  let achievementBaseline:AchievementEntry[]=[];
  let catalog:Catalog|null=$state(null);
+ let sourceNames:SourceItemNames=$state({});
+ let sourceNameEpoch=0;
  let snapshot:SaveSnapshot|null=$state(null);
  let original:File|null=$state(null);
  let recorded:Record<string,bigint>=$state({});
@@ -102,6 +106,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  const copy=$derived(localizedCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
  const hCopy=$derived(historyCopy(locale));
+ const hDetailCopy=$derived(historyDetailCopy(locale));
  const compactCopy=$derived(compactAchievementCopy(locale));
  const groupCopy=$derived(achievementGroupCopy(locale));
  const factCopy=$derived(achievementFactsCopy(locale));
@@ -111,6 +116,8 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  const entriesCount=$derived(Object.keys(recorded).length);
  const tabHistory=$derived(((snapshot as SaveSnapshot|null)?.history??[]).filter((entry:HistoryRecord)=>entry.scope===activeTool));
  const tabHistoryCursor=$derived(tabHistory.filter(entry=>entry.applied).length);
+ const historyDetails=$derived(decodeHistoryDetails((snapshot as SaveSnapshot|null)?.historyCheckpoint??null,(snapshot as SaveSnapshot|null)?.history??[]));
+ const tabHistoryDetails=$derived(historyDetails.filter(entry=>entry.scope===activeTool));
  const historyItems=$derived(new Map(((catalog as Catalog|null)?.items??[]).map(item=>[item[0],item])));
  const sourceAchievementRows=$derived(joinAchievementCatalog(achievementIndex,(snapshot as SaveSnapshot|null)?.achievements??[]));
  const achievementGroupSummaries=$derived(achievementGroupHierarchy?summarizeAchievementGroups(achievementGroupHierarchy,sourceAchievementRows):[]);
@@ -175,6 +182,17 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  });
  $effect(()=>{
   if(typeof document!=='undefined'){document.documentElement.lang=locale;document.documentElement.dir=isRtl(locale)?'rtl':'ltr';document.documentElement.dataset.theme=actualTheme;}
+ });
+ /* v3.0.1 Name.selectedString provides an exact original Babel lookup
+    for all 10,262 source-mapped collection item IDs in all 16 locales.
+    Fall back to previous names if the source-names asset cannot load. */
+ $effect(()=>{
+  const language=locale;
+  const epoch=++sourceNameEpoch;
+  sourceNames={};
+  void loadSourceItemNames(import.meta.env.BASE_URL,language).then(names=>{
+   if(epoch===sourceNameEpoch)sourceNames=names;
+  }).catch(()=>{if(epoch===sourceNameEpoch)sourceNames={};});
  });
  /* Native artwork loads only with a save in the Achievements tab.
     Tampered or stale image data fail closed without blocking save edits. */
@@ -290,7 +308,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  function nameFor(item:Item){
   // Source ItemId -> Babel ID -> original localized text takes precedence over
   // the older name-by-string heuristic. All 18 floorplans have exact ID links.
-  return verifiedFloorplanName(item[0],locale)??
+  return sourceNames[String(item[0])]??verifiedFloorplanName(item[0],locale)??
    collectionDisplayName(item,gameLabels.names[String(item[0])],locale==='ja',copy.unverifiedItem);
  }
  function jumpToCollectionItem(item:Item){
@@ -339,6 +357,9 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
    iconPack=pack;
   }catch{if(epoch===iconEpoch)iconError=true}
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
+ }
+ function historyEntryChange(i:number):string{
+  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy);
  }
  function historyEntryLabel(entry:HistoryRecord):string{
   if(entry.scope==='collections'){
@@ -694,7 +715,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
          </button>
          {#each tabHistory as entry,i (i)}
           <button type="button" class:active={tabHistoryCursor===i+1} disabled={busy} title={hCopy.step} onclick={()=>void goToHistory(i+1)}>
-           <span class="history-step">{i+1}</span><span class="history-text">{historyEntryLabel(entry)}</span>
+           <span class="history-step">{i+1}</span><span class="history-text"><span class="history-item-name">{historyEntryLabel(entry)}</span>{#if historyEntryChange(i)}<span class="history-change">{historyEntryChange(i)}</span>{/if}</span>
            {#if tabHistoryCursor===i+1}<span class="history-current" aria-label={hCopy.current}>✓</span>{/if}
           </button>
          {/each}
