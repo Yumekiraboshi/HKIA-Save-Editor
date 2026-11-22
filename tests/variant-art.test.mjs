@@ -17,8 +17,8 @@ const manifest=JSON.parse(read('../public/variant-art/index.json'));
 const native=JSON.parse(read('../public/native-dye-palettes.json'));
 const example={
  file:'704486536.png',sha256:'a'.repeat(64),
- provenance:'verified-game-capture',
- source:'https://hellokittyislandadventure.wiki.gg/wiki/File:Ice_Cream_Archer_Hat.png'
+ provenance:'game-render',
+ source:'unityfs:l_basicstyle_fullbody_imaginationarcher'
 };
 const wrap=(records)=>({schema:'HKIA.DyeVariantArt.1',version:'3.0.1',records});
 
@@ -37,7 +37,9 @@ test('strict index rejects cross-origin links, wrong source IDs, traversal and m
   {file:'704486536.jpg'},
   {sha256:'short'},
   {provenance:'unverified-approximation'},
-  {source:'oops'}
+  {source:'oops'},
+  {source:'https://hellokittyislandadventure.wiki.gg/wiki/File:Ice_Cream_Archer_Hat.png'},
+  {provenance:'verified-game-capture'}
  ]){
   assert.throws(()=>parseVariantArtIndex(wrap({'704486536':{...example,...invalid}}),'/'),
    /VARIANT_ART_RECORD_INVALID/);
@@ -100,8 +102,8 @@ test('the collection selects exact captures first in all three places and never 
  assert.match(sprite,/picture\.decode\(\)\.then/);
  assert.match(sprite,/\.catch\(renderApproximation\)/);
  assert.match(sprite,/data-dye-source=\{imageSource\}/);
- assert.match(sprite,/imageSource='game-capture'/);
- assert.match(sprite,/background-size=\{imageSource==='game-capture'\?'contain'/);
+ assert.match(sprite,/imageSource='game-render'/);
+ assert.match(sprite,/background-size=\{imageSource==='game-render'\?'contain'/);
  assert.match(sprite,/URL\.revokeObjectURL\(createdUrl\)/);
  for(const prohibited of [/native-dye-ring/,/native-dye-swatch/,/native-dye-preview/]){
   assert.doesNotMatch(app,prohibited);
