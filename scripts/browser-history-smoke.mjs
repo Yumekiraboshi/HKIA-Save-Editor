@@ -283,6 +283,11 @@ async function run(){
  await checkBandedHatPair('Black Triangle Shades',1944643209,
   'Full Black Triangle Shades',1039676870);
 
+ // Original High Tea Elegant Hat shares one source icon across 44
+ // native colorways. The distinct second dye must change the bitmap.
+ await checkBandedHatPair('White and Green High Tea Elegant Hat',77149467,
+  'White and Sky High Tea Elegant Hat',370872413);
+
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();
