@@ -63,7 +63,14 @@ for(const [left,right] of [
  ['290453986','1473720360'],
  ['1265055643','1046324850'],
  ['1265055643','1893329026'],
- ['1265055643','535112962']
+ ['1265055643','535112962'],
+ ['84070359','833990488'],
+ ['426901455','747035598'],
+ ['1676813114','849273304'],
+ ['2051522529','744815526'],
+ ['1266418586','1590676460'],
+ ['1881281725','886333968'],
+ ['1944643209','1039676870']
 ]){
  if(!records[left]||!records[right])continue;
  assert.equal(records[left].group,records[right].group);
@@ -101,6 +108,19 @@ for(const id of ['1265055643','1046324850','1893329026','535112962']){
  assert.equal(records[id].cell,4);
  assert.ok(records[id].channels.includes(2),
   'native Frilled Bonnet PNG must use original second dye: '+id);
+}
+// All seven shared-primary Triangle Shades pairs must use the source's
+// distinct second dye channel on real generated 96px icon pixels.
+for(const id of ['84070359','833990488','426901455','747035598',
+ '1676813114','849273304','2051522529','744815526',
+ '1266418586','1590676460','1881281725','886333968',
+ '1944643209','1039676870']){
+ if(!records[id])continue;
+ assert.equal(records[id].group,'collections_group_clothing');
+ assert.equal(records[id].sheet,0);
+ assert.equal(records[id].cell,38);
+ assert.ok(records[id].channels.includes(2),
+  'Triangle Shades native second dye must alter source pixels: '+id);
 }
 console.log('HKIA_ORIGINAL_UICON_COLORWAYS_VERIFIED '+files.length+
  ' / '+coverage.uniqueCandidates+' source-unique, '+coverage.ambiguous+
