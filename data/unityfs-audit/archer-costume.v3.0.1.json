@@ -34,7 +34,33 @@
       "CAB-2383a36f15413272ed26f383f73f6431",
       "CAB-6d01000bf1aa6b026bad1ed5b70c73c7",
       "CAB-46b8f8fe122147493b3113f7c1c8cd0f"
+    ],
+    "rendererMaterialReferences": [
+      {
+        "class": "MeshRenderer",
+        "objectPathId": -3122190711953221000,
+        "materials": [
+          {
+            "slot": 0,
+            "fileId": 2,
+            "pathId": -8051441427883450000,
+            "externalCAB": "CAB-6d01000bf1aa6b026bad1ed5b70c73c7"
+          }
+        ]
+      },
+      {
+        "class": "SkinnedMeshRenderer",
+        "objectPathId": 8603473947824341000,
+        "materials": [
+          {
+            "slot": 0,
+            "fileId": 3,
+            "pathId": 6824069125264728000,
+            "externalCAB": "CAB-46b8f8fe122147493b3113f7c1c8cd0f"
+          }
+        ]
+      }
     ]
   },
-  "blocker": "Three external CAB references occur in the original serialized dependency table. Their source UnityFS bundle filenames and renderer shader bindings remain to be resolved; this source bundle contains no Material/Texture2D."
+  "blocker": "MeshRenderer explicitly references external CAB-6d01000b...; SkinnedMeshRenderer references CAB-46b8f8fe... (confirmed same external Skinned Material PathID as Komiya Shirt). Source bundle lacks Material and Texture2D; target source bundles for these CABs and actual shader mapping remain unresolved."
 }
