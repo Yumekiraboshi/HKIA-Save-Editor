@@ -345,6 +345,45 @@ async function run(){
  await page.locator('.removal-confirm-action').click();
  await page.locator('.achievement-item-grid button.achievement-toggle[aria-pressed="false"]').first().waitFor();
 
+ // Exact, same-origin 8x8 red capture must outrank approximation. Supply
+ // a synthetic capture via a browser route without shipping false game art.
+ // A missing second capture must fall back to local source-dye rendering.
+ const fakePng=Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAFklEQVR4nGP8JWfznwEPYMInOXwUAABpGAJjJPuaSQAAAABJRU5ErkJggg==',
+  'base64'
+ );
+ const fakeRecord=id=>({
+  file:id+'.png',sha256:'a'.repeat(64),
+  provenance:'verified-game-capture',
+  source:'https://hellokittyislandadventure.wiki.gg/wiki/File:Test_Colorway.png'
+ });
+ await page.route('**/variant-art/index.json',route=>route.fulfill({
+  status:200,contentType:'application/json',
+  body:JSON.stringify({
+   schema:'HKIA.DyeVariantArt.1',version:'3.0.1',
+   records:{'704486536':fakeRecord('704486536'),'585726126':fakeRecord('585726126')}
+  })
+ }));
+ await page.route('**/variant-art/704486536.png',route=>route.fulfill({
+  status:200,contentType:'image/png',body:fakePng
+ }));
+ await page.route('**/variant-art/585726126.png',route=>route.fulfill({status:404,body:'missing'}));
+ await page.reload({waitUntil:'networkidle'});
+ await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+ await chooseTab(page,0);
+ const finalSearch=page.locator('.collection-controls input[type="search"]');
+ await finalSearch.fill('Ice Cream Archer Hat');
+ await page.locator('.collection-search-result').first().click();
+ const captured=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-capture"]');
+ await captured.waitFor({timeout:30_000});
+ assert.equal(await captured.evaluate(el=>getComputedStyle(el).backgroundSize),'contain',
+  'verified colorway assets preserve their natural aspect ratio');
+ assert.ok((await captured.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/704486536.png'),
+  'verified image uses direct static item-specific pixels rather than a recolored Blob');
+ await finalSearch.fill('Orange Archer Hat');
+ await page.locator('.collection-search-result').first().click();
+ await page.locator('#collection-item-585726126 .item-sprite[data-dye-source="approximation"]').waitFor({timeout:30_000});
+
  assert.deepEqual(errors,[],'no console exceptions or 5xx during browser replay');
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
  await context.close();
