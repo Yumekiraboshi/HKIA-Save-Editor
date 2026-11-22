@@ -117,6 +117,33 @@ pub extern "C" fn hkia_achievement_toggle_plan(
  })
 }
 
+/// Single CAS-validated child edit with source-derived parent completion,
+/// revocation or date sync decided entirely inside the Rust core. One Undo
+/// transaction covers every affected native achievement document.
+#[no_mangle]
+pub extern "C" fn hkia_achievement_edit_auto(
+ g0:u32,g1:u32,g2:u32,g3:u32,
+ before_present:u32,bc:u32,bp:f32,bs:i64,bn:u32,bh:u32,
+ ac:u32,ap:f32,as_:i64,an:u32,ah:u32
+)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  if [before_present,bc,bh,ac,ah].iter().any(|&v|v>1){return 1}
+  if before_present==0&&(bc!=0||bh!=0){return 1}
+  let before=if before_present==1{
+   Some(hkia_save_core::achievement::AchievementValue{
+    complete:bc==1,current:bp,completed:if bh==1{Some((bs,bn))}else{None}
+   })
+  }else{None};
+  let next=hkia_save_core::achievement::AchievementValue{
+   complete:ac==1,current:ap,completed:if ah==1{Some((as_,an))}else{None}
+  };
+  match a.editor.as_mut().map(|e|e.edit_achievement_auto([g0,g1,g2,g3],before,next)){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+
 // Source-validated, version-gated new AchievementModel (Union 16).
 #[no_mangle]
 pub extern "C" fn hkia_achievement_create(
