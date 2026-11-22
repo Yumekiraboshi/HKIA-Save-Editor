@@ -141,7 +141,7 @@ async function run(){
     r+=px[i];g+=px[i+1];b+=px[i+2];n++;
    }
    function pixelAt(x,y){const i=(y*96+x)*4;return [px[i],px[i+1],px[i+2]];}
-   return {hash,r:r/n,g:g/n,b:b/n,count:n,strap:pixelAt(47,30),buckle:pixelAt(43,50)};
+   return {hash,r:r/n,g:g/n,b:b/n,count:n,strap:pixelAt(47,30),buckle:pixelAt(43,50),neck:pixelAt(40,45),body:pixelAt(47,56)};
   });
  }
  await search.fill('Ice Cream Archer Hat');
@@ -179,6 +179,31 @@ async function run(){
  assert.ok(orangeCostumePixels.strap[0]>orangeCostumePixels.strap[2]+40,'source band becomes orange in Orange');
  assert.ok(creamPixels.buckle[2]>creamPixels.buckle[0]*.65,'source buckle becomes pale with Ice Cream');
  assert.ok(orangeCostumePixels.buckle[0]>orangeCostumePixels.buckle[2]+50,'source buckle becomes gold with Orange');
+
+ // Both School families have same-primary variants whose differing
+ // second palette channel must alter pixels of the V-shaped neckline.
+ // This detects regression to the first-channel-only gray thumbnail logic.
+ async function checkSchoolPair(search1,id1,search2,id2){
+  await search.fill(search1);
+  await page.locator('.collection-search-result').first().click();
+  const first=page.locator('#collection-item-'+id1+' .item-sprite[data-dye-rendered="true"]');
+  await first.waitFor({timeout:30_000});
+  const image1=await sampledSprite(first);
+  await search.fill(search2);
+  await page.locator('.collection-search-result').first().click();
+  const second=page.locator('#collection-item-'+id2+' .item-sprite[data-dye-rendered="true"]');
+  await second.waitFor({timeout:30_000});
+  const image2=await sampledSprite(second);
+  assert.notEqual(image1.hash,image2.hash,'the secondary game dye must change real image pixels');
+  const neckDelta=image1.neck.reduce((sum,c,i)=>sum+Math.abs(c-image2.neck[i]),0);
+  assert.ok(neckDelta>35,'V-neckline must display different secondary source colors: '+neckDelta);
+  const bodyDelta=image1.body.reduce((sum,c,i)=>sum+Math.abs(c-image2.body[i]),0);
+  assert.ok(bodyDelta<35,'main fabric uses identical native primary dye: '+bodyDelta);
+ }
+ await checkSchoolPair('Gray and Pink School Jacket',237080181,
+  'Gray and Yellow School Jacket',556476907);
+ await checkSchoolPair('Gray and Blue School Sweater Vest',307168230,
+  'Gray and Pink School Sweater Vest',404567552);
 
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');

@@ -60,7 +60,8 @@ test('shared original icons receive source-palette pixel rendering without rings
  assert.doesNotMatch(copy,/sharedDyeableIcon/);
  assert.doesNotMatch(localized,/sharedDyeableIcon/);
  assert.doesNotMatch(style,/\\.item-sprite\\{[^}]*filter:(?:grayscale|saturate)/);
- assert.ok(read('../src/icon-packs.ts').includes('entries[String(id)]={url,x:(cell%12)*96,y:Math.floor(cell/12)*96}'));
+ assert.ok(read('../src/icon-packs.ts').includes('entries[String(id)]={url,x:(cell%12)*96,y:Math.floor(cell/12)*96,group,sheet,cell}'));
+ assert.match(read('../src/dye-recolor.ts'),/sourceIconDyeRegions\(sourceKey,pixels\.data,SIDE,SIDE,sprite\)/);
 });
 
 test('native icon pack contains one precise sprite location for both variants with no fabricated recolour',()=>{

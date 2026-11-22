@@ -140,3 +140,77 @@ test('Archer Costume source artwork identifies tunic, belt and buckle without gu
  assert.ok(orangeBuckle[0]>orangeBuckle[2]+50,'Orange buckle becomes gold');
  for(let i=3;i<pixels.length;i+=4)assert.equal(icePaint.pixels[i],pixels[i]);
 });
+
+test('game-source school clothing atlas cells expose 27 jackets and 24 sweater vests',()=>{
+ const bytes=readFileSync(new URL('../public/item-packs/collections_group_events.zip',import.meta.url));
+ assert.equal(bytes.readUInt32LE(0),0x04034b50);
+ const nameLength=bytes.readUInt16LE(26),extraLength=bytes.readUInt16LE(28);
+ const name=bytes.toString('utf8',30,30+nameLength);
+ assert.equal(name,'index.json');
+ const start=30+nameLength+extraLength;
+ const end=start+bytes.readUInt32LE(18);
+ const index=JSON.parse(bytes.subarray(start,end).toString('utf8'));
+ const jackets=index.records.filter(([,sheet,cell])=>sheet===3&&cell===24);
+ const vests=index.records.filter(([,sheet,cell])=>sheet===6&&cell===68);
+ assert.equal(jackets.length,27);
+ assert.equal(vests.length,24);
+ for(const id of [237080181,556476907])assert.ok(jackets.some(row=>row[0]===id));
+ for(const id of [307168230,404567552])assert.ok(vests.some(row=>row[0]===id));
+});
+
+test('source-atlas anchored School Jacket and School Sweater Vest resolve same-main-color variants',async()=>{
+ const regionModule=await build({
+  entryPoints:[fileURLToPath(new URL('../src/dye-icon-regions.ts',import.meta.url))],
+  bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'
+ });
+ const {sourceIconDyeRegions}=await import('data:text/javascript;base64,'+
+  Buffer.from(regionModule.outputFiles[0].text).toString('base64'));
+ const width=96,height=96,original=new Uint8ClampedArray(width*height*4);
+ // Neutral 2D-source silhouette surrogate matching the audited original
+ // source window. Source atlas coordinates, rather than guessing item names,
+ // are the gate on this profile.
+ for(let y=25;y<62;y++)for(let x=10;x<84;x++){
+  const j=(y*width+x)*4;
+  original[j]=130;original[j+1]=130;original[j+2]=130;original[j+3]=255;
+ }
+ const fixtures=[
+  {source:{group:'collections_group_events',sheet:3,cell:24},ids:[237080181,556476907]},
+  {source:{group:'collections_group_events',sheet:6,cell:68},ids:[307168230,404567552]}
+ ];
+ for(const {source,ids} of fixtures){
+  const key='item_c_dyeable_school_source_test';
+  const mask=sourceIconDyeRegions(key,original,width,height,source);
+  assert.ok(mask,'exact source icon should match the second-channel mask');
+  const counts=[...mask].reduce((a,b)=>(a[b]++,a),[0,0,0]);
+  assert.ok(counts[1]>2100&&counts[2]>170&&counts[2]<450);
+  const [p,q]=ids.map(id=>raw.records[String(id)]);
+  assert.equal(p.colors[0],q.colors[0],'two variants intentionally share the same first channel');
+  assert.notEqual(p.colors[1],q.colors[1]);
+  const colored1=recolorDyePixels(original,width,height,p,mask);
+  const colored2=recolorDyePixels(original,width,height,q,mask);
+  assert.ok(colored1&&colored2);
+  const main=(53*width+47)*4;
+  const trim=(45*width+40)*4;
+  assert.equal(mask[main/4],1);
+  assert.equal(mask[trim/4],2);
+  assert.deepEqual([...colored1.pixels.slice(main,main+3)],
+    [...colored2.pixels.slice(main,main+3)],'same source primary dye keeps the main body identical');
+  assert.notDeepEqual([...colored1.pixels.slice(trim,trim+3)],
+    [...colored2.pixels.slice(trim,trim+3)],'native channel 2 changes collar pixel colors');
+  assert.equal(sourceIconDyeRegions(key,original,width,height,
+    {...source,sheet:8}),undefined,'wrong source sheet must not receive the School profile');
+  assert.equal(sourceIconDyeRegions(key,original,width,height,
+    {...source,cell:12}),undefined,'wrong sprite cell must not receive the School profile');
+  assert.equal(sourceIconDyeRegions(key,original,width,height),undefined,
+    'source provenance is mandatory for School profiles');
+  assert.equal(sourceIconDyeRegions('item_unverified',original,width,height,source),undefined);
+ }
+ const corrupted=new Uint8ClampedArray(original);
+ for(let y=25;y<62;y++)for(let x=10;x<84;x++){
+  const j=(y*width+x)*4;corrupted[j]=234;corrupted[j+1]=10;corrupted[j+2]=12;
+ }
+ for(const {source} of fixtures){
+  assert.equal(sourceIconDyeRegions('item_c_dyeable_source',corrupted,width,height,source),
+   undefined,'changed original art refuses speculative multi-channel recoloring');
+ }
+});

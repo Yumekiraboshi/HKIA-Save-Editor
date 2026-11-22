@@ -1,4 +1,4 @@
-export type SpriteCell={url:string;x:number;y:number};
+export type SpriteCell={url:string;x:number;y:number;group?:string;sheet?:number;cell?:number};
 export type IconPack={group:string;entries:Record<string,SpriteCell>;dispose():void};
 type PackIndex={schema:string;group:string;size:number;columns:number;records:Array<[number,number,number]>};
 const NAME=/^(?:index\.json|sheet-\d{3}\.webp)$/;
@@ -74,7 +74,7 @@ export async function loadIconPack(group:string,base:string):Promise<IconPack>{
    const url=pages.get(sheet);
    if(!url)throw Error('ICON_SHEET_MISSING');
    if(Object.hasOwn(entries,String(id)))throw Error('ICON_MAP_DUPLICATE');
-   entries[String(id)]={url,x:(cell%12)*96,y:Math.floor(cell/12)*96};
+   entries[String(id)]={url,x:(cell%12)*96,y:Math.floor(cell/12)*96,group,sheet,cell};
   }
   return {group,entries,dispose(){urls.forEach(x=>URL.revokeObjectURL(x))}};
  }catch(e){
