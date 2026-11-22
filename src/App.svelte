@@ -25,6 +25,7 @@
  import {localizedCopy} from './ui-locales';
  import {loadLocaleIndex,loadGameLabels,EMPTY_LABELS,type GameLabels} from './game-localization';
  import {loadIconPack,type IconPack} from './icon-packs';
+ import {loadNativeDyePalettes,type NativeDyePalettes} from './native-dye-palettes';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
  import {searchAllCollectionItems,collectionDisplayName,filterCollectionItems} from './collection-search';
@@ -89,6 +90,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  let baseline=new Map<number,bigint>();
  let draftWrites:Promise<void>=Promise.resolve();
  let iconPack:IconPack|null=$state(null);
+ let nativeDyePalettes:NativeDyePalettes=$state({});
  let iconEpoch=0;
  let iconError=$state(false);
  let loadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
@@ -143,6 +145,8 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  const dateChanged=$derived(dateDialogTick!==null&&dateValue!==toDateTimeValue(dateDialogTick));
 
  onMount(()=>{
+  // Native original-game dye swatches are optional visual metadata.
+  void loadNativeDyePalettes(import.meta.env.BASE_URL).then(palettes=>nativeDyePalettes=palettes).catch(()=>{});
   browserLanguage=detectLocale(navigator.languages?.length?navigator.languages:[navigator.language||'en']);
   try{
    const savedLang=localStorage.getItem('hkia-display-locale');
@@ -996,6 +1000,15 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
        {:else}
         <span class="subcategory-art-empty">✧</span>
        {/if}
+       {#if sub.previewId!==null}
+        {#if nativeDyePalettes[String(sub.previewId)]}
+         <span class="native-dye-swatches">
+          {#each nativeDyePalettes[String(sub.previewId)].colors as dyeColor,i (i)}
+           {#if dyeColor}<span class="native-dye-swatch" style:background-color={dyeColor}></span>{/if}
+          {/each}
+         </span>
+        {/if}
+       {/if}
       </span>
       <span class="subcategory-label">{subcategoryLabel(sub.key,locale)}</span>
       <span class="subcategory-count" title={copy.progressHint}>{sub.count.toLocaleString(locale)} / {sub.total.toLocaleString(locale)}</span>
@@ -1041,6 +1054,13 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
         {:else}
          <span class="item-art-empty">✧</span>
         {/if}
+        {#if nativeDyePalettes[String(item[0])]}
+         <span class="native-dye-swatches">
+          {#each nativeDyePalettes[String(item[0])].colors as dyeColor,i (i)}
+           {#if dyeColor}<span class="native-dye-swatch" style:background-color={dyeColor}></span>{/if}
+          {/each}
+         </span>
+        {/if}
        </span>
        <span class="item-name">{nameFor(item)}</span>
        <span class="item-status" class:has={has}>{has?'✓ '+copy.recorded:copy.unrecorded+' · 0 / 1'}</span>
@@ -1075,6 +1095,13 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
        <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
       {:else}
        <span class="item-art-empty">✧</span>
+      {/if}
+      {#if nativeDyePalettes[String(dateDialogItem[0])]}
+       <span class="native-dye-swatches">
+        {#each nativeDyePalettes[String(dateDialogItem[0])].colors as dyeColor,i (i)}
+         {#if dyeColor}<span class="native-dye-swatch" style:background-color={dyeColor}></span>{/if}
+        {/each}
+       </span>
       {/if}
      </span>
      <div class="date-dialog-detail"><strong>{nameFor(dateDialogItem)}</strong><span>{'✓ '+copy.recorded}</span></div>
