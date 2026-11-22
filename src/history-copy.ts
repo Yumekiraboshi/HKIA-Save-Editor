@@ -25,3 +25,32 @@ const translations:Partial<Record<Locale,HistoryCopy>>={
 export function historyCopy(locale:Locale):HistoryCopy{
  return translations[locale]??(locale==='fr-CA'?translations.fr!:en);
 }
+
+
+export type HistoryDetailCopy={
+ added:string;removed:string;date:string;complete:string;incomplete:string;
+ created:string;progress:string;fromTo:string
+};
+const detailEn:HistoryDetailCopy={
+ added:'Not recorded → Recorded',removed:'Recorded → Not recorded',
+ date:'Date',complete:'Completed',incomplete:'Incomplete',
+ created:'New record',progress:'Progress',fromTo:'to'
+};
+const details:Partial<Record<Locale,HistoryDetailCopy>>={
+ ja:{added:'未記録 → 記録済み',removed:'記録済み → 未記録',date:'日時',complete:'達成済み',incomplete:'未達成',created:'新規記録',progress:'進捗',fromTo:'→'},
+ ar:{added:'غير مسجل ← مسجل',removed:'مسجل ← غير مسجل',date:'التاريخ',complete:'مكتمل',incomplete:'غير مكتمل',created:'سجل جديد',progress:'التقدم',fromTo:'إلى'},
+ de:{added:'Nicht erfasst → Erfasst',removed:'Erfasst → Nicht erfasst',date:'Datum',complete:'Abgeschlossen',incomplete:'Unvollständig',created:'Neuer Eintrag',progress:'Fortschritt',fromTo:'zu'},
+ es:{added:'Sin registrar → Registrado',removed:'Registrado → Sin registrar',date:'Fecha',complete:'Completado',incomplete:'Incompleto',created:'Registro nuevo',progress:'Progreso',fromTo:'a'},
+ fr:{added:'Non enregistré → Enregistré',removed:'Enregistré → Non enregistré',date:'Date',complete:'Terminé',incomplete:'Incomplet',created:'Nouvelle entrée',progress:'Progression',fromTo:'vers'},
+ it:{added:'Non registrato → Registrato',removed:'Registrato → Non registrato',date:'Data',complete:'Completato',incomplete:'Incompleto',created:'Nuova voce',progress:'Progresso',fromTo:'a'},
+ ko:{added:'미기록 → 기록됨',removed:'기록됨 → 미기록',date:'날짜',complete:'달성',incomplete:'미달성',created:'새 기록',progress:'진행도',fromTo:'→'},
+ nl:{added:'Niet vastgelegd → Vastgelegd',removed:'Vastgelegd → Niet vastgelegd',date:'Datum',complete:'Voltooid',incomplete:'Onvoltooid',created:'Nieuwe invoer',progress:'Voortgang',fromTo:'naar'},
+ 'pt-BR':{added:'Não registrado → Registrado',removed:'Registrado → Não registrado',date:'Data',complete:'Concluído',incomplete:'Incompleto',created:'Novo registro',progress:'Progresso',fromTo:'para'},
+ ru:{added:'Не записано → Записано',removed:'Записано → Не записано',date:'Дата',complete:'Выполнено',incomplete:'Не выполнено',created:'Новая запись',progress:'Прогресс',fromTo:'в'},
+ tr:{added:'Kaydedilmedi → Kaydedildi',removed:'Kaydedildi → Kaydedilmedi',date:'Tarih',complete:'Tamamlandı',incomplete:'Tamamlanmadı',created:'Yeni kayıt',progress:'İlerleme',fromTo:'→'},
+ 'zh-Hans':{added:'未记录 → 已记录',removed:'已记录 → 未记录',date:'日期',complete:'已完成',incomplete:'未完成',created:'新增记录',progress:'进度',fromTo:'→'},
+ 'zh-Hant':{added:'未記錄 → 已記錄',removed:'已記錄 → 未記錄',date:'日期',complete:'已完成',incomplete:'未完成',created:'新增記錄',progress:'進度',fromTo:'→'}
+};
+export function historyDetailCopy(locale:Locale):HistoryDetailCopy{
+ return details[locale]??(locale==='fr-CA'?details.fr!:detailEn);
+}
