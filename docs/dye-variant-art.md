@@ -80,3 +80,94 @@ The source 3D bundles are identifiable, but a verified material-channel
 renderer and a complete Item ID ↔ 3D model mapping have **not** yet been
 implemented. Producing 5,383 game-accurate images requires these components.
 Do not claim success based only on the existing approximate 2D recoloring.
+
+
+## Implemented offline prototype and verified audits
+
+This repository now contains an offline, dependency-free Python auditor, an
+Item-ID-to-prefab render-job generator, and a Unity Editor **diagnostic**
+renderer. No external Wiki images or player save files are involved.
+
+Run the auditor against original game bundle bytes held outside the repository:
+
+```bash
+python scripts/unityfs-audit.py /path/to/l_basicstyle_fullbody_imaginationarcher
+python scripts/unityfs-audit.py /path/to/l_nisetamastyle_shirt_komiyashirt
+```
+
+The auditor parses UnityFS v8 LZ4 blocks and SerializedFile v22 TypeTrees,
+then reports verified GameObject names and class counts. Source binaries
+remain private/local, while the audited metadata is pinned in
+`data/unityfs-audit/` with original SHA-256 hashes.
+
+Verified result: Archer Costume's original bundle contains 105 objects,
+including 49 GameObjects, one Mesh and one SkinnedMeshRenderer. Its exact
+serialized GameObject is `BasicStyle_FullBody_ImaginationArcher`. It
+contains **no embedded Material or Texture2D objects**; those references
+must be resolved through additional original-game source bundles before a
+shader-accurate render can be published. The separate Komiya Shirt bundle
+contains one Material, three Texture2Ds and a large `.resS` stream; it is
+a useful asset-layout comparison but **not a proven material dependency for
+Archer**.
+
+Generate a render job using only live repository game data:
+
+```bash
+node scripts/prepare-dye-render.mjs --item-id 1286846063 --out /tmp/archer-job.json
+node scripts/prepare-dye-render.mjs --item-id 935642973
+```
+
+These jobs include the 5 exact native palette colors, original prefab name,
+family, source bundle SHA, and render recipe. The initial manifest and
+recipes are `data/dye-render-families.json` and
+`data/dye-render-recipes.json`. They deliberately record
+`blocked-unresolved-materials`; the following must **fail** rather than
+pretend a correct image exists:
+
+```bash
+node scripts/prepare-dye-render.mjs --item-id 1286846063 --require-ready
+```
+
+The experimental Unity Editor implementation is
+`tools/unity/Editor/HKIADyeVariantPilot.cs`. It accepts the job with
+`--hkia-job`, original bundle path with `--hkia-bundle`, and an
+unpublished staging PNG path with `--hkia-preview`. An explicit
+`--hkia-allow-unverified-preview` permits a **diagnostic** attempt,
+but the script refuses missing materials, shader properties or `_BaseMap`
+textures. After the CAB resolver has identified original external UnityFS files,
+pass each with a repeated `--hkia-dependency /path/to/dependency-bundle`
+argument; the diagnostic renderer loads them before instantiating the prefab.
+It does not register the output in the public image index.
+
+**Not yet completed:** recover Archer's external materials, full dye shader
+channel behavior, texture dependencies, correct pose and camera orientation,
+and validate an actual rendered PNG. Source audits and job generation do
+not satisfy those remaining rendering requirements. Neither the Python
+audit nor the C# prototype is a 5,383-image renderer today.
+
+
+## Verified external UnityFS dependency references
+
+The Archer SerializedFile directly lists the following three external CABs
+in this order:
+
+- `CAB-2383a36f15413272ed26f383f73f6431`
+- `CAB-6d01000bf1aa6b026bad1ed5b70c73c7`
+- `CAB-46b8f8fe122147493b3113f7c1c8cd0f`
+
+The separate Komiya Shirt references the first and third CAB. These exact
+references were extracted from original serialized asset metadata—not
+inferred from names. The actual source bundle filenames and texture/Shader
+semantics are **not yet resolved**.
+
+The dependency scanner locates them by reading only the compressed UnityFS
+directory metadata, avoiding costly mesh/texture decompression:
+
+```bash
+python scripts/resolve-unityfs-cabs.py \
+  --root /path/to/HKIA/StreamingAssets/aa/StandaloneWindows64
+```
+
+It prints matching original bundle relative paths and their SHA-256 values;
+if any CAB remains unresolved, it exits with code 3. This is a build/debug
+tool only and does not process save files or publish game binaries.

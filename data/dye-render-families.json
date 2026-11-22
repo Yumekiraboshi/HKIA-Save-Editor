@@ -1,0 +1,29 @@
+{
+  "schema": "HKIA.DyeRenderFamilies.1",
+  "version": "3.0.1",
+  "sourcePolicy": "original-game-only",
+  "families": [
+    {
+      "familyId": "imagination_archer_costume",
+      "itemKeyPrefix": "item_c_dyeable_icarcheroutfit_",
+      "initialItemIds": [
+        1286846063,
+        935642973
+      ],
+      "originalUnityFS": {
+        "bundle": "l_basicstyle_fullbody_imaginationarcher",
+        "sha256": "ea8f16a8a326f28c314818a0f2381c227442ea8a3f3137a2f5d05b7ff951084b"
+      },
+      "originalGameObject": "BasicStyle_FullBody_ImaginationArcher",
+      "audit": "data/unityfs-audit/archer-costume.v3.0.1.json",
+      "sharedIcon": {
+        "group": "collections_group_events",
+        "sheet": 10,
+        "cell": 103
+      },
+      "rendererStatus": "blocked-unresolved-materials",
+      "verifiedMaterialDependencies": [],
+      "verifiedShaderPaletteMask": false
+    }
+  ]
+}

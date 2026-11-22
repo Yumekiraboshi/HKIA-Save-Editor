@@ -1,0 +1,30 @@
+{
+  "schema": "HKIA.DyeRenderRecipes.1",
+  "version": "3.0.1",
+  "recipes": [
+    {
+      "familyId": "imagination_archer_costume",
+      "camera": {
+        "projection": "orthographic",
+        "target": "mesh-bounds",
+        "view": "front-pending-orientation-verification",
+        "framePadding": 1.15
+      },
+      "output": {
+        "width": 512,
+        "height": 512,
+        "transparent": true,
+        "format": "png"
+      },
+      "lighting": {
+        "status": "unverified",
+        "source": "not-extracted"
+      },
+      "pose": {
+        "status": "unverified",
+        "source": "bind-pose-only"
+      },
+      "publishable": false
+    }
+  ]
+}
