@@ -6,6 +6,7 @@
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
+ import {loadSourceItemNames,type SourceItemNames} from './source-names';
  import {decodeHistoryDetails,formatHistoryChange} from './history-details';
  import {compactAchievementCopy} from './achievement-compact-ui';
  import {toggleAchievementState} from './achievement-quick';
@@ -62,6 +63,8 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  let achievementValidation=$state('');
  let achievementBaseline:AchievementEntry[]=[];
  let catalog:Catalog|null=$state(null);
+ let sourceNames:SourceItemNames=$state({});
+ let sourceNameEpoch=0;
  let snapshot:SaveSnapshot|null=$state(null);
  let original:File|null=$state(null);
  let recorded:Record<string,bigint>=$state({});
@@ -180,6 +183,17 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  $effect(()=>{
   if(typeof document!=='undefined'){document.documentElement.lang=locale;document.documentElement.dir=isRtl(locale)?'rtl':'ltr';document.documentElement.dataset.theme=actualTheme;}
  });
+ /* v3.0.1 Name.selectedString provides an exact original Babel lookup
+    for all 10,262 source-mapped collection item IDs in all 16 locales.
+    Fall back to previous names if the source-names asset cannot load. */
+ $effect(()=>{
+  const language=locale;
+  const epoch=++sourceNameEpoch;
+  sourceNames={};
+  void loadSourceItemNames(import.meta.env.BASE_URL,language).then(names=>{
+   if(epoch===sourceNameEpoch)sourceNames=names;
+  }).catch(()=>{if(epoch===sourceNameEpoch)sourceNames={};});
+ });
  /* Native artwork loads only with a save in the Achievements tab.
     Tampered or stale image data fail closed without blocking save edits. */
  $effect(()=>{
@@ -294,7 +308,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  function nameFor(item:Item){
   // Source ItemId -> Babel ID -> original localized text takes precedence over
   // the older name-by-string heuristic. All 18 floorplans have exact ID links.
-  return verifiedFloorplanName(item[0],locale)??
+  return sourceNames[String(item[0])]??verifiedFloorplanName(item[0],locale)??
    collectionDisplayName(item,gameLabels.names[String(item[0])],locale==='ja',copy.unverifiedItem);
  }
  function jumpToCollectionItem(item:Item){
