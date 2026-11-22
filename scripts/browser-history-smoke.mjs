@@ -304,6 +304,22 @@ async function run(){
  await checkBandedHatPair('Warm Pink Marching Band Buttoned Skirt',102581461,
   'Black Marching Band Buttoned Skirt',213537409);
 
+ // Twelve further original Marching Band families, with the same
+ // primary dye and distinct second dyes, must alter the source PNG,
+ // not add a CSS ring/swatch. Representative accessory / garment cases:
+ await checkBandedHatPair('Blue Marching Band Track Pants',31570178,
+  'Red Marching Band Track Pants',436025902);
+ await checkBandedHatPair('Light Gray Marching Band Shako Cap',55228784,
+  'Green Marching Band Shako Cap',356308774);
+ await checkBandedHatPair('Yellow Marching Band Drum',156094928,
+  'Blue Marching Band Drum',273831612);
+ await checkBandedHatPair('Light Gray Marching Band Cape',104020790,
+  'Brown Marching Band Cape',137008390);
+ await checkBandedHatPair('Cream Marching Band Lined Skirt',84626875,
+  'Red Marching Band Lined Skirt',129517237);
+ await checkBandedHatPair('Blue Marching Band Tall Feather Cap',325925840,
+  'Violet Marching Band Tall Feather Cap',556290317);
+
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();
