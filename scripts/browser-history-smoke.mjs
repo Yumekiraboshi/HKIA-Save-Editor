@@ -227,6 +227,28 @@ async function run(){
  assert.ok(maroonMedicPixels.body[0]>maroonMedicPixels.body[2]+25,
   'original maroon second palette dye must color the medic outfit source icon');
 
+ // These genuine banded hat colorways have the same first native dye
+ // but distinct second dyes. Assert that the displayed original 96px PNG
+ // changes, not that an added ring, chip or different 3D pose appears.
+ async function checkBandedHatPair(name1,id1,name2,id2){
+  await search.fill(name1);
+  await page.locator('.collection-search-result').first().click();
+  const first=page.locator('#collection-item-'+id1+' .item-sprite[data-dye-source="native-icon"]');
+  await first.waitFor({timeout:30_000});
+  const firstPixels=await sampledSprite(first);
+  await search.fill(name2);
+  await page.locator('.collection-search-result').first().click();
+  const second=page.locator('#collection-item-'+id2+' .item-sprite[data-dye-source="native-icon"]');
+  await second.waitFor({timeout:30_000});
+  const secondPixels=await sampledSprite(second);
+  assert.notEqual(firstPixels.hash,secondPixels.hash,
+   'the original banded hat icon must visibly use the second native dye channel');
+ }
+ await checkBandedHatPair('White and Yellow High Tea Banded Tophat',522640238,
+  'White and Sky High Tea Banded Tophat',571486471);
+ await checkBandedHatPair('White and Yellow Banded Mini Tophat',396678160,
+  'White and Sky Banded Mini Tophat',984341911);
+
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();

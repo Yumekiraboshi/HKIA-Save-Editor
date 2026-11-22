@@ -55,6 +55,46 @@ function crewMedicVariantFabric(
  return mask;
 }
 
+/**
+ * Original v3.0.1 High Tea Banded Tophat and Banded Mini Tophat UiIcons.
+ * These neutral icons visibly contain a crown band. The native item
+ * palettes have same-first-color variants with different second colors.
+ * The source-cell-gated 2D band geometry is APPROXIMATE, not a verified
+ * Unity shader/material mask; original transparency and outlines survive.
+ */
+function bandedTophatRegions(
+ sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
+ origin?:SpriteCell
+):Uint8Array|undefined{
+ const highTea=origin?.group==='collection_group_teagarden'&&
+  origin.sheet===0&&origin.cell===18;
+ const mini=origin?.group==='collections_group_clothing'&&
+  origin.sheet===0&&origin.cell===53;
+ if(!sourceKey.startsWith('item_c_dyeable_')||(!highTea&&!mini)||
+  width!==96||height!==96||input.length!==96*96*4)return undefined;
+ const mask=new Uint8Array(width*height);
+ let visible=0,neutral=0,band=0;
+ for(let i=0;i<mask.length;i++){
+  const j=i*4;
+  if(input[j+3]<64)continue;
+  visible++;
+  const r=input[j],g=input[j+1],b=input[j+2];
+  const chroma=Math.max(r,g,b)-Math.min(r,g,b);
+  const lum=.2126*r+.7152*g+.0722*b;
+  if(chroma>40||lum<38)continue;
+  neutral++;
+  const x=i%96,y=Math.floor(i/96);
+  // Native neutral crown band region, never a CSS border/swatch.
+  const onBand=x>=25&&x<=71&&y>=55&&y<=70;
+  mask[i]=onBand?2:1;
+  if(onBand)band++;
+ }
+ // Reject changed/future art when neutral garment geometry is missing.
+ if(visible<1100||visible>5900||neutral<850||
+  neutral<visible*.50||band<50||band>1000)return undefined;
+ return mask;
+}
+
 function distanceToSegment(x:number,y:number,ax:number,ay:number,bx:number,by:number):number{
  const dx=bx-ax,dy=by-ay;
  const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy)));
@@ -125,6 +165,8 @@ export function sourceIconDyeRegions(
  sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
  origin?:SpriteCell
 ):Uint8Array|undefined{
+ const tophat=bandedTophatRegions(sourceKey,input,width,height,origin);
+ if(tophat)return tophat;
  const crew=crewMedicVariantFabric(sourceKey,input,width,height,origin);
  if(crew)return crew;
  const school=schoolNecklineRegions(sourceKey,input,width,height,origin);
