@@ -45,13 +45,14 @@ test('game-source dyeable items have many IDs sharing one native icon, not true 
  assert.equal(new Set(dyeable.map(item=>item[0])).size,5383);
 });
 
-test('shared original icons render without dye rings, swatches, or explanatory banner',()=>{
+test('shared original icons receive source-palette pixel rendering without rings, swatches or explanatory banner',()=>{
  const app=read('../src/App.svelte');
  const copy=read('../src/ui-copy.ts');
  const localized=read('../src/ui-locales.ts');
  const style=read('../src/style.css');
  assert.match(app,/class="item-art" aria-hidden="true"/);
  assert.match(app,/class="item-sprite" style:background-image=/);
+ assert.equal((app.match(/<DyeSprite /g)||[]).length,3);
  for(const prohibited of [/native-dye-ring/,/native-dye-preview/,/native-dye-swatch/,/hasSharedDyeableIcon/,/sharedDyeableIcon/]){
   assert.doesNotMatch(app,prohibited);
   assert.doesNotMatch(style,prohibited);
