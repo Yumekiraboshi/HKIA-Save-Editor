@@ -160,3 +160,23 @@ replacement 3D perspectives are used.
 source-image-derived approximation, not independently verified as the
 Unity game's material-to-pixel shader mask. The source cells, Item IDs,
 native palette colors and shared-icon identity are game-original facts.
+
+## High Tea Tophat original-game dye variants
+
+Original Steam v3.0.1 `collection_group_teagarden` UiIcon sheet
+`000`, cell `098` is shared by 47 native **High Tea Tophat**
+Item IDs. In this family the White and Yellow / White and Sky
+versions have the same first dye (`#fdf7e6`) but different
+second dyes (`#fede49` / `#bbf2ef`). A first-channel-only recolorer
+necessarily shows those different variants as identical.
+
+For this one precisely identified original UiIcon, a conservative
+pixel mask uses the native second palette color on the visible
+lower crown band and channel 1 on other neutral cloth. The original
+96px icon position, transparency, outline and shading remain.
+Replaced source art fails closed to the generic source-icon fallback.
+
+**Limit:** the band geometry is estimated from the original 2D source
+icon; the Unity material shader's 1..5 channel-to-pixel mapping is not
+yet independently verified. These previews must not be described as
+pixel-perfect reconstructions of the game's 3D dye shader.

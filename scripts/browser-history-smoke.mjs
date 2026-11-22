@@ -249,6 +249,11 @@ async function run(){
  await checkBandedHatPair('White and Yellow Banded Mini Tophat',396678160,
   'White and Sky Banded Mini Tophat',984341911);
 
+ // Original High Tea Tophat variants share a first dye but have a
+ // different second native color. Inspect real bitmap pixels, not swatches.
+ await checkBandedHatPair('White and Yellow High Tea Tophat',1542238429,
+  'White and Sky High Tea Tophat',643288523);
+
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();
