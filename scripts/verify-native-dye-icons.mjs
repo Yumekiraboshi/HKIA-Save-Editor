@@ -53,7 +53,11 @@ for(const [left,right] of [
  ['156787090','351352504'],
  ['522640238','571486471'],
  ['396678160','984341911'],
- ['1542238429','643288523']
+ ['1542238429','643288523'],
+ ['1645062322','114494397'],
+ ['1962363087','2051283646'],
+ ['60984945','1976756152'],
+ ['1516271219','2089088060']
 ]){
  if(!records[left]||!records[right])continue;
  assert.equal(records[left].group,records[right].group);
@@ -62,6 +66,17 @@ for(const [left,right] of [
  assert.notEqual(records[left].sha256,records[right].sha256,
   'game source icon must have visibly distinct dyed pixel output for this variant pair');
 }
+// A distinct bitmap alone is insufficient if an unrelated channel changed.
+ // All original Camp Counselor Skort samples must render palette channel 2.
+ for(const id of ['1645062322','114494397','1962363087','2051283646',
+  '60984945','1976756152','1516271219','2089088060']){
+  if(!records[id])continue;
+  assert.equal(records[id].group,'collections_group_events');
+  assert.equal(records[id].sheet,1);
+  assert.equal(records[id].cell,21);
+  assert.ok(records[id].channels.includes(2),
+   'source Camp Counselor Skort PNG must truly apply native channel 2: '+id);
+ }
 console.log('HKIA_ORIGINAL_UICON_COLORWAYS_VERIFIED '+files.length+
  ' / '+coverage.uniqueCandidates+' source-unique, '+coverage.ambiguous+
  ' ambiguous, '+coverage.unmatched+' unmapped, '+coverage.uncolorable+' uncolorable across '+
