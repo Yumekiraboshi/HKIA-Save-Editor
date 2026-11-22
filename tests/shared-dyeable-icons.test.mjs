@@ -45,19 +45,21 @@ test('game-source dyeable items have many IDs sharing one native icon, not true 
  assert.equal(new Set(dyeable.map(item=>item[0])).size,5383);
 });
 
-test('the UI discloses the neutral shared sprite and does not falsely tint an unverified color',()=>{
+test('shared original icons render without dye rings, swatches, or explanatory banner',()=>{
  const app=read('../src/App.svelte');
  const copy=read('../src/ui-copy.ts');
  const localized=read('../src/ui-locales.ts');
  const style=read('../src/style.css');
- assert.match(app,/hasSharedDyeableIcon=\$derived\(matching\.some\(item=>item\[1\]\.startsWith\('item_c_dyeable_'\)\)\)/);
- assert.match(app,/\{#if hasSharedDyeableIcon\}<p class="shared-dyeable-icon-note" role="note">\{copy\.sharedDyeableIcon\}<\/p>\{\/if\}/);
- assert.match(copy,/"sharedDyeableIcon": "色違いのアイテムは/);
- assert.match(copy,/"sharedDyeableIcon": "Color variants share a single icon/);
- assert.equal((localized.match(/sharedDyeableIcon:/g)??[]).length,14);
- assert.match(style,/\.shared-dyeable-icon-note\{/);
- assert.doesNotMatch(style,/\.item-sprite\{[^}]*filter:(?:grayscale|saturate)/);
- assert.match(read('../src/icon-packs.ts'),/entries\[String\(id\)\]=\{url,x:\(cell%12\)\*96,y:Math\.floor\(cell\/12\)\*96\}/);
+ assert.match(app,/class="item-art" aria-hidden="true"/);
+ assert.match(app,/class="item-sprite" style:background-image=/);
+ for(const prohibited of [/native-dye-ring/,/native-dye-preview/,/native-dye-swatch/,/hasSharedDyeableIcon/,/sharedDyeableIcon/]){
+  assert.doesNotMatch(app,prohibited);
+  assert.doesNotMatch(style,prohibited);
+ }
+ assert.doesNotMatch(copy,/sharedDyeableIcon/);
+ assert.doesNotMatch(localized,/sharedDyeableIcon/);
+ assert.doesNotMatch(style,/\\.item-sprite\\{[^}]*filter:(?:grayscale|saturate)/);
+ assert.ok(read('../src/icon-packs.ts').includes('entries[String(id)]={url,x:(cell%12)*96,y:Math.floor(cell/12)*96}'));
 });
 
 test('native icon pack contains one precise sprite location for both variants with no fabricated recolour',()=>{

@@ -26,8 +26,6 @@
  import {localizedCopy} from './ui-locales';
  import {loadLocaleIndex,loadGameLabels,EMPTY_LABELS,type GameLabels} from './game-localization';
  import {loadIconPack,type IconPack} from './icon-packs';
- import {loadNativeDyePalettes,type NativeDyePalettes} from './native-dye-palettes';
-  import {nativeDyeRing} from './native-dye-ring';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
  import {searchAllCollectionItems,collectionDisplayName,filterCollectionItems} from './collection-search';
@@ -99,7 +97,6 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  let baseline=new Map<number,bigint>();
  let draftWrites:Promise<void>=Promise.resolve();
  let iconPack:IconPack|null=$state(null);
- let nativeDyePalettes:NativeDyePalettes=$state({});
  let iconEpoch=0;
  let iconError=$state(false);
  let loadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
@@ -155,8 +152,6 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  const dateChanged=$derived(dateDialogTick!==null&&dateValue!==toDateTimeValue(dateDialogTick));
 
  onMount(()=>{
-  // Native original-game dye swatches are optional visual metadata.
-  void loadNativeDyePalettes(import.meta.env.BASE_URL).then(palettes=>nativeDyePalettes=palettes).catch(()=>{});
   browserLanguage=detectLocale(navigator.languages?.length?navigator.languages:[navigator.language||'en']);
   try{
    const savedLang=localStorage.getItem('hkia-display-locale');
@@ -275,7 +270,6 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  const showingGlobalCollectionSearch=$derived(Boolean(query.trim())&&!collectionSearchDrilldown);
  const collectionSearchResults=$derived(searchAllCollectionItems((catalog as Catalog|null)?.items??[],query,locale,nameFor));
  const visibleItems=$derived(matching.slice(0,visibleLimit));
- const hasSharedDyeableIcon=$derived(matching.some(item=>item[1].startsWith('item_c_dyeable_')));
  $effect(()=>{
   const el=loadMoreSentinel;
   const count=showingGlobalCollectionSearch?collectionSearchResults.length:matching.length;
@@ -1052,21 +1046,11 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
     {#each subgroups as sub (sub.key)}
      {@const sprite=sub.previewId!==null&&iconPack?.group===selectedGroup?iconPack.entries[String(sub.previewId)]:undefined}
      <button type="button" class="subcategory-card" onclick={()=>selectSubcategory(sub.key)}>
-      <span class="subcategory-art" class:native-dye-preview={Boolean(sprite&&sub.previewId!==null&&nativeDyePalettes[String(sub.previewId)])}
-        style:--native-dye-ring={sprite&&sub.previewId!==null?nativeDyeRing(nativeDyePalettes[String(sub.previewId)]):undefined} aria-hidden="true">
+      <span class="subcategory-art" aria-hidden="true">
        {#if sprite}
         <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
        {:else}
         <span class="subcategory-art-empty">✧</span>
-       {/if}
-       {#if sub.previewId!==null}
-        {#if nativeDyePalettes[String(sub.previewId)]}
-         <span class="native-dye-swatches">
-          {#each nativeDyePalettes[String(sub.previewId)].colors as dyeColor,i (i)}
-           {#if dyeColor}<span class="native-dye-swatch" style:background-color={dyeColor}></span>{/if}
-          {/each}
-         </span>
-        {/if}
        {/if}
       </span>
       <span class="subcategory-label">{subcategoryLabel(sub.key,locale)}</span>
@@ -1093,7 +1077,6 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
     {/if}
    </div>
    {#if !snapshot.membershipEdit}<div class="compact-hint">{copy.noMembership}</div>{/if}
-   {#if hasSharedDyeableIcon}<p class="shared-dyeable-icon-note" role="note">{copy.sharedDyeableIcon}</p>{/if}
    <div class="item-grid">
     {#each visibleItems as item (item[0])}
      {@const tick=recorded[String(item[0])]}
@@ -1107,19 +1090,11 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
       <button type="button" class="item-toggle" aria-pressed={has} aria-label={(has?copy.unsetRecorded:copy.setRecorded)+': '+nameFor(item)}
        title={mayToggle?(has?copy.unsetRecorded:copy.setRecorded):!showVariants&&recordIds.length>0?copy.variantsToEdit:copy.unsafe} disabled={busy||!mayToggle}
        onclick={e=>void toggleCollection(item[0],nameFor(item),e.currentTarget)}>
-       <span class="item-art" class:native-dye-preview={Boolean(sprite&&nativeDyePalettes[String(item[0])])}
-        style:--native-dye-ring={sprite?nativeDyeRing(nativeDyePalettes[String(item[0])]):undefined} aria-hidden="true">
+       <span class="item-art" aria-hidden="true">
         {#if sprite}
          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
         {:else}
          <span class="item-art-empty">✧</span>
-        {/if}
-        {#if nativeDyePalettes[String(item[0])]}
-         <span class="native-dye-swatches">
-          {#each nativeDyePalettes[String(item[0])].colors as dyeColor,i (i)}
-           {#if dyeColor}<span class="native-dye-swatch" style:background-color={dyeColor}></span>{/if}
-          {/each}
-         </span>
         {/if}
        </span>
        <span class="item-name">{nameFor(item)}</span>
@@ -1150,19 +1125,11 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
      <button type="button" class="date-dialog-close" aria-label={copy.cancel} disabled={busy} onclick={closeDateDialog}>×</button>
     </div>
     <div class="date-dialog-item">
-     <span class="date-dialog-art" class:native-dye-preview={Boolean(sprite&&nativeDyePalettes[String(dateDialogItem[0])])}
-      style:--native-dye-ring={sprite?nativeDyeRing(nativeDyePalettes[String(dateDialogItem[0])]):undefined} aria-hidden="true">
+     <span class="date-dialog-art" aria-hidden="true">
       {#if sprite}
        <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
       {:else}
        <span class="item-art-empty">✧</span>
-      {/if}
-      {#if nativeDyePalettes[String(dateDialogItem[0])]}
-       <span class="native-dye-swatches">
-        {#each nativeDyePalettes[String(dateDialogItem[0])].colors as dyeColor,i (i)}
-         {#if dyeColor}<span class="native-dye-swatch" style:background-color={dyeColor}></span>{/if}
-        {/each}
-       </span>
       {/if}
      </span>
      <div class="date-dialog-detail"><strong>{nameFor(dateDialogItem)}</strong><span>{'✓ '+copy.recorded}</span></div>

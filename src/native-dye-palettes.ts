@@ -1,9 +1,9 @@
 /** Read-only native Steam v3.0.1 dye colors.
  * Exact IDs: InventoryItemDefinitionAsset.Id -> OutfitItemDetails.DyeRef
  * -> DyeDataServiceConfig.DyeMap -> SwatchMap.Color (RGBA source).
- * The original UiIcon sprite is shared and does NOT contain a verified
- * multichannel recolor mask; these swatches are therefore a companion
- * visual identifier, not a claim of source-identical recolored pixels.
+ * The original UiIcon sprites are shared and contain no verified per-channel mask.
+ * Keep these exact game-source colors for later asset-derived recoloring; they
+ * are not loaded just to decorate the current collection UI.
  */
 export type NativeDyePalette={dye:number;colors:[string|null,string|null,string|null,string|null,string|null]};
 export type NativeDyePalettes=Record<string,NativeDyePalette>;
