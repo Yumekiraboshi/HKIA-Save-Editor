@@ -36,16 +36,20 @@ test('two archer-hat colorways share native artwork but have distinct exact pale
  assert.notDeepEqual(ice.colors,orange.colors);
 });
 
-test('no arbitrary CSS tint is applied; only original palette swatches accompany source artwork',()=>{
+test('the game palette database remains intact for future image recoloring but generates no UI overlays',()=>{
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  const css=readFileSync(new URL('../src/style.css',import.meta.url),'utf8');
- assert.match(app,/loadNativeDyePalettes\(import\.meta\.env\.BASE_URL\)/);
- assert.match(app,/nativeDyePalettes\[String\(item\[0\]\)\]/);
- assert.match(app,/nativeDyePalettes\[String\(dateDialogItem\[0\]\)\]/);
- assert.match(app,/nativeDyePalettes\[String\(sub\.previewId\)\]/);
- assert.match(app,/class="native-dye-swatch" style:background-color=\{dyeColor\}/);
- assert.match(css,/\.native-dye-swatches\{/);
- assert.doesNotMatch(css,/\.item-sprite\s*\{[^}]*filter:/);
+ const indexed=readFileSync(new URL('../src/native-dye-palettes.ts',import.meta.url),'utf8');
+ assert.match(indexed,/native-dye-palettes\\.json/);
+ assert.match(app,/class="item-sprite" style:background-image=/);
+ assert.match(app,/class="subcategory-art" aria-hidden="true"/);
+ assert.match(app,/class="item-art" aria-hidden="true"/);
+ assert.match(app,/class="date-dialog-art" aria-hidden="true"/);
+ for(const prohibited of [/nativeDyeRing/,/nativeDyePalettes/,/native-dye-ring/,/native-dye-swatch/,/native-dye-preview/,/hasSharedDyeableIcon/,/sharedDyeableIcon/]){
+  assert.doesNotMatch(app,prohibited);
+  assert.doesNotMatch(css,prohibited);
+ }
+ assert.doesNotMatch(css,/\\.item-sprite\\s*\\{[^}]*filter:/);
 });
 
 test('corrupt, incomplete, mismatched or fabricated dye colors fail closed',()=>{
