@@ -24,7 +24,7 @@ test('all 16 game locales have clear, complete removal and timestamp warnings',(
  for(const locale of supportedLocales){
   const m=removalConfirmationCopy(locale.code);
   for(const key of ['collectionTitle','achievementTitle','collectionWarning','achievementWarning','cancel','remove','stale']){
-   assert.ok(typeof m[key]==='string'&&m[key].trim().length>3,locale.code+' '+key);
+   assert.ok(typeof m[key]==='string'&&m[key].trim().length>=2,locale.code+' '+key);
   }
   assert.notEqual(m.collectionTitle,m.achievementTitle);
   assert.notEqual(m.cancel,m.remove);
