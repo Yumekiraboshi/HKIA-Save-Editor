@@ -433,7 +433,24 @@ const sourceAccentProfiles:Array<{
  {group:'collections_group_events',sheet:2,cell:81,part:'chest-panel'},
  {group:'collections_group_events',sheet:4,cell:109,part:'right-skirt'},
  {group:'collections_group_events',sheet:5,cell:74,part:'hat-band'},
- {group:'collections_group_events',sheet:7,cell:121,part:'chest-panel'}
+ {group:'collections_group_events',sheet:7,cell:121,part:'chest-panel'},
+ {group:'collections_group_events',sheet:1,cell:48,part:'right-trouser'},
+ {group:'collections_group_events',sheet:4,cell:39,part:'hat-band'},
+ {group:'collections_group_events',sheet:10,cell:18,part:'right-trouser'},
+ {group:'collections_group_events',sheet:7,cell:48,part:'chest-panel'},
+ {group:'collections_group_events',sheet:4,cell:45,part:'hat-band'},
+ {group:'collections_group_events',sheet:8,cell:137,part:'chest-panel'},
+ {group:'collections_group_events',sheet:7,cell:139,part:'chest-panel'},
+ {group:'collections_group_events',sheet:6,cell:58,part:'plume'},
+ {group:'collections_group_events',sheet:8,cell:59,part:'right-skirt'},
+ {group:'collections_group_events',sheet:10,cell:63,part:'chest-panel'},
+ {group:'collections_group_events',sheet:5,cell:10,part:'hat-band'},
+ {group:'collections_group_events',sheet:6,cell:21,part:'right-skirt'},
+ {group:'collections_group_events',sheet:10,cell:89,part:'chest-panel'},
+ {group:'collections_group_events',sheet:4,cell:110,part:'chest-panel'},
+ {group:'collections_group_events',sheet:3,cell:19,part:'right-skirt'},
+ {group:'collections_group_events',sheet:10,cell:69,part:'hat-band'},
+ {group:'collections_group_events',sheet:9,cell:116,part:'chest-panel'}
 ];
 function sourceAccentIsSecond(
  x:number,y:number,
