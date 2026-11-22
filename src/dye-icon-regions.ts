@@ -96,7 +96,7 @@ function bandedTophatRegions(
 }
 
 /**
- * High Tea Tophat: original Steam v3.0.1 teaharden pack 000/098.
+ * High Tea Tophat: original Steam v3.0.1 teagarden pack 000/098.
  * The 47 variants use the same neutral 96px UiIcon, including multiple
  * White-and-* variants with an identical primary dye and distinct
  * secondary dyes. This places the *original* second color on the
