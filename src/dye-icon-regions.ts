@@ -285,6 +285,58 @@ function highTeaFrilledBonnetRegions(
  return regions;
 }
 
+/**
+ * Triangle Shades: all 34 game-original Steam v3.0.1 dyeable variants
+ * share the grayscale collections_group_clothing UiIcon sheet 0/cell 38.
+ * Source-native "White"/"White and Black" and six further pairs share
+ * palette channel 1 but have distinct game palette channel 2.
+ *
+ * Assign the two visible triangular LENS interiors to channel 2,
+ * while frame/temples retain channel 1. Preserve alpha, outlines and
+ * any pre-coloured decoration from the *original* game's 96px sprite.
+ * Triangle placement is an approximate 2D region profile, NOT a
+ * recovered/verified Unity five-channel shader/material mask.
+ */
+function triangleShadesRegions(
+ sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
+ origin?:SpriteCell
+):Uint8Array|undefined{
+ if(!sourceKey.startsWith('item_c_dyeable_')||
+  origin?.group!=='collections_group_clothing'||
+  origin.sheet!==0||origin.cell!==38||
+  width!==96||height!==96||input.length!==96*96*4)return undefined;
+ const regions=new Uint8Array(width*height);
+ let visible=0,neutral=0,lenses=0,chromatic=0;
+ for(let i=0;i<regions.length;i++){
+  const p=i*4;
+  if(input[p+3]<64)continue;
+  visible++;
+  const r=input[p],g=input[p+1],b=input[p+2];
+  const chroma=Math.max(r,g,b)-Math.min(r,g,b);
+  const lum=.2126*r+.7152*g+.0722*b;
+  if(chroma>48)chromatic++;
+  // Preserve transparent areas, dark outlines and colored parts.
+  if(chroma>40||lum<38)continue;
+  neutral++;
+  const x=i%96,y=Math.floor(i/96);
+  // Two triangular lenses, with their broad edges along the upper
+  // brow and tips pointing down. The original pixel art is the mask.
+  const depth=y-31;
+  const halfWidth=13-depth*.32;
+  const insideLens=depth>=0&&depth<=34&&(
+   Math.abs(x-34)<=halfWidth||Math.abs(x-64)<=halfWidth
+  );
+  regions[i]=insideLens?2:1;
+  if(insideLens)lenses++;
+ }
+ // No source-icon revision or unrelated accessory inherits an
+ // unverified channel mask. First-channel source fallback remains safe.
+ if(visible<750||visible>5000||neutral<550||
+  neutral<visible*.48||chromatic>1000||
+  lenses<75||lenses>1300)return undefined;
+ return regions;
+}
+
 function distanceToSegment(x:number,y:number,ax:number,ay:number,bx:number,by:number):number{
  const dx=bx-ax,dy=by-ay;
  const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy)));
@@ -355,6 +407,8 @@ export function sourceIconDyeRegions(
  sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
  origin?:SpriteCell
 ):Uint8Array|undefined{
+ const shades=triangleShadesRegions(sourceKey,input,width,height,origin);
+ if(shades)return shades;
  const bonnet=highTeaFrilledBonnetRegions(sourceKey,input,width,height,origin);
  if(bonnet)return bonnet;
  const flowerClip=highTeaFlowerClipRegions(sourceKey,input,width,height,origin);
