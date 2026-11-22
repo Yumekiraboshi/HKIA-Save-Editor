@@ -38,7 +38,9 @@ test('source catalog IDs remain exact and unknown names use clearly marked place
  assert.doesNotMatch(component,/!nameFor\(item\)/);
  assert.match(component,/filterCollectionItems\(/);
  assert.match(component,/collectionDisplayName\(/);
- assert.doesNotMatch(component,/\{item\[0\]\}|\{item\[1\]\}|\{item\[2\]\}/);
+ // Item IDs/keys may legitimately appear as component props (e.g. sourceKey);
+ // they must never appear as raw visible text labels.
+ assert.doesNotMatch(component,/>\s*\{item\[[012]\]\}\s*</);
 });
 test('header commands, local recovery, image tiles and continuous listing have real handlers',()=>{
  for(const symbol of ['openSave','exportSave','backup()','closeSave()','actHistory(','setLanguage(','setTheme(','persistDraft(', 'restoreSession(', 'loadIconPack(','selectCategory(','change(','fileInput?.click()'])assert.ok(component.includes(symbol),symbol);
