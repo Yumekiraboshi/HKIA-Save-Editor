@@ -99,6 +99,28 @@ test('Python UnityFS LZ4 parser has no third-party modules and passes its own fi
  assert.match(result.stdout,/UNITYFS_AUDIT_SELFTEST_OK/);
 });
 
+test('Komiya source Material resolves its actual Shader PPtr into the shared external CAB',()=>{
+ const embedded=shirt.nodes[0].materialObjects;
+ assert.equal(embedded.length,1);
+ assert.deepEqual(embedded[0],{
+  pathId:'-8957885102818627004',
+  name:'NisetamaStyle_Shirt_KomiyaShirt',
+  shader:{
+   fileId:2,pathId:'477622052401609204',
+   externalCAB:'CAB-46b8f8fe122147493b3113f7c1c8cd0f'
+  }
+ });
+ assert.deepEqual(shirt.nodes[0].textureObjects.map(x=>x.name),[
+  'NisetamaStyle_Shirt_KomiyaShirt_N',
+  'NisetamaStyle_Shirt_KomiyaShirt_X',
+  'NisetamaStyle_Shirt_KomiyaShirt_C'
+ ]);
+ const archerSkin=archer.serialized.rendererMaterialReferences.find(x=>x.class==='SkinnedMeshRenderer');
+ assert.equal(archerSkin.materials[0].externalCAB,embedded[0].shader.externalCAB,
+  'the same CAB hosts an Archer skinned Material and Komiya Material shader');
+ assert.equal(archerSkin.materials[0].pathId,'6824069125264728142');
+});
+
 test('original game data is not embedded in repository and is never replaced by wiki images',()=>{
  const job=prepareDyeRender('1286846063',original);
  assert.equal(job.renderer.publishable,false);
