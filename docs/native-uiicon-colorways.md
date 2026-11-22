@@ -180,3 +180,28 @@ Replaced source art fails closed to the generic source-icon fallback.
 icon; the Unity material shader's 1..5 channel-to-pixel mapping is not
 yet independently verified. These previews must not be described as
 pixel-perfect reconstructions of the game's 3D dye shader.
+
+## Camp Counselor Skort (22 original colorways)
+
+Original Steam v3.0.1 `collections_group_events` sheet `001`, cell
+`021` is shared by 22 verified **Camp Counselor Skort** Item IDs.
+The actual game-defined dye palettes include pairs whose primary channel
+is identical but secondary colors differ: White / White and Black
+(`#ebe4e7` / `#3a3840`), Green / Green and Brown
+(`#3c7041` / `#5a3528`), Khaki / Khaki and Brown
+(`#f3be89` / `#764231`), and Light Gray / Light and Dark Gray
+(`#b5b1b8` / `#534e57`). A single-channel icon would collapse these
+distinct game item colorways to identical images.
+
+For the exact original source icon, a guarded approximate **2D** region
+mask applies native channel 2 to the right-hand pleated fabric and native
+channel 1 to the remaining neutral cloth. The game-original 96px atlas
+cell, colors, transparency and shading remain the source of all output.
+Replacement art or mismatched source cells refuse the special mask,
+leaving the original safe fallback. No Wiki art, additional badges or
+invented dye values are used.
+
+**Fidelity limitation:** Right-side placement is inferred from the
+original icon's visible fabric, *not* independently recovered from
+Unity's 3D five-channel shader material masks. Output must be treated as
+an approximate 2D preview, not pixel-perfect game rendering.
