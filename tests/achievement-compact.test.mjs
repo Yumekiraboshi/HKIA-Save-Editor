@@ -19,7 +19,7 @@ test('one-click state, source goal and original timestamp are planned in Rust, n
  assert.match(core,/crate::achievement_keys::progress_goal_v301\(guid\)/);
  assert.match(core,/completed:Some\(\(now_ms\/1000,\(now_ms%1000\) as u32\*1_000_000\)\)/);
  assert.match(wasm,/pub extern "C" fn hkia_achievement_toggle_plan\(/);
- assert.match(wasm,/if e\.version\(\)!="3\.0\.1"\{return 1\}/);
+ assert.match(wasm,/if version!="3\.0\.0"&&version!="3\.0\.1"\{return 1\}/);
  assert.doesNotMatch(app,/from '.\/achievement-quick'/);
 });
 
