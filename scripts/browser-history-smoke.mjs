@@ -122,7 +122,7 @@ async function run(){
  async function sampledSprite(locator){
   return locator.evaluate(async el=>{
    const style=getComputedStyle(el).backgroundImage;
-   const url=style.match(/^url\\(["']?(.+?)["']?\\)$/)?.[1];
+   const url=style.startsWith('url(')?style.slice(4,-1).replace(/^['\"]|['\"]$/g,''):null;
    if(!url)throw Error('DYE_IMAGE_STYLE_MISSING');
    const image=new Image();
    image.src=url;
