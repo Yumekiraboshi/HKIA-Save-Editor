@@ -159,7 +159,28 @@ async function run(){
  await item.click();
  await page.locator('article.item-tile button.item-toggle[aria-pressed="true"]').first().waitFor();
  assert.equal(await page.locator('.bar-actions button[title="Undo"]').isDisabled(),false);
+ // The date-dialog delete path must also be gated, with cancel preserving dates.
+ await page.locator('article.item-tile button.date-button').first().click();
+ await page.locator('dialog.date-dialog[open]').waitFor();
+ await page.locator('dialog.date-dialog .date-dialog-clear').click();
+ await page.locator('dialog.removal-confirm-dialog[open]').waitFor();
+ assert.match(await page.locator('.removal-confirm-warning').innerText(),/date and time/i);
+ await page.locator('.removal-cancel').click();
+ await page.locator('dialog.removal-confirm-dialog[open]').waitFor({state:'hidden'});
+ assert.equal(await item.getAttribute('aria-pressed'),'true');
+ assert.equal(await page.locator('dialog.date-dialog[open]').count(),1);
+ await page.locator('dialog.date-dialog .date-dialog-cancel').click();
+
+ // A mistaken tile click can also be canceled without adding a history step.
  await item.click();
+ await page.locator('dialog.removal-confirm-dialog[open]').waitFor();
+ assert.equal(await item.getAttribute('aria-pressed'),'true');
+ await page.locator('.removal-cancel').click();
+ await page.locator('dialog.removal-confirm-dialog[open]').waitFor({state:'hidden'});
+ assert.equal(await item.getAttribute('aria-pressed'),'true');
+ await item.click();
+ await page.locator('dialog.removal-confirm-dialog[open]').waitFor();
+ await page.locator('.removal-confirm-action').click();
  await page.locator('article.item-tile button.item-toggle[aria-pressed="false"]').first().waitFor();
  const collectionSteps=await countHistory(page,3);
  assert.equal(await collectionSteps.filter({has:page.locator('.history-step')}).count(),3);
@@ -178,6 +199,12 @@ async function run(){
  await achievement.waitFor();
  await achievement.click();
  await page.locator('.achievement-item-grid button.achievement-toggle[aria-pressed="true"]').first().waitFor();
+ await achievement.click();
+ await page.locator('dialog.removal-confirm-dialog[open]').waitFor();
+ assert.match(await page.locator('.removal-confirm-warning').innerText(),/completion date and time/i);
+ await page.locator('.removal-cancel').click();
+ await page.locator('dialog.removal-confirm-dialog[open]').waitFor({state:'hidden'});
+ assert.equal(await achievement.getAttribute('aria-pressed'),'true');
  let steps=await countHistory(page,2);
  assert.match(await steps.nth(1).getAttribute('class')??'',/active/);
  await page.locator('.history-menu > summary').click(); // close without altering state
@@ -235,8 +262,30 @@ async function run(){
   'mobile file menu should not be clipped horizontally: '+JSON.stringify(fileBounds));
  await page.locator('.file-menu > summary').click();
 
+ // The separate confirmation path actually applies the destructive edits.
+ // Undo/redo recovery assertions above are unaffected by this final smoke.
+ await page.setViewportSize({width:1360,height:840});
+ const dateButton=page.locator('article.item-tile button.date-button').first();
+ await dateButton.waitFor();
+ await dateButton.click();
+ await page.locator('dialog.date-dialog[open]').waitFor();
+ await page.locator('dialog.date-dialog .date-dialog-clear').click();
+ await page.locator('dialog.removal-confirm-dialog[open]').waitFor();
+ await page.locator('.removal-confirm-action').click();
+ await page.locator('dialog.date-dialog[open]').waitFor({state:'hidden'});
+ await page.locator('article.item-tile button.item-toggle[aria-pressed="false"]').first().waitFor();
+
+ await chooseTab(page,1);
+ const achievementsAfterReload=page.locator('.achievement-item-grid button.achievement-toggle:not([disabled])');
+ await achievementsAfterReload.first().click(); // restore completed status
+ await page.locator('.achievement-item-grid button.achievement-toggle[aria-pressed="true"]').first().waitFor();
+ await achievementsAfterReload.first().click();
+ await page.locator('dialog.removal-confirm-dialog[open]').waitFor();
+ await page.locator('.removal-confirm-action').click();
+ await page.locator('.achievement-item-grid button.achievement-toggle[aria-pressed="false"]').first().waitFor();
+
  assert.deepEqual(errors,[],'no console exceptions or 5xx during browser replay');
- console.log('CHROMIUM UI HISTORY SMOKE PASS: collection add/remove, achievement edit, independent redo, IndexedDB reload, mobile menu');
+ console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
  await context.close();
 }
 try{await run()}finally{
