@@ -40,7 +40,7 @@ test('the game palette database remains intact for future image recoloring but g
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  const css=readFileSync(new URL('../src/style.css',import.meta.url),'utf8');
  const indexed=readFileSync(new URL('../src/native-dye-palettes.ts',import.meta.url),'utf8');
- assert.match(indexed,/native-dye-palettes\\.json/);
+ assert.ok(indexed.includes('native-dye-palettes.json'));
  assert.match(app,/class="item-sprite" style:background-image=/);
  assert.match(app,/class="subcategory-art" aria-hidden="true"/);
  assert.match(app,/class="item-art" aria-hidden="true"/);
