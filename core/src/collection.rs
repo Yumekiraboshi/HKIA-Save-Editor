@@ -305,6 +305,109 @@ impl Editor {
   self.redo.retain(|change|change.scope()!=HistoryScope::Achievements);self.revision=next_revision;
   Ok(())
  }
+
+ /// Source-gated, single-transaction native achievement edit. The UI submits
+ /// only the child GUID, the exact CAS expectation (or absence), and new state.
+ /// Rust alone decides whether a source-defined category must be completed,
+ /// created, revoked or timestamp-synchronized. No reward/counter mutation.
+ pub fn edit_achievement_auto(
+  &mut self,guid:[u32;4],expected:Option<AchievementValue>,next:AchievementValue
+ )->Result<(),Error>{
+  if self.achievement_value(guid)!=expected||expected==Some(next)||
+   !achievement::valid(next)||expected.is_some_and(|v|!achievement::valid(v)){
+   return Err(Error::Schema)
+  }
+  if expected.is_none()&&(self.slot.envelope.version!=Version::V301||
+    !crate::achievement_keys::known_v301(guid)){return Err(Error::Version)}
+  if self.slot.envelope.version==Version::V301 {
+   if let Some(parent_guid)=crate::achievement_keys::parent_of_v301(guid){
+    let total=crate::achievement_keys::parent_size_v301(parent_guid).ok_or(Error::Schema)?;
+    let parent=self.achievement_value(parent_guid);
+    let saved=self.achievements();
+    // A complete category may be inferred only when every genuine, direct
+    // source child is present and complete. Dates are compared at 100 ns.
+    if next.complete&&parent.is_none_or(|v|!v.complete){
+     let mut seen=0usize;
+     let mut all_complete=true;
+     let mut all_dated=true;
+     let mut latest:Option<(i64,u32)>=None;
+     for row in &saved{
+      if crate::achievement_keys::parent_of_v301(row.guid)!=Some(parent_guid){continue}
+      seen+=1;
+      let v=if row.guid==guid{next}else{row.value};
+      if !achievement::valid(v){return Err(Error::Schema)}
+      if !v.complete{all_complete=false}
+      match v.completed{
+       Some(date)=>{if latest.is_none_or(|t|date>t){latest=Some(date)}},
+       None=>all_dated=false
+      }
+     }
+     if expected.is_none(){
+      seen+=1;
+      if let Some(date)=next.completed{
+       if latest.is_none_or(|t|date>t){latest=Some(date)}
+      }else{all_dated=false}
+     }
+     if seen==total&&all_complete {
+      let parent_next=AchievementValue{complete:true,current:total as f32,
+       completed:if all_dated{latest}else{None}};
+      return match (expected,parent){
+       (Some(before),Some(parent_before))=>self.change_achievement_pair(
+        (guid,before,next),(parent_guid,parent_before,parent_next)),
+       (None,Some(parent_before))=>self.create_achievement_with_parent(
+        guid,next,parent_guid,parent_before,parent_next),
+       (_,None)=>self.complete_child_and_create_parent(
+        guid,expected,next,parent_guid,parent_next)
+      }
+     }
+    }
+    if let (Some(before),Some(parent_before))=(expected,parent){
+     // Revoke a completed native category together with its child. Never
+     // increase stale progress or delete any other child's timestamp.
+     if before.complete&&!next.complete&&parent_before.complete{
+      let remaining=saved.iter().filter(|row|row.guid!=guid&&row.value.complete&&
+       crate::achievement_keys::parent_of_v301(row.guid)==Some(parent_guid)).count();
+      let parent_next=AchievementValue{complete:false,
+       current:parent_before.current.min(remaining as f32),completed:None};
+      return self.change_achievement_pair(
+       (guid,before,next),(parent_guid,parent_before,parent_next))
+     }
+     // Only synchronize a date when the old parent timestamp is provably
+     // source-derived (the exact maximum timestamp of all completed children).
+     // Independently recorded parent dates remain unchanged.
+     if before.complete&&next.complete&&
+      before.current.to_bits()==next.current.to_bits()&&
+      before.completed.is_some()&&next.completed.is_some()&&
+      before.completed!=next.completed&&parent_before.complete&&
+      parent_before.current==total as f32&&parent_before.completed.is_some(){
+      let mut seen=0usize;
+      let mut old_latest:Option<(i64,u32)>=None;
+      let mut new_latest:Option<(i64,u32)>=None;
+      let mut eligible=true;
+      for row in &saved{
+       if crate::achievement_keys::parent_of_v301(row.guid)!=Some(parent_guid){continue}
+       seen+=1;
+       if !row.value.complete||!achievement::valid(row.value){eligible=false;break}
+       let Some(old_date)=row.value.completed else{eligible=false;break};
+       let new_date=if row.guid==guid{next.completed.unwrap()}else{old_date};
+       if old_latest.is_none_or(|d|old_date>d){old_latest=Some(old_date)}
+       if new_latest.is_none_or(|d|new_date>d){new_latest=Some(new_date)}
+      }
+      if eligible&&seen==total&&parent_before.completed==old_latest&&
+       new_latest!=old_latest{
+       let parent_next=AchievementValue{completed:new_latest,..parent_before};
+       return self.change_achievement_pair(
+        (guid,before,next),(parent_guid,parent_before,parent_next))
+      }
+     }
+    }
+   }
+  }
+  match expected{
+   Some(before)=>self.change_achievement(guid,before,next),
+   None=>self.create_achievement(guid,next)
+  }
+ }
  pub fn change_achievement(&mut self,guid:[u32;4],expected:AchievementValue,next:AchievementValue)->Result<(),Error>{
   if !achievement::valid(next) || expected==next || self.achievement_value(guid)!=Some(expected){return Err(Error::Schema)}
   if let Some(&before)=self.achievement_created.get(&guid){
