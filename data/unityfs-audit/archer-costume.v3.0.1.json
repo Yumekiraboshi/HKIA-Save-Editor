@@ -1,0 +1,35 @@
+{
+  "schema": "HKIA.UnityFSAudit.1",
+  "version": "3.0.1",
+  "source": "original-game-unityfs",
+  "bundle": "l_basicstyle_fullbody_imaginationarcher",
+  "sha256": "ea8f16a8a326f28c314818a0f2381c227442ea8a3f3137a2f5d05b7ff951084b",
+  "compressedBytes": 102778,
+  "unityfs": {
+    "format": 8,
+    "compression": 3,
+    "blockCount": 2,
+    "nodeCount": 1,
+    "unpackedBytes": 218051
+  },
+  "serialized": {
+    "version": 22,
+    "nodeName": "CAB-997e5196a7e38f4359d839d2462dcf66",
+    "objectCount": 105,
+    "classCounts": {
+      "AnimationClip": 1,
+      "AssetBundle": 1,
+      "GameObject": 49,
+      "Mesh": 1,
+      "MeshFilter": 1,
+      "MeshRenderer": 1,
+      "MonoBehaviour": 1,
+      "SkinnedMeshRenderer": 1,
+      "Transform": 49
+    },
+    "verifiedGameObject": "BasicStyle_FullBody_ImaginationArcher",
+    "hasEmbeddedMaterial": false,
+    "hasEmbeddedTexture2D": false
+  },
+  "blocker": "Original bundle has no embedded Material or Texture2D. External renderer dependencies and correct shader dye semantics must be resolved before publishing an exact game-derived render."
+}
