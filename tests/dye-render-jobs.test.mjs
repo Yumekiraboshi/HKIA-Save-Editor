@@ -39,6 +39,13 @@ test('a different original garment bundles 1 Material, 3 textures, and an .resS'
  assert.equal(shirt.nodes[1].kind,'externalTextureStream');
  assert.equal(shirt.nodes[1].bytes,873888);
  assert.notEqual(shirt.sha256,archer.sha256);
+ assert.equal(archer.serialized.externalCABs.length,3);
+ assert.equal(shirt.nodes[0].externalCABs.length,2);
+ for(const cab of shirt.nodes[0].externalCABs){
+  assert.match(cab,/^CAB-[0-9a-f]{32}$/);
+  assert.ok(archer.serialized.externalCABs.includes(cab),
+   'both original assets refer to the same external CAB');
+ }
 });
 
 test('both real game dye variants resolve exact palette and blocked UnityFS 3D job',()=>{
@@ -98,4 +105,12 @@ test('original game data is not embedded in repository and is never replaced by 
  assert.equal(job.originalUnityFS.bundle,'l_basicstyle_fullbody_imaginationarcher');
  assert.equal(read('../public/variant-art/index.json').schema,'HKIA.DyeVariantArt.1');
  assert.deepEqual(read('../public/variant-art/index.json').records,{});
+});
+
+test('metadata-only original-game CAB dependency resolver passes synthetic UnityFS fixture',()=>{
+ const path=fileURLToPath(new URL('../scripts/resolve-unityfs-cabs.py',import.meta.url));
+ const result=spawnSync(process.platform==='win32'?'python':'python3',
+  [path,'--self-test'],{encoding:'utf8'});
+ assert.equal(result.status,0,result.stderr);
+ assert.match(result.stdout,/UNITYFS_CAB_RESOLVER_SELFTEST_OK/);
 });
