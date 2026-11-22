@@ -115,3 +115,26 @@ Each static PNG is checked against the exact original item's
 `<group>/<sheet>/<cell>` source index, original WebP sheet SHA-256 and
 generated PNG SHA-256. Ambiguous or uncolorable originals automatically
 fall back to their native source icon in the browser.
+
+
+## Crew Medic Outfit source palette distinction
+
+The first high-priority collision family is the **17 Crew Medic Outfit**
+Item IDs in the original `collections_group_events` source icon sheet
+`000`, cell `071`. All 17 original game palettes have the same channel 1
+(`#ebe4e7`), while channel 2 varies across every colorway (Blue, Maroon,
+Blush, Peacock, Navy, etc.). First-channel-only preview coloring therefore
+could never distinguish these original game IDs.
+
+The source-icon profile now applies each Item ID's **actual native channel 2**
+to its monochrome tunic pixels, preserving the original icon's alpha, outline,
+shape and shading. Selection requires the exact source sheet/cell and
+the measured original garment silhouette. If the native art changes, the
+profile refuses to recolor via this inference and falls back to the
+generic original-icon path.
+
+**Fidelity boundary:** the choice to color the 2D monochrome fabric with
+native channel 2 is supported by native palette variation, but its precise
+3D shader mask/garment-region assignment is not yet independently confirmed.
+This remains an explicitly approximate icon preview. No game IDs, colors,
+ownership or item data are fabricated.
