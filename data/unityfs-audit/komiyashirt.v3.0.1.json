@@ -35,6 +35,32 @@
       "externalCABs": [
         "CAB-2383a36f15413272ed26f383f73f6431",
         "CAB-46b8f8fe122147493b3113f7c1c8cd0f"
+      ],
+      "rendererMaterialReferences": [
+        {
+          "class": "MeshRenderer",
+          "objectPathId": "6267642576144124274",
+          "materials": [
+            {
+              "slot": 0,
+              "fileId": 0,
+              "pathId": "-8957885102818627004",
+              "externalCAB": null
+            }
+          ]
+        },
+        {
+          "class": "SkinnedMeshRenderer",
+          "objectPathId": "172866389820919831",
+          "materials": [
+            {
+              "slot": 0,
+              "fileId": 2,
+              "pathId": "6824069125264728142",
+              "externalCAB": "CAB-46b8f8fe122147493b3113f7c1c8cd0f"
+            }
+          ]
+        }
       ]
     },
     {
@@ -43,5 +69,5 @@
       "kind": "externalTextureStream"
     }
   ],
-  "note": "Material and three Texture2D are embedded. Two external CAB references overlap with Archer, but the precise shader/material bindings are not yet verified."
+  "note": "Komiya Shirt SkinnedMeshRenderer uses same external material PPtr file CAB-46b8f8fe... / PathID 6824069125264728142 as Archer Costume; its MeshRenderer's material resides within this own bundle. Actual shader and texture dependencies still not identified."
 }

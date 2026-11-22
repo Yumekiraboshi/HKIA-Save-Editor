@@ -1,0 +1,29 @@
+{
+  "schema": "HKIA.UnityFSCabResolution.1",
+  "version": "3.0.1",
+  "source": "original-game-UnityFS",
+  "rootBundle": "l_basicstyle_fullbody_imaginationarcher",
+  "targetCABs": [
+    "CAB-2383a36f15413272ed26f383f73f6431",
+    "CAB-6d01000bf1aa6b026bad1ed5b70c73c7",
+    "CAB-46b8f8fe122147493b3113f7c1c8cd0f"
+  ],
+  "confirmed": [
+    {
+      "cab": "CAB-2383a36f15413272ed26f383f73f6431",
+      "bundle": "2383a36f15413272ed26f383f73f6431",
+      "sha256": "2be9445adfb193570f910a22afec50c332a1b02435388b459869377764893de4",
+      "bytes": 80111,
+      "contains": {
+        "MonoScript": 1546,
+        "AssetBundle": 1
+      },
+      "kind": "script-dependency-not-a-renderer-material"
+    }
+  ],
+  "unresolvedMaterialCABs": [
+    "CAB-6d01000bf1aa6b026bad1ed5b70c73c7",
+    "CAB-46b8f8fe122147493b3113f7c1c8cd0f"
+  ],
+  "note": "Material CAB targets established from the original Archer Renderers' material PPtrs. The physical UnityFS filenames for these two CABs have not yet been found; do not claim exact rendering or publish images."
+}
