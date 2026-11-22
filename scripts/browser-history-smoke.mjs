@@ -207,6 +207,26 @@ async function run(){
  await checkSchoolPair('Gray and Blue School Sweater Vest',307168230,
   'Gray and Pink School Sweater Vest',404567552);
 
+ // All 17 original Crew Medic Outfit colorways share first native dye
+ // #ebe4e7. This must not collapse Blue/Maroon to the same neutral icon:
+ // the original second dye channel defines the named game colorway.
+ await search.fill('Blue Crew Medic Outfit');
+ await page.locator('.collection-search-result').first().click();
+ const blueMedic=page.locator('#collection-item-156787090 .item-sprite[data-dye-source="native-icon"]');
+ await blueMedic.waitFor({timeout:30_000});
+ const blueMedicPixels=await sampledSprite(blueMedic);
+ await search.fill('Maroon Crew Medic Outfit');
+ await page.locator('.collection-search-result').first().click();
+ const maroonMedic=page.locator('#collection-item-351352504 .item-sprite[data-dye-source="native-icon"]');
+ await maroonMedic.waitFor({timeout:30_000});
+ const maroonMedicPixels=await sampledSprite(maroonMedic);
+ assert.notEqual(blueMedicPixels.hash,maroonMedicPixels.hash,
+  'native second channel must distinguish Crew Medic source UiIcon colorways');
+ assert.ok(blueMedicPixels.body[2]>blueMedicPixels.body[0]+55,
+  'original blue second palette dye must color the medic outfit source icon');
+ assert.ok(maroonMedicPixels.body[0]>maroonMedicPixels.body[2]+25,
+  'original maroon second palette dye must color the medic outfit source icon');
+
  // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();
