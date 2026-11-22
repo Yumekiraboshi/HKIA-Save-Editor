@@ -61,6 +61,31 @@
             }
           ]
         }
+      ],
+      "materialObjects": [
+        {
+          "pathId": "-8957885102818627004",
+          "name": "NisetamaStyle_Shirt_KomiyaShirt",
+          "shader": {
+            "fileId": 2,
+            "pathId": "477622052401609204",
+            "externalCAB": "CAB-46b8f8fe122147493b3113f7c1c8cd0f"
+          }
+        }
+      ],
+      "textureObjects": [
+        {
+          "pathId": "-8884841658679841680",
+          "name": "NisetamaStyle_Shirt_KomiyaShirt_N"
+        },
+        {
+          "pathId": "-6548024100083352366",
+          "name": "NisetamaStyle_Shirt_KomiyaShirt_X"
+        },
+        {
+          "pathId": "2611440771450054617",
+          "name": "NisetamaStyle_Shirt_KomiyaShirt_C"
+        }
       ]
     },
     {
@@ -69,5 +94,5 @@
       "kind": "externalTextureStream"
     }
   ],
-  "note": "Komiya Shirt SkinnedMeshRenderer uses same external material PPtr file CAB-46b8f8fe... / PathID 6824069125264728142 as Archer Costume; its MeshRenderer's material resides within this own bundle. Actual shader and texture dependencies still not identified."
+  "note": "Original Komiya Shirt embeds Material NisetamaStyle_Shirt_KomiyaShirt, three Texture2D named _N/_X/_C and mesh. Its Material shader PPtr fileID 2 / pathID 477622052401609204 points to CAB-46b8f8fe...; its SkinnedMeshRenderer uses another shared Material object in the same CAB. Actual shader/texture channel semantics require further inspection."
 }

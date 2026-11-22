@@ -102,6 +102,51 @@ def material_cabs(audit):
     if not wanted:raise auditor.InvalidAsset('no external Renderer materials')
     return sorted(wanted)
 
+def exact_material_targets(audit):
+    """Resolve only externally-referenced Material pathIDs from source PPtrs."""
+    targets={}
+    renderers=audit['serialized']['rendererMaterialReferences']
+    for renderer in renderers:
+        for material in renderer['materials']:
+            cab=material['externalCAB']
+            if cab is not None:
+                if cab not in audit['serialized']['externalCABs']:
+                    raise auditor.InvalidAsset('material references unknown external CAB')
+                targets.setdefault(cab,set()).add(str(material['pathId']))
+    return {cab:sorted(paths) for cab,paths in sorted(targets.items())}
+
+def verify_material_targets(root,result,target_map):
+    """Verify the exact Material object, not just the CAB filename."""
+    verified={}
+    missing=[]
+    for cab,wanted in target_map.items():
+        found={}
+        for candidate in result['candidates'].get(cab,[]):
+            local=root/candidate['relativeSourcePath']
+            try:
+                report=auditor.audit(local)
+            except (OSError,auditor.InvalidAsset,struct.error) as error:
+                candidate['materialInspectionError']=str(error)
+                continue
+            for node in report['nodes']:
+                if node['name']!=cab:
+                    continue
+                for material in node.get('materialObjects',[]):
+                    path_id=str(material['pathId'])
+                    if path_id in wanted:
+                        found[path_id]={
+                            'name':material['name'],
+                            'shader':material['shader'],
+                            'bundle':candidate['relativeSourcePath']
+                        }
+        verified[cab]=found
+        for path_id in wanted:
+            if path_id not in found:
+                missing.append({'externalCAB':cab,'materialPathId':path_id})
+    result['verifiedMaterialObjects']=verified
+    result['unresolvedMaterialObjects']=missing
+    return result
+
 def self_test():
     # A synthetic UnityFS v8 file with a metadata-only CAB entry and a
     # single raw content block (no original copyrighted game bytes).
@@ -129,6 +174,14 @@ def self_test():
       'rendererMaterialReferences':[{'materials':[
        {'externalCAB':'CAB-'+'1'*32},{'externalCAB':None}]}]}}
     assert material_cabs(audit)==['CAB-'+'1'*32]
+    audit={'serialized':{'externalCABs':['CAB-'+'0'*32,'CAB-'+'1'*32],
+      'rendererMaterialReferences':[{'materials':[
+       {'externalCAB':'CAB-'+'1'*32,'pathId':'6824069125264728142'},
+       {'externalCAB':'CAB-'+'1'*32,'pathId':'6824069125264728142'},
+       {'externalCAB':None,'pathId':'0'}]}]}}
+    assert exact_material_targets(audit)=={
+        'CAB-'+'1'*32:['6824069125264728142']
+    }
     print('UNITYFS_CAB_RESOLVER_SELFTEST_OK')
 
 def main():
@@ -137,6 +190,8 @@ def main():
     args.add_argument('--audit',type=Path,default=HERE.parent/'data/unityfs-audit/archer-costume.v3.0.1.json')
     args.add_argument('--self-test',action='store_true')
     args.add_argument('--materials-only',action='store_true',help='restrict CAB scan to audited Renderer material references')
+    args.add_argument('--verify-materials',action='store_true',
+        help='inspect matching UnityFS Material objects and verify their exact 64-bit PathIDs')
     cli=args.parse_args()
     try:
         if cli.self_test:self_test();return 0
@@ -145,9 +200,11 @@ def main():
         audit=json.loads(cli.audit.read_text(encoding='utf8'))
         refs=material_cabs(audit) if cli.materials_only else audit['serialized']['externalCABs']
         result=resolve(cli.root,refs)
+        if cli.verify_materials:
+            result=verify_material_targets(cli.root,result,exact_material_targets(audit))
         print(json.dumps(result,indent=2))
-        # Missing CABs are explicit blockers, never silently marked resolved.
-        return 0 if not result['unresolved'] else 3
+        # Missing CABs or mismatched Material PathIDs are explicit blockers.
+        return 0 if not result['unresolved'] and not result.get('unresolvedMaterialObjects') else 3
     except (auditor.InvalidAsset,OSError,ValueError,KeyError) as exc:
         print('UNITYFS_CAB_RESOLUTION_ERROR: '+str(exc),file=sys.stderr)
         return 2

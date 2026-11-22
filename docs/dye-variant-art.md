@@ -214,3 +214,52 @@ fileID and string-valued 64-bit pathID into the original-game render job.
 Neither the source bundle locations for the two Material CABs nor their
 rendering correctness are asserted until the original UnityFS bundles
 are found and inspected.
+
+
+## Unity v22 serialized Material/Shader verification
+
+The offline UnityFS auditor now also decodes the first `m_Name` field on
+`Material` and `Texture2D` objects and the `Material.m_Shader` PPtr,
+including the correct source-file-relative fileID and 64-bit pathID. It
+fixes an object-table cursor error previously masked by synthetic-only
+tests: the `objectCount` field must be consumed before the first
+serialized object entry. A synthetic v22 Material-object test now protects
+this invariant.
+
+Confirmed directly from the original Steam v3.0.1
+`l_nisetamastyle_shirt_komiyashirt` bundle:
+
+- Local Material `NisetamaStyle_Shirt_KomiyaShirt`
+  (pathID `-8957885102818627004`).
+- Material Shader PPtr: external fileID `2`,
+  pathID `477622052401609204`, pointing to
+  `CAB-46b8f8fe122147493b3113f7c1c8cd0f`.
+- Three embedded Texture2D objects:
+  `NisetamaStyle_Shirt_KomiyaShirt_N`,
+  `NisetamaStyle_Shirt_KomiyaShirt_X`, and
+  `NisetamaStyle_Shirt_KomiyaShirt_C`.
+
+The **same external CAB** also hosts the Material object referenced by the
+Archer Costume SkinnedMeshRenderer, but the Material pathID and Shader pathID
+are different. This is an original-data reference, not evidence that the
+Archer and Komiya models use an identical final shader/material.
+
+Once a folder of original game bundles is available, perform a *two-stage*
+source verification:
+
+```bash
+python scripts/resolve-unityfs-cabs.py \
+  --root /path/to/game/StreamingAssets/aa/StandaloneWindows64 \
+  --materials-only --verify-materials
+```
+
+Unlike simple CAB filename matching, `--verify-materials` decompresses
+**only the matching bundles** and requires each Material object to exist
+under the **exact 64-bit pathID referenced by Archer**. It reports the
+real Material name and its Shader PPtr. If a CAB exists without the target
+Material pathID, the command remains blocked with exit code 3.
+
+The source-accurate Unity renderer is still blocked until the remaining
+Material-hosting CAB files are identified, materials and shaders loaded,
+palette-to-surface behavior validated and a real transparent PNG produced.
+No external Wiki images or simulated 3D outputs have been registered.

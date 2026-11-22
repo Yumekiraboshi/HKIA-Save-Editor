@@ -126,6 +126,17 @@ def extract_nodes(b):
             'unityVersion':game_version,'editorVersion':editor_version},[
         (name,bytes(stream[off:off+length])) for name,off,length in entries]
 
+def named_asset(obj,endian):
+    """Parse a Unity 2022 Material/Texture2D leading m_Name string."""
+    if len(obj)<4:raise InvalidAsset('truncated named asset')
+    length=integer(obj,0,4,endian)
+    if length<1 or length>512 or 4+length>len(obj):
+        raise InvalidAsset('invalid named asset string length')
+    try:name=obj[4:4+length].decode('utf-8')
+    except UnicodeDecodeError as e:raise InvalidAsset('invalid named asset UTF-8') from e
+    aligned=(4+length+3)&~3
+    return name,aligned
+
 def renderer_material_references(obj,endian):
     """Unity SerializedFile v22 MeshRenderer/SkinnedMeshRenderer m_Materials.
 
@@ -180,11 +191,16 @@ def inspect_serialized(b):
         if dependencies>10000 or pos>len(b):
             raise InvalidAsset('invalid type references')
         types.append(cls)
-    count=integer(b,pos,4,endian);pos=(pos+3)&~3
+    # The object count itself consumes four bytes before alignment.
+    # Previously this cursor was not advanced: object table was read from
+    # the count field instead of the actual first PPtr entry.
+    count=integer(b,pos,4,endian);pos+=4;pos=(pos+3)&~3
     if count>2000000:raise InvalidAsset('object count limit')
     names=[]
     classes=collections.Counter()
     renderer_refs=[]
+    material_objects=[]
+    texture_objects=[]
     for _ in range(count):
         if pos+24>len(b):raise InvalidAsset('object table truncated')
         _,start,length,index=struct.unpack_from(endian+'qqIi',b,pos)
@@ -193,8 +209,23 @@ def inspect_serialized(b):
             raise InvalidAsset('invalid serialized object')
         cls=types[index]
         classes[CLASS.get(cls,'class_'+str(cls))]+=1
-        if cls not in (1,23,137):continue
+        if cls not in (1,21,23,28,137):continue
         obj=b[data_offset+start:data_offset+start+length]
+        path_id=struct.unpack_from(endian+'q',b,pos-24)[0]
+        if cls in (21,28):
+            name,after_name=named_asset(obj,endian)
+            if cls==21:
+                if after_name+12>len(obj):
+                    raise InvalidAsset('truncated Material shader PPtr')
+                shader_file=struct.unpack_from(endian+'i',obj,after_name)[0]
+                shader_path=struct.unpack_from(endian+'q',obj,after_name+4)[0]
+                material_objects.append({
+                    'pathId':str(path_id),'name':name,
+                    'shader':{'fileId':shader_file,'pathId':str(shader_path)}
+                })
+            else:
+                texture_objects.append({'pathId':str(path_id),'name':name})
+            continue
         if cls in (23,137):
             renderer_refs.append({
                 'class':CLASS[cls],
@@ -226,6 +257,14 @@ def inspect_serialized(b):
         if not external.startswith('archive:/CAB-'):
             raise InvalidAsset('non-CAB external path')
         external_paths.append(external)
+    for material in material_objects:
+        shader=material['shader']
+        file_id=shader['fileId']
+        if file_id<0 or file_id>len(external_paths):
+            raise InvalidAsset('Material shader fileID outside dependency table')
+        shader['externalCAB']=(
+            external_paths[file_id-1].split('/')[-1] if file_id else None
+        )
     for renderer in renderer_refs:
         for material in renderer['materials']:
             file_id=material['fileId']
@@ -237,6 +276,8 @@ def inspect_serialized(b):
     return {'serializedFileVersion':version,
             'serializedUnityVersion':unity_version,
             'rendererMaterialReferences':renderer_refs,
+            'materialObjects':material_objects,
+            'textureObjects':texture_objects,
             'externalAssetPaths':external_paths,
             'objectCount':count,
             'classCounts':dict(sorted(classes.items())),
@@ -266,6 +307,40 @@ def self_test():
         except InvalidAsset:pass
         else:raise AssertionError('invalid LZ4 accepted')
     assert decompress(b'abc',3,0)==b'abc'
+    # Synthetic v22 object-table fixture: one Material with a shader PPtr.
+    # This guards against misaligned object table parsing without including
+    # any copyrighted game asset bytes.
+    asset_name=b'Demo_Material'
+    material=bytearray(4+len(asset_name))
+    struct.pack_into('<I',material,0,len(asset_name))
+    material[4:]=asset_name
+    material.extend(b'\x00'*((-len(material))%4))
+    material.extend(struct.pack('<iq',0,1234567890123456))
+    material.extend(b'\x00'*20)
+    blob=bytearray(512+len(material))
+    struct.pack_into('>I',blob,8,22)
+    struct.pack_into('>Q',blob,24,len(blob))
+    struct.pack_into('>Q',blob,32,512)
+    pos=48
+    parts=(b'2022.3.1f1\x00',bytes(4),bytes([0]),
+           struct.pack('<I',1),
+           struct.pack('<i',21),bytes(1),bytes(2),bytes(16),
+           struct.pack('<I',0),struct.pack('<I',1))
+    for part in parts:
+        blob[pos:pos+len(part)]=part
+        pos+=len(part)
+    pos=(pos+3)&~3
+    entry=struct.pack('<qqIi',-123456789987654321,0,len(material),0)
+    blob[pos:pos+24]=entry
+    pos+=24
+    blob[512:]=material
+    outcome=inspect_serialized(bytes(blob))
+    assert outcome['objectCount']==1,outcome
+    assert outcome['classCounts']=={'Material':1},outcome
+    assert outcome['materialObjects']==[{
+        'pathId':'-123456789987654321','name':'Demo_Material',
+        'shader':{'fileId':0,'pathId':'1234567890123456','externalCAB':None}
+    }],outcome
     encoded=bytearray(88)
     struct.pack_into('<Iiq',encoded,72,1,3,6824069125264728142)
     assert renderer_material_references(encoded,'<')==[
