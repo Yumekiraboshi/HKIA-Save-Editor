@@ -337,6 +337,53 @@ function triangleShadesRegions(
  return regions;
 }
 
+/**
+ * High Tea Elegant Hat: original Steam v3.0.1 game UiIcon sheet 000,
+ * cell 031 in collection_group_teagarden. Its 44 dyeable Item IDs
+ * share a single neutral 96px original source sprite. The game-native
+ * White and Green/Sky/Periwinkle palettes have identical channel 1
+ * and different channel 2 colors.
+ *
+ * Apply native channel 2 to the visible central hat ribbon/band, and
+ * channel 1 to other neutral fabric. This is an approximate 2D source-
+ * image segmentation, NOT a verified Unity shader/material mask.
+ */
+function highTeaElegantHatRegions(
+ sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
+ origin?:SpriteCell
+):Uint8Array|undefined{
+ if(!sourceKey.startsWith('item_c_dyeable_')||
+  origin?.group!=='collection_group_teagarden'||
+  origin.sheet!==0||origin.cell!==31||
+  width!==96||height!==96||input.length!==96*96*4)return undefined;
+ const regions=new Uint8Array(96*96);
+ let visible=0,neutral=0,ribbon=0,chromatic=0;
+ for(let i=0;i<regions.length;i++){
+  const p=i*4;
+  if(input[p+3]<64)continue;
+  visible++;
+  const r=input[p],g=input[p+1],b=input[p+2];
+  const chroma=Math.max(r,g,b)-Math.min(r,g,b);
+  const lum=.2126*r+.7152*g+.0722*b;
+  if(chroma>48)chromatic++;
+  // Preserve the original icon's dark outlines and color details.
+  if(chroma>42||lum<40)continue;
+  neutral++;
+  const x=i%96,y=Math.floor(i/96);
+  // Approximate the front-facing band within the gray crown.
+  // The original pixels (and alpha) determine the actual silhouette.
+  const isRibbon=x>=25&&x<=75&&y>=43&&y<=58;
+  regions[i]=isRibbon?2:1;
+  if(isRibbon)ribbon++;
+ }
+ // Conservative acceptance of the shared original neutral icon;
+ // unrelated/changed artwork keeps the regular source-icon fallback.
+ if(visible<600||visible>6300||neutral<400||
+  neutral<visible*.28||chromatic>2400||
+  ribbon<55||ribbon>1100)return undefined;
+ return regions;
+}
+
 function distanceToSegment(x:number,y:number,ax:number,ay:number,bx:number,by:number):number{
  const dx=bx-ax,dy=by-ay;
  const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy)));
@@ -407,6 +454,8 @@ export function sourceIconDyeRegions(
  sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
  origin?:SpriteCell
 ):Uint8Array|undefined{
+ const elegant=highTeaElegantHatRegions(sourceKey,input,width,height,origin);
+ if(elegant)return elegant;
  const shades=triangleShadesRegions(sourceKey,input,width,height,origin);
  if(shades)return shades;
  const bonnet=highTeaFrilledBonnetRegions(sourceKey,input,width,height,origin);
