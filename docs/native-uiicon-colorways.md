@@ -138,3 +138,25 @@ native channel 2 is supported by native palette variation, but its precise
 3D shader mask/garment-region assignment is not yet independently confirmed.
 This remains an explicitly approximate icon preview. No game IDs, colors,
 ownership or item data are fabricated.
+
+## Source-native banded hat colorways
+
+Steam v3.0.1 collection_group_teagarden sheet 000 cell 018 is shared by
+48 High Tea Banded Tophat colors. The original collections_group_clothing
+sheet 000 cell 053 is shared by 45 Banded Mini Tophat colors.
+Within each original family, the native White and Yellow / White and Sky
+pairs have identical first dye color (#fdf7e6), but different second
+channel colors (#fede49 and #bbf2ef). Previously their 2D image pixels
+could remain identical even though the game defines different variants.
+
+For these **two exact native atlas cells only**, the gray crown uses
+native channel 1 and the visible horizontal band region uses channel 2.
+The source artwork's 96x96 shape, alpha and shadows are preserved.
+Unrecognized original art or incompatible pixel geometry declines the
+two-channel region mask. No Wiki images, arbitrary CSS swatches or
+replacement 3D perspectives are used.
+
+**Fidelity limit:** Positioning of the band in this 2D UiIcon is a
+source-image-derived approximation, not independently verified as the
+Unity game's material-to-pixel shader mask. The source cells, Item IDs,
+native palette colors and shared-icon identity are game-original facts.
