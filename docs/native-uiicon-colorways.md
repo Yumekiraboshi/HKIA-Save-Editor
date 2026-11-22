@@ -251,3 +251,27 @@ path.
 palette are verified. This **2D ribbon segmentation is approximate**,
 not a recovered or independently verified five-channel Unity shader
 material mask.
+
+## Triangle Shades source-lens distinction (34 colors)
+
+The original game Steam v3.0.1 `collections_group_clothing` UiIcon
+sheet `000` cell `038` is shared by 34 exact Triangle Shades
+Item IDs. Seven verified pairs have identical native first dye but
+different second dye: White / White and Black, Warm Pink / Warm Pink
+and Black, Blue / Blue and Black, Red / Red and Black, Orange / Orange
+and Black, Cream / Cream and Black, and Black / Full Black.
+
+The source cell shows two downward-pointing neutral triangular lenses.
+A strict source-cell-gated **2D approximation** colors those lens
+interiors with game-native palette channel 2, while neutral frames
+remain channel 1; the actual 96px transparent silhouette, texture,
+shading, outlines and colored decoration remain sourced from the
+original icon. Altered/non-neutral art fails closed and reuses the
+generic source-icon fallback. No Wiki art, CSS swatches, fabricated
+colorways or replacement 3D viewpoints are involved.
+
+**Fidelity boundary:** The source Item IDs, dye color values and
+UiIcon location are original verified game data. The placement of
+the lens regions is an image-derived approximation, not a verified
+Unity five-channel 3D shader/material mask. Pixel-perfect parity
+with the game's 3D model is not claimed.
