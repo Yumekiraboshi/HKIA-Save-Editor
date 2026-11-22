@@ -95,6 +95,50 @@ function bandedTophatRegions(
  return mask;
 }
 
+/**
+ * High Tea Tophat: original Steam v3.0.1 teaharden pack 000/098.
+ * The 47 variants use the same neutral 96px UiIcon, including multiple
+ * White-and-* variants with an identical primary dye and distinct
+ * secondary dyes. This places the *original* second color on the
+ * source icon's visible lower crown band; no synthetic color is used.
+ *
+ * The 2D band placement is an IMAGE approximation: the corresponding
+ * five-channel Unity material/shader masks have not been recovered.
+ */
+function highTeaTophatRegions(
+ sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
+ origin?:SpriteCell
+):Uint8Array|undefined{
+ if(!sourceKey.startsWith('item_c_dyeable_')||
+  origin?.group!=='collection_group_teagarden'||
+  origin.sheet!==0||origin.cell!==98||
+  width!==96||height!==96||input.length!==96*96*4)return undefined;
+ const mask=new Uint8Array(96*96);
+ let visible=0,neutral=0,band=0,chromatic=0;
+ for(let i=0;i<mask.length;i++){
+  const j=i*4;
+  if(input[j+3]<64)continue;
+  visible++;
+  const r=input[j],g=input[j+1],b=input[j+2];
+  const chroma=Math.max(r,g,b)-Math.min(r,g,b);
+  const lum=.2126*r+.7152*g+.0722*b;
+  if(chroma>48)chromatic++;
+  if(chroma>40||lum<38)continue;
+  neutral++;
+  const x=i%96,y=Math.floor(i/96);
+  // The source icon's horizontal hatband; exclude silhouette outline,
+  // unpainted dark seams and transparent pixels.
+  const onBand=x>=27&&x<=71&&y>=45&&y<=61;
+  mask[i]=onBand?2:1;
+  if(onBand)band++;
+ }
+ // A source pack revision or non-hat icon must not receive guessed masks.
+ if(visible<1100||visible>5100||neutral<900||
+  neutral<visible*.55||chromatic>140||band<60||band>760)
+  return undefined;
+ return mask;
+}
+
 function distanceToSegment(x:number,y:number,ax:number,ay:number,bx:number,by:number):number{
  const dx=bx-ax,dy=by-ay;
  const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy)));
@@ -165,6 +209,8 @@ export function sourceIconDyeRegions(
  sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
  origin?:SpriteCell
 ):Uint8Array|undefined{
+ const highTeaHat=highTeaTophatRegions(sourceKey,input,width,height,origin);
+ if(highTeaHat)return highTeaHat;
  const tophat=bandedTophatRegions(sourceKey,input,width,height,origin);
  if(tophat)return tophat;
  const crew=crewMedicVariantFabric(sourceKey,input,width,height,origin);
