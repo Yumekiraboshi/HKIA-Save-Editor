@@ -8,7 +8,7 @@ async function compiled(path){
  return import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 }
 const {decodeHistoryDetails,formatHistoryChange}=await compiled('../src/history-details.ts');
-const {historyDetailCopy}=await compiled('../src/history-copy.ts');
+const {historyDetailCopy,historyCopy}=await compiled('../src/history-copy.ts');
 const bytes=(parts)=>Uint8Array.from(parts.flatMap(x=>Array.from(x)));
 const u8=n=>Uint8Array.of(n);
 const i32=n=>{const b=new Uint8Array(4);new DataView(b.buffer).setInt32(0,n,true);return b};
@@ -54,7 +54,7 @@ test('native achievement status, date and progress are distinguished, not guesse
  const result=decodeHistoryDetails(log(ops,ops.length),m);
  assert.equal(result.length,3);
  const ja=historyDetailCopy('ja');
- assert.equal(formatHistoryChange(result[0],'ja',ja),'未達成 → 達成済み');
+ assert.match(formatHistoryChange(result[0],'ja',ja),/^未達成 → 達成済み · 日時: — → /);
  assert.match(formatHistoryChange(result[1],'ja',ja),/^日時:/);
  assert.equal(formatHistoryChange(result[2],'ja',ja),'進捗: 1 → 1.5');
 });
@@ -76,6 +76,18 @@ test('source-gated creation and each native grouped transaction remain single de
  assert.equal(d[1].parentGuid?.[0],2);
  assert.equal(d[2].parentGuid?.[0],2);
  assert.equal(d[3].parentGuid?.[0],2);
+ assert.equal(d[1].parentBefore.complete,false);
+ assert.equal(d[1].parentAfter.complete,true);
+ assert.equal(d[2].parentBefore,null);
+ assert.deepEqual(d[2].parentAfter,{complete:true,current:1,completed:[1750000000n,123456700]});
+ assert.equal(d[3].parentBefore.complete,false);
+ assert.equal(d[3].parentAfter.complete,true);
+ const label=historyCopy('ja').paired;
+ const message=formatHistoryChange(d[3],'ja',historyDetailCopy('ja'),label);
+ assert.match(message,/^未達成 → 達成済み/);
+ assert.match(message,/カテゴリーを含む: 未達成 → 達成済み/);
+ assert.match(message,/日時:/);
+ assert.match(formatHistoryChange(d[2],'ja',historyDetailCopy('ja'),label),/カテゴリーを含む: 新規記録 · 達成済み/);
 });
 
 test('mismatched scope, GUID, trailing bytes or bad optional-value markers fail closed',()=>{
@@ -95,4 +107,28 @@ test('mismatched scope, GUID, trailing bytes or bad optional-value markers fail 
   const copy=historyDetailCopy(l);
   assert.ok(copy.added&&copy.removed&&copy.date&&copy.progress,l);
  }
+});
+
+test('single achievement action reports status, progress and completion timestamp together',()=>{
+ const from=value(false,0),to=value(true,4,1_750_000_000n,123_456_700);
+ const op=bytes([u8(1),guid(leaf),from,to]);
+ const [row]=decodeHistoryDetails(log([op],1),[meta('achievements',null,leaf)]);
+ const text=formatHistoryChange(row,'ja',historyDetailCopy('ja'));
+ assert.match(text,/^未達成 → 達成済み · 進捗: 0 → 4 · 日時: — → /);
+ assert.equal(text.match(/日時:/g)?.length,1);
+});
+
+test('combined progress and date corrections and parent-only dates are reported',()=>{
+ const before=value(true,1,1_750_000_000n,123_456_700);
+ const after=value(true,3,1_750_000_010n,123_456_700);
+ const parentBefore=value(true,9,1_750_000_000n,123_456_700);
+ const parentAfter=value(true,9,1_750_000_010n,123_456_700);
+ const op=bytes([u8(5),guid(leaf),before,after,guid(parent),parentBefore,parentAfter]);
+ const [row]=decodeHistoryDetails(log([op],1),[meta('achievements',null,leaf,true)]);
+ const label=historyCopy('ja').paired;
+ const text=formatHistoryChange(row,'ja',historyDetailCopy('ja'),label);
+ assert.match(text,/^進捗: 1 → 3 · 日時:/);
+ assert.match(text,/カテゴリーを含む: 日時:/);
+ assert.equal(text.match(/日時:/g)?.length,2);
+ assert.doesNotMatch(text,/未達成 → 達成済み/);
 });

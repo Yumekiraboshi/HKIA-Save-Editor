@@ -3,7 +3,7 @@ import {toDateTimeValue} from './collection-date';
 
 export type HistoryDetail =
  | {scope:'collections';itemId:number;before:bigint|null;after:bigint|null}
- | {scope:'achievements';guid:[number,number,number,number];before:AchievementValue|null;after:AchievementValue;parentGuid:[number,number,number,number]|null};
+ | {scope:'achievements';guid:[number,number,number,number];before:AchievementValue|null;after:AchievementValue;parentGuid:[number,number,number,number]|null;parentBefore:AchievementValue|null;parentAfter:AchievementValue|null};
 
 const MAGIC='HKIAHS01';
 const MAX_BYTES=128*1024;
@@ -65,22 +65,22 @@ export function decodeHistoryDetails(
     result.push({scope:'collections',itemId,before,after});
    }else if(kind===1){
     const id=guid(),before=value(),after=value();
-    result.push({scope:'achievements',guid:id,before,after,parentGuid:null});
+    result.push({scope:'achievements',guid:id,before,after,parentGuid:null,parentBefore:null,parentAfter:null});
    }else if(kind===2){
     const id=guid(),after=value();
-    result.push({scope:'achievements',guid:id,before:null,after,parentGuid:null});
+    result.push({scope:'achievements',guid:id,before:null,after,parentGuid:null,parentBefore:null,parentAfter:null});
    }else if(kind===3){
     const id=guid(),after=value(),parentGuid=guid();
-    value();value(); // verified native parent state; one grouped history step
-    result.push({scope:'achievements',guid:id,before:null,after,parentGuid});
+    const parentBefore=value(),parentAfter=value(); // verified atomic parent state
+    result.push({scope:'achievements',guid:id,before:null,after,parentGuid,parentBefore,parentAfter});
    }else if(kind===4){
     const id=guid(),before=optional(),after=value(),parentGuid=guid();
-    value(); // created parent
-    result.push({scope:'achievements',guid:id,before,after,parentGuid});
+    const parentAfter=value(); // created parent, no prior serialized entry
+    result.push({scope:'achievements',guid:id,before,after,parentGuid,parentBefore:null,parentAfter});
    }else if(kind===5){
     const id=guid(),before=value(),after=value(),parentGuid=guid();
-    value();value();
-    result.push({scope:'achievements',guid:id,before,after,parentGuid});
+    const parentBefore=value(),parentAfter=value();
+    result.push({scope:'achievements',guid:id,before,after,parentGuid,parentBefore,parentAfter});
    }else return [];
    const record=history[i],detail=result[i];
    if(record.scope!==detail.scope||record.paired!==(kind===3||kind===4||kind===5)||
@@ -93,27 +93,43 @@ export function decodeHistoryDetails(
  }catch{return []}
 }
 
-/** No inferred dye or game state: labels derive exclusively from native edits. */
+type HistoryChangeCopy={
+ added:string;removed:string;date:string;complete:string;incomplete:string;
+ created:string;progress:string;fromTo:string
+};
+/** Show every field changed by one native transaction rather than discarding
+ * date/progress updates when completion changed at the same time. */
+function achievementChanges(
+ before:AchievementValue|null,after:AchievementValue,locale:string,copy:HistoryChangeCopy
+):string[]{
+ if(!before)return [copy.created,after.complete?copy.complete:copy.incomplete];
+ const parts:string[]=[];
+ if(before.complete!==after.complete)
+  parts.push((before.complete?copy.complete:copy.incomplete)+' → '+(after.complete?copy.complete:copy.incomplete));
+ if(!Object.is(before.current,after.current))
+  parts.push(copy.progress+': '+before.current+' → '+after.current);
+ if(before.completed?.[0]!==after.completed?.[0]||
+  before.completed?.[1]!==after.completed?.[1])
+  parts.push(copy.date+': '+achievementTime(before.completed,locale)+' → '+achievementTime(after.completed,locale));
+ return parts;
+}
+/** Details derive only from the native Rust history journal, including
+ * category side effects within a single atomic achievement transaction. */
 export function formatHistoryChange(
- detail:HistoryDetail|undefined,locale:string,
- copy:{added:string;removed:string;date:string;complete:string;incomplete:string;created:string;progress:string;fromTo:string}
+ detail:HistoryDetail|undefined,locale:string,copy:HistoryChangeCopy,pairedLabel=''
 ):string{
- void locale;
  if(!detail)return '';
  if(detail.scope==='collections'){
   if(detail.before===null)return copy.added;
   if(detail.after===null)return copy.removed;
   return copy.date+': '+collectionTime(detail.before,locale)+' → '+collectionTime(detail.after,locale);
  }
- const before=detail.before,after=detail.after;
- if(!before)return copy.created+' · '+(after.complete?copy.complete:copy.incomplete);
- if(before.complete!==after.complete)
-  return (before.complete?copy.complete:copy.incomplete)+' → '+(after.complete?copy.complete:copy.incomplete);
- if(before.completed?.[0]!==after.completed?.[0]||
-  before.completed?.[1]!==after.completed?.[1])
-  return copy.date+': '+achievementTime(before.completed,locale)+' → '+achievementTime(after.completed,locale);
- if(!Object.is(before.current,after.current))return copy.progress+': '+before.current+' → '+after.current;
- return '';
+ const parts=achievementChanges(detail.before,detail.after,locale,copy);
+ if(detail.parentGuid&&detail.parentAfter){
+  const parentParts=achievementChanges(detail.parentBefore,detail.parentAfter,locale,copy);
+  if(parentParts.length)parts.push((pairedLabel?pairedLabel+': ':'')+parentParts.join(' · '));
+ }
+ return parts.join(' · ');
 }
 function collectionTime(ticks:bigint,locale:string):string{
  void locale;
