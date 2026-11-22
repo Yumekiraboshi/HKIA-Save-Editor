@@ -126,6 +126,27 @@ def extract_nodes(b):
             'unityVersion':game_version,'editorVersion':editor_version},[
         (name,bytes(stream[off:off+length])) for name,off,length in entries]
 
+def renderer_material_references(obj,endian):
+    """Unity SerializedFile v22 MeshRenderer/SkinnedMeshRenderer m_Materials.
+
+    Unity 2022 Renderer layout: array count at byte offset 72, followed by
+    (fileID:i32, pathID:i64) PPtrs. Strictly bound the array before reading.
+    This is only applicable to the verified Unity 2022 game serializer.
+    """
+    if len(obj)<84:
+        raise InvalidAsset('truncated renderer material array')
+    count=integer(obj,72,4,endian)
+    if count>64 or 76+12*count>len(obj):
+        raise InvalidAsset('invalid renderer material array')
+    references=[]
+    for slot in range(count):
+        file_id=struct.unpack_from(endian+'i',obj,76+12*slot)[0]
+        path_id=struct.unpack_from(endian+'q',obj,80+12*slot)[0]
+        if file_id<0:
+            raise InvalidAsset('negative Renderer material file ID')
+        references.append({'slot':slot,'fileId':file_id,'pathId':path_id})
+    return references
+
 def inspect_serialized(b):
     version=integer(b,8)
     if version!=22:
@@ -163,6 +184,7 @@ def inspect_serialized(b):
     if count>2000000:raise InvalidAsset('object count limit')
     names=[]
     classes=collections.Counter()
+    renderer_refs=[]
     for _ in range(count):
         if pos+24>len(b):raise InvalidAsset('object table truncated')
         _,start,length,index=struct.unpack_from(endian+'qqIi',b,pos)
@@ -171,8 +193,15 @@ def inspect_serialized(b):
             raise InvalidAsset('invalid serialized object')
         cls=types[index]
         classes[CLASS.get(cls,'class_'+str(cls))]+=1
-        if cls!=1:continue
+        if cls not in (1,23,137):continue
         obj=b[data_offset+start:data_offset+start+length]
+        if cls in (23,137):
+            renderer_refs.append({
+                'class':CLASS[cls],
+                'objectPathId':struct.unpack_from(endian+'q',b,pos-24)[0],
+                'materials':renderer_material_references(obj,endian)
+            })
+            continue
         if len(obj)<20:continue
         components=integer(obj,0,4,endian)
         nameoff=4+12*components+4
@@ -197,8 +226,17 @@ def inspect_serialized(b):
         if not external.startswith('archive:/CAB-'):
             raise InvalidAsset('non-CAB external path')
         external_paths.append(external)
+    for renderer in renderer_refs:
+        for material in renderer['materials']:
+            file_id=material['fileId']
+            if file_id>len(external_paths):
+                raise InvalidAsset('renderer material file ID exceeds external refs')
+            material['externalCAB']=(
+                external_paths[file_id-1].split('/')[-1] if file_id else None
+            )
     return {'serializedFileVersion':version,
             'serializedUnityVersion':unity_version,
+            'rendererMaterialReferences':renderer_refs,
             'externalAssetPaths':external_paths,
             'objectCount':count,
             'classCounts':dict(sorted(classes.items())),
@@ -228,6 +266,14 @@ def self_test():
         except InvalidAsset:pass
         else:raise AssertionError('invalid LZ4 accepted')
     assert decompress(b'abc',3,0)==b'abc'
+    encoded=bytearray(88)
+    struct.pack_into('<Iiq',encoded,72,1,3,6824069125264728142)
+    assert renderer_material_references(encoded,'<')==[
+        {'slot':0,'fileId':3,'pathId':6824069125264728142}]
+    struct.pack_into('<I',encoded,72,1000)
+    try:renderer_material_references(encoded,'<')
+    except InvalidAsset:pass
+    else:raise AssertionError('out-of-bounds Renderer materials accepted')
     print('UNITYFS_AUDIT_SELFTEST_OK')
 
 def main():
