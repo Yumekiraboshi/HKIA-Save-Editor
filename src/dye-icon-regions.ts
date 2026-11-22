@@ -384,6 +384,88 @@ function highTeaElegantHatRegions(
  return regions;
 }
 
+/**
+ * Original Steam v3.0.1 shared UiIcon cells with source-verified native
+ * two-tone palettes. Every Marching Band family has 13 distinct second
+ * native dye colors over the same first color (#3a3840); the High Tea
+ * Empire Waist Dress has same-first / different-second pairs.
+ *
+ * Region coordinates are conservative 2D visual approximations of the
+ * ORIGINAL game icon, NEVER claims of decoded Unity material masks.
+ * Source sprites, alpha, shadows and every palette value remain native.
+ */
+const sourceAccentProfiles:Array<{
+ group:string;sheet:number;cell:number;
+ part:'right-skirt'|'plume'|'right-trouser'|'left-trouser'|
+  'chest-panel'|'diagonal-sash'|'hat-band';
+}>=[
+ {group:'collection_group_teagarden',sheet:0,cell:74,part:'right-skirt'},
+ {group:'collections_group_events',sheet:0,cell:38,part:'plume'},
+ {group:'collections_group_events',sheet:1,cell:29,part:'plume'},
+ {group:'collections_group_events',sheet:1,cell:92,part:'right-trouser'},
+ {group:'collections_group_events',sheet:2,cell:118,part:'plume'},
+ {group:'collections_group_events',sheet:2,cell:64,part:'chest-panel'},
+ {group:'collections_group_events',sheet:3,cell:47,part:'diagonal-sash'},
+ {group:'collections_group_events',sheet:4,cell:111,part:'hat-band'},
+ {group:'collections_group_events',sheet:5,cell:120,part:'left-trouser'},
+ {group:'collections_group_events',sheet:5,cell:34,part:'right-skirt'}
+];
+function sourceAccentIsSecond(
+ x:number,y:number,
+ part:(typeof sourceAccentProfiles)[number]['part']
+):boolean{
+ switch(part){
+  case 'right-skirt':
+   return y>=40&&y<=82&&x>=52&&x<=79;
+  case 'plume':
+   return y>=24&&y<=71&&x>=48&&x<=66;
+  case 'right-trouser':
+   return y>=39&&y<=80&&x>=52&&x<=80;
+  case 'left-trouser':
+   return y>=39&&y<=80&&x>=22&&x<=47;
+  case 'chest-panel':
+   return y>=28&&y<=70&&x>=43&&x<=66;
+  case 'diagonal-sash':
+   return y>=28&&y<=76&&Math.abs(x-(63-(y-28)*.44))<=8;
+  case 'hat-band':
+   return y>=42&&y<=59&&x>=24&&x<=78;
+ }
+}
+function nativeBatchTwoToneRegions(
+ sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
+ origin?:SpriteCell
+):Uint8Array|undefined{
+ if(!sourceKey.startsWith('item_c_dyeable_')||!origin||
+  width!==96||height!==96||input.length!==96*96*4)return undefined;
+ const profile=sourceAccentProfiles.find(p=>
+  p.group===origin.group&&p.sheet===origin.sheet&&p.cell===origin.cell);
+ if(!profile)return undefined;
+ const mask=new Uint8Array(96*96);
+ let visible=0,neutral=0,accent=0,chromatic=0;
+ for(let i=0;i<mask.length;i++){
+  const p=i*4,a=input[p+3];
+  if(a<64)continue;
+  visible++;
+  const r=input[p],g=input[p+1],b=input[p+2];
+  const chroma=Math.max(r,g,b)-Math.min(r,g,b);
+  const lum=.2126*r+.7152*g+.0722*b;
+  if(chroma>55)chromatic++;
+  // Keep linework and pre-colored art: only neutral, opaque fabric
+  // inherits the original two-channel dye values.
+  if(chroma>50||lum<36)continue;
+  neutral++;
+  const x=i%96,y=Math.floor(i/96);
+  const onAccent=sourceAccentIsSecond(x,y,profile.part);
+  mask[i]=onAccent?2:1;
+  if(onAccent)accent++;
+ }
+ // Fail closed when the original game source icon geometry is absent.
+ if(visible<450||visible>6300||neutral<300||
+  neutral<visible*.26||chromatic>3200||
+  accent<28||accent>1700)return undefined;
+ return mask;
+}
+
 function distanceToSegment(x:number,y:number,ax:number,ay:number,bx:number,by:number):number{
  const dx=bx-ax,dy=by-ay;
  const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy)));
@@ -454,6 +536,8 @@ export function sourceIconDyeRegions(
  sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
  origin?:SpriteCell
 ):Uint8Array|undefined{
+ const originalAccents=nativeBatchTwoToneRegions(sourceKey,input,width,height,origin);
+ if(originalAccents)return originalAccents;
  const elegant=highTeaElegantHatRegions(sourceKey,input,width,height,origin);
  if(elegant)return elegant;
  const shades=triangleShadesRegions(sourceKey,input,width,height,origin);
