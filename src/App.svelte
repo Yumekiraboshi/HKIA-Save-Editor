@@ -1,7 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,createAchievement,createAchievementWithParent,completeChildWithNewParent,changeAchievement,changeAchievementPair,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type AchievementPatch,type HistoryRecord} from './worker-client';
- import {planCategoryParentCompletion,planMissingCategoryParentCompletion,planCategoryParentRevocation,planCategoryParentDateSync} from './achievement-parent-auto';
+ import {openSave,changeCollection,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -640,29 +639,6 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
   },opener);
  }
 
- /**
-  * Keep source-defined category completion, revocation, or date sync in one atomic edit.
-  * Counters, rewards and platform claims remain untouched.
-  */
- async function changeAchievementWithParent(live:AchievementEntry,next:AchievementValue):Promise<SaveSnapshot>{
-  const revocation=snapshot?.version==='3.0.1'?planCategoryParentRevocation(
-   achievementGroupHierarchy,snapshot.achievements,live.guid,live.value,next
-  ):null;
-  if(revocation)return changeAchievementPair({guid:live.guid,before:live.value,after:next},revocation);
-  const dateSync=snapshot?.version==='3.0.1'?planCategoryParentDateSync(
-   achievementGroupHierarchy,snapshot.achievements,live.guid,live.value,next
-  ):null;
-  if(dateSync)return changeAchievementPair({guid:live.guid,before:live.value,after:next},dateSync);
-  const parent=planCategoryParentCompletion(achievementGroupHierarchy,snapshot?.achievements??[],live.guid,next);
-  if(parent){
-   const child:AchievementPatch={guid:live.guid,before:live.value,after:next};
-   return changeAchievementPair(child,parent);
-  }
-  const missingParent=planMissingCategoryParentCompletion(achievementGroupHierarchy,snapshot?.achievements??[],live.guid,next);
-  if(missingParent&&snapshot?.version==='3.0.1')
-   return completeChildWithNewParent({guid:live.guid,before:live.value,after:next},missingParent);
-  return changeAchievement(live.guid,live.value,next);
- }
  /** An absent saved AchievementModel means 0/X in the game UI.
   * Only clicking a verified source-defined tile creates a new Union(16) model.
   * v3.0.0 creation is gated until its exact version-specific source is verified.
@@ -682,15 +658,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
    const guid=item.guid.split(':').map(word=>parseInt(word,16)) as AchievementEntry['guid'];
    // Rust alone determines goal, progress clamp and recorded completion time.
    const next=await planAchievementToggle(guid,Date.now());
-   if(live){
-    update(await changeAchievementWithParent(live,next));
-   }else{
-    const parent=planCategoryParentCompletion(achievementGroupHierarchy,snapshot.achievements,guid,next);
-    const missingParent=parent?null:planMissingCategoryParentCompletion(achievementGroupHierarchy,snapshot.achievements,guid,next);
-    update(await (parent?createAchievementWithParent(guid,next,parent):
-     missingParent?completeChildWithNewParent({guid,before:null,after:next},missingParent):
-     createAchievement(guid,next)));
-   }
+   update(await editAchievementAuto(guid,live?.value??null,next));
    await persistDraft();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -737,7 +705,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
    next.completed?.[1]===selected.value.completed?.[1]){closeAchievement();return}
   busy=true;error='';achievementValidation='';
   try{
-   update(await changeAchievementWithParent(selected,next));
+   update(await editAchievementAuto(selected.guid,selected.value,next));
    closeAchievement();await persistDraft();
   }catch(e){achievementValidation=describeError(e)}
   finally{busy=false}
