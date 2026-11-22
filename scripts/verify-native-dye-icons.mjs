@@ -70,7 +70,9 @@ for(const [left,right] of [
  ['2051522529','744815526'],
  ['1266418586','1590676460'],
  ['1881281725','886333968'],
- ['1944643209','1039676870']
+ ['1944643209','1039676870'],
+ ['77149467','370872413'],
+ ['77149467','2022277447']
 ]){
  if(!records[left]||!records[right])continue;
  assert.equal(records[left].group,records[right].group);
@@ -121,6 +123,16 @@ for(const id of ['84070359','833990488','426901455','747035598',
  assert.equal(records[id].cell,38);
  assert.ok(records[id].channels.includes(2),
   'Triangle Shades native second dye must alter source pixels: '+id);
+}
+// Native High Tea Elegant Hat original icon, sheet 000 cell 031:
+// same-primary game colorways must genuinely apply channel 2.
+for(const id of ['77149467','370872413','2022277447']){
+ if(!records[id])continue;
+ assert.equal(records[id].group,'collection_group_teagarden');
+ assert.equal(records[id].sheet,0);
+ assert.equal(records[id].cell,31);
+ assert.ok(records[id].channels.includes(2),
+  'game-original Elegant Hat bitmap must use second dye channel: '+id);
 }
 console.log('HKIA_ORIGINAL_UICON_COLORWAYS_VERIFIED '+files.length+
  ' / '+coverage.uniqueCandidates+' source-unique, '+coverage.ambiguous+
