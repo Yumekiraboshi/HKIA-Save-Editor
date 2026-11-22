@@ -3,15 +3,15 @@
  import type {NativeDyePalette} from './native-dye-palettes';
  import {renderDyeSprite} from './dye-recolor';
 
- let {sprite,palette}:{sprite:SpriteCell;palette:NativeDyePalette}=$props();
+ let {sprite,palette,sourceKey=''}:{sprite:SpriteCell;palette:NativeDyePalette;sourceKey?:string}=$props();
  let coloredUrl=$state<string|null>(null);
 
  $effect(()=>{
-  const cell=sprite,colors=palette;
+  const cell=sprite,colors=palette,key=sourceKey;
   let canceled=false;
   let createdUrl:string|null=null;
   coloredUrl=null;
-  void renderDyeSprite(cell,colors).then(blob=>{
+  void renderDyeSprite(cell,colors,key).then(blob=>{
    if(canceled||!blob)return;
    createdUrl=URL.createObjectURL(blob);
    coloredUrl=createdUrl;
