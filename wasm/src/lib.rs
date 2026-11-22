@@ -83,15 +83,29 @@ pub extern "C" fn hkia_achievement_toggle_plan(
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
   let Some(e)=a.editor.as_ref()else{return 1};
-  if e.version()!="3.0.1"{return 1}
+  let version=e.version();
+  if version!="3.0.0"&&version!="3.0.1"{return 1}
   let guid=[g0,g1,g2,g3];
-  let before=e.achievement_value(guid).unwrap_or(
+  let existing=e.achievement_value(guid);
+  let before=existing.unwrap_or(
    hkia_save_core::achievement::AchievementValue{
     complete:false,current:0.0,completed:None
    });
-  let after=match hkia_save_core::achievement::plan_toggle_v301(guid,before,now_ms){
-   Ok(value)=>value,Err(_)=>return 1
-  };
+  // Source-defined goals exist only for v3.0.1. A real but unknown saved
+  // record may still change state with its exact original progress preserved.
+  // A missing unverified ID is never synthesized; v3.0.0 never borrows
+  // v3.0.1 goals from a different game source.
+  let planned=if version=="3.0.1"{
+   match hkia_save_core::achievement::plan_toggle_v301(guid,before,now_ms){
+    Ok(value)=>Ok(value),
+    Err(_) if existing.is_some()=>
+     hkia_save_core::achievement::plan_toggle_existing_without_goal(before,now_ms),
+    Err(error)=>Err(error)
+   }
+  }else if existing.is_some(){
+   hkia_save_core::achievement::plan_toggle_existing_without_goal(before,now_ms)
+  }else{Err(hkia_save_core::Error::Schema)};
+  let after=match planned{Ok(value)=>value,Err(_)=>return 1};
   let mut bytes=Vec::with_capacity(18);
   bytes.push(u8::from(after.complete));
   bytes.extend(after.current.to_bits().to_le_bytes());
