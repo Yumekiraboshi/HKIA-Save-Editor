@@ -10,6 +10,7 @@
  import {decodeHistoryDetails,formatHistoryChange} from './history-details';
  import {compactAchievementCopy} from './achievement-compact-ui';
  import {toggleAchievementState} from './achievement-quick';
+ import {removalConfirmationCopy} from './removal-confirmation';
  import {achievementProgressTarget} from './achievement-progress';
  import {achievementFactsCopy} from './achievement-facts-ui';
  import {loadAchievementFacts,counterIndex,type AchievementFactsIndex} from './achievement-facts';
@@ -38,6 +39,9 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  type Filter='all'|'recorded'|'unrecorded';
  type Tool='collections'|'achievements';
  type ThemePref='system'|'light'|'dark';
+ type PendingRemoval=
+  | {kind:'collections';id:number;name:string;before:bigint;revision:number;fromDateDialog:boolean}
+  | {kind:'achievements';item:AchievementListRow;name:string;revision:number};
  const BATCH_SIZE=40;
  const EPOCH=621355968000000000n;
  const ICONS=import.meta.env.BASE_URL+'icons/';
@@ -82,6 +86,10 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  let dateValidation=$state('');
  let dateDialogEl:HTMLDialogElement;
  let dateReturnFocus:HTMLElement|null=null;
+ let removalConfirmEl:HTMLDialogElement|undefined=$state(undefined);
+ let pendingRemoval:PendingRemoval|null=$state(null);
+ let removalReturnFocus:HTMLElement|null=null;
+ let removalOriginal:File|null=null;
  let iconLoadingGroup:string|null=null;
  let busy=$state(false);
  let error=$state('');
@@ -107,6 +115,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  let historyMenu:HTMLDetailsElement|undefined=$state(undefined);
  const locale=$derived(languagePref==='auto'?browserLanguage:languagePref);
  const copy=$derived(localizedCopy(locale));
+ const removalCopy=$derived(removalConfirmationCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
  const hCopy=$derived(historyCopy(locale));
  const hDetailCopy=$derived(historyDetailCopy(locale));
@@ -510,6 +519,47 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
   catch(e){error=describeError(e);return false}
   finally{busy=false}
  }
+
+ /** Destructive edits are never sent to the Worker before a user decision. */
+ async function requestRemoval(target:PendingRemoval,opener:HTMLElement){
+  if(!snapshot||busy||pendingRemoval)return;
+  pendingRemoval=target;removalReturnFocus=opener;removalOriginal=original;
+  await tick();
+  if(!pendingRemoval||!snapshot||original!==removalOriginal){closeRemovalConfirmation();return}
+  if(removalConfirmEl&&!removalConfirmEl.open)removalConfirmEl.showModal();
+ }
+ function closeRemovalConfirmation(){if(removalConfirmEl?.open)removalConfirmEl.close();}
+ function onRemovalConfirmationClosed(){
+  pendingRemoval=null;removalOriginal=null;
+  const focus=removalReturnFocus;removalReturnFocus=null;
+  if(focus?.isConnected)focus.focus();
+ }
+ async function confirmRemoval(){
+  const target=pendingRemoval;
+  if(!target||!snapshot||busy)return;
+  if(snapshot.revision!==target.revision||original!==removalOriginal||
+   (target.kind==='collections'
+    ?recorded[String(target.id)]!==target.before
+    :snapshot.achievements.find(row=>achievementGuid(row.guid)===target.item.guid)?.value.complete!==true)){
+   closeRemovalConfirmation();error=removalCopy.stale;return;
+  }
+  closeRemovalConfirmation();
+  if(target.kind==='collections'){
+   const success=await change(target.id,null);
+   if(target.fromDateDialog){
+    if(success)closeDateDialog();
+    else dateValidation=error||copy.fileError;
+   }
+  }else await quickToggleAchievement(target.item,undefined,undefined,true);
+ }
+ async function toggleCollection(id:number,name:string,opener:HTMLElement){
+  if(!snapshot||busy||pendingRemoval)return;
+  const before=recorded[String(id)];
+  if(before!==undefined){
+   if(!snapshot.membershipEdit)return;
+   await requestRemoval({kind:'collections',id,name,before,revision:snapshot.revision,fromDateDialog:false},opener);
+  }else await change(id,EPOCH+BigInt(Date.now())*10000n);
+ }
  async function goToHistory(target:number){
   if(!snapshot||busy||!Number.isSafeInteger(target)||target<0||target>tabHistory.length||target===tabHistoryCursor)return;
   const scope=activeTool;
@@ -575,12 +625,12 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
   if(success)closeDateDialog();
   else dateValidation=error||copy.fileError;
  }
- async function clearDate(){
+ async function clearDate(opener:HTMLElement){
   if(editId===null||dateDialogTick===null||busy||!snapshot?.membershipEdit)return;
-  const id=editId;
-  const success=await change(id,null);
-  if(success)closeDateDialog();
-  else dateValidation=error||copy.fileError;
+  await requestRemoval({
+   kind:'collections',id:editId,name:dateDialogItem?nameFor(dateDialogItem):String(editId),
+   before:dateDialogTick,revision:snapshot.revision,fromDateDialog:true
+  },opener);
  }
 
  /**
@@ -610,10 +660,16 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
   * Only clicking a verified source-defined tile creates a new Union(16) model.
   * v3.0.0 creation is gated until its exact version-specific source is verified.
   */
- async function quickToggleAchievement(item:AchievementListRow){
-  if(!snapshot||busy)return;
+ async function quickToggleAchievement(item:AchievementListRow,opener?:HTMLElement,name?:string,confirmed=false){
+  if(!snapshot||busy||(!confirmed&&pendingRemoval))return;
   const live=snapshot.achievements.find(x=>achievementGuid(x.guid)===item.guid);
   if(!live&&(snapshot.version!=='3.0.1'||!achievementIndex.has(item.guid)))return;
+  if(live?.value.complete&&!confirmed){
+   if(opener)await requestRemoval({
+    kind:'achievements',item,name:name??achievementName(item.guid,item.index),revision:snapshot.revision
+   },opener);
+   return;
+  }
   busy=true;error='';
   try{
    const target=achievementProgressTarget(
@@ -826,7 +882,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
         aria-label={(item.row?.value.complete?compactCopy.relock:compactCopy.unlock)+': '+title}
         title={item.row?.value.complete?compactCopy.relock:compactCopy.unlock}
         disabled={busy||(!item.row&&(snapshot.version!=='3.0.1'||!achievementIndex.has(item.guid)))}
-        onclick={()=>void quickToggleAchievement(item)}>
+        onclick={e=>void quickToggleAchievement(item,e.currentTarget,title)}>
         <span class="item-art achievement-item-art" aria-hidden="true">
          {#if individualArt}
           <span class="achievement-individual-sprite" style:background-image={`url("${achievementIndividualAtlas?.url}")`} style:background-position={`${individualArt.x} ${individualArt.y}`}></span>
@@ -1050,7 +1106,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
      <article class="item-tile" id={'collection-item-'+item[0]} class:is-recorded={has}>
       <button type="button" class="item-toggle" aria-pressed={has} aria-label={(has?copy.unsetRecorded:copy.setRecorded)+': '+nameFor(item)}
        title={mayToggle?(has?copy.unsetRecorded:copy.setRecorded):!showVariants&&recordIds.length>0?copy.variantsToEdit:copy.unsafe} disabled={busy||!mayToggle}
-       onclick={()=>void change(item[0],direct?null:EPOCH+BigInt(Date.now())*10000n)}>
+       onclick={e=>void toggleCollection(item[0],nameFor(item),e.currentTarget)}>
        <span class="item-art" class:native-dye-preview={Boolean(sprite&&nativeDyePalettes[String(item[0])])}
         style:--native-dye-ring={sprite?nativeDyeRing(nativeDyePalettes[String(item[0])]):undefined} aria-hidden="true">
         {#if sprite}
@@ -1118,13 +1174,31 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
     {#if dateValidation}<p class="date-dialog-error" role="alert">{dateValidation}</p>{/if}
     <div class="date-dialog-actions">
      {#if snapshot?.membershipEdit}
-      <button type="button" class="date-dialog-clear" disabled={busy} onclick={()=>void clearDate()}>{copy.unsetRecorded}</button>
+      <button type="button" class="date-dialog-clear" disabled={busy} onclick={e=>void clearDate(e.currentTarget)}>{copy.unsetRecorded}</button>
      {/if}
      <span class="date-dialog-spacer"></span>
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeDateDialog}>{copy.cancel}</button>
      <button type="submit" class="primary" disabled={busy||!dateValue||!dateChanged}>{copy.apply}</button>
     </div>
    </form>
+  {/if}
+ </dialog>
+ <dialog class="removal-confirm-dialog" bind:this={removalConfirmEl}
+  aria-labelledby="removal-confirm-title" onclose={onRemovalConfirmationClosed}
+  oncancel={e=>{if(busy)e.preventDefault()}}>
+  {#if pendingRemoval}
+   <div class="removal-confirm-inner">
+    <div class="date-dialog-heading">
+     <h2 id="removal-confirm-title">{pendingRemoval.kind==='collections'?removalCopy.collectionTitle:removalCopy.achievementTitle}</h2>
+     <button type="button" class="date-dialog-close" aria-label={removalCopy.cancel} disabled={busy} onclick={closeRemovalConfirmation}>×</button>
+    </div>
+    <strong class="removal-confirm-name">{pendingRemoval.name}</strong>
+    <p class="removal-confirm-warning">{pendingRemoval.kind==='collections'?removalCopy.collectionWarning:removalCopy.achievementWarning}</p>
+    <div class="date-dialog-actions">
+     <button type="button" class="date-dialog-cancel removal-cancel" autofocus disabled={busy} onclick={closeRemovalConfirmation}>{removalCopy.cancel}</button>
+     <button type="button" class="removal-confirm-action" disabled={busy} onclick={()=>void confirmRemoval()}>{removalCopy.remove}</button>
+    </div>
+   </div>
   {/if}
  </dialog>
 </div>
