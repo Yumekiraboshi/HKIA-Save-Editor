@@ -275,3 +275,27 @@ UiIcon location are original verified game data. The placement of
 the lens regions is an image-derived approximation, not a verified
 Unity five-channel 3D shader/material mask. Pixel-perfect parity
 with the game's 3D model is not claimed.
+
+## High Tea Elegant Hat (44 native colorways)
+
+Steam v3.0.1 `collection_group_teagarden` sheet `000`, cell `031`
+is the source-original neutral UiIcon for **44** verified High Tea
+Elegant Hat Item IDs. Three distinct variants have the same native
+palette channel 1 (`#fdf7e6`) but different native channel 2:
+White and Green (77149467, `#78d244`), White and Sky (370872413,
+`#bbf2ef`), and White and Periwinkle (2022277447, `#afb4fd`).
+They were indistinguishable in first-channel-only icon recoloring.
+
+The original 96px icon is retained. For this **exact source cell only**,
+a guarded approximate 2D pixel-region profile colors the neutral
+central hat ribbon with the original game dye channel 2, and other
+neutral hat fabric with channel 1. The original transparent silhouette,
+shading, outlines and colored decorations remain unchanged. Unrecognized
+or non-neutral source art falls back to the original general source icon
+rendering; no CSS color rings, swatches, Wikipedia/Wiki images, novel
+items, or 3D renders are introduced.
+
+**Accuracy limit:** original Item IDs, palette values and image source
+are verified game data. The 2D ribbon placement is image-derived
+approximation, **not** a recovered five-channel Unity material mask.
+Pixel-perfect correspondence with the actual 3D renderer is unverified.
