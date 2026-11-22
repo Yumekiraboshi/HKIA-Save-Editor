@@ -42,6 +42,10 @@ node scripts/generate-native-dye-icons.mjs \
 node scripts/generate-native-dye-icons.mjs \
   --group collections_group_events --all \
   --out staging/native-colorways
+
+# Production: every shipped original game icon pack group
+node scripts/generate-native-dye-icons.mjs \
+  --all-groups --out dist/native-colorways
 ```
 
 The game-derived inputs are only `public/item-packs/<group>.zip` (and its
@@ -77,3 +81,5 @@ thumbnails in place of the original UiIcon.
 - Batch export source-verified item IDs without changing their original
   silhouette or metadata.
 - Keep all 3D audit output outside the final item icon display.
+
+The all-group export conservatively **skips Item IDs present in multiple icon groups** because selecting the first group could serve the wrong category icon. It also skips shared icons with no safe detectable dye regions, leaving the browser's original UiIcon fallback in place. Its manifest records `sourceGroups`, `uniqueCandidates`, `ambiguous`, `unmatched`, `uncolorable` and `generated` counts. CI checks each output's 96×96 PNG dimensions, native source pack group, exact original sheet/cell and SHA-256; it never silently marks color placement as game-shader-accurate.
