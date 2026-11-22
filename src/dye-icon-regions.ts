@@ -134,7 +134,7 @@ function highTeaTophatRegions(
  }
  // A source pack revision or non-hat icon must not receive guessed masks.
  if(visible<1100||visible>5100||neutral<900||
-  neutral<visible*.55||chromatic>140||band<60||band>760)
+  neutral<visible*.55||chromatic>140||band<60)
   return undefined;
  return mask;
 }
