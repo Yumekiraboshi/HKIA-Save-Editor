@@ -109,7 +109,7 @@ test('individual cards use exact sprites and missing rows retain placeholder; ca
   '<span class="item-art-empty">✧</span>',
   'nativeAchievementOrder(achievementGroupHierarchy,sourceAchievementRows,achievementFacts)',
   'groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows,achievementFacts)',
-  'onclick={()=>void quickToggleAchievement(item)}',
+  'onclick={e=>void quickToggleAchievement(item,e.currentTarget,title)}',
   'if(item.row)void openAchievement(item.row'
  ])assert.ok(app.includes(part),part);
  assert.match(css,/\.achievement-individual-sprite\{[^}]*background-size:1400% 1500%/);
