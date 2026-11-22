@@ -84,6 +84,7 @@ test('5,383 source-color variants are wired into all three image views without r
  assert.match(app,/loadNativeDyePalettes\(import\.meta\.env\.BASE_URL\)/);
  assert.match(app,/import DyeSprite from '\.\/DyeSprite\.svelte'/);
  assert.equal((app.match(/<DyeSprite /g)||[]).length,3);
+ assert.equal((app.match(/sourceKey=\{/g)||[]).length,3);
  assert.match(app,/palette=\{nativeDyePalettes\[String\(item\[0\]\)\]\}/);
  assert.match(app,/palette=\{nativeDyePalettes\[String\(sub\.previewId\)\]\}/);
  assert.match(app,/palette=\{nativeDyePalettes\[String\(dateDialogItem\[0\]\)\]\}/);
@@ -92,4 +93,50 @@ test('5,383 source-color variants are wired into all three image views without r
  for(const disallowed of [/native-dye-ring/,/native-dye-swatch/,/native-dye-preview/,/sharedDyeableIcon/]){
   assert.doesNotMatch(app,disallowed);assert.doesNotMatch(css,disallowed);
  }
+});
+
+test('Archer Costume source artwork identifies tunic, belt and buckle without guessing on other garments',async()=>{
+ const regionModule=await build({
+  entryPoints:[fileURLToPath(new URL('../src/dye-icon-regions.ts',import.meta.url))],
+  bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'
+ });
+ const {sourceIconDyeRegions}=await import('data:text/javascript;base64,'+
+  Buffer.from(regionModule.outputFiles[0].text).toString('base64'));
+ const width=96,height=96;
+ const pixels=new Uint8ClampedArray(width*height*4);
+ const paint=(x,y,r,g,b)=>{
+  const idx=(y*width+x)*4;
+  pixels[idx]=r;pixels[idx+1]=g;pixels[idx+2]=b;pixels[idx+3]=255;
+ };
+ for(let y=15;y<83;y++)for(let x=10;x<76;x++)paint(x,y,144,141,139);
+ for(let y=27;y<39;y++)for(let x=20;x<70;x++)paint(x,y,174,120,75);
+ for(let y=40;y<51;y++)for(let x=36;x<46;x++)paint(x,y,222,174,61);
+ const source='item_c_dyeable_icarcheroutfit_icecream';
+ const mask=sourceIconDyeRegions(source,pixels,width,height);
+ assert.ok(mask,'source icon color geometry must match all three regions');
+ const id=(x,y)=>y*width+x;
+ assert.equal(mask[id(15,20)],1,'neutral fabric uses native channel 1');
+ assert.equal(mask[id(21,30)],2,'source ochre strap uses native channel 2');
+ assert.equal(mask[id(40,45)],3,'source yellow buckle uses native channel 3');
+ assert.equal(mask[id(0,0)],0,'transparent pixels are never dyed');
+ assert.equal(sourceIconDyeRegions('item_c_dyeable_icarcherhat_icecream',pixels,width,height),undefined);
+ const altered=new Uint8ClampedArray(pixels);
+ for(let j=0;j<altered.length;j+=4)if(altered[j+3]>0){
+  altered[j]=10;altered[j+1]=210;altered[j+2]=220;
+ }
+ assert.equal(sourceIconDyeRegions(source,altered,width,height),undefined,
+  'replaced 3D artwork fails closed if native icon regions no longer match');
+ const icePaint=recolorDyePixels(pixels,width,height,ice,mask);
+ const orangePaint=recolorDyePixels(pixels,width,height,orange,mask);
+ assert.ok(icePaint&&orangePaint);
+ const iceStrap=[...icePaint.pixels.slice(id(21,30)*4,id(21,30)*4+3)];
+ const orangeStrap=[...orangePaint.pixels.slice(id(21,30)*4,id(21,30)*4+3)];
+ assert.ok(iceStrap[2]>iceStrap[0]+20,'Ice Cream fabric band becomes cyan');
+ assert.ok(orangeStrap[0]>orangeStrap[2]+70,'Orange band becomes orange');
+ assert.notDeepEqual(iceStrap,orangeStrap);
+ const iceBuckle=[...icePaint.pixels.slice(id(40,45)*4,id(40,45)*4+3)];
+ const orangeBuckle=[...orangePaint.pixels.slice(id(40,45)*4,id(40,45)*4+3)];
+ assert.ok(iceBuckle[2]>iceBuckle[0]*.80,'Ice Cream buckle becomes white');
+ assert.ok(orangeBuckle[0]>orangeBuckle[2]+50,'Orange buckle becomes gold');
+ for(let i=3;i<pixels.length;i+=4)assert.equal(icePaint.pixels[i],pixels[i]);
 });
