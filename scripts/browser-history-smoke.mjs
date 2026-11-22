@@ -149,6 +149,8 @@ async function run(){
  const iceSprite=page.locator('#collection-item-704486536 .item-sprite[data-dye-rendered="true"]');
  await iceSprite.waitFor({timeout:30_000});
  const icePixels=await sampledSprite(iceSprite);
+ assert.equal(await iceSprite.getAttribute('data-dye-source'),'native-icon',
+  'original HKIA UiIcon 96px colored PNG is served, not a 3D pose');
  assert.ok(icePixels.count>75&&icePixels.r>icePixels.g+8,'Ice Cream Archer Hat should recolor its gray fabric pink');
  await search.fill('Orange Archer Hat');
  await page.locator('.collection-search-result').first().click();
@@ -382,7 +384,7 @@ async function run(){
   'verified image uses direct static item-specific pixels rather than a recolored Blob');
  await finalSearch.fill('Orange Archer Hat');
  await page.locator('.collection-search-result').first().click();
- await page.locator('#collection-item-585726126 .item-sprite[data-dye-source="approximation"]').waitFor({timeout:30_000});
+ await page.locator('#collection-item-585726126 .item-sprite[data-dye-source="native-icon"]').waitFor({timeout:30_000});
 
  assert.deepEqual(errors,[],'no console exceptions or 5xx during browser replay');
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
