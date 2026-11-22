@@ -139,6 +139,55 @@ function highTeaTophatRegions(
  return mask;
 }
 
+/**
+ * Camp Counselor Skort, original Steam v3.0.1 UiIcon sheet 001 cell 021
+ * in collections_group_events. 22 genuine item IDs share this neutral
+ * source sprite; two-tone items have distinct game palette channel 2
+ * despite identical channel 1. Give the visible right-side pleated fabric
+ * a second native dye channel while preserving the actual original icon
+ * silhouette, shadows, seams and alpha.
+ *
+ * The panel placement is an approximate original-2D-icon region,
+ * not an extracted Unity 3D shader/material channel mask.
+ */
+function campCounselorSkortRegions(
+ sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
+ origin?:SpriteCell
+):Uint8Array|undefined{
+ if(!sourceKey.startsWith('item_c_dyeable_')||
+  origin?.group!=='collections_group_events'||
+  origin.sheet!==1||origin.cell!==21||
+  width!==96||height!==96||input.length!==96*96*4)return undefined;
+ const regions=new Uint8Array(96*96);
+ let visible=0,neutral=0,secondary=0,chromatic=0;
+ for(let i=0;i<regions.length;i++){
+  const j=i*4,a=input[j+3];
+  if(a<64)continue;
+  visible++;
+  const r=input[j],g=input[j+1],b=input[j+2];
+  const chroma=Math.max(r,g,b)-Math.min(r,g,b);
+  const lum=.2126*r+.7152*g+.0722*b;
+  if(chroma>48)chromatic++;
+  // Preserve the dark seams, decorative pixels and existing edge.
+  if(chroma>40||lum<45)continue;
+  neutral++;
+  const x=i%96,y=Math.floor(i/96);
+  // The right-hand visible pleated fabric below the waistband.
+  // Image-derived approximation only, never an inferred native mask.
+  const rightPanel=y>=37&&y<=82&&x>=51+Math.floor((y-37)/11)&&x<=83;
+  regions[i]=rightPanel?2:1;
+  if(rightPanel)secondary++;
+ }
+ // Original source-art plausibility checks: an altered or replaced icon
+ // must fall back, not have an arbitrary two-channel mask imposed on it.
+ const alphaAt=(x:number,y:number)=>input[(y*96+x)*4+3];
+ if(visible<1200||visible>5200||neutral<850||
+  neutral<visible*.55||chromatic>160||
+  secondary<95||secondary>1700||alphaAt(48,55)<128)
+  return undefined;
+ return regions;
+}
+
 function distanceToSegment(x:number,y:number,ax:number,ay:number,bx:number,by:number):number{
  const dx=bx-ax,dy=by-ay;
  const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy)));
@@ -209,6 +258,8 @@ export function sourceIconDyeRegions(
  sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
  origin?:SpriteCell
 ):Uint8Array|undefined{
+ const skort=campCounselorSkortRegions(sourceKey,input,width,height,origin);
+ if(skort)return skort;
  const highTeaHat=highTeaTophatRegions(sourceKey,input,width,height,origin);
  if(highTeaHat)return highTeaHat;
  const tophat=bandedTophatRegions(sourceKey,input,width,height,origin);
