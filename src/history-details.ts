@@ -47,7 +47,8 @@ export function decodeHistoryDetails(
   const flag=u8();
   if(flag===1)return value();
   if(flag!==0)throw Error('HISTORY_DETAIL_OPTIONAL');
-  const blank=input.subarray(take(18)-18,at);
+  const start=take(18);
+  const blank=input.subarray(start,at);
   if(blank.some(x=>x!==0))throw Error('HISTORY_DETAIL_OPTIONAL');
   return null;
  };
@@ -97,6 +98,7 @@ export function formatHistoryChange(
  detail:HistoryDetail|undefined,locale:string,
  copy:{added:string;removed:string;date:string;complete:string;incomplete:string;created:string;progress:string;fromTo:string}
 ):string{
+ void locale;
  if(!detail)return '';
  if(detail.scope==='collections'){
   if(detail.before===null)return copy.added;
@@ -114,12 +116,14 @@ export function formatHistoryChange(
  return '';
 }
 function collectionTime(ticks:bigint,locale:string):string{
+ void locale;
  const date=toDateTimeValue(ticks).replace('T',' ');
  if(!date)return ticks.toString();
  const fractional=(ticks%10_000_000n).toString().padStart(7,'0');
  return date+(fractional==='0000000'?'':'.'+fractional);
 }
 function achievementTime(value:AchievementValue['completed'],locale:string):string{
+ void locale;
  if(!value)return '—';
  const [seconds,nanos]=value;
  const ms=Number(seconds)*1000+Math.floor(nanos/1_000_000);
