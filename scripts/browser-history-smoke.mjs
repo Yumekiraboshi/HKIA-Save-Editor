@@ -116,8 +116,26 @@ async function run(){
  });
  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
 
- // Source-verified floorplan IDs can be added without a real-game asset file.
  const search=page.locator('.collection-controls input[type="search"]');
+ // A shared game-authored sprite does not imply identical native dye colours.
+ await search.fill('Ice Cream Archer Hat');
+ await page.locator('.collection-search-result').first().click();
+ const ice=page.locator('#collection-item-704486536 .native-dye-swatch');
+ await ice.first().waitFor({timeout:20_000});
+ assert.deepEqual(await ice.evaluateAll(nodes=>nodes.map(x=>getComputedStyle(x).backgroundColor)),[
+  'rgb(255, 187, 250)','rgb(194, 254, 255)','rgb(249, 250, 255)',
+  'rgb(255, 187, 250)','rgb(249, 250, 255)'
+ ]);
+ await search.fill('Orange Archer Hat');
+ await page.locator('.collection-search-result').first().click();
+ const orange=page.locator('#collection-item-585726126 .native-dye-swatch');
+ await orange.first().waitFor({timeout:20_000});
+ assert.deepEqual(await orange.evaluateAll(nodes=>nodes.map(x=>getComputedStyle(x).backgroundColor)),[
+  'rgb(254, 255, 189)','rgb(255, 179, 55)','rgb(253, 217, 0)',
+  'rgb(255, 198, 21)','rgb(253, 217, 0)'
+ ]);
+
+ // Source-verified floorplan IDs can be added without a real-game asset file.
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();
  await result.waitFor({timeout:20_000});
