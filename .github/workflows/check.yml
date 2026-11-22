@@ -25,7 +25,7 @@ jobs:
       - name: Create native game UiIcon colorway previews (not 3D renders)
         run: |
           npm install --no-save --package-lock=false --ignore-scripts playwright-core@1.56.1
-          node scripts/generate-native-dye-icons.mjs --out dist/native-colorways
+          node scripts/generate-native-dye-icons.mjs --all-groups --out dist/native-colorways
           node scripts/verify-native-dye-icons.mjs dist/native-colorways
       - name: Chromium UI smoke (history and browser reload)
         run: node scripts/browser-history-smoke.mjs
