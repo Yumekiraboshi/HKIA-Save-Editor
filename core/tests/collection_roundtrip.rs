@@ -834,16 +834,22 @@ fn auto_achievement_fixture(version:&str,rows:&[([u32;4],hkia_save_core::achieve
  let v=doc(18,arr(vec![vec![0],u(if version=="3.0.0"{83}else{87}),{
   let mut s=vec![0xa0|version.len()as u8];s.extend(version.as_bytes());s
  }]));
- let mut models=vec![v];
+ // DbRoot requires at least one native AchievementModel and GameCounterModel,
+ // even when the source-defined category under test is wholly absent.
+ let filler=doc(16,arr(vec![vec![1],guid([1,0,0,1]),
+  arr(vec![vec![0xc2],f(0.0),vec![0xc0]])]));
+ let counter=doc(17,arr(vec![vec![2],guid([1,0,0,2]),
+  arr(vec![f(2.0),vec![0xc0],vec![0x90]])]));
+ let mut models=vec![v,filler,counter];
  for (i,(key,value)) in rows.iter().enumerate(){
   let date=if let Some((seconds,nanos))=value.completed{
    let mut b=vec![0xc7,12,0xff];
    b.extend(nanos.to_be_bytes());b.extend(seconds.to_be_bytes());b
   }else{vec![0xc0]};
-  models.push(doc(16,arr(vec![vec![(i+1)as u8],guid(*key),
+  models.push(doc(16,arr(vec![vec![(i+4)as u8],guid(*key),
    arr(vec![vec![if value.complete{0xc3}else{0xc2}],f(value.current),date])])));
  }
- let key=map(vec![(vec![2],l(638000000000000001))]);
+ let key=map(vec![(vec![2],l(638000000000000001)),(vec![3],l(9))]);
  let collection=doc(39,arr(vec![map(vec![]),key]));
  models.push(doc(32,arr(vec![vec![3],guid([0,0,0,3]),vec![0],arr(vec![collection])])));
  slot_from_payload(version,arr(vec![vec![0],vec![4],arr(models)]))
