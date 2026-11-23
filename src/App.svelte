@@ -426,8 +426,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   * Canonical comparison retains lossless decimal timestamp strings.
   */
  function recoveredMatchesDraft(
-  baseRows:ReadonlyMap<number,bigint>,baseAchievements:readonly AchievementEntry[],
-  recovered:SaveSnapshot,collectionPatches:readonly DraftPatch[],achievementPatches:readonly StoredPatch[]
+  baseRows:ReadonlyMap<number,bigint>,baseAchievements:readonly AchievementEntry[],baseInventory:readonly InventoryEntry[],
+  recovered:SaveSnapshot,collectionPatches:readonly DraftPatch[],achievementPatches:readonly StoredPatch[],inventoryPatches:readonly InventoryPatch[]
  ):boolean{
   const current=Object.fromEntries(recovered.entries.map(([id,t])=>[String(id),t]));
   const sortedCollection=(xs:readonly DraftPatch[])=>
@@ -438,15 +438,17 @@ import {verifiedFloorplanName} from './floorplan-names';
     return 0;
    }));
   return sortedCollection(diffPatches(baseRows,current))===sortedCollection(collectionPatches)&&
-   sortedAchievement(diffAchievements(baseAchievements,recovered.achievements))===sortedAchievement(achievementPatches);
+   sortedAchievement(diffAchievements(baseAchievements,recovered.achievements))===sortedAchievement(achievementPatches)&&
+   JSON.stringify(diffInventory(baseInventory,recovered.inventory))===JSON.stringify(inventoryPatches);
  }
  function persistDraft():Promise<void>{
   if(!original)return Promise.resolve();
   const patches=diffPatches(baseline,recorded);
   const achievements=diffAchievements(achievementBaseline,snapshot?.achievements??[]);
+  const inventoryPatches=diffInventory(inventoryBaseline,snapshot?.inventory??[]);
   const ui={group:selectedGroup,subgroup:selectedSubgroup};
   const checkpoint=(snapshot as SaveSnapshot|null)?.historyCheckpoint??null;
-  const job=draftWrites.catch(()=>{}).then(()=>saveDraftChanges(patches,ui,achievements,checkpoint));
+  const job=draftWrites.catch(()=>{}).then(()=>saveDraftChanges(patches,ui,achievements,checkpoint,inventoryPatches));
   draftWrites=job;
   return job.then(()=>{draftReady=true;draftWarning=false},()=>{draftReady=false;draftWarning=true});
  }
@@ -464,11 +466,12 @@ import {verifiedFloorplanName} from './floorplan-names';
      return {id:p.id,before,after};
     });
     const achievementPatches=decodeAchievementDraft(draft.achievementPatches,s.achievements);
+    const inventoryPatches=draft.inventoryPatches;
     let session:SaveSnapshot|null=null;
     if(draft.historyCheckpoint){
      try{
       const recovered=await restoreHistory(draft.historyCheckpoint);
-      if(!recoveredMatchesDraft(originalRows,s.achievements,recovered,draft.patches,draft.achievementPatches))
+      if(!recoveredMatchesDraft(originalRows,s.achievements,s.inventory,recovered,draft.patches,draft.achievementPatches,inventoryPatches))
        throw Error('HISTORY_RESTORE_CONFLICT');
       session=recovered;
      }catch{
@@ -477,9 +480,9 @@ import {verifiedFloorplanName} from './floorplan-names';
       await openSave(draft.file);
      }
     }
-    if(!session)session=patches.length||achievementPatches.length?await applyDraft(patches,achievementPatches):s;
+    if(!session)session=patches.length||achievementPatches.length||inventoryPatches.length?await applyDraft(patches,achievementPatches,inventoryPatches):s;
    collectionSearchDrilldown=false;query='';
-    original=draft.file;baseline=originalRows;achievementBaseline=s.achievements;update(session);
+    original=draft.file;baseline=originalRows;achievementBaseline=s.achievements;inventoryBaseline=s.inventory;update(session);
     selectedGroup=draft.ui.group;selectedSubgroup=draft.ui.subgroup;
     if(draft.ui.group)void fetchImages(draft.ui.group);
    }
@@ -499,6 +502,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   const priorBaseline=baseline;
   const priorRecorded=recorded;
   const priorAchievements=snapshot?.achievements??[];
+  const priorInventory=snapshot?.inventory??[];
+  const priorInventoryBaseline=inventoryBaseline;
   const priorAchievementBaseline=achievementBaseline;
   const priorHistoryCheckpoint=(snapshot as SaveSnapshot|null)?.historyCheckpoint??null;
   const priorGroup=selectedGroup;
@@ -509,7 +514,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(file.size>60*1024*1024||file.size===0)throw Error(copy.typeIssue);
    await draftWrites.catch(()=>{});
    const session=await openSave(file);
-   original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;update(session);
+   original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;inventoryBaseline=session.inventory;update(session);
    selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';collectionSearchDrilldown=false;filter='all';
    iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;
    try{await saveOriginalLocally(file);draftReady=true;draftWarning=false}
@@ -526,21 +531,22 @@ import {verifiedFloorplanName} from './floorplan-names';
      }));
      const achievementPatches=diffAchievements(priorAchievementBaseline,priorAchievements);
      const decodedAchievements=decodeAchievementDraft(achievementPatches,opened.achievements);
+     const inventoryPatches=diffInventory(priorInventoryBaseline,priorInventory);
      let previous:SaveSnapshot|null=null;
      if(priorHistoryCheckpoint){
       try{
        const recovered=await restoreHistory(priorHistoryCheckpoint);
-       if(!recoveredMatchesDraft(priorBaseline,opened.achievements,recovered,
-        diffPatches(priorBaseline,priorRecorded),achievementPatches))throw Error('HISTORY_RESTORE_CONFLICT');
+       if(!recoveredMatchesDraft(priorBaseline,opened.achievements,opened.inventory,recovered,
+        diffPatches(priorBaseline,priorRecorded),achievementPatches,inventoryPatches))throw Error('HISTORY_RESTORE_CONFLICT');
        previous=recovered;
       }catch{await openSave(priorFile)}
      }
-     if(!previous)previous=patches.length||decodedAchievements.length?await applyDraft(patches,decodedAchievements):opened;
-     original=priorFile;baseline=priorBaseline;achievementBaseline=priorAchievementBaseline;update(previous);
+     if(!previous)previous=patches.length||decodedAchievements.length||inventoryPatches.length?await applyDraft(patches,decodedAchievements,inventoryPatches):opened;
+     original=priorFile;baseline=priorBaseline;achievementBaseline=priorAchievementBaseline;inventoryBaseline=priorInventoryBaseline;update(previous);
      selectedGroup=priorGroup;selectedSubgroup=priorSubgroup;showVariants=priorVariants;visibleLimit=BATCH_SIZE;
      if(priorGroup&&(!iconPack||iconPack.group!==priorGroup))void fetchImages(priorGroup);
     }catch{
-     original=null;snapshot=null;recorded={};baseline=new Map();achievementBaseline=[];
+     original=null;snapshot=null;recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];
      selectedGroup=null;selectedSubgroup=null;showVariants=false;iconEpoch++;iconPack?.dispose();iconPack=null;
     }
    }
@@ -633,7 +639,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy)return;
   if(snapshot.dirty&&!confirm(copy.discard))return;
   busy=true;error='';
-  try{await draftWrites.catch(()=>{});await forgetLocalDraft();await clear();snapshot=null;original=null;recorded={};baseline=new Map();achievementBaseline=[];editingAchievement=null;goHome();draftReady=true;draftWarning=false;}
+  try{await draftWrites.catch(()=>{});await forgetLocalDraft();await clear();snapshot=null;original=null;recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];editingAchievement=null;goHome();draftReady=true;draftWarning=false;}
   catch(e){error=e instanceof Error?e.message:copy.unknown}
   finally{busy=false}
  }
