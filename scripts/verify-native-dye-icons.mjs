@@ -138,6 +138,10 @@ for(const id of ['77149467','370872413','2022277447']){
 // and per-colorway PNG signatures, not a manually curated palette list,
 // determine precisely which native variants belong to each original cell.
 const nativeTwoToneSources=[
+ // Original game atlas cell and palette audit: 3 same-first / different-
+ // second pairs per outfit family. Generated real pixels must differ.
+ ['collection_group_citytown',2,65,22],
+ ['collections_group_clothing',1,36,15],
  ['collection_group_teagarden',0,74,38],
  ['collections_group_events',0,38,13],
  ['collections_group_events',1,29,13],
