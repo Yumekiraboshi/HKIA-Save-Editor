@@ -1,3 +1,5 @@
+import {resolveEditedLocalTime} from './local-date-fold';
+
 /**
  * Local datetime input conversion for an existing native achievement timestamp.
  *
@@ -38,7 +40,9 @@ export function fromAchievementDateTimeValue(
  // An unchanged display value always retains the original instant exactly.
  if(original&&toAchievementDateTimeValue(original)===full)
   return [original[0],original[1]];
- const ms=new Date(full).getTime();
+ const sourceMs=original===null?null:
+  Number(original[0]*1000n+BigInt(Math.floor(original[1]/1_000_000)));
+ const ms=resolveEditedLocalTime(full,sourceMs);
  if(!Number.isFinite(ms)||ms<0||ms>253402300799000)
   throw Error('INVALID_ACHIEVEMENT_DATE');
  const next:[bigint,number]=[BigInt(Math.floor(ms/1000)),original?.[1]??0];
