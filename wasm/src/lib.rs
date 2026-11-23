@@ -29,6 +29,24 @@ pub extern "C" fn hkia_open()->u32{
   match Editor::open(input){Ok(e)=>{a.editor=Some(e);0},Err(_)=>1}
  })
 }
+/// Export the native can-create allowlist for the CURRENT local save.
+/// Reply wire format: u32 count + count LE i32 IDs; read-only and side
+/// effect free. Never infer collection eligibility from item display flags.
+#[no_mangle]
+pub extern "C" fn hkia_collection_creatable_snapshot()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref() else{return 1};
+  let ids=editor.creatable_collection_history_ids();
+  if ids.len()>100_000{return 1}
+  let mut b=Vec::with_capacity(4+ids.len()*4);
+  b.extend((ids.len() as u32).to_le_bytes());
+  for id in ids{b.extend(id.to_le_bytes())}
+  a.reply=b;
+  0
+ })
+}
+
 #[no_mangle]
 pub extern "C" fn hkia_change(id:i32,expected_present:u32,expected_ticks:i64,next_present:u32,next_ticks:i64)->u32{
  STATE.with(|s|{
