@@ -64,8 +64,8 @@ test('achievement detail popup no longer accepts arbitrary progress or changes i
  assert.match(app,/const next:AchievementValue=\{complete:selected\.value\.complete,current:selected\.value\.current,completed\}/);
  assert.match(app,/planAchievementToggle\(guid,Date\.now\(\)\)/);
  assert.match(app,/achievementGoalsByGuid\.get\(item\.guid\)/);
- assert.match(app,/\{#if facts\}\s*<details class="achievement-modal-source">/);
- assert.match(app,/linkedCounter\?linkedCounter\.current\.toLocaleString/);
- assert.match(app,/factCopy\.receiptUnverified/);
+ assert.match(app,/\{#if item\.row\?\.value\.complete\}/);
+ assert.match(app,/if\(busy\|\|!row\.value\.complete\)return;/);
+ assert.doesNotMatch(app,/achievement-modal-source|linkedCounter\?|factCopy\./);
  assert.match(app,/editAchievementAuto\(guid,live\?\.value\?\?null,next\)/);
 });
