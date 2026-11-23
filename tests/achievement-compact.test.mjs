@@ -48,8 +48,7 @@ test('collection-like achievement cards create source-defined absent records on 
    'await persistDraft()',
    'bind:this={achievementDialogEl}',
    'bind:value={achievementDate}',
-   'class="achievement-modal-source"',
-   'compactCopy.scope'
+   'if(busy||!row.value.complete)return;'
  ])assert.ok(app.includes(mark),mark);
  assert.ok(!app.includes('class="achievement-card"'));
  assert.ok(!app.includes('achievementComplete=row.value.complete'));
@@ -61,13 +60,13 @@ test('collection-like achievement cards create source-defined absent records on 
  assert.ok(css.includes('.achievement-dialog-button')||css.includes('.item-tile .date-button'));
 });
 
-test('no new root or progress ordering is introduced; advanced counter/reward detail is popup-only',()=>{
+test('source progress order stays native while nonactionable facts and incomplete popups are absent',()=>{
  assert.match(app,/nativeAchievementOrder\(achievementGroupHierarchy,sourceAchievementRows,achievementFacts\)/);
  assert.match(app,/groupRows\(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows,achievementFacts\)/);
- const segment=app.substring(app.indexOf('class="item-grid achievement-grid achievement-item-grid"'),app.indexOf('<dialog class="achievement-dialog"'));
- assert.doesNotMatch(segment,/achievement-fact-details|achievement-fact-list|sourceThreshold|rewardQuantity/);
- assert.match(app,/class="achievement-modal-source"/);
- assert.match(app,/factCopy\.receiptUnverified/);
+ assert.match(app,/\{#if item\.row\?\.value\.complete\}[\s\S]*?class="date-button achievement-dialog-button"/);
+ assert.doesNotMatch(app,/achievement-fact-list|achievement-modal-source|factCopy\.|achievement-modal-scope/);
+ assert.doesNotMatch(app,/class="data-note achievement-info-note"/);
+ assert.doesNotMatch(app,/item\.row\.value\.complete\?'◷':'⋯'/);
 });
 
 test('one-click and popup controls are localized to all 16 game locales',()=>{
