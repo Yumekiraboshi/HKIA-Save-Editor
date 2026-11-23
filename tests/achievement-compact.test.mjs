@@ -44,7 +44,7 @@ test('collection-like achievement cards create source-defined absent records on 
    'if(item.row)void openAchievement(item.row',
    'disabled={busy||(!item.row&&(snapshot.version',
    'planAchievementToggle(guid,Date.now())',
-   'changeAchievement(live.guid,live.value,next)',
+   'editAchievementAuto(guid,live?.value??null,next)',
    'await persistDraft()',
    'bind:this={achievementDialogEl}',
    'bind:value={achievementDate}',
