@@ -179,9 +179,12 @@ impl Editor {
   if self.slot.envelope.version!=Version::V301||!self.can_change_membership(){
    return Vec::new()
   }
-  crate::catalog::eligible_history_ids()
+  let mut ids:Vec<i32>=crate::catalog::eligible_history_ids()
    .filter(|&id|id>0&&id!=i32::MAX&&self.value(id).is_none())
-   .collect()
+   .collect();
+  ids.sort_unstable();
+  ids.dedup();
+  ids
  }
  pub fn change(&mut self,id:i32,expected:Option<i64>,next:Option<i64>)->Result<(),Error>{
   if id<=0 || id==i32::MAX || self.value(id)!=expected || next==expected {return Err(Error::Schema)}
