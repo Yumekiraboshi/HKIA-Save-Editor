@@ -52,7 +52,8 @@ test('shared original icons receive source-palette pixel rendering without rings
  const style=read('../src/style.css');
  assert.match(app,/class="item-art" aria-hidden="true"/);
  assert.match(app,/class="item-sprite" style:background-image=/);
- assert.equal((app.match(/<DyeSprite /g)||[]).length,3);
+ assert.equal((app.match(/<DyeSprite /g)||[]).length,4);
+ assert.match(app,/inventorySourceItems\.get\(item\.itemId\)/);
  for(const prohibited of [/native-dye-ring/,/native-dye-preview/,/native-dye-swatch/,/hasSharedDyeableIcon/,/sharedDyeableIcon/]){
   assert.doesNotMatch(app,prohibited);
   assert.doesNotMatch(style,prohibited);

@@ -281,6 +281,9 @@
 .inventory-total{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 .inventory-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;align-items:stretch}
 .inventory-card{padding:17px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow)}
+.inventory-card-heading{display:flex;align-items:center;gap:12px;min-width:0}
+.inventory-item-art{display:flex;align-items:center;justify-content:center;flex:none;width:96px;height:96px}
+.inventory-item-art .item-art-empty{font-size:30px}
 .inventory-name{font-size:13px;line-height:1.55;overflow-wrap:anywhere}
 .inventory-quantity-form{display:flex;align-items:flex-end;gap:8px}
 .inventory-quantity-form label{display:grid;gap:5px;flex:1;min-width:0;color:var(--muted);font-size:11px}
