@@ -14,7 +14,7 @@ const original=originalJobInputs();
 
 test('Archer family points to an audited real serialized GameObject, not a guessed prefab',()=>{
  const f=families.families[0];
- assert.equal(familyCount(),1);
+ assert.equal(familyCount(),3);
  assert.equal(f.originalGameObject,'BasicStyle_FullBody_ImaginationArcher');
  assert.equal(f.originalUnityFS.bundle,'l_basicstyle_fullbody_imaginationarcher');
  assert.equal(f.originalUnityFS.sha256,archer.sha256);
@@ -175,4 +175,64 @@ test('render job exposes actual source renderer material CAB dependencies, not s
  assert.throws(()=>prepareDyeRender('1286846063',{...original,audits:{
   imagination_archer_costume:missingRefs
  }}),/DYE_JOB_MISSING_MATERIAL_PPTRS/);
+});
+
+test('all 44 striped pajama IDs resolve source-confirmed outfit, UiIcon and native render materials',()=>{
+ const bindings=read('../data/unityfs-audit/striped-pajama-bindings.v3.0.1.json');
+ assert.equal(bindings.definitionsSha256,original.palettes.definitions_sha256);
+ const ids=new Set();
+ for(const family of bindings.families){
+  assert.equal(family.records.length,22);
+  const part=family.familyId.endsWith('shirt')?'shirt':'pants';
+  const materialAudit=read('../data/unityfs-audit/pajama-'+part+'-materials.v3.0.1.json');
+  const native=Object.values(materialAudit.materials)[0];
+  for(const [id,suffix,definitionPathId] of family.records){
+   assert.ok(!ids.has(id));ids.add(id);
+   const job=prepareDyeRender(id,original);
+   assert.equal(job.itemKey,family.itemKeyPrefix+suffix);
+   assert.equal(job.familyId,family.familyId);
+   assert.deepEqual(job.nativeBinding,{definitionPathId,outfitPathId:family.outfitPathId,
+    basicStylePathId:family.basicStylePathId,uiIconPathId:family.uiIconPathId,
+    addressableKey:family.addressableKey,sharedIcon:family.sharedIcon});
+   assert.equal(job.nativeMaterial.name,native.name);
+   assert.equal(job.nativeMaterial.shader,'Sunblink/Lynx/CustomLitCharacter');
+   assert.deepEqual(job.nativeMaterial.textures,Object.entries(native.textures).map(([property,ref])=>({
+    property,name:materialAudit.textures[ref.pathId].name
+   })));
+   assert.equal(job.dependencyBundleNames.length,6);
+   assert.ok(job.dependencyBundleNames.includes(materialAudit.sourceBundle));
+   assert.equal(job.dependencyHashes.length,2);
+   assert.equal(job.publishable,false);
+   assert.equal(job.renderer.ready,false);
+   assert.deepEqual(job.palette.colors,original.palettes.records[id].colors);
+  }
+ }
+ assert.equal(ids.size,44);
+ const pants=prepareDyeRender(998530799,original);
+ assert.equal(pants.materialSlots.length,1);
+ assert.equal(pants.materialSlots[0].class,'MeshRenderer');
+ assert.deepEqual(pants.palette.colors,['#d30138','#ebe4e7','#f23b56',null,null]);
+ const shirt=prepareDyeRender(317580042,original);
+ assert.equal(shirt.materialSlots.length,2);
+ assert.deepEqual(shirt.palette.colors,pants.palette.colors);
+});
+
+test('an original-looking but unmapped pajama key cannot create a source-bound render job',()=>{
+ const id=317580042;
+ const corrupted={...original,bindings:{...original.bindings,striped_pajama_shirt:{
+  ...original.bindings.striped_pajama_shirt,
+  families:original.bindings.striped_pajama_shirt.families.map(f=>f.familyId==='striped_pajama_shirt'?
+   {...f,records:f.records.filter(r=>r[0]!==id)}:f)
+ }}};
+ assert.throws(()=>prepareDyeRender(id,corrupted),/DYE_JOB_NATIVE_ITEM_BINDING_MISMATCH/);
+});
+
+test('native diagnostic renderer applies audited source texture maps, not a generic replacement shader',()=>{
+ const code=readFileSync(new URL('../tools/unity/Editor/HKIADyeVariantPilot.cs',import.meta.url),'utf8');
+ assert.match(code,/r is MeshRenderer\|\|r is SkinnedMeshRenderer/);
+ assert.match(code,/origin.shader.name==job.nativeMaterial.shader/);
+ assert.match(code,/tex!=null&&tex.name==expected.name/);
+ assert.match(code,/if\(present\[c\]\)material.SetColor/);
+ assert.match(code,/HKIA_RENDER_DEPENDENCY_SHA256_MISMATCH/);
+ assert.match(code,/NOT validated for publication/);
 });

@@ -18,7 +18,7 @@ const ID=/^[1-9][0-9]{0,9}$/;
 const SHA=/^[0-9a-f]{64}$/;
 const COLOR=/^#[0-9a-f]{6}$/;
 
-export function prepareDyeRender(itemId,{catalog,palettes,families,recipes,audits}){
+export function prepareDyeRender(itemId,{catalog,palettes,families,recipes,audits,bindings={}}){
  if(!ID.test(String(itemId))||!Array.isArray(catalog?.items)||!palettes?.records||
   families?.schema!=='HKIA.DyeRenderFamilies.1'||
   recipes?.schema!=='HKIA.DyeRenderRecipes.1'||
@@ -36,8 +36,21 @@ export function prepareDyeRender(itemId,{catalog,palettes,families,recipes,audit
  if(!audit||audit.sha256!==family.originalUnityFS.sha256||
   !SHA.test(audit.sha256)||audit.bundle!==family.originalUnityFS.bundle||
   audit.serialized.verifiedGameObject!==family.originalGameObject||
-  audit.serialized.classCounts.SkinnedMeshRenderer<1)
+  (audit.serialized.classCounts.SkinnedMeshRenderer??0)+(audit.serialized.classCounts.MeshRenderer??0)<1)
   throw Error('DYE_JOB_SOURCE_AUDIT_MISMATCH');
+ let binding=null;
+ if(family.bindingAudit){
+  const doc=bindings[family.familyId], native=doc?.families?.find(f=>f.familyId===family.familyId);
+  const entry=native?.records?.find(r=>r[0]===Number(itemId));
+  if(doc?.schema!=='HKIA.NativeOutfitIconBindings.1'||doc.version!==palettes.version||
+   doc.definitionsSha256!==palettes.definitions_sha256||!entry||
+   row[1]!==native.itemKeyPrefix+entry[1]||
+   JSON.stringify(native.sharedIcon)!==JSON.stringify(family.sharedIcon))
+   throw Error('DYE_JOB_NATIVE_ITEM_BINDING_MISMATCH');
+  binding={definitionPathId:entry[2],outfitPathId:native.outfitPathId,
+   basicStylePathId:native.basicStylePathId,uiIconPathId:native.uiIconPathId,
+   addressableKey:native.addressableKey,sharedIcon:native.sharedIcon};
+ }
  const recipe=recipes.recipes.find(r=>r.familyId===family.familyId);
  if(!recipe||recipe.output.width!==512||recipe.output.height!==512||
   recipe.output.transparent!==true||recipe.output.format!=='png')
@@ -68,6 +81,9 @@ export function prepareDyeRender(itemId,{catalog,palettes,families,recipes,audit
   sourceAuditSha256:audit.sha256,
   requiredMaterialCABs,
   materialSlots:rendererRefs,
+  ...(binding?{nativeBinding:binding,nativeMaterial:family.nativeMaterial,
+   dependencyBundleNames:family.dependencyBundleNames,
+   dependencyHashes:family.verifiedMaterialDependencies}:{}),
   palette:{dye:palette.dye,colors:palette.colors},
   renderer:{...recipe,ready,verifiedMaterialDependencies:family.verifiedMaterialDependencies},
   outputRelative:'staging/variant-art/'+itemId+'.png',
@@ -77,9 +93,10 @@ export function prepareDyeRender(itemId,{catalog,palettes,families,recipes,audit
 export function originalJobInputs(){
  const families=load('data/dye-render-families.json');
  const audits=Object.fromEntries(families.families.map(f=>[f.familyId,load(f.audit)]));
+ const bindings=Object.fromEntries(families.families.filter(f=>f.bindingAudit).map(f=>[f.familyId,load(f.bindingAudit)]));
  return {catalog:load('public/catalog.json'),
   palettes:load('public/native-dye-palettes.json'),
-  families,recipes:load('data/dye-render-recipes.json'),audits};
+  families,recipes:load('data/dye-render-recipes.json'),audits,bindings};
 }
 const invoked=process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url);
 if(invoked){

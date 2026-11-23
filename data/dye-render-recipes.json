@@ -25,6 +25,54 @@
         "source": "bind-pose-only"
       },
       "publishable": false
+    },
+    {
+      "familyId": "striped_pajama_shirt",
+      "camera": {
+        "projection": "orthographic",
+        "target": "mesh-bounds",
+        "view": "front-pending-orientation-verification",
+        "framePadding": 1.15
+      },
+      "output": {
+        "width": 512,
+        "height": 512,
+        "transparent": true,
+        "format": "png"
+      },
+      "lighting": {
+        "status": "unverified",
+        "source": "not-extracted"
+      },
+      "pose": {
+        "status": "unverified",
+        "source": "original-prefab-not-icon-pose"
+      },
+      "publishable": false
+    },
+    {
+      "familyId": "striped_pajama_pants",
+      "camera": {
+        "projection": "orthographic",
+        "target": "mesh-bounds",
+        "view": "front-pending-orientation-verification",
+        "framePadding": 1.15
+      },
+      "output": {
+        "width": 512,
+        "height": 512,
+        "transparent": true,
+        "format": "png"
+      },
+      "lighting": {
+        "status": "unverified",
+        "source": "not-extracted"
+      },
+      "pose": {
+        "status": "unverified",
+        "source": "original-prefab-not-icon-pose"
+      },
+      "publishable": false
     }
   ]
 }

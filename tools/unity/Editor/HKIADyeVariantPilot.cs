@@ -35,6 +35,20 @@ public static class HKIADyeVariantPilot
         public BundleRef originalUnityFS;
         public Palette palette;
         public bool publishable;
+        public NativeMaterial nativeMaterial;
+        public string[] dependencyBundleNames;
+        public BundleRef[] dependencyHashes;
+    }
+    [Serializable] private sealed class NativeMaterial
+    {
+        public string name;
+        public string shader;
+        public TextureRef[] textures;
+    }
+    [Serializable] private sealed class TextureRef
+    {
+        public string property;
+        public string name;
     }
 
     private static string Arg(string[] all, string key)
@@ -76,6 +90,7 @@ public static class HKIADyeVariantPilot
         GameObject instance=null,camObject=null,lightObject=null;
         AssetBundle bundle=null;
         var dependencies=new List<AssetBundle>();
+        var createdMaterials=new List<Material>();
         RenderTexture target=null;
         RenderTexture oldActive=RenderTexture.active;
         try
@@ -105,7 +120,24 @@ public static class HKIADyeVariantPilot
             // Load original UnityFS dependencies before instantiating the
             // source prefab. Only explicitly supplied local files are used.
             // The CAB resolver must identify these ahead of time.
-            foreach(string dependencyPath in AllArgs(args,"--hkia-dependency"))
+            var dependencyPaths=AllArgs(args,"--hkia-dependency").ToArray();
+            if(job.nativeMaterial!=null)
+            {
+                Require(job.dependencyBundleNames!=null&&job.dependencyHashes!=null,
+                    "HKIA_RENDER_DEPENDENCY_MANIFEST_MISSING");
+                var supplied=dependencyPaths.Select(Path.GetFileNameWithoutExtension).ToArray();
+                Require(supplied.Distinct(StringComparer.Ordinal).Count()==supplied.Length &&
+                    new HashSet<string>(supplied,StringComparer.Ordinal)
+                        .SetEquals(job.dependencyBundleNames),
+                    "HKIA_RENDER_DEPENDENCY_SET_MISMATCH");
+                foreach(var expected in job.dependencyHashes)
+                {
+                    var matching=dependencyPaths.Single(p=>Path.GetFileNameWithoutExtension(p)==expected.bundle);
+                    Require(Hash(matching)==expected.sha256,
+                        "HKIA_RENDER_DEPENDENCY_SHA256_MISMATCH "+expected.bundle);
+                }
+            }
+            foreach(string dependencyPath in dependencyPaths)
             {
                 Require(File.Exists(dependencyPath),"HKIA_RENDER_DEPENDENCY_FILE_MISSING");
                 Require(Path.GetFullPath(dependencyPath)!=Path.GetFullPath(bundlePath),
@@ -121,52 +153,85 @@ public static class HKIADyeVariantPilot
             Require(exact.Length==1,"HKIA_RENDER_EXACT_PREFAB_NOT_RESOLVED");
             instance=UnityEngine.Object.Instantiate(exact[0]);
             instance.name="HKIA_Staged_"+job.itemId;
-            var skinned=instance.GetComponentsInChildren<SkinnedMeshRenderer>(true);
-            Require(skinned.Length>0,"HKIA_RENDER_MESH_NOT_RESOLVED");
-
+            // Include rigid garment meshes as well as skinned meshes. The
+            // pajama pants have only a MeshRenderer. Match the audited garment
+            // Material, not the shared avatar/body Material on the shirt.
+            var candidates=instance.GetComponentsInChildren<Renderer>(true)
+                .Where(r=>r is MeshRenderer||r is SkinnedMeshRenderer).ToArray();
+            Require(candidates.Length>0,"HKIA_RENDER_MESH_NOT_RESOLVED");
             string[] names={"_PaletteColor1","_PaletteColor2","_PaletteColor3",
                             "_PaletteColor4","_PaletteColor5"};
             var colors=new Color[5];
+            var present=new bool[5];
             for(int c=0;c<5;c++)
             {
-                Require(!string.IsNullOrEmpty(job.palette.colors[c]) &&
-                        ColorUtility.TryParseHtmlString(job.palette.colors[c],out colors[c]),
+                // Native null means absent; leave the source Material default
+                // intact instead of synthesizing a fifth or fourth color.
+                if(string.IsNullOrEmpty(job.palette.colors[c])) continue;
+                Require(ColorUtility.TryParseHtmlString(job.palette.colors[c],out colors[c]),
                         "HKIA_RENDER_PALETTE_COLOR_"+(c+1));
+                present[c]=true;
             }
+            Require(present.Any(v=>v),"HKIA_RENDER_NO_NATIVE_PALETTE_COLORS");
             int applied=0;
-            foreach(var renderer in skinned)
+            var visible=new List<Renderer>();
+            foreach(var renderer in candidates)
             {
                 var originals=renderer.sharedMaterials;
                 Require(originals!=null&&originals.Length>0,
                         "HKIA_RENDER_MATERIALS_NOT_RESOLVED");
-                var replacements=new Material[originals.Length];
+                var replacements=(Material[])originals.Clone();
+                bool garment=false;
                 for(int m=0;m<originals.Length;m++)
                 {
                     var origin=originals[m];
                     Require(origin!=null&&origin.shader!=null,
                             "HKIA_RENDER_EXTERNAL_MATERIAL_MISSING");
+                    if(job.nativeMaterial!=null&&origin.name!=job.nativeMaterial.name)continue;
+                    Require(origin.shader.isSupported &&
+                        origin.shader.name!="Hidden/InternalErrorShader",
+                        "HKIA_RENDER_NATIVE_SHADER_UNSUPPORTED");
+                    if(job.nativeMaterial!=null)
+                    {
+                        Require(origin.shader.name==job.nativeMaterial.shader,
+                            "HKIA_RENDER_NATIVE_SHADER_NAME_MISMATCH");
+                        Require(job.nativeMaterial.textures!=null&&job.nativeMaterial.textures.Length==4,
+                            "HKIA_RENDER_TEXTURE_MANIFEST_MISSING");
+                        foreach(var expected in job.nativeMaterial.textures)
+                        {
+                            Require(origin.HasProperty(expected.property),
+                                "HKIA_RENDER_NATIVE_MAP_MISSING "+expected.property);
+                            var tex=origin.GetTexture(expected.property);
+                            Require(tex!=null&&tex.name==expected.name,
+                                "HKIA_RENDER_NATIVE_MAP_MISMATCH "+expected.property);
+                        }
+                    }
                     var material=new Material(origin);
+                    createdMaterials.Add(material);
                     for(int c=0;c<5;c++)
                     {
                         Require(material.HasProperty(names[c]),
                                 "HKIA_RENDER_SHADER_CHANNEL_MISSING "+names[c]);
-                        material.SetColor(names[c],colors[c]);
+                        if(present[c])material.SetColor(names[c],colors[c]);
                     }
-                    // A proper reconstruction must verify the mapping of
-                    // _BaseMap, _ComboMap and _PatternMap in the game shader.
-                    Require(material.HasProperty("_BaseMap"),
-                            "HKIA_RENDER_TEXTURE_BASEMAP_MISSING");
-                    Require(material.GetTexture("_BaseMap")!=null,
+                    Require(material.HasProperty("_BaseMap")&&material.GetTexture("_BaseMap")!=null,
                             "HKIA_RENDER_TEXTURE_NOT_RESOLVED");
                     replacements[m]=material;
+                    garment=true;
                     applied++;
+                }
+                if(job.nativeMaterial!=null&&!garment)
+                {
+                    renderer.enabled=false;
+                    continue;
                 }
                 renderer.sharedMaterials=replacements;
                 renderer.gameObject.SetActive(true);
+                renderer.enabled=true;
+                visible.Add(renderer);
             }
             Require(applied>0,"HKIA_RENDER_NO_COLORIZED_MATERIALS");
-
-            var renderers=instance.GetComponentsInChildren<Renderer>(true);
+            var renderers=visible.ToArray();
             Require(renderers.Length>0,"HKIA_RENDER_NO_RENDERERS");
             var bounds=FindBounds(renderers);
             camObject=new GameObject("HKIA_Staging_Camera");
@@ -215,6 +280,7 @@ public static class HKIADyeVariantPilot
             if(lightObject!=null)UnityEngine.Object.DestroyImmediate(lightObject);
             if(camObject!=null)UnityEngine.Object.DestroyImmediate(camObject);
             if(instance!=null)UnityEngine.Object.DestroyImmediate(instance);
+            foreach(var material in createdMaterials)if(material!=null)UnityEngine.Object.DestroyImmediate(material);
             if(bundle!=null)bundle.Unload(false);
             foreach(var external in dependencies)if(external!=null)external.Unload(false);
         }
