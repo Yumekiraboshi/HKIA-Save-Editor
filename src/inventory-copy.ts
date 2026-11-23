@@ -20,6 +20,27 @@ const messages:Partial<Record<Locale,Copy>>={
  'zh-Hans':{tab:'物品栏',search:'搜索物品',quantity:'数量',apply:'应用',empty:'没有匹配的物品',readonly:'此物品暂不支持安全编辑',count:'已有物品'},
  'zh-Hant':{tab:'物品欄',search:'搜尋物品',quantity:'數量',apply:'套用',empty:'沒有相符的物品',readonly:'此物品暫不支援安全編輯',count:'已有物品'}
 };
-export function inventoryCopy(locale:Locale):Copy{
- return messages[locale]??(locale==='fr-CA'?messages.fr!:en);
+type BrowseCopy={collectionGroups:string;all:string;other:string;editableOnly:string};
+/** Collection GUID grouping is native-source evidence, not an assertion
+ * about the game's own Inventory screen layout.
+ */
+const browsing:Partial<Record<Locale,BrowseCopy>>={
+ en:{collectionGroups:'Collection categories',all:'All',other:'Other items',editableOnly:'Editable only'},
+ ja:{collectionGroups:'コレクションの分類',all:'すべて',other:'その他のアイテム',editableOnly:'編集可能のみ'},
+ ar:{collectionGroups:'فئات المجموعات',all:'الكل',other:'عناصر أخرى',editableOnly:'القابل للتعديل فقط'},
+ de:{collectionGroups:'Sammlungskategorien',all:'Alle',other:'Andere Gegenstände',editableOnly:'Nur bearbeitbare'},
+ es:{collectionGroups:'Categorías de colección',all:'Todo',other:'Otros objetos',editableOnly:'Solo editables'},
+ fr:{collectionGroups:'Catégories de collection',all:'Tout',other:'Autres objets',editableOnly:'Modifiables uniquement'},
+ it:{collectionGroups:'Categorie delle collezioni',all:'Tutti',other:'Altri oggetti',editableOnly:'Solo modificabili'},
+ ko:{collectionGroups:'컬렉션 분류',all:'전체',other:'기타 아이템',editableOnly:'편집 가능만'},
+ nl:{collectionGroups:'Verzamelcategorieën',all:'Alles',other:'Andere items',editableOnly:'Alleen bewerkbaar'},
+ 'pt-BR':{collectionGroups:'Categorias de coleção',all:'Todos',other:'Outros itens',editableOnly:'Somente editáveis'},
+ ru:{collectionGroups:'Категории коллекции',all:'Все',other:'Другие предметы',editableOnly:'Только редактируемые'},
+ tr:{collectionGroups:'Koleksiyon kategorileri',all:'Tümü',other:'Diğer eşyalar',editableOnly:'Yalnızca düzenlenebilir'},
+ 'zh-Hans':{collectionGroups:'收藏分类',all:'全部',other:'其他物品',editableOnly:'仅可编辑'},
+ 'zh-Hant':{collectionGroups:'收藏分類',all:'全部',other:'其他物品',editableOnly:'僅可編輯'}
+};
+export function inventoryCopy(locale:Locale):Copy & BrowseCopy{
+ return {...(messages[locale]??(locale==='fr-CA'?messages.fr!:en)),
+  ...(browsing[locale]??(locale==='fr-CA'?browsing.fr!:browsing.en!))};
 }
