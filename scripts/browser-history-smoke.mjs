@@ -28,7 +28,8 @@ function createSyntheticSlot({childCompleted=null}={}){
  const child=doc(16,arr([1],hash(1,0,0,1),arr([childCompleted?0xc3:0xc2],f32(1),childCompleted?timestamp(...childCompleted):[0xc0])));
  const parent=doc(16,arr([2],hash(2,0,0,1),arr([0xc2],f32(2),[0xc0])));
  const counter=doc(17,arr([1],hash(1,0,0,2),arr(f32(2),[0xc0],[0x90])));
- const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object));
+ const inventory=doc(1,arr([4],u32(315822),[0],u32(6),[0xc0]));
+ const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory));
  const prefix=Uint8Array.from('135b4aa4f702a45d1cc562aeb5a386ed5d17e1fd588f424dcfc59d2e140cf597'.match(/../g).map(x=>parseInt(x,16)));
  const magic=Uint8Array.from('a1a2f8333c66ec455baa2dfc6325c2437a779c9906eecff0c022e5f6b6ca73b8'.match(/../g).map(x=>parseInt(x,16)));
  const lit=[0xf0];let remain=model.length-15;
@@ -100,6 +101,60 @@ async function localDraft(page){
    };
   });
  });
+}
+
+/** Actual user path: search an existing item, change its count, recover the
+ * draft after refresh, export, and independently reparse Rust/WASM bytes. */
+async function inventoryEditExportSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  const source=Buffer.from(createSyntheticSlot());
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-hkia-inventory.save',mimeType:'application/octet-stream',buffer:source
+  });
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,2);
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('315822');
+  const card=page.locator('.inventory-card').first();
+  await card.waitFor({timeout:20_000});
+  const quantity=card.locator('input[name="quantity"]');
+  assert.equal(await quantity.inputValue(),'6');
+  assert.equal(await quantity.isDisabled(),false);
+  await quantity.fill('25');
+  await card.locator('button[type="submit"]').click();
+  await page.locator('.inventory-card input[name="quantity"]').first().waitFor();
+  await page.waitForFunction(()=>document.querySelector('.inventory-card input[name="quantity"]')?.value==='25');
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,2);
+  await page.locator('.inventory-controls input[type="search"]').fill('315822');
+  assert.equal(await page.locator('.inventory-card input[name="quantity"]').first().inputValue(),'25',
+   'browser refresh must restore unsaved inventory changes locally');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([
+   page.waitForEvent('download',{timeout:30_000}),
+   page.locator('.file-menu .menu-popover > button').nth(2).click()
+  ]);
+  const output=readFileSync(await download.path());
+  const wasm=readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm');
+  const {instance}=await WebAssembly.instantiate(wasm,{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);
+  new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);
+  assert.equal(e.hkia_inventory_snapshot(),0);
+  const iv=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(iv.getUint32(0,true),1);
+  assert.equal(iv.getUint32(4,true),4,'document ID unchanged');
+  assert.equal(iv.getInt32(8,true),315822,'item ID unchanged');
+  assert.equal(iv.getInt32(12,true),25,'edited stack count exported');
+  assert.equal(iv.getUint32(16,true),1,'native edit eligibility retained');
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM INVENTORY EDIT/EXPORT PASS: search, CAS edit, local draft recovery, Rust/WASM reparse');
+ }finally{await context.close();}
 }
 
 /** Browser file upload → UI date edit → download → independent native reparse
@@ -751,6 +806,7 @@ async function run(){
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
  await context.close();
  await achievementExportReopenRoundtrip();
+ await inventoryEditExportSmoke();
  await achievementDstFoldExportSmoke();
  await achievementAtlasRetrySmoke();
 }
