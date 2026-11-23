@@ -9,8 +9,7 @@
  import {decodeHistoryDetails,formatHistoryChange} from './history-details';
  import {compactAchievementCopy} from './achievement-compact-ui';
  import {removalConfirmationCopy} from './removal-confirmation';
- import {achievementProgressTarget} from './achievement-progress';
- import {achievementFactsCopy} from './achievement-facts-ui';
+  import {achievementFactsCopy} from './achievement-facts-ui';
  import {loadAchievementFacts,counterIndex,type AchievementFactsIndex} from './achievement-facts';
  import {joinAchievementCatalog,type AchievementListRow} from './achievement-catalog';
  import {loadAchievementGroups,groupRows,ungroupedRows,nativeAchievementOrder,groupSummaries as summarizeAchievementGroups,type AchievementHierarchy} from './achievement-groups';
@@ -128,6 +127,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
  const eligibleCollectionHistoryIds=$derived(new Set((snapshot as SaveSnapshot|null)?.eligibleCollectionHistoryIds??[]));
+ const achievementGoalsByGuid=$derived(new Map((snapshot as SaveSnapshot|null)?.achievementGoals??[]));
  const tabHistory=$derived(((snapshot as SaveSnapshot|null)?.history??[]).filter((entry:HistoryRecord)=>entry.scope===activeTool));
  const tabHistoryCursor=$derived(tabHistory.filter(entry=>entry.applied).length);
  const historyDetails=$derived(decodeHistoryDetails((snapshot as SaveSnapshot|null)?.historyCheckpoint??null,(snapshot as SaveSnapshot|null)?.history??[]));
@@ -842,10 +842,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       {@const art=achievementCategoryAtlas?.bySaveGuid.get(item.guid)}
       {@const individualArt=achievementIndividualAtlas?.bySaveGuid.get(item.guid)}
       {@const title=achievementName(item.guid,item.index)}
-      {@const progressGoal=achievementProgressTarget(
-       achievementGroupHierarchy?.byGuid.get(item.guid)?.children.length??null,
-       achievementFacts.get(item.guid)?.threshold??null
-      )}
+      {@const progressGoal=achievementGoalsByGuid.get(item.guid)??null}
       <article class="item-tile achievement-tile" class:is-recorded={item.row?.value.complete===true}>
        <button type="button" class="item-toggle achievement-toggle"
         aria-pressed={item.row?.value.complete??false}

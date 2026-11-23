@@ -880,6 +880,12 @@ pub fn progress_goal_v301(guid:[u32;4])->Option<f32>{
  if count==0||count>1_000_000 {return None}
  Some(count as f32)
 }
+/// Verified native source thresholds, including direct-child goals for the
+/// 63 source-defined achievement categories (not sentinel counter value 1).
+/// The same Rust source drives click edits AND the read-only progress UI.
+pub fn source_progress_goals_v301()->impl Iterator<Item=([u32;4],f32)>{
+ V301.iter().copied().filter_map(|guid|progress_goal_v301(guid).map(|goal|(guid,goal)))
+}
 
 #[cfg(test)]mod tests{
  use super::*;

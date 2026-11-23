@@ -15,6 +15,8 @@ export type SaveSnapshot={
  historyCheckpoint:Uint8Array|null;
  /** Sorted source-verified IDs currently absent and safe to record in this session. */
  eligibleCollectionHistoryIds:number[];
+ /** Original v3.0.1 Rust-defined GUID/goal pairs, empty on older or unknown versions. */
+ achievementGoals:Array<[string,number]>;
  version:string; // Source-semver; Rust verifies target schema for future revisions.
  zip:boolean;
  membershipEdit:boolean;

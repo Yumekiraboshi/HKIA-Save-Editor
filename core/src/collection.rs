@@ -131,6 +131,12 @@ impl Editor {
    _=>None,
   }).collect()
  }
+ /// Read-only native source metadata for progress footers.
+ /// Unknown and old-format versions never inherit an unverified v3.0.1 goal.
+ pub fn source_achievement_progress_goals(&self)->Vec<([u32;4],f32)>{
+  if self.slot.envelope.version!=Version::V301{return Vec::new()}
+  crate::achievement_keys::source_progress_goals_v301().collect()
+ }
  pub fn achievement_value(&self,guid:[u32;4])->Option<AchievementValue>{
   self.achievement_created.get(&guid).copied().or_else(||self.achievement_changes.get(&guid).copied())
    .or_else(||self.slot.index.achievements.iter().find(|m|m.guid==guid).and_then(|m|achievement::value(m).ok()))

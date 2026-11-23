@@ -1018,3 +1018,27 @@ fn native_collection_creation_eligibility_gates_and_updates(){
  assert!(old.can_change_membership());
  assert!(old.creatable_collection_history_ids().is_empty(),"v3.0.0 may not reuse v3.0.1 allowlist");
 }
+
+#[test]
+fn v301_source_achievement_goals_read_only_exact_and_version_gated(){
+ // Source-derived goal data lives in one authoritative Rust table. Showing
+ // an achievement goal never edits progress, creates a record or alters Undo.
+ let source=slot("3.0.1");
+ let mut editor=Editor::open(source.clone()).unwrap();
+ let goals=editor.source_achievement_progress_goals();
+ assert_eq!(goals.len(),820);
+ assert!(goals.windows(2).all(|rows|rows[0].0<rows[1].0));
+ assert_eq!(goals.iter().find(|(g,_)|*g==[15182560,1296854392,3253409457,3976879535]).unwrap().1,12.0);
+ assert_eq!(goals.iter().find(|(g,_)|*g==[735910181,1277923196,579092924,1040734789]).unwrap().1,2.0);
+ assert!(goals.iter().all(|(_,goal)|goal.is_finite()&&*goal>=1.0&&goal.fract()==0.0));
+ let revision=editor.revision();
+ assert_eq!(editor.source_achievement_progress_goals(),goals);
+ assert!(!editor.dirty());assert_eq!(editor.revision(),revision);
+ editor.change(2,Some(638000000000000001),Some(638000000000000002)).unwrap();
+ assert_eq!(editor.source_achievement_progress_goals(),goals);
+ assert!(editor.undo());
+ assert_eq!(editor.source_achievement_progress_goals(),goals);
+ assert_eq!(source,slot("3.0.1"),"original synthetic save untouched");
+ let old=Editor::open(slot("3.0.0")).unwrap();
+ assert!(old.source_achievement_progress_goals().is_empty(),"do not infer unverified thresholds on v3.0.0");
+}

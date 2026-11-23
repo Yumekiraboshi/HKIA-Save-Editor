@@ -94,6 +94,27 @@ pub extern "C" fn hkia_achievement_parent_create(
 /// until the caller submits the returned value through normal native CAS.
 /// 18-byte response: complete/u8, progress/f32, has_date/u8,
 /// seconds/i64, nanoseconds/u32 (all numeric fields little endian).
+/// Version-gated, read-only game-native achievement goals.
+/// Reply: u32 count, then count entries of 4x LE u32 GUID + LE f32 goal.
+/// No independent TypeScript parent-size or threshold calculations.
+#[no_mangle]
+pub extern "C" fn hkia_achievement_goals_snapshot()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref() else{return 1};
+  let goals=editor.source_achievement_progress_goals();
+  if goals.len()>820{return 1}
+  let mut reply=Vec::with_capacity(4+goals.len()*20);
+  reply.extend((goals.len() as u32).to_le_bytes());
+  for (guid,goal) in goals{
+   for part in guid{reply.extend(part.to_le_bytes())}
+   reply.extend(goal.to_le_bytes());
+  }
+  a.reply=reply;
+  0
+ })
+}
+
 #[no_mangle]
 pub extern "C" fn hkia_achievement_toggle_plan(
  g0:u32,g1:u32,g2:u32,g3:u32,now_ms:i64
