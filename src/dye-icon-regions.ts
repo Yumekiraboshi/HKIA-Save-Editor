@@ -412,6 +412,15 @@ const sourceAccentProfiles:Array<{
  {group:'collections_group_clothing',sheet:0,cell:24,part:'hat-band'},
  {group:'collections_group_clothing',sheet:0,cell:44,part:'right-trouser'},
  {group:'collections_group_clothing',sheet:0,cell:77,part:'chest-panel'},
+ // Original Steam v3.0.1 21-colorway Mermaid Tail silhouettes.
+ // Source-authored Gilded, Ornate, Fish and Striped designs each contain
+ // two shared-primary / different-secondary native palette pairs.
+ // The right-side source-neutral tail fabric receives real dye channel 2.
+ // This source-UiIcon 2D estimate is NOT a verified game 3D shader mask.
+ {group:'collections_group_events',sheet:1,cell:19,part:'right-skirt'},
+ {group:'collections_group_events',sheet:5,cell:141,part:'right-skirt'},
+ {group:'collections_group_events',sheet:6,cell:136,part:'right-skirt'},
+ {group:'collections_group_events',sheet:6,cell:5,part:'right-skirt'},
  {group:'collection_group_citytown',sheet:2,cell:65,part:'chest-panel'},
  {group:'collections_group_clothing',sheet:1,cell:36,part:'chest-panel'},
  {group:'collection_group_teagarden',sheet:0,cell:74,part:'right-skirt'},

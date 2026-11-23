@@ -504,3 +504,28 @@ checked against original game source data. The placement of each
 source-2D cloth/trim region is an estimate, not proof of the Unity 3D
 material/shader channels. The post-build PNG verifier must detect each
 of the six source-distinct variant pairs, or CI fails.
+
+## Original Mermaid Tail colorways
+
+Four further game-authored, source-neutral Mermaid Tail UiIcon families
+each contain 21 valid Item IDs with two exact same-primary/
+different-secondary colorway pairs:
+
+| Game family | Source group | Sheet/cell | Game Item IDs |
+| --- | --- | --- | ---: |
+| Gilded Mermaid Tail | `collections_group_events` | 001/019 | 21 |
+| Ornate Mermaid Tail | `collections_group_events` | 005/141 | 21 |
+| Mermaid Fish Tail | `collections_group_events` | 006/136 | 21 |
+| Striped Mermaid Tail | `collections_group_events` | 006/005 | 21 |
+
+All **84 source IDs**, their original Babel names and native dye palettes
+are checked directly against the bundled Steam v3.0.1 game index.
+The generated icons recolor only neutral source-native tail cloth pixels
+on the right side using the game's second dye channel. Native primary
+fabric, texture, transparency, seams and already colored details remain
+from the actual game sprite; no wiki images or decorative color rings.
+
+This is an *approximate 2D UiIcon region*, not an authenticated Unity
+shader-material assignment or a pixel-perfect in-game 3D render.
+CI checks the generated 96px PNG hashes and channels for every original
+same-primary/different-secondary pair and rejects silent duplicates.
