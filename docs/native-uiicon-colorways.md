@@ -455,3 +455,27 @@ Unity five-channel material shader masks have *not* been recovered
 or proven equivalent. Higher channels with unknown pixel positions
 are not fabricated. No Wiki art, invented items, CSS swatches,
 replacement 3D renders or save editing changes.
+
+## City Town and Clothing original-icon second-channel outfits
+
+Two further *game-original* neutral UiIcon sprites are identified by the
+Steam v3.0.1 packed source atlas and native dye palette:
+
+| Source item-pack group | Native sheet/cell | Original item IDs | Same-primary, different-secondary pairs |
+| --- | --- | ---: | ---: |
+| `collection_group_citytown` | 002/065 | 22 | 3 |
+| `collections_group_clothing` | 001/036 | 15 | 3 |
+
+The original 96×96 chest-decoration pixels inherit the game's **second**
+palette dye and the remaining neutral body uses its first dye; pre-colored
+details, source texture, alpha and silhouette are retained. This changes
+the actual per-item image pixels, without CSS rings, swatches, alternate
+shapes or community-wiki images.
+
+The parent source pack, item IDs, exact five-slot palette records, and
+all six same-primary variant pairs are independently checked by the
+source ZIP/index unit tests. The post-build image QA checks **the
+generated PNG file hashes**, the applied channel-2 mask and source-sheet
+SHA-256; a pair that still renders identically is a test failure.
+The mask placement remains an **approximate 2D UiIcon segmentation**,
+not an authenticated Unity shader or 3D material-channel assignment.

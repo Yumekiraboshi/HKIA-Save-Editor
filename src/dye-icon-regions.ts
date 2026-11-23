@@ -399,6 +399,13 @@ const sourceAccentProfiles:Array<{
  part:'right-skirt'|'plume'|'right-trouser'|'left-trouser'|
   'chest-panel'|'diagonal-sash'|'hat-band';
 }>=[
+ // Original HKIA Steam v3.0.1 City Town and Clothing outfit UiIcon
+ // source index cells; 22 and 15 genuine Item IDs, respectively.
+ // Each has three verified pairs with equal primary dye and different
+ // secondary dye. Recolor source-neutral chest decoration, not an overlay.
+ // Image-derived 2D APPROXIMATION; Unity shader masks remain unverified.
+ {group:'collection_group_citytown',sheet:2,cell:65,part:'chest-panel'},
+ {group:'collections_group_clothing',sheet:1,cell:36,part:'chest-panel'},
  {group:'collection_group_teagarden',sheet:0,cell:74,part:'right-skirt'},
  {group:'collections_group_events',sheet:0,cell:38,part:'plume'},
  {group:'collections_group_events',sheet:1,cell:29,part:'plume'},
