@@ -17,7 +17,7 @@ const rows=[
  {documentId:10,itemId:315822,quantity:4,editable:true},
  {documentId:11,itemId:517031,quantity:1,editable:false},
  {documentId:12,itemId:567052,quantity:8,editable:true},
- {documentId:13,itemId:2147483647,quantity:1,editable:false},
+ {documentId:13,itemId:0,quantity:1,editable:false},
  {documentId:14,itemId:315822,quantity:9,editable:true}
 ];
 const names={'315822':'ミント色のストライプのパジャマシャツ','517031':'青の妖精の服',
@@ -28,7 +28,7 @@ const filter=(term='',group=null,editable=false,locale='ja')=>
 test('original collection groups are only assigned through verified item source IDs',()=>{
  assert.equal(sourceCollectionGroup(315822,items,groups),'collections_group_clothing');
  assert.equal(sourceCollectionGroup(567052,items,groups),'collections_group_food');
- assert.equal(sourceCollectionGroup(2147483647,items,groups),OTHER_INVENTORY_GROUP);
+ assert.equal(sourceCollectionGroup(0,items,groups),OTHER_INVENTORY_GROUP);
  const totals=inventoryGroupCounts(rows,items,groups);
  assert.equal(totals.get('collections_group_clothing'),2,'counts native document stacks');
  assert.equal(totals.get('collections_group_events'),1);
