@@ -456,6 +456,24 @@ const sourceAccentProfiles:Array<{
  {group:'collections_group_events',sheet:10,cell:10,part:'right-trouser'},
  {group:'collections_group_events',sheet:2,cell:108,part:'plume'},
  {group:'collections_group_events',sheet:2,cell:59,part:'hat-band'},
+ // All 12 original v3.0.1 Pink/Purple Bee source UiIcon families.
+ // Each contains 11 genuine source-game item IDs with the same primary
+ // palette (#3a3840) in the verified pair but different second dye values
+ // (#fd8de0 vs #a66fbe). The *original sprite pixels* inherit channel 2.
+ // These source-anchored regions are an approximate 2D segmentation,
+ // NOT recovered Unity shader/material-channel assignments.
+ {group:'collections_group_events',sheet:3,cell:122,part:'hat-band'}, // Pleated Sunhat
+ {group:'collections_group_events',sheet:3,cell:54,part:'chest-panel'}, // Parade Vest
+ {group:'collections_group_events',sheet:3,cell:75,part:'right-trouser'}, // Parade Pants
+ {group:'collections_group_events',sheet:4,cell:105,part:'chest-panel'}, // Pleated Vest
+ {group:'collections_group_events',sheet:4,cell:142,part:'plume'}, // Pinwheel
+ {group:'collections_group_events',sheet:4,cell:81,part:'hat-band'}, // Pleated Cap
+ {group:'collections_group_events',sheet:5,cell:139,part:'hat-band'}, // Origami Helm
+ {group:'collections_group_events',sheet:5,cell:3,part:'plume'}, // Paper Bow
+ {group:'collections_group_events',sheet:5,cell:96,part:'plume'}, // Wings
+ {group:'collections_group_events',sheet:6,cell:67,part:'right-skirt'}, // Pleated Dress
+ {group:'collections_group_events',sheet:7,cell:117,part:'hat-band'}, // Origami Crane Hat
+ {group:'collections_group_events',sheet:7,cell:28,part:'hat-band'}, // Pleated Tophat
  {group:'collection_group_citytown',sheet:1,cell:11,part:'right-trouser'},
  {group:'collection_group_citytown',sheet:0,cell:65,part:'chest-panel'},
  {group:'collection_group_citytown',sheet:1,cell:61,part:'diagonal-sash'},
