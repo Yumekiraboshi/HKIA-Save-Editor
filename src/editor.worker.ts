@@ -7,6 +7,7 @@ type Transport = { postMessage(data:unknown, transfer?:Transferable[]):void; onm
 type Engine = {
  memory:WebAssembly.Memory;
  hkia_stage(n:number):number; hkia_open():number;
+ hkia_collection_creatable_snapshot():number;
  hkia_change(id:number,expectedPresent:number,old:bigint,nextPresent:number,value:bigint):number;
  hkia_achievement_parent_create(...args:[ number,number,number,number, number, number,number,bigint,number,number, number,number,bigint,number,number, number,number,number,number, number,number,bigint,number,number]):number;
  hkia_achievement_create(g0:number,g1:number,g2:number,g3:number,complete:number,progress:number,seconds:bigint,nanos:number,hasDate:number):number;
@@ -130,7 +131,21 @@ function snapshot(e:Engine){
   const saved=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
   if(saved.length>=16&&saved.length<=128*1024)checkpoint=saved;
  }
- return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,achievements,counters,history,historyCheckpoint:checkpoint};
+ if(e.hkia_collection_creatable_snapshot()!==0)throw Error('COLLECTION_ELIGIBILITY_FAILED');
+ const eligible=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+ if(eligible.length<4)throw Error('COLLECTION_ELIGIBILITY_INVALID');
+ const ev=new DataView(eligible.buffer,eligible.byteOffset,eligible.byteLength);
+ const eligibleCount=ev.getUint32(0,true);
+ if(eligibleCount>100_000||eligible.length!==4+eligibleCount*4)throw Error('COLLECTION_ELIGIBILITY_INVALID');
+ const eligibleCollectionHistoryIds:number[]=[];
+ let lastId=0;
+ for(let i=0;i<eligibleCount;i++){
+  const id=ev.getInt32(4+i*4,true);
+  if(id<=0||id>=2147483647||id===lastId)throw Error('COLLECTION_ELIGIBILITY_INVALID');
+  eligibleCollectionHistoryIds.push(id);
+  lastId=id;
+ }
+ return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,achievements,counters,history,historyCheckpoint:checkpoint,eligibleCollectionHistoryIds};
 }
 function validAchievement(v:AchievementValue):boolean{
  return !!v&&typeof v.complete==='boolean'&&typeof v.current==='number'&&Number.isFinite(v.current)&&v.current>=0&&

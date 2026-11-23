@@ -42,6 +42,29 @@ function snapshot(){
  return {entries,dirty:b[2],canUndo:b[3],canRedo:b[4]};
 }
 load(slot);
+// Exact native source allowlist is exposed to the UI without TS flag mirrors.
+// An eligibility read may not alter save state, timestamps or Undo history.
+assert.ok(e.hkia_collection_creatable_snapshot,'missing collection source eligibility ABI');
+function creatableIds(){
+ assert.equal(e.hkia_collection_creatable_snapshot(),0);
+ const p=e.hkia_reply_ptr(),n=e.hkia_reply_len();
+ const v=new DataView(e.memory.buffer,p,n),count=v.getUint32(0,true);
+ assert.ok(count>5000&&count<100000);
+ assert.equal(n,4+count*4);
+ const ids=[];for(let i=0;i<count;i++)ids.push(v.getInt32(4+i*4,true));
+ assert.ok(ids.every((id,i)=>id>0&&id<2147483647&&(!i||id>ids[i-1])));
+ return ids;
+}
+const eligibleBefore=creatableIds();
+assert.ok(eligibleBefore.includes(259795663),'native source floorplan exception must be visible');
+assert.ok(eligibleBefore.includes(315822),'native ordinary eligible history');
+assert.ok(!eligibleBefore.includes(2),'original saved history must not be created again');
+assert.equal(snapshot().dirty,0);
+assert.equal(e.hkia_change(315822,0,0n,1,638000000000000000n),0);
+assert.ok(!creatableIds().includes(315822),'after create, id leaves new-record allowlist');
+assert.equal(e.hkia_undo(),0);
+assert.deepEqual(creatableIds(),eligibleBefore,'Undo restores precise native eligibility');
+assert.equal(snapshot().dirty,0);
 // Read-only source-v3.0.1 native click plan: unknown IDs and invalid clock
 // are rejected without modifying the original session or its history.
 assert.ok(e.hkia_achievement_toggle_plan,'missing Rust-only achievement planner ABI');

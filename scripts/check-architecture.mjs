@@ -41,8 +41,7 @@ for(const p of illegalRuntimeJs)
 
 // Migrated: source-defined achievement parent mutations now live in Rust.
 const legacyRules=new Map([
- ['src/achievement-progress.ts',new Set(['achievementProgressTarget'])],
- ['src/collection-eligibility.ts',new Set(['mayCreateCollectionHistory'])]
+ ['src/achievement-progress.ts',new Set(['achievementProgressTarget'])]
 ]);
 // Current transport/draft-display adapters are not authoritative game-state writers.
 const transportAdapters=new Set([

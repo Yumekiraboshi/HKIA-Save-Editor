@@ -13,6 +13,8 @@ export type HistoryRecord={
 export type SaveSnapshot={
  history:HistoryRecord[];
  historyCheckpoint:Uint8Array|null;
+ /** Sorted source-verified IDs currently absent and safe to record in this session. */
+ eligibleCollectionHistoryIds:number[];
  version:string; // Source-semver; Rust verifies target schema for future revisions.
  zip:boolean;
  membershipEdit:boolean;

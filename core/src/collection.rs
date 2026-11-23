@@ -171,6 +171,21 @@ impl Editor {
   true
  }
  pub fn can_change_membership(&self)->bool {self.slot.index.deprecated_map.is_some() && self.slot.index.deprecated_count==0 && self.slot.index.deprecated.is_empty()}
+ /// Read-only native source eligibility for the currently opened save.
+ /// The exact same game-source IDs and compatibility gates used by
+ /// change(None, Some(ticks)) determine which missing records are offered.
+ /// No inventory, DLC ownership or progress is modified by this query.
+ pub fn creatable_collection_history_ids(&self)->Vec<i32>{
+  if self.slot.envelope.version!=Version::V301||!self.can_change_membership(){
+   return Vec::new()
+  }
+  let mut ids:Vec<i32>=crate::catalog::eligible_history_ids()
+   .filter(|&id|id>0&&id!=i32::MAX&&self.value(id).is_none())
+   .collect();
+  ids.sort_unstable();
+  ids.dedup();
+  ids
+ }
  pub fn change(&mut self,id:i32,expected:Option<i64>,next:Option<i64>)->Result<(),Error>{
   if id<=0 || id==i32::MAX || self.value(id)!=expected || next==expected {return Err(Error::Schema)}
   if (expected.is_none() || next.is_none()) && !self.can_change_membership(){return Err(Error::Schema)}
