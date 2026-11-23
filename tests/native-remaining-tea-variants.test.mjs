@@ -19,14 +19,14 @@ const TEA='collection_group_teagarden',CLOTH='collections_group_clothing',EV='co
 const sources=[
  {group:TEA,sheet:0,cell:28,n:42,end:'High Tea Waistcoat',accent:[54,45],base:[30,45]},
  {group:TEA,sheet:0,cell:25,n:40,end:'High Tea Flower Bonnet',accent:[54,45],base:[30,45]},
- {group:TEA,sheet:0,cell:63,n:40,end:'High Tea Open Tailcoat',accent:[53,50],base:[30,50]},
- {group:TEA,sheet:0,cell:95,n:40,end:'High Tea Patterned Tailcoat',accent:[54,45],base:[30,45]},
+ {group:TEA,sheet:0,cell:63,n:40,end:'High Tea Open Tailcoat',accent:[53,50],base:[26,50]},
+ {group:TEA,sheet:0,cell:95,n:40,end:'High Tea Patterned Tailcoat',accent:[54,45],base:[30,60]},
  {group:TEA,sheet:0,cell:107,n:38,end:'High Tea Elegant Dress',accent:[64,55],base:[30,55]},
  {group:TEA,sheet:0,cell:106,n:38,end:'High Tea Dress',accent:[64,55],base:[30,55]},
  {group:TEA,sheet:0,cell:52,n:36,end:'High Tea Long Sleeved Dress',accent:[64,55],base:[30,55]},
  {group:TEA,sheet:0,cell:105,n:34,end:'High Tea Great Coat',accent:[53,50],base:[30,50]},
  {group:CLOTH,sheet:0,cell:39,n:12,end:'Browline Glasses',accent:[54,50],base:[30,70]},
- {group:EV,sheet:2,cell:81,n:18,end:'Soccer Jersey',accent:[54,45],base:[30,45]},
+ {group:EV,sheet:2,cell:81,n:18,end:'Soccer Jersey',accent:[54,45],base:[30,60]},
  {group:EV,sheet:4,cell:109,n:12,end:'Grass Skirt',accent:[64,55],base:[30,55]},
  {group:EV,sheet:5,cell:74,n:11,end:'Floral Beachcomber Hat',accent:[54,50],base:[30,70]},
  {group:EV,sheet:7,cell:121,n:22,end:'Vaporwave Eclectic Outfit',accent:[54,45],base:[30,45]}
