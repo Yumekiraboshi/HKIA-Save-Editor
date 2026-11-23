@@ -1,55 +1,55 @@
 import type {InventoryEntry} from './worker-client';
 import type {CollectionItem} from './subcategories';
+import type {NativeInventoryIndex} from './inventory-native-data';
 
-/** Only game-derived collection GUID grouping is known here. This is a
- * browsing aid, not a claim about the game's Inventory tab category schema.
- * Unknown native inventory IDs remain visible under Other rather than being
- * silently assigned to a guessed category.
+/** Original InventoryViewModel.RawCategories array: v3.0.1 metadata 0xC1E150.
+ * Category mask browsing preserves records and multiple matching tabs; specialized
+ * runtime visibility/filter behavior is not asserted to match the game exactly.
+ * Non-inventory-specific artwork reuses original game Collection UI art.
  */
-export const OTHER_INVENTORY_GROUP='__inventory_other__';
-
-export function sourceCollectionGroup(
- itemId:number,
- sourceItems:ReadonlyMap<number,CollectionItem>,
- sourceGroups:ReadonlySet<string>
-):string{
- const group=sourceItems.get(itemId)?.[3];
- return group&&sourceGroups.has(group)?group:OTHER_INVENTORY_GROUP;
+export const NATIVE_INVENTORY_TABS=[
+ {key:'key-items',bit:134217728,art:null},
+ {key:'items',bit:0,art:null},
+ {key:'food',bit:65536,art:'collections_group_food.webp'},
+ {key:'chef-station',bit:4096,art:'collections_group_recipes.webp'},
+ {key:'flowers',bit:50331648,art:'inventory-category-flowers.png'},
+ {key:'creation-station',bit:32,art:'collections_group_plans.webp'},
+ {key:'critters',bit:8,art:'collections_group_critters.webp'},
+ {key:'fish',bit:16384,art:'collections_group_fish.webp'},
+ {key:'clothes',bit:256,art:'collections_group_clothing.webp'},
+ {key:'furniture',bit:64,art:'inventory-category-furniture.png'},
+ {key:'comics',bit:67108864,art:'collections_group_comics.webp'},
+ {key:'music',bit:2097152,art:'collections_group_musicdiscs.webp'},
+ {key:'wands',bit:8388608,art:null}
+] as const;
+export type InventoryGroupKey=(typeof NATIVE_INVENTORY_TABS)[number]['key']|'other';
+export const OTHER_INVENTORY_GROUP:InventoryGroupKey='other';
+export function nativeInventoryGroups(itemId:number,index:NativeInventoryIndex):InventoryGroupKey[]{
+ const source=index.get(itemId);
+ if(!source)return [OTHER_INVENTORY_GROUP];
+ const flags=source.hasUiOverride?source.uiOverrideFlags:source.rawFlags;
+ if(flags<0)return [OTHER_INVENTORY_GROUP];
+ const matches:InventoryGroupKey[]=NATIVE_INVENTORY_TABS.filter(t=>t.bit!==0&&(flags&t.bit)!==0).map(t=>t.key);
+ return matches.length?matches:['items'];
 }
-
-export function inventoryGroupCounts(
- rows:readonly InventoryEntry[],
- sourceItems:ReadonlyMap<number,CollectionItem>,
- sourceGroups:ReadonlySet<string>
-):Map<string,number>{
- const counts=new Map<string,number>();
- for(const row of rows){
-  const group=sourceCollectionGroup(row.itemId,sourceItems,sourceGroups);
-  counts.set(group,(counts.get(group)??0)+1);
- }
+export function inventoryGroupCounts(rows:readonly InventoryEntry[],index:NativeInventoryIndex):Map<InventoryGroupKey,number>{
+ const counts=new Map<InventoryGroupKey,number>();
+ for(const row of rows)for(const key of nativeInventoryGroups(row.itemId,index))counts.set(key,(counts.get(key)??0)+1);
  return counts;
 }
 
-/** Read-only search/sorting/filtering of already-parsed native rows.
- * All write eligibility, CAS, and serialization stay in Rust/WASM.
- */
+/** Search/filter only; quantity CAS and writer remain solely Rust/WASM. */
 export function browseInventory(
- rows:readonly InventoryEntry[],
- term:string,
- selectedGroup:string|null,
- editableOnly:boolean,
- localizedNames:Readonly<Record<string,string>>,
- sourceItems:ReadonlyMap<number,CollectionItem>,
- sourceGroups:ReadonlySet<string>,
- locale:string
+ rows:readonly InventoryEntry[],term:string,selectedGroup:InventoryGroupKey|null,
+ editableOnly:boolean,localizedNames:Readonly<Record<string,string>>,
+ sourceItems:ReadonlyMap<number,CollectionItem>,index:NativeInventoryIndex,locale:string
 ):InventoryEntry[]{
  const q=term.trim().toLocaleLowerCase();
  return rows.filter(row=>{
   if(editableOnly&&!row.editable)return false;
-  const source=sourceItems.get(row.itemId);
-  if(selectedGroup!==null&&
-   sourceCollectionGroup(row.itemId,sourceItems,sourceGroups)!==selectedGroup)return false;
+  if(selectedGroup!==null&&!nativeInventoryGroups(row.itemId,index).includes(selectedGroup))return false;
   if(!q)return true;
+  const source=sourceItems.get(row.itemId);
   return String(row.itemId).includes(q)||
    (localizedNames[String(row.itemId)]??'').toLocaleLowerCase().includes(q)||
    (source?.[5]??'').toLocaleLowerCase().includes(q)||
