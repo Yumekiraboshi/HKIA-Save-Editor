@@ -1,10 +1,11 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
- import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
+ import {openSave,changeCollection,changeInventoryQuantity,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {diffPatches,diffInventory,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
+ import {inventoryCopy} from './inventory-copy';
  import {loadSourceItemNames,type SourceItemNames} from './source-names';
  import {decodeHistoryDetails,formatHistoryChange} from './history-details';
  import {compactAchievementCopy} from './achievement-compact-ui';
@@ -36,7 +37,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
  type Filter='all'|'recorded'|'unrecorded';
- type Tool='collections'|'achievements';
+ type Tool='collections'|'achievements'|'inventory';
  type ThemePref='system'|'light'|'dark';
  type PendingRemoval=
   | {kind:'collections';id:number;name:string;before:bigint;revision:number;fromDateDialog:boolean}
@@ -46,6 +47,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  const ICONS=import.meta.env.BASE_URL+'icons/';
  let activeTool:Tool=$state('collections');
  let achievementQuery=$state('');
+ let inventoryQuery=$state('');
+ let inventoryLimit=$state(BATCH_SIZE);
+ let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
+ let inventoryBaseline:InventoryEntry[]=[];
  let achievementIndex:AchievementIndex=$state(new Map());
  let achievementGroupHierarchy:AchievementHierarchy|null=$state(null);
  let achievementCategoryAtlas:CategoryIconAtlas|null=$state(null);
@@ -118,6 +123,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const copy=$derived(localizedCopy(locale));
  const removalCopy=$derived(removalConfirmationCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
+ const iCopy=$derived(inventoryCopy(locale));
  const hCopy=$derived(historyCopy(locale));
  const hDetailCopy=$derived(historyDetailCopy(locale));
  const compactCopy=$derived(compactAchievementCopy(locale));
@@ -131,6 +137,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const historyDetails=$derived(decodeHistoryDetails((snapshot as SaveSnapshot|null)?.historyCheckpoint??null,(snapshot as SaveSnapshot|null)?.history??[]));
  const tabHistoryDetails=$derived(historyDetails.filter(entry=>entry.scope===activeTool));
  const historyItems=$derived(new Map(((catalog as Catalog|null)?.items??[]).map(item=>[item[0],item])));
+ const inventoryHistoryItems=$derived(new Map(((snapshot as SaveSnapshot|null)?.inventory??[]).map(item=>[item.documentId,item.itemId])));
  const sourceAchievementRows=$derived(joinAchievementCatalog(achievementIndex,(snapshot as SaveSnapshot|null)?.achievements??[]));
  const achievementGroupSummaries=$derived(achievementGroupHierarchy?summarizeAchievementGroups(achievementGroupHierarchy,sourceAchievementRows):[]);
  const unmappedAchievementRows=$derived(achievementGroupHierarchy?ungroupedRows(achievementGroupHierarchy,sourceAchievementRows):[]);
@@ -138,6 +145,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  const groupScopedAchievementRows=$derived(achievementGroupHierarchy&&achievementGroupSelection?
   achievementGroupSelection==='__unmapped'?unmappedAchievementRows:groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows,achievementFacts):
   sourceOrderedAchievementRows);
+ const inventoryRows=$derived(((snapshot as SaveSnapshot|null)?.inventory??[]).filter(row=>{
+  const q=inventoryQuery.trim().toLocaleLowerCase();
+  return !q||inventoryName(row.itemId).toLocaleLowerCase().includes(q)||String(row.itemId).includes(q);
+ }));
  const achievementRows=$derived(searchAchievementRows(achievementQuery,sourceOrderedAchievementRows,
   groupScopedAchievementRows,achievementName,guid=>achievementIndex.get(guid)?.key??''));
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
@@ -295,6 +306,16 @@ import {verifiedFloorplanName} from './floorplan-names';
   observer.observe(el);
   return ()=>observer.disconnect();
  });
+ $effect(()=>{
+  const el=inventoryLoadMoreSentinel;
+  if(!el||typeof IntersectionObserver==='undefined')return;
+  const observer=new IntersectionObserver(entries=>{
+   if(entries.some(x=>x.isIntersecting))
+    inventoryLimit=Math.min(inventoryLimit+BATCH_SIZE,inventoryRows.length);
+  },{rootMargin:'720px 0px'});
+  observer.observe(el);
+  return ()=>observer.disconnect();
+ });
  const unnamed=$derived((catalog as Catalog|null)?.items.filter((x:Item)=>!x[5]&&!x[6]&&!verifiedFloorplanName(x[0],locale)).length??0);
  function describeError(e:unknown){const raw=e instanceof Error?e.message:String(e);return editorErrors[locale==='ja'?'ja':'en'][raw]??(locale==='ja'?(raw||copy.unknown):copy.unknown);}
  function setLanguage(v:LanguagePref){
@@ -302,6 +323,12 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function setTheme(v:ThemePref){
   themePref=v;try{localStorage.setItem('hkia-display-theme',v)}catch{}
+ }
+ function inventoryName(itemId:number):string{
+  return sourceNames[String(itemId)]??'#'+String(itemId);
+ }
+ function openInventoryTab(){
+  activeTool='inventory';inventoryQuery='';inventoryLimit=BATCH_SIZE;editingAchievement=null;error='';
  }
  function showAchievementGroup(guid:string|null){
   achievementGroupSelection=guid;achievementQuery='';
@@ -382,7 +409,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
  function historyEntryChange(i:number):string{
-  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired)||
+  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity)||
    (tabHistory[i]?.paired?hCopy.paired:'');
  }
  function historyEntryLabel(entry:HistoryRecord):string{
@@ -390,6 +417,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const item=historyItems.get(entry.itemId??0);
    return item?nameFor(item):'#'+String(entry.itemId);
   }
+  if(entry.scope==='inventory')return inventoryName(inventoryHistoryItems.get(entry.itemId??0)??0);
   if(!entry.guid)return hCopy.title;
   return achievementName(achievementGuid(entry.guid),0);
  }
