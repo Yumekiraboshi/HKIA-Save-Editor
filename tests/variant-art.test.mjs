@@ -92,10 +92,11 @@ test('every registered exact image is an audited, local, unmodified PNG or WebP'
  }
 });
 
-test('the collection selects exact captures first in all three places and never adds dye rings',()=>{
+test('Collection and Inventory select source-registered exact images before approximations',()=>{
  const app=read('../src/App.svelte'),sprite=read('../src/DyeSprite.svelte');
  assert.match(app,/loadVariantArtIndex\(import\.meta\.env\.BASE_URL\)/);
- assert.equal((app.match(/exactArtUrl=\{/g)||[]).length,3);
+ assert.equal((app.match(/exactArtUrl=\{/g)||[]).length,4);
+ assert.match(app,/exactVariantArt\[String\(item\.itemId\)\]/);
  assert.match(app,/exactVariantArt\[String\(sub\.previewId\)\]/);
  assert.match(app,/exactVariantArt\[String\(item\[0\]\)\]/);
  assert.match(app,/exactVariantArt\[String\(dateDialogItem\[0\]\)\]/);
