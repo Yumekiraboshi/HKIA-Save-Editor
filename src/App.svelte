@@ -32,7 +32,6 @@
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
  import {searchAllCollectionItems,collectionDisplayName,filterCollectionItems} from './collection-search';
 import {verifiedFloorplanName} from './floorplan-names';
-import {mayCreateCollectionHistory} from './collection-eligibility';
  type Item=CollectionItem;
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
@@ -128,6 +127,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
  const rewardsById=$derived(new Map(((catalog as Catalog|null)?.items??[]).map((item:Item)=>[item[0],nameFor(item)])));
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
+ const eligibleCollectionHistoryIds=$derived(new Set((snapshot as SaveSnapshot|null)?.eligibleCollectionHistoryIds??[]));
  const tabHistory=$derived(((snapshot as SaveSnapshot|null)?.history??[]).filter((entry:HistoryRecord)=>entry.scope===activeTool));
  const tabHistoryCursor=$derived(tabHistory.filter(entry=>entry.applied).length);
  const historyDetails=$derived(decodeHistoryDetails((snapshot as SaveSnapshot|null)?.historyCheckpoint??null,(snapshot as SaveSnapshot|null)?.history??[]));
@@ -1063,7 +1063,7 @@ import {mayCreateCollectionHistory} from './collection-eligibility';
      {@const direct=tick!==undefined}
      {@const recordIds=families[String(item[7]||item[0])]??[]}
      {@const has=showVariants?direct:recordIds.length>0}
-     {@const mayAdd=mayCreateCollectionHistory(item,snapshot.membershipEdit,snapshot.version,catalog?.version)}
+     {@const mayAdd=snapshot.version===catalog?.version&&eligibleCollectionHistoryIds.has(item[0])}
      {@const mayToggle=showVariants?(direct?snapshot.membershipEdit:mayAdd):(recordIds.length===0?mayAdd:recordIds.length===1&&direct&&snapshot.membershipEdit)}
      {@const sprite=iconPack?.group===selectedGroup?iconPack.entries[String(item[0])]:undefined}
      <article class="item-tile" id={'collection-item-'+item[0]} class:is-recorded={has}>
