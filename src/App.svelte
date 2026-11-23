@@ -6,7 +6,7 @@
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
  import {inventoryCopy} from './inventory-copy';
- import {browseInventory,inventoryGroupCounts,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {browseInventory,inventoryGroupCounts,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {inventoryGroupLabel} from './inventory-native-category-copy';
  import {loadSourceItemNames,type SourceItemNames} from './source-names';
@@ -165,8 +165,9 @@ import {verifiedFloorplanName} from './floorplan-names';
  const inventoryGroupTotals=$derived(inventoryGroupCounts(
   (snapshot as SaveSnapshot|null)?.inventory??[],nativeInventoryIndex));
  const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
+ const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
  const inventoryRows=$derived(browseInventory(
-  (snapshot as SaveSnapshot|null)?.inventory??[],inventoryQuery,inventoryGroup,
+  (snapshot as SaveSnapshot|null)?.inventory??[],inventoryQuery,activeInventoryGroup,
   inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale));
  const achievementRows=$derived(searchAchievementRows(achievementQuery,sourceOrderedAchievementRows,
   groupScopedAchievementRows,achievementName,guid=>achievementIndex.get(guid)?.key??''));
@@ -1047,20 +1048,16 @@ import {verifiedFloorplanName} from './floorplan-names';
    {#if inventoryVisibleGroups.length>0||(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)>0}
     
     <nav class="inventory-group-strip" aria-label={iCopy.tab}>
-     <button type="button" class="inventory-group-option" class:active={inventoryGroup===null}
-      aria-pressed={inventoryGroup===null} onclick={()=>{inventoryGroup=null;inventoryLimit=BATCH_SIZE}}>
-      <span>{iCopy.all}</span><small>{snapshot?.inventory.length.toLocaleString(locale)}</small>
-     </button>
      {#each inventoryVisibleGroups as t (t.key)}
-      <button type="button" class="inventory-group-option" class:active={inventoryGroup===t.key}
-       aria-pressed={inventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;inventoryLimit=BATCH_SIZE}}>
+      <button type="button" class="inventory-group-option" class:active={activeInventoryGroup===t.key}
+       aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;inventoryLimit=BATCH_SIZE}}>
        {#if t.art}<img src={ICONS+t.art} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>{/if}
        <span>{inventoryGroupLabel(locale,t.key)}</span><small>{(inventoryGroupTotals.get(t.key)??0).toLocaleString(locale)}</small>
       </button>
      {/each}
      {#if (inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)>0}
-      <button type="button" class="inventory-group-option" class:active={inventoryGroup===OTHER_INVENTORY_GROUP}
-       aria-pressed={inventoryGroup===OTHER_INVENTORY_GROUP}
+      <button type="button" class="inventory-group-option" class:active={activeInventoryGroup===OTHER_INVENTORY_GROUP}
+       aria-pressed={activeInventoryGroup===OTHER_INVENTORY_GROUP}
        onclick={()=>{inventoryGroup=OTHER_INVENTORY_GROUP;inventoryLimit=BATCH_SIZE}}>
        <span>{iCopy.other}</span><small>{inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)?.toLocaleString(locale)}</small>
       </button>

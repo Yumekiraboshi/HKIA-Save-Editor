@@ -38,16 +38,22 @@ export function inventoryGroupCounts(rows:readonly InventoryEntry[],index:Native
  return counts;
 }
 
+/** Select the first occupied native tab in original order. Unknown rows remain reachable. */
+export function defaultInventoryGroup(counts:ReadonlyMap<InventoryGroupKey,number>):InventoryGroupKey{
+ return NATIVE_INVENTORY_TABS.find(t=>(counts.get(t.key)??0)>0)?.key ??
+  ((counts.get(OTHER_INVENTORY_GROUP)??0)>0?OTHER_INVENTORY_GROUP:NATIVE_INVENTORY_TABS[0].key);
+}
+
 /** Search/filter only; quantity CAS and writer remain solely Rust/WASM. */
 export function browseInventory(
- rows:readonly InventoryEntry[],term:string,selectedGroup:InventoryGroupKey|null,
+ rows:readonly InventoryEntry[],term:string,selectedGroup:InventoryGroupKey,
  editableOnly:boolean,localizedNames:Readonly<Record<string,string>>,
  sourceItems:ReadonlyMap<number,CollectionItem>,index:NativeInventoryIndex,locale:string
 ):InventoryEntry[]{
  const q=term.trim().toLocaleLowerCase();
  return rows.filter(row=>{
   if(editableOnly&&!row.editable)return false;
-  if(selectedGroup!==null&&!nativeInventoryGroups(row.itemId,index).includes(selectedGroup))return false;
+  if(!nativeInventoryGroups(row.itemId,index).includes(selectedGroup))return false;
   if(!q)return true;
   const source=sourceItems.get(row.itemId);
   return String(row.itemId).includes(q)||

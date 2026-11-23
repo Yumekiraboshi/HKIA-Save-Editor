@@ -12,21 +12,23 @@ const buildSource=async file=>{
  return import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 };
 const {decodeNativeInventoryIndex}=await buildSource('../src/inventory-native-data.ts');
-const {nativeInventoryGroups,inventoryGroupCounts,browseInventory,NATIVE_INVENTORY_TABS}=await buildSource('../src/inventory-browse.ts');
+const {nativeInventoryGroups,inventoryGroupCounts,browseInventory,defaultInventoryGroup,NATIVE_INVENTORY_TABS}=await buildSource('../src/inventory-browse.ts');
 const catalog=JSON.parse(readFileSync(new URL('../public/catalog.json',import.meta.url)));
 const items=new Map(catalog.items.map(x=>[x[0],x]));
 const packed=JSON.parse(readFileSync(new URL('../public/inventory-native-categories.json',import.meta.url)));
 const raw=gunzipSync(Buffer.from(packed.data,'base64'));
 const names={'315822':'ミント色のストライプのパジャマシャツ','517031':'青の妖精の服','567052':'サクラ・チーズケーキ'};
 const index=decodeNativeInventoryIndex(packed,raw);
+const unknownId=0;
+assert.equal(index.has(unknownId),false);
 const rows=[
  {documentId:10,itemId:315822,quantity:4,editable:true},
  {documentId:11,itemId:517031,quantity:1,editable:false},
  {documentId:12,itemId:567052,quantity:8,editable:true},
- {documentId:13,itemId:2147483647,quantity:1,editable:false},
+ {documentId:13,itemId:unknownId,quantity:1,editable:false},
  {documentId:14,itemId:315822,quantity:9,editable:true}
 ];
-const filter=(q='',group=null,editable=false)=>browseInventory(rows,q,group,editable,names,items,index,'ja');
+const filter=(q='',group='clothes',editable=false)=>browseInventory(rows,q,group,editable,names,items,index,'ja');
 
 test('original v3.0.1 item definition source covers every native inventory category and UI override',()=>{
  assert.equal(packed.schema,'HKIA.NativeInventoryCategoryIndex.1');
@@ -50,8 +52,12 @@ test('original v3.0.1 item definition source covers every native inventory categ
 
 test('native categories never confuse Collection GUID categories with the InventoryItemDefinitionAsset flags',()=>{
  assert.ok(!NATIVE_INVENTORY_TABS.some(x=>x.key==='collection_group_clothing'));
- assert.equal(nativeInventoryGroups(2147483647,index)[0],'other');
+ assert.equal(nativeInventoryGroups(unknownId,index)[0],'other');
  const counts=inventoryGroupCounts(rows,index);
+ assert.equal(defaultInventoryGroup(counts),'food');
+ assert.equal(defaultInventoryGroup(new Map([['clothes',1]])),'clothes');
+ assert.equal(defaultInventoryGroup(new Map([['other',1]])),'other');
+ assert.equal(defaultInventoryGroup(new Map()),'key-items');
  assert.equal(counts.get('clothes'),3);
  assert.equal(counts.get('food'),1);
  assert.equal(counts.get('other'),1);
@@ -77,6 +83,8 @@ test('Inventory UI selects native source definitions, retains original game art 
  assert.match(app,/inventoryGroupTotals=\$derived\(inventoryGroupCounts\(/);
  assert.match(app,/inventoryRows=\$derived\(browseInventory\(/);
  assert.match(app,/inventoryGroupLabel\(locale,t\.key\)/);
+ assert.match(app,/inventoryQuery,activeInventoryGroup,/);
+ assert.doesNotMatch(app,/\{iCopy\.all\}/);
  assert.match(app,/inventoryIconPacks\[definition\[3\]\]/);
  assert.match(app,/changeInventoryQuantity\(row.documentId,row.quantity,next\)/);
  assert.match(app,/class:inventory-readonly=\{!item.editable\}/);
