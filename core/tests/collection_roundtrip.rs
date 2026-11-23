@@ -855,7 +855,8 @@ fn rust_auto_category_last_child_completion_revoke_and_date_sync_one_undo(){
  let p=[735910181,1277923196,579092924,1040734789];
  let c1=[490253731,222802515,1171786643,2805829719];
  let c2=[4168762965,1138949340,3213554308,2987728360];
- let date1=(1_750_000_001,123_456_700),date2=(1_750_000_002,987_654_300);
+ let date1=(1_750_000_001,123_456_700);
+ let date2=(1_750_000_002,987_654_300);
  let parent=A{complete:false,current:1.0,completed:None};
  let first=A{complete:true,current:1.0,completed:Some(date1)};
  let second=A{complete:false,current:0.0,completed:None};
