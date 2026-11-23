@@ -5,6 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 
 const palettes=JSON.parse(readFileSync(new URL('../public/native-dye-palettes.json',import.meta.url),'utf8')).records;
+const nativeNames=JSON.parse(readFileSync(new URL('../public/source-names/en.json',import.meta.url),'utf8')).names;
 async function compileTs(path){
  const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL(path,import.meta.url))],
   bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
@@ -14,9 +15,9 @@ async function compileTs(path){
 const {sourceIconDyeRegions}=await compileTs('../src/dye-icon-regions.ts');
 const {recolorDyePixels}=await compileTs('../src/dye-recolor.ts');
 const specs=[
- {group:'collection_group_citytown',sheet:2,cell:65,total:22,
+ {group:'collection_group_citytown',sheet:2,cell:65,total:22,name:'Sleek City Outfit',
   pairs:[[2053611817,2115654145],[483663954,938457668],[407649469,1252452934]]},
- {group:'collections_group_clothing',sheet:1,cell:36,total:15,
+ {group:'collections_group_clothing',sheet:1,cell:36,total:15,name:'Overalls',
   pairs:[[74299247,582861271],[86532470,221072553],[997345487,1449310436]]}
 ];
 
@@ -53,7 +54,10 @@ test('the exact two game-original UiIcon cells contain all 37 genuine palette-ba
   const ids=idx.records.filter(([,sheet,cell])=>sheet===spec.sheet&&cell===spec.cell).map(([id])=>id);
   assert.equal(ids.length,spec.total,spec.group);
   assert.equal(new Set(ids).size,ids.length);
-  for(const id of ids)assert.ok(palettes[id]?.colors[0],String(id));
+  for(const id of ids){
+   assert.ok(palettes[id]?.colors[0],String(id));
+   assert.ok(nativeNames[id]?.endsWith(spec.name),'exact source Babel name '+id+': '+nativeNames[id]);
+  }
   const groups=new Map();
   for(const id of ids){
    const first=palettes[id].colors[0];
