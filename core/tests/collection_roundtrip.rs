@@ -56,6 +56,72 @@ fn slot_from_payload(version:&str,payload:Vec<u8>)->Vec<u8>{
  b.push(0xc6);b.extend((compressed.len() as u32).to_be_bytes());b.extend(compressed);
  b
 }
+/// Synthetic v3.0.1 source-shaped inventory records: ordinary stack and
+/// a unique-data-bearing item. Source user saves are never checked in.
+fn inventory_slot(version:&str)->Vec<u8>{
+ let mut payload=synthetic_payload(version);
+ assert_eq!(&payload[..4],&[0x93,0,4,0x95]);
+ payload[3]=0x97; // add two original IDocument union(1) entries
+ payload.extend(doc(1,arr(vec![u(4),u(315822),u(0),u(6),vec![0xc0]])));
+ let unique=arr(vec![vec![0],arr(vec![guid([11,22,33,44])])]);
+ payload.extend(doc(1,arr(vec![u(5),u(315822),u(1),u(1),unique])));
+ slot_from_payload(version,payload)
+}
+#[test]
+fn inventory_existing_stack_edit_undo_history_export_and_reopen(){
+ use hkia_save_core::collection::HistoryScope::{Inventory,Collections};
+ for version in ["3.0.0","3.0.1"]{
+  for zipped in [false,true]{
+   let raw=inventory_slot(version);
+   let input=if zipped{zip(&raw)}else{raw};
+   let mut e=Editor::open(input.clone()).unwrap();
+   let original=e.inventory();
+   assert_eq!(original.len(),2);
+   assert_eq!((original[0].document_id,original[0].item_id,original[0].quantity),(4,315822,6));
+   assert!(!original[1].editable,"unique-data-backed inventory is read-only");
+   assert!(e.change_inventory_quantity(5,1,20).is_err());
+   assert!(e.change_inventory_quantity(4,9,20).is_err(),"stale CAS rejected");
+   assert!(e.change_inventory_quantity(4,6,0).is_err(),"zero count would delete or corrupt a stack");
+   if version=="3.0.0"{
+    assert!(!original[0].editable);
+    assert!(e.change_inventory_quantity(4,6,20).is_err());
+    continue
+   }
+   assert!(original[0].editable);
+   e.change_inventory_quantity(4,6,20).unwrap();
+   assert_eq!(e.inventory()[0].quantity,20);
+   assert_eq!(e.history().len(),1);
+   assert_eq!(e.history()[0].scope,Inventory);
+   let checkpoint=e.history_checkpoint().unwrap();
+   let mut restored=Editor::open(input.clone()).unwrap();
+   restored.restore_history(&checkpoint).unwrap();
+   assert_eq!(restored.inventory(),e.inventory());
+   assert_eq!(restored.history_checkpoint().unwrap(),checkpoint);
+   assert!(e.undo_scope(Inventory));
+   assert_eq!(e.inventory(),original);
+   assert!(!e.dirty());
+   assert!(e.redo_scope(Inventory));
+   assert_eq!(e.inventory()[0].quantity,20);
+   let saved=e.export().unwrap();
+   let reopened=Editor::open(saved).unwrap();
+   assert_eq!(reopened.inventory()[0].quantity,20);
+   assert_eq!(reopened.inventory()[1],original[1],"unique payload and item untouched");
+   assert_eq!(reopened.value(2),Some(638000000000000001));
+   assert_eq!(reopened.achievements(),Editor::open(input.clone()).unwrap().achievements());
+   assert_eq!(Editor::open(input.clone()).unwrap().inventory(),original);
+   // Crossing tab history stays independent; export with both patches.
+   e.change(2,Some(638000000000000001),Some(638000000000000101)).unwrap();
+   assert!(e.jump_history(Inventory,0));
+   assert_eq!(e.value(2),Some(638000000000000101));
+   assert_eq!(e.inventory(),original);
+   assert!(e.jump_history(Inventory,1));
+   assert_eq!(e.history().iter().filter(|h|h.scope==Collections&&h.applied).count(),1);
+   let mixed=Editor::open(e.export().unwrap()).unwrap();
+   assert_eq!(mixed.inventory()[0].quantity,20);
+   assert_eq!(mixed.value(2),Some(638000000000000101));
+  }
+ }
+}
 fn put16(v:&mut Vec<u8>,n:u16){v.extend(n.to_le_bytes())}
 fn put32(v:&mut Vec<u8>,n:u32){v.extend(n.to_le_bytes())}
 fn zip(slot:&[u8])->Vec<u8>{
