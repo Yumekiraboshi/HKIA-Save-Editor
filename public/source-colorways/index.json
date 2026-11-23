@@ -1,0 +1,1751 @@
+{
+  "schema": "HKIA.NamedNativeColorwaySprite.1",
+  "version": "3.0.1",
+  "source": "original-game-texture-sprites",
+  "definitionsSha256": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0",
+  "atlasSha256": "04c1f4c191b0a821a0bbcb15e67a75bec85cf343a0b2e875ee8e525e1e8dfc7b",
+  "provenance": "game-original-named-colorway-sprite",
+  "runtimeUiIconReferenceMatches": false,
+  "nativeUiIconAlphaVerification": {
+    "size": 96,
+    "logicalSpriteSize": 256,
+    "resizedCanvas": 84,
+    "padding": 6,
+    "sharedGreyControlItems": [
+      "striped-pajama-shirt",
+      "striped-pajama-pants"
+    ],
+    "alphaPixelsMatchedPerControl": 9216
+  },
+  "records": {
+    "61505853": {
+      "file": "61505853.webp",
+      "sha256": "61392db145b671889d51da72f92e5054de80ab1b9cca4ea5ba4ca0b365905637",
+      "itemKey": "item_c_dyeable_sparobe_steam_denim",
+      "definitionPathId": "6059565080854258961",
+      "sharedUiIconPathId": "8067311752969132554",
+      "sourceSpritePathId": "-1499014421689031115",
+      "sourceSpriteName": "icon_item_c_dyeable_sparobe_steam_denim",
+      "texturePathId": "3434941765885324030",
+      "textureName": "sactx-24-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "05d8841f006b5abd5f88573d93dac357dc8186753306b9d56b601fcb229c9b36",
+      "sourceKind": "atlas",
+      "renderKey": "62c79c08d1ddd744b240e53a7d7f03632003450100000000",
+      "textureRect": [
+        237.02674865722656,
+        1639.076171875,
+        255.97325134277344,
+        221.84774780273438
+      ],
+      "atlasRectOffset": [
+        237,
+        1620
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "160386597": {
+      "file": "160386597.webp",
+      "sha256": "2853b5e734685a3330be4469a89f3e3d524379aecac09ca6e23f6ca2acd3e567",
+      "itemKey": "item_c_dyeable_springtimeblossomdress_lilac",
+      "definitionPathId": "-8951244922507834974",
+      "sharedUiIconPathId": "-4197664224229332183",
+      "sourceSpritePathId": "-7302500651345293956",
+      "sourceSpriteName": "icon_item_c_dyeable_springtimeblossomdress_lilac",
+      "texturePathId": "5349952519849732862",
+      "textureName": "sactx-34-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "695c7d8b4edadd7f0284bc3ab04a7a05ed5e598bc630a4b6f9c9160468d26a3f",
+      "sourceKind": "atlas",
+      "renderKey": "afa500126ffbb742880f3a68f50eedf32003450100000000",
+      "textureRect": [
+        726,
+        0.07612037658691406,
+        256,
+        204.8549346923828
+      ],
+      "atlasRectOffset": [
+        726,
+        -24
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "166967476": {
+      "file": "166967476.webp",
+      "sha256": "d0030e4a24dba79163926ab80dc6e3f6bf7b33c033c64155ea9cf3f189373326",
+      "itemKey": "item_c_dyeable_jamboreeblueberryoutfit_pink",
+      "definitionPathId": "-4159423588184187057",
+      "sharedUiIconPathId": "6235519152325636806",
+      "sourceSpritePathId": "-2302041175393368758",
+      "sourceSpriteName": "icon_item_c_dyeable_jamboreeblueberryoutfit_pink",
+      "texturePathId": "8045627539454716670",
+      "textureName": "sactx-42-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "619de1259132dd9a802a6c0aeaf91842068315c4c496021c895bf1dd0a0a3031",
+      "sourceKind": "atlas",
+      "renderKey": "c76cb24bb152524bb0792c71958fb04c2003450100000000",
+      "textureRect": [
+        1455.076171875,
+        422.0267639160156,
+        229.84774780273438,
+        212.89712524414062
+      ],
+      "atlasRectOffset": [
+        1439,
+        403
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "198778707": {
+      "file": "198778707.webp",
+      "sha256": "4c93dc4ef95f14b3abcd9da2caba16935add7ab4da7edd9a586d92aef4e40e4d",
+      "itemKey": "item_c_dyeable_sidekickcape_red",
+      "definitionPathId": "-8888925331081559729",
+      "sharedUiIconPathId": "-8453768911101981502",
+      "sourceSpritePathId": "-4424189022375058310",
+      "sourceSpriteName": "icon_item_c_dyeable_sidekickcape_red",
+      "texturePathId": "-927154471617926402",
+      "textureName": "sactx-17-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "33ed0284baa702de37b7da3119d0372a68105126b167ab855869bc4509b4b64e",
+      "sourceKind": "atlas",
+      "renderKey": "68f741c253dfd54ea91f971d5d4bbd2e2003450100000000",
+      "textureRect": [
+        1804.076171875,
+        1747.076171875,
+        243.89712524414062,
+        245.89712524414062
+      ],
+      "atlasRectOffset": [
+        1794,
+        1744
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "275195464": {
+      "file": "275195464.webp",
+      "sha256": "9b92abeb24ba0cc99d3a03bda0e3b952a5472b91b06d674f8ceee900221c0579",
+      "itemKey": "item_c_dyeable_tgflowerclip_green",
+      "definitionPathId": "1066150047392354606",
+      "sharedUiIconPathId": "-5917089241842056716",
+      "sourceSpritePathId": "1057511593111044902",
+      "sourceSpriteName": "icon_item_c_dyeable_tgflowerclip_green",
+      "texturePathId": "-7924012803780263130",
+      "textureName": "icon_item_c_dyeable_tgflowerclip_green",
+      "textureSha256": "8fe870b766cf1c49d569e79a4b8569b3bd7cd27b2bf2bdf095446f7171ce602e",
+      "sourceKind": "direct"
+    },
+    "301421087": {
+      "file": "301421087.webp",
+      "sha256": "b26d61fc2760f7220fc12035d18290c4d715e096a01465a8529eb9034129999a",
+      "itemKey": "item_c_dyeable_daysofplenty_toadstooldress_mymel",
+      "definitionPathId": "-5446055463593130324",
+      "sharedUiIconPathId": "17616859296509935",
+      "sourceSpritePathId": "179764988283818866",
+      "sourceSpriteName": "icon_item_c_dyeable_daysofplenty_toadstooldress_mymel",
+      "texturePathId": "6122298201271331582",
+      "textureName": "sactx-30-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "6af366af7eb92d2fef807131358fa7720618f7abfec3cd560873158d05dce69f",
+      "sourceKind": "atlas",
+      "renderKey": "b8d5eb813a1c7d41b1fd39638e2c29442003450100000000",
+      "textureRect": [
+        491.07611083984375,
+        219.0761260986328,
+        249.84774780273438,
+        216.84774780273438
+      ],
+      "atlasRectOffset": [
+        487,
+        198
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "349660696": {
+      "file": "349660696.webp",
+      "sha256": "393779da2d0c7d6ee1bafa3e36224c4f1bebdde4e410cd1701ee8daa8f96aca6",
+      "itemKey": "item_c_dyeable_baseballhat_allblue",
+      "definitionPathId": "1625423487811187878",
+      "sharedUiIconPathId": "3552525158569248193",
+      "sourceSpritePathId": "-4601821919033421663",
+      "sourceSpriteName": "icon_item_c_dyeable_baseballhat_allblue",
+      "texturePathId": "-2522479957794854146",
+      "textureName": "sactx-50-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "00f42eeaca70c46f6471986734c7cd4a7772cd4613399db1ab368fec5019b47c",
+      "sourceKind": "atlas",
+      "renderKey": "f108680d49b90e4680f2d4d878bee7052003450100000000",
+      "textureRect": [
+        664.0761108398438,
+        665.0761108398438,
+        249.84774780273438,
+        186.84774780273438
+      ],
+      "atlasRectOffset": [
+        661,
+        635
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "371669358": {
+      "file": "371669358.webp",
+      "sha256": "cdf495913addcd818dfc4324515c73f4f7f12a1c64d2d2ba387226841f9b7947",
+      "itemKey": "item_c_dyeable_detectivecoat_graysuit",
+      "definitionPathId": "8219140794976221966",
+      "sharedUiIconPathId": "9169001309089977530",
+      "sourceSpritePathId": "-8853835464368316655",
+      "sourceSpriteName": "icon_item_c_dyeable_detectivecoat_graysuit",
+      "texturePathId": "-6750812447536944386",
+      "textureName": "sactx-18-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "3af535e34b39d32651626f3c521a0e827c1eecd724d14a298642a082f287dfd9",
+      "sourceKind": "atlas",
+      "renderKey": "63450431ba52e6458124a74f550a6ea12003450100000000",
+      "textureRect": [
+        773.0761108398438,
+        0.07612037658691406,
+        254.88096618652344,
+        234.84774780273438
+      ],
+      "atlasRectOffset": [
+        773,
+        -11
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "373047658": {
+      "file": "373047658.webp",
+      "sha256": "419a521517d5bd186ef23922e9892d298ecfc76900012ac484cb420f21e6cee2",
+      "itemKey": "item_c_dyeable_spookycelebration_fancywitch_mymel",
+      "definitionPathId": "-83117080461868746",
+      "sharedUiIconPathId": "-3907284508097689611",
+      "sourceSpritePathId": "164866092807865444",
+      "sourceSpriteName": "icon_item_c_dyeable_spookycelebration_fancywitch_mymel",
+      "texturePathId": "360738859514817278",
+      "textureName": "sactx-22-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "c0503833a14973611dfa6f163853bee0e1a7984a6100f00473d325812a3346cd",
+      "sourceKind": "atlas",
+      "renderKey": "0ccca3f19cb2734cbdd28cfff55c73202003450100000000",
+      "textureRect": [
+        512.0621337890625,
+        458.07611083984375,
+        253.86175537109375,
+        226.84774780273438
+      ],
+      "atlasRectOffset": [
+        510,
+        444
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "373321231": {
+      "file": "373321231.webp",
+      "sha256": "43b488fd409dc624beee5bbd1d6c7a59ef0a77104a54b9010136f7c1bc48771b",
+      "itemKey": "item_c_dyeable_wayfarers_acc_black",
+      "definitionPathId": "-4906615118422420399",
+      "sharedUiIconPathId": "-4821738049906092723",
+      "sourceSpritePathId": "1060558472194492047",
+      "sourceSpriteName": "icon_item_c_dyeable_wayfarers_acc_black",
+      "texturePathId": "2273526741141292687",
+      "textureName": "icon_item_c_dyeable_wayfarers_acc_black",
+      "textureSha256": "e783a8d57c006481a03843ac2b03da52cc8e094c271899c44e624eebe2e4a188",
+      "sourceKind": "direct"
+    },
+    "379863484": {
+      "file": "379863484.webp",
+      "sha256": "40866cf0c2a29b146d19161997d69920c52b5fe7e1fccb62b7336fe97a18ded0",
+      "itemKey": "item_c_dyeable_tgpatternedtailcoat_periwinkle",
+      "definitionPathId": "-3622273309215802950",
+      "sharedUiIconPathId": "-7154818796287234535",
+      "sourceSpritePathId": "-8618300758469099804",
+      "sourceSpriteName": "icon_item_c_dyeable_tgpatternedtailcoat_periwinkle",
+      "texturePathId": "7066284058911653604",
+      "textureName": "icon_item_c_dyeable_tgpatternedtailcoat_periwinkle",
+      "textureSha256": "60f3d0701555797d0587dea3fa7f7e7c2e11f5dc1fa597e660e7f81224f734f7",
+      "sourceKind": "direct"
+    },
+    "429612784": {
+      "file": "429612784.webp",
+      "sha256": "5bc9211463305011d6cafb9941a0741190251c9d8017f4db1f4b53b8aa0ee0cb",
+      "itemKey": "item_c_dyeable_detectivehat_detectivetan",
+      "definitionPathId": "7037586327307866320",
+      "sharedUiIconPathId": "7776104389598586",
+      "sourceSpritePathId": "-2282161791678930486",
+      "sourceSpriteName": "icon_item_c_dyeable_detectivehat_detectivetan",
+      "texturePathId": "-7153925506573309186",
+      "textureName": "sactx-49-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "1dcbaa3b31e909aa64f68735475b0e69eb0fddfe055dec0bb614a82499e42042",
+      "sourceKind": "atlas",
+      "renderKey": "4807901b1efd744682d5336d8026c9632003450100000000",
+      "textureRect": [
+        0.026751041412353516,
+        591.0761108398438,
+        251.97325134277344,
+        186.84774780273438
+      ],
+      "atlasRectOffset": [
+        -4,
+        555
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "439893716": {
+      "file": "439893716.webp",
+      "sha256": "d1f4bb2797281a4b7da898ecdbefdce0fbed2861d0c535d34a1549eb51addb9f",
+      "itemKey": "item_c_dyeable_baseballhat_rosered",
+      "definitionPathId": "-6815231661049091350",
+      "sharedUiIconPathId": "3552525158569248193",
+      "sourceSpritePathId": "-953329504765396953",
+      "sourceSpriteName": "icon_item_c_dyeable_baseballhat_rosered",
+      "texturePathId": "-2522479957794854146",
+      "textureName": "sactx-50-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "00f42eeaca70c46f6471986734c7cd4a7772cd4613399db1ab368fec5019b47c",
+      "sourceKind": "atlas",
+      "renderKey": "4a5e993d017e374da7d8767a664ec3072003450100000000",
+      "textureRect": [
+        0.07612037658691406,
+        1248.076171875,
+        249.84774780273438,
+        186.84774780273438
+      ],
+      "atlasRectOffset": [
+        -3,
+        1218
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "463193460": {
+      "file": "463193460.webp",
+      "sha256": "8e53762c208c08a8b90876ef776f4457dcf7c2d5f4334001375abcea79ca5784",
+      "itemKey": "item_c_dyeable_tgbandedtophat_violetwhite",
+      "definitionPathId": "806469829534322141",
+      "sharedUiIconPathId": "-6794311950817035939",
+      "sourceSpritePathId": "-7344303325769529425",
+      "sourceSpriteName": "icon_item_c_dyeable_tgbandedtophat_violetwhite",
+      "texturePathId": "5904205097157560239",
+      "textureName": "icon_item_c_dyeable_tgbandedtophat_violetwhite",
+      "textureSha256": "f6b6c9bbd9d43fff81fd96f495de3cfb81c99d1b5bb8bd309957983314d05a19",
+      "sourceKind": "direct"
+    },
+    "480777963": {
+      "file": "480777963.webp",
+      "sha256": "d5a9c5ea63cbafa346725920397fef4a3ad431ecc333e02727819a0e10250b6c",
+      "itemKey": "item_c_dyeable_springtimeblossomoutfit_blush",
+      "definitionPathId": "-4406616635389927051",
+      "sharedUiIconPathId": "1684149279745582319",
+      "sourceSpritePathId": "2119377251510524235",
+      "sourceSpriteName": "icon_item_c_dyeable_springtimeblossomoutfit_blush",
+      "texturePathId": "7070885355998440190",
+      "textureName": "sactx-15-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "1fec5cb101551ebc666d7683bd885cafe99e962ff3d152cb21ee5795e1a1fdfa",
+      "sourceKind": "atlas",
+      "renderKey": "d37daff222e98b4a8c05de2c0d1eae552003450100000000",
+      "textureRect": [
+        512.0335083007812,
+        1025.076171875,
+        253.93975830078125,
+        251.84774780273438
+      ],
+      "atlasRectOffset": [
+        511,
+        1023
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "492770553": {
+      "file": "492770553.webp",
+      "sha256": "0e72ea8458211c065a234dab3002dc2ef4edf39ed7884ad3df9e4cc7c46dcaa3",
+      "itemKey": "item_c_dyeable_monocle_acc_black",
+      "definitionPathId": "3242961586941392977",
+      "sharedUiIconPathId": "-6460305539395034899",
+      "sourceSpritePathId": "7674119577667621062",
+      "sourceSpriteName": "icon_item_c_dyeable_monocle_acc_black",
+      "texturePathId": "6295155133050546942",
+      "textureName": "sactx-77-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "411da2611beb571a0347c663b7f65be20f166780eb6849ccbd26c5abba582c8c",
+      "sourceKind": "atlas",
+      "renderKey": "17a3aa49c575ea469b88d27d15cd7a012003450100000000",
+      "textureRect": [
+        1832.076171875,
+        912.0267333984375,
+        146.89712524414062,
+        221.90489196777344
+      ],
+      "atlasRectOffset": [
+        1781,
+        901
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "528610065": {
+      "file": "528610065.webp",
+      "sha256": "3478fbb28c1a1360326ca490e945cf3cd88a9a19a913f383062ce51a1870cab7",
+      "itemKey": "item_c_dyeable_witchhat_spookywitch",
+      "definitionPathId": "-7754450116206399698",
+      "sharedUiIconPathId": "2217651694392381270",
+      "sourceSpritePathId": "-5889833670487013237",
+      "sourceSpriteName": "icon_item_c_dyeable_witchhat_spookywitch",
+      "texturePathId": "6452111662207502475",
+      "textureName": "icon_item_c_dyeable_witchhat_spookywitch",
+      "textureSha256": "195388bd41f79085e63636ec8eff41f0d5d3c65833e9dc5efd8e8d82c99d8f60",
+      "sourceKind": "direct"
+    },
+    "528999373": {
+      "file": "528999373.webp",
+      "sha256": "3676b8149509b5245b6daa720463bb7f5ffde461b7fda24391026a3648fbe67e",
+      "itemKey": "item_c_dyeable_lighttimejubilee_vaporwave_wirehat_cyan",
+      "definitionPathId": "132007791552385072",
+      "sharedUiIconPathId": "2987387741390342488",
+      "sourceSpritePathId": "263398225368755146",
+      "sourceSpriteName": "icon_item_c_dyeable_lighttimejubilee_vaporwave_wirehat_cyan",
+      "texturePathId": "-7789853405426570294",
+      "textureName": "icon_item_c_dyeable_lighttimejubilee_vaporwave_wirehat_cyan",
+      "textureSha256": "f6d69d2a794ec313e3ff4d63e8fd88605ae2c084ac63a2b19e3ddd1999beb582",
+      "sourceKind": "direct"
+    },
+    "540723100": {
+      "file": "540723100.webp",
+      "sha256": "62de046d6f5e3902bdb4917f8512591bcb5f6a6dd9349f20ca8122bf50b531d0",
+      "itemKey": "item_c_dyeable_daysofplenty_chanterelledress_kitty",
+      "definitionPathId": "-4516926189797885088",
+      "sharedUiIconPathId": "-3264567167584867001",
+      "sourceSpritePathId": "-1791752645214776186",
+      "sourceSpriteName": "icon_item_c_dyeable_daysofplenty_chanterelledress_kitty",
+      "texturePathId": "-3433252325215081730",
+      "textureName": "sactx-27-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "f5fb078b4faf6d8ac65beaa6f91e8d01e08c0fc0fd9f3c2b30a355bcbb5aa38b",
+      "sourceKind": "atlas",
+      "renderKey": "77bbcb0f36946b4694d7e02bd15920fc2003450100000000",
+      "textureRect": [
+        950.0267333984375,
+        473.07183837890625,
+        253.94650268554688,
+        217.85203552246094
+      ],
+      "atlasRectOffset": [
+        948,
+        454
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "562308351": {
+      "file": "562308351.webp",
+      "sha256": "0280914472866f8bf5cc8827059fee39e5e9bcc19962ddf09cfb123fa2e59ace",
+      "itemKey": "item_c_dyeable_tgwaistcoat_tealtan",
+      "definitionPathId": "7541137696463066378",
+      "sharedUiIconPathId": "3071458459125395548",
+      "sourceSpritePathId": "-5857953158768852902",
+      "sourceSpriteName": "icon_item_c_dyeable_tgwaistcoat_tealtan",
+      "texturePathId": "9035472533881061466",
+      "textureName": "icon_item_c_dyeable_tgwaistcoat_tealtan",
+      "textureSha256": "bf42fa0d649d3086533d525cec2d11d36320abb79fd97e05d0d1dd6444fa06dc",
+      "sourceKind": "direct"
+    },
+    "647232370": {
+      "file": "647232370.webp",
+      "sha256": "18b5b7980ca1aa95094592355f7f6ee172aacb6a848d3d53d767d2683134979e",
+      "itemKey": "item_c_dyeable_tgempirewaistdress_yellow",
+      "definitionPathId": "1143893205044243999",
+      "sharedUiIconPathId": "-6835518302177314535",
+      "sourceSpritePathId": "1983511668096403058",
+      "sourceSpriteName": "icon_item_c_dyeable_tgempirewaistdress_yellow",
+      "texturePathId": "2891253448478918258",
+      "textureName": "icon_item_c_dyeable_tgempirewaistdress_yellow",
+      "textureSha256": "96749ccdad7f9339359aa0e5f024bb387f593638cbd986e548513b12b083c2da",
+      "sourceKind": "direct"
+    },
+    "698125948": {
+      "file": "698125948.webp",
+      "sha256": "0ac7654f6028737ea8639280429b5936aed4c01a48898020e30b279ab244c950",
+      "itemKey": "item_c_dyeable_tgelegantdress_creampink",
+      "definitionPathId": "-5008185539341232750",
+      "sharedUiIconPathId": "-3514846520225881665",
+      "sourceSpritePathId": "-3781126025120046533",
+      "sourceSpriteName": "icon_item_c_dyeable_tgelegantdress_creampink",
+      "texturePathId": "2671872993537696315",
+      "textureName": "icon_item_c_dyeable_tgelegantdress_creampink",
+      "textureSha256": "d3be7c2c774cbd387c43e2b138644cab12be3397381c0401fb3a8ea480f78cac",
+      "sourceKind": "direct"
+    },
+    "707207580": {
+      "file": "707207580.webp",
+      "sha256": "f5df27f5efd60085b8bd9056ccba732d959f8bfe89c67c5bf1c28ad06c9f0b8c",
+      "itemKey": "item_c_dyeable_elegantdress_icecream",
+      "definitionPathId": "-6400580338439283338",
+      "sharedUiIconPathId": "-2817173925871220958",
+      "sourceSpritePathId": "5423253803169273494",
+      "sourceSpriteName": "icon_item_c_dyeable_elegantdress_icecream",
+      "texturePathId": "-6750812447536944386",
+      "textureName": "sactx-18-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "3af535e34b39d32651626f3c521a0e827c1eecd724d14a298642a082f287dfd9",
+      "sourceKind": "atlas",
+      "renderKey": "140f9ad84056e943ae80740c2eea35ba2003450100000000",
+      "textureRect": [
+        1763.076171875,
+        240.0761260986328,
+        250.84774780273438,
+        237.84774780273438
+      ],
+      "atlasRectOffset": [
+        1760,
+        232
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "750852570": {
+      "file": "750852570.webp",
+      "sha256": "03b0bc4be17c1bcdd61d293651957a16e0bac6da2a4c084444eab4ecffce73ee",
+      "itemKey": "item_c_dyeable_tshirt_spring",
+      "definitionPathId": "5776915461973714008",
+      "sharedUiIconPathId": "-1639365896256011451",
+      "sourceSpritePathId": "428697013451387567",
+      "sourceSpriteName": "icon_item_c_dyeable_tshirt_spring",
+      "texturePathId": "-1946498218185495810",
+      "textureName": "sactx-64-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "2b65f47e1656ac91f5e836a4294a6935ffaaab4fea848ecfda5b86b6d169ae3f",
+      "sourceKind": "atlas",
+      "renderKey": "5bf57b7cee0ab746835c04e60950e4312003450100000000",
+      "textureRect": [
+        1001.0761108398438,
+        1388.076171875,
+        255.9238739013672,
+        160.84774780273438
+      ],
+      "atlasRectOffset": [
+        1001,
+        1341
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "765812893": {
+      "file": "765812893.webp",
+      "sha256": "62ce0babd7c840d4aa19f9e1025a79c2830dde89bc2396e455533eb380e434dd",
+      "itemKey": "item_c_dyeable_ctfashionglasses_black",
+      "definitionPathId": "6794921079606708637",
+      "sharedUiIconPathId": "-5547443074465578907",
+      "sourceSpritePathId": "2999420403664714841",
+      "sourceSpriteName": "icon_item_c_dyeable_ctfashionglasses_black",
+      "texturePathId": "8938919234151344894",
+      "textureName": "sactx-75-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "91ae592dd85e13c482f74fcfbc7940a21ef0a37d88af005dcbf8aafe31e3502d",
+      "sourceKind": "atlas",
+      "renderKey": "67c8a397b3be074691e1324ded2d9d4e2003450100000000",
+      "textureRect": [
+        1365.076171875,
+        524.0761108398438,
+        254.9238739013672,
+        135.84774780273438
+      ],
+      "atlasRectOffset": [
+        1364,
+        463
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "771524680": {
+      "file": "771524680.webp",
+      "sha256": "a897ab674108eb4f13a0d7767a82925eca83548aebcab5f44c8afa3fcd2518db",
+      "itemKey": "item_c_dyeable_jamboreedress_jam_rhubarb",
+      "definitionPathId": "-6647651991856517693",
+      "sharedUiIconPathId": "-4306937733790445346",
+      "sourceSpritePathId": "8839637923478164266",
+      "sourceSpriteName": "icon_item_c_dyeable_jamboreedress_jam_rhubarb",
+      "texturePathId": "-9004715016744506626",
+      "textureName": "sactx-26-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "f0288e8aab075bb905380ae591bc995bfced8b2918e6c3ce886c3e600535c972",
+      "sourceKind": "atlas",
+      "renderKey": "da1a97e5041a58468d3e7386fdb3f1df2003450100000000",
+      "textureRect": [
+        0,
+        1152.076171875,
+        256,
+        217.84774780273438
+      ],
+      "atlasRectOffset": [
+        0,
+        1134
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "788496221": {
+      "file": "788496221.webp",
+      "sha256": "7edcb2c752236222d5c91158467b9a58cd44a6dd0749be5da59637e2a696127c",
+      "itemKey": "item_c_dyeable_alienantenna_nul_green",
+      "definitionPathId": "-7356041233769544646",
+      "sharedUiIconPathId": "-6902970337369648557",
+      "sourceSpritePathId": "-7688725756541509317",
+      "sourceSpriteName": "icon_item_c_dyeable_alienantenna_nul_green",
+      "texturePathId": "1553460196541688574",
+      "textureName": "sactx-16-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "f1a9c6cca3afd3b5cc5f3e11f50ccf3af665c748559f26cd0080eb25df74a77a",
+      "sourceKind": "atlas",
+      "renderKey": "10b4290de072e340809c7fa947d99e7c2003450100000000",
+      "textureRect": [
+        252.02674865722656,
+        1256.076171875,
+        252.89712524414062,
+        244.84774780273438
+      ],
+      "atlasRectOffset": [
+        250,
+        1251
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "805349350": {
+      "file": "805349350.webp",
+      "sha256": "937f7d0a24fb8f12d49634d5755b96552a76b4246a3d48c960902a08f25d7649",
+      "itemKey": "item_c_dyeable_tgopentailcoat_periwinklepink",
+      "definitionPathId": "6488874637586301463",
+      "sharedUiIconPathId": "23107242593078785",
+      "sourceSpritePathId": "-2300955774148293765",
+      "sourceSpriteName": "icon_item_c_dyeable_tgopentailcoat_periwinklepink",
+      "texturePathId": "5060676078355794811",
+      "textureName": "icon_item_c_dyeable_tgopentailcoat_periwinklepink",
+      "textureSha256": "3eb3a9f86c36e597a67658cbd04c088f60c5f808478b55fac856f4ed8affbc9b",
+      "sourceKind": "direct"
+    },
+    "829551644": {
+      "file": "829551644.webp",
+      "sha256": "8a7d065c900761fc55edc66316de446b4554edda78ac0776a5c8ec79126bb5fc",
+      "itemKey": "item_c_dyeable_tgempirewaistdress_periwinkle",
+      "definitionPathId": "-7419249216520783158",
+      "sharedUiIconPathId": "-6835518302177314535",
+      "sourceSpritePathId": "5095060571567083014",
+      "sourceSpriteName": "icon_item_c_dyeable_tgempirewaistdress_periwinkle",
+      "texturePathId": "3057708757765377542",
+      "textureName": "icon_item_c_dyeable_tgempirewaistdress_periwinkle",
+      "textureSha256": "0e42da4bf729cd14a01cc1e0185244cc50339509fd05577e891c327d6ad9c0ec",
+      "sourceKind": "direct"
+    },
+    "829679515": {
+      "file": "829679515.webp",
+      "sha256": "ee9b573869a6f31954fd81d2176ce25123fbbe7006a9846972be4cad11938255",
+      "itemKey": "item_c_dyeable_tgflowerbonnet_coral",
+      "definitionPathId": "-2085186443380643761",
+      "sharedUiIconPathId": "5468631757981375924",
+      "sourceSpritePathId": "-1197787846314813597",
+      "sourceSpriteName": "icon_item_c_dyeable_tgflowerbonnet_coral",
+      "texturePathId": "-932747390560823453",
+      "textureName": "icon_item_c_dyeable_tgflowerbonnet_coral",
+      "textureSha256": "7311a87c3f1e0428bae3e548e1bba2ee35ea29a757b0a1b6bd63a75ca1cedf9d",
+      "sourceKind": "direct"
+    },
+    "837013741": {
+      "file": "837013741.webp",
+      "sha256": "a83af9589709fbab2e5f2a0d2abfc0002eca3315e6effdc39a84bbca20699b43",
+      "itemKey": "item_c_dyeable_icarmor_armorsky",
+      "definitionPathId": "2277068707450462255",
+      "sharedUiIconPathId": "-5086036050010732615",
+      "sourceSpritePathId": "7485129534622599917",
+      "sourceSpriteName": "icon_item_c_dyeable_icarmor_armorsky",
+      "texturePathId": "-927154471617926402",
+      "textureName": "sactx-17-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "33ed0284baa702de37b7da3119d0372a68105126b167ab855869bc4509b4b64e",
+      "sourceKind": "atlas",
+      "renderKey": "199409960cf12f4ca2c8f8befc098ba82003450100000000",
+      "textureRect": [
+        1268.0267333984375,
+        239.0761260986328,
+        255.97325134277344,
+        236.84774780273438
+      ],
+      "atlasRectOffset": [
+        1268,
+        230
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "872268744": {
+      "file": "872268744.webp",
+      "sha256": "733bd1816bb2f87c910ad946616bfc7ca32115033d9f0a6b4e82d105f6a00e37",
+      "itemKey": "item_c_dyeable_tgtophat_periwinklewhite",
+      "definitionPathId": "3920622568387836502",
+      "sharedUiIconPathId": "7032906620865667618",
+      "sourceSpritePathId": "-3778725099011837979",
+      "sourceSpriteName": "icon_item_c_dyeable_tgtophat_periwinklewhite",
+      "texturePathId": "-7919207688945405979",
+      "textureName": "icon_item_c_dyeable_tgtophat_periwinklewhite",
+      "textureSha256": "6c9536a90a6f48a4cfafaa220b3c653d3af84221612917288d194cd695fc4038",
+      "sourceKind": "direct"
+    },
+    "883192322": {
+      "file": "883192322.webp",
+      "sha256": "f0d9810e5376fffc71dbb3458970e3ebf7c8d89281dc1f00b97ee66ec8508ff2",
+      "itemKey": "item_c_dyeable_ushankahat_sky",
+      "definitionPathId": "6174376840704752310",
+      "sharedUiIconPathId": "9138370587763113096",
+      "sourceSpritePathId": "-6742126540419229336",
+      "sourceSpriteName": "icon_item_c_dyeable_ushankahat_sky",
+      "texturePathId": "-9004715016744506626",
+      "textureName": "sactx-26-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "f0288e8aab075bb905380ae591bc995bfced8b2918e6c3ce886c3e600535c972",
+      "sourceKind": "atlas",
+      "renderKey": "da801e9f47264649a236a583de8a20e52003450100000000",
+      "textureRect": [
+        1680.076171875,
+        237.02674865722656,
+        243.84774780273438,
+        227.89712524414062
+      ],
+      "atlasRectOffset": [
+        1672,
+        228
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "936308070": {
+      "file": "936308070.webp",
+      "sha256": "03cc526b2b95ca826949376c82a4bef6c5d7f40eb7060ed14d83a1b818b95829",
+      "itemKey": "item_c_dyeable_tglongsleeveddress_teal",
+      "definitionPathId": "4345805422077598511",
+      "sharedUiIconPathId": "-3327772517825296899",
+      "sourceSpritePathId": "-3517486148865889815",
+      "sourceSpriteName": "icon_item_c_dyeable_tglongsleeveddress_teal",
+      "texturePathId": "539536280472644073",
+      "textureName": "icon_item_c_dyeable_tglongsleeveddress_teal",
+      "textureSha256": "1e9aec0e7a941cb6f5eab4b616c4ccbe631181c0933722c68041e8d5d8127fdc",
+      "sourceKind": "direct"
+    },
+    "963252764": {
+      "file": "963252764.webp",
+      "sha256": "7fda99eac1a6eccaf4ffe50ef616bbbe73d2495d4a75b1fa0ad4267529dffc5d",
+      "itemKey": "item_c_dyeable_hardhat_acc_yellow",
+      "definitionPathId": "253974812718092",
+      "sharedUiIconPathId": "7660004030307356780",
+      "sourceSpritePathId": "3634758748166842229",
+      "sourceSpriteName": "icon_item_c_dyeable_hardhat_acc_yellow",
+      "texturePathId": "9135479077915355902",
+      "textureName": "sactx-36-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "13a440b239b0ed771746a576fd4d930a632145b9f5a28b5ab7c02100c2fd351a",
+      "sourceKind": "atlas",
+      "renderKey": "6e6845d70911af4a86569d270368ab142003450100000000",
+      "textureRect": [
+        250.02676391601562,
+        656.0761108398438,
+        247.89712524414062,
+        207.84774780273438
+      ],
+      "atlasRectOffset": [
+        244,
+        630
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "977976142": {
+      "file": "977976142.webp",
+      "sha256": "f2c76a30bc922e2db4b3ef75fb176d5a8d87bf5387fe6e572355e376b4daf377",
+      "itemKey": "item_c_dyeable_tgflowerclip_pinkyellow",
+      "definitionPathId": "-2026971568845570861",
+      "sharedUiIconPathId": "-5917089241842056716",
+      "sourceSpritePathId": "-168751285105391330",
+      "sourceSpriteName": "icon_item_c_dyeable_tgflowerclip_pinkyellow",
+      "texturePathId": "4456221084876540190",
+      "textureName": "icon_item_c_dyeable_tgflowerclip_pinkyellow",
+      "textureSha256": "0bb2ac599adf21ed9a0ab1d4552045e83969a72130269965b490ca9716417989",
+      "sourceKind": "direct"
+    },
+    "980933319": {
+      "file": "980933319.webp",
+      "sha256": "6f79506555d3c973cffe2aba0e4e50a4b980c8b070d3963609faaaf6aaa08616",
+      "itemKey": "item_c_dyeable_tglongsleeveddress_pink",
+      "definitionPathId": "-8179647329992803358",
+      "sharedUiIconPathId": "-3327772517825296899",
+      "sourceSpritePathId": "4077703404140281582",
+      "sourceSpriteName": "icon_item_c_dyeable_tglongsleeveddress_pink",
+      "texturePathId": "8371493911995727598",
+      "textureName": "icon_item_c_dyeable_tglongsleeveddress_pink",
+      "textureSha256": "c36761284db76a386b682fa78f075b00749ba75c1585dd63c9d03f365cf5afea",
+      "sourceKind": "direct"
+    },
+    "993062511": {
+      "file": "993062511.webp",
+      "sha256": "5b2d901f82f127dd25fdb6d6dc0f1cb9a168ca2b11453aab0fc9e732ea42683d",
+      "itemKey": "item_c_dyeable_tgeleganthat_blushwhite",
+      "definitionPathId": "-7437616155493884258",
+      "sharedUiIconPathId": "-2677882346520506799",
+      "sourceSpritePathId": "-6351217595280319167",
+      "sourceSpriteName": "icon_item_c_dyeable_tgeleganthat_blushwhite",
+      "texturePathId": "7840966090274250049",
+      "textureName": "icon_item_c_dyeable_tgeleganthat_blushwhite",
+      "textureSha256": "1e37255c92ea745b72d5f7b8049a6d43df4992cb6089d86900309b6f7e215846",
+      "sourceKind": "direct"
+    },
+    "993727524": {
+      "file": "993727524.webp",
+      "sha256": "77a11e03cf3b9ad489c83fbf325fdd01fb3cf186bbd3459771c7d9ca238fb6fc",
+      "itemKey": "item_c_dyeable_tglongsleeveddress_purplepink",
+      "definitionPathId": "-1631876245965497913",
+      "sharedUiIconPathId": "-3327772517825296899",
+      "sourceSpritePathId": "2768910728793376117",
+      "sourceSpriteName": "icon_item_c_dyeable_tglongsleeveddress_purplepink",
+      "texturePathId": "7207376703580685685",
+      "textureName": "icon_item_c_dyeable_tglongsleeveddress_purplepink",
+      "textureSha256": "8fd846e1fc1fcabc731828e8aeaf9568d38053878cfadd8a23226dd34ff77aad",
+      "sourceKind": "direct"
+    },
+    "1022562323": {
+      "file": "1022562323.webp",
+      "sha256": "eccbc9843fa1a96fa59bf7a827d843e1e2011c77e9f279ed5ebd13b0fe87b03a",
+      "itemKey": "item_c_dyeable_elegantdress_launchsimple",
+      "definitionPathId": "1257416047741526882",
+      "sharedUiIconPathId": "-2817173925871220958",
+      "sourceSpritePathId": "-6351127964504428785",
+      "sourceSpriteName": "icon_item_c_dyeable_elegantdress_launchsimple",
+      "texturePathId": "-6750812447536944386",
+      "textureName": "sactx-18-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "3af535e34b39d32651626f3c521a0e827c1eecd724d14a298642a082f287dfd9",
+      "sourceKind": "atlas",
+      "renderKey": "30e9fc741789fe4a9a6a1064c5f57ed22003450100000000",
+      "textureRect": [
+        1523.076171875,
+        962.0761108398438,
+        250.84774780273438,
+        237.84774780273438
+      ],
+      "atlasRectOffset": [
+        1520,
+        954
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1036630114": {
+      "file": "1036630114.webp",
+      "sha256": "70eac0aac169c75bbf000ee5075049475415e8009e6f7ca21ed421329baec096",
+      "itemKey": "item_c_dyeable_sidekickmask_red",
+      "definitionPathId": "-9122715938508773285",
+      "sharedUiIconPathId": "7238680315847921159",
+      "sourceSpritePathId": "1982121729429432963",
+      "sourceSpriteName": "icon_item_c_dyeable_sidekickmask_red",
+      "texturePathId": "-2435400706321650946",
+      "textureName": "sactx-76-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "ea36782edc2fe6967a9fdec2a5448bfcbd779204a641885a8328e88875f63b15",
+      "sourceKind": "atlas",
+      "renderKey": "e485a336c963af49a9b619e1c139569a2003450100000000",
+      "textureRect": [
+        209.0761260986328,
+        955.0761108398438,
+        233.84774780273438,
+        144.89712524414062
+      ],
+      "atlasRectOffset": [
+        198,
+        901
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1041732100": {
+      "file": "1041732100.webp",
+      "sha256": "ebbc2415644715cacce693d972a864f6cb59342ff7e956162c413149f2c6f27c",
+      "itemKey": "item_c_dyeable_interlude_futuristic_medical_sky",
+      "definitionPathId": "-7585847794249289621",
+      "sharedUiIconPathId": "1180191147974866350",
+      "sourceSpritePathId": "-5321221452049071711",
+      "sourceSpriteName": "icon_item_c_dyeable_interlude_futuristic_medical_sky",
+      "texturePathId": "-7948600096312628482",
+      "textureName": "sactx-21-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "b35f2de30ee0416f56dcc90930fc4a09726cf5beb8be230e5fa371426f577ee8",
+      "sourceKind": "atlas",
+      "renderKey": "b0420a832dd0784bab1dd01b08f6ef6b2003450100000000",
+      "textureRect": [
+        1279.076171875,
+        1435.076171875,
+        254.89712524414062,
+        226.84774780273438
+      ],
+      "atlasRectOffset": [
+        1278,
+        1423
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1075162693": {
+      "file": "1075162693.webp",
+      "sha256": "f0f6df2212e109cf8fde8d46b033ef8d4b4200f66a0e53bc908593bab706c712",
+      "itemKey": "item_c_dyeable_witchdress_spookywitch",
+      "definitionPathId": "6634674402159262914",
+      "sharedUiIconPathId": "7972956772710823237",
+      "sourceSpritePathId": "2357666349662971239",
+      "sourceSpriteName": "icon_item_c_dyeable_witchdress_spookywitch",
+      "texturePathId": "-1298692486333764866",
+      "textureName": "sactx-13-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "f8199b8b635fb6c453097aee9fddcf712e4bc8b8e3fe4fea3196f29a430f7cc0",
+      "sourceKind": "atlas",
+      "renderKey": "9143de9c3443cd4fa76b5482ec5f7f192003450100000000",
+      "textureRect": [
+        1287,
+        1806.076171875,
+        256,
+        235.84774780273438
+      ],
+      "atlasRectOffset": [
+        1287,
+        1797
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1093311477": {
+      "file": "1093311477.webp",
+      "sha256": "c52f2c619363d42c1e1a4069bcfe549c876ff309ae1a0a1bdee2a090110cb292",
+      "itemKey": "item_c_dyeable_wwmagicalshowmansuit_chococat",
+      "definitionPathId": "9106322181023836965",
+      "sharedUiIconPathId": "-6097857660851239897",
+      "sourceSpritePathId": "-41329598418332348",
+      "sourceSpriteName": "icon_item_c_dyeable_wwmagicalshowmansuit_chococat",
+      "texturePathId": "-345825923589575938",
+      "textureName": "sactx-20-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "68a934440c4d4f22019c0b4387173e5bcf51ebac4b53d4db3027c85dbd0681b1",
+      "sourceKind": "atlas",
+      "renderKey": "8562d7daffa39a499571b5cd3c37ee8c2003450100000000",
+      "textureRect": [
+        256,
+        0.07612037658691406,
+        256,
+        229.84774780273438
+      ],
+      "atlasRectOffset": [
+        256,
+        -12
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1125979653": {
+      "file": "1125979653.webp",
+      "sha256": "d1814136d29b9d8132b2e0bd93575352258ba9ba2f30e2b15157636138c60175",
+      "itemKey": "item_c_dyeable_wwmagicalwingoutfit_ruby",
+      "definitionPathId": "2413745029760028760",
+      "sharedUiIconPathId": "6137687913393828881",
+      "sourceSpritePathId": "7483762030037294499",
+      "sourceSpriteName": "icon_item_c_dyeable_wwmagicalwingoutfit_ruby",
+      "texturePathId": "6122298201271331582",
+      "textureName": "sactx-30-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "6af366af7eb92d2fef807131358fa7720618f7abfec3cd560873158d05dce69f",
+      "sourceKind": "atlas",
+      "renderKey": "dd2987877485a74a9ae67674e55ac21e2003450100000000",
+      "textureRect": [
+        509.0267639160156,
+        934.0761108398438,
+        253.89712524414062,
+        212.84774780273438
+      ],
+      "atlasRectOffset": [
+        507,
+        911
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1150696545": {
+      "file": "1150696545.webp",
+      "sha256": "63dcd9161f88b77bf0d5d1c12c8f5403fbcba4deb6299dac620663e962e2abaf",
+      "itemKey": "item_c_dyeable_ctbeanie_violet",
+      "definitionPathId": "-5536975444729824541",
+      "sharedUiIconPathId": "2533047349130853543",
+      "sourceSpritePathId": "955517458988940199",
+      "sourceSpriteName": "icon_item_c_dyeable_ctbeanie_violet",
+      "texturePathId": "3885410050180541182",
+      "textureName": "sactx-62-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "e13419347cec73734c8e91c487ae7824440ced4be29187d83f73f1eab11705f9",
+      "sourceKind": "atlas",
+      "renderKey": "8cb992cae70b334db8dd66385fdcee702003450100000000",
+      "textureRect": [
+        0.07612037658691406,
+        1634.076171875,
+        234.88758850097656,
+        178.84774780273438
+      ],
+      "atlasRectOffset": [
+        -11,
+        1591
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1171610642": {
+      "file": "1171610642.webp",
+      "sha256": "8021d404673732078066a5bdc9f1b82915820bb13dbd06ff265eee6325c02299",
+      "itemKey": "item_c_dyeable_luckandlanterns_lucky_tangsuit_hotpink",
+      "definitionPathId": "1313682460689986223",
+      "sharedUiIconPathId": "3429072794293869037",
+      "sourceSpritePathId": "1940475594710694342",
+      "sourceSpriteName": "icon_item_c_dyeable_luckandlanterns_lucky_tangsuit_hotpink",
+      "texturePathId": "-3293234964369851962",
+      "textureName": "icon_item_c_dyeable_luckandlanterns_lucky_tangsuit_hotpink",
+      "textureSha256": "866ba762ae408a01093ae8c31e8c3663f49a81daefeb5b08b76f27b996f06a8e",
+      "sourceKind": "direct"
+    },
+    "1177091267": {
+      "file": "1177091267.webp",
+      "sha256": "fefbd7f1260227706c9c26b82a512d9046495886f2884ce6cbe651088da49587",
+      "itemKey": "item_c_dyeable_scholasticcheeruniform_kur",
+      "definitionPathId": "-2793326484992317054",
+      "sharedUiIconPathId": "-7473339676089924945",
+      "sourceSpritePathId": "4052678111026755429",
+      "sourceSpriteName": "icon_item_c_dyeable_scholasticcheeruniform_kur",
+      "texturePathId": "3434941765885324030",
+      "textureName": "sactx-24-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "05d8841f006b5abd5f88573d93dac357dc8186753306b9d56b601fcb229c9b36",
+      "sourceKind": "atlas",
+      "renderKey": "68a254ef3717b44aabce6d87781f0da72003450100000000",
+      "textureRect": [
+        1474.0267333984375,
+        0.07612037658691406,
+        255.89712524414062,
+        221.84774780273438
+      ],
+      "atlasRectOffset": [
+        1474,
+        -19
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1204999086": {
+      "file": "1204999086.webp",
+      "sha256": "0a2d84caad69db482975a0a5afde748be2c84af10583d9ef48508699cd452b2c",
+      "itemKey": "item_c_dyeable_tgelegantdress_pinkyellow",
+      "definitionPathId": "-5684621483466250139",
+      "sharedUiIconPathId": "-3514846520225881665",
+      "sourceSpritePathId": "3171591249966366992",
+      "sourceSpriteName": "icon_item_c_dyeable_tgelegantdress_pinkyellow",
+      "texturePathId": "-3605775702697017072",
+      "textureName": "icon_item_c_dyeable_tgelegantdress_pinkyellow",
+      "textureSha256": "e86641f59ba81aef02df42f137ee4237ba214e4df062a070f6c80664fb9d0273",
+      "sourceKind": "direct"
+    },
+    "1208742099": {
+      "file": "1208742099.webp",
+      "sha256": "571887892c768d0135ac098bad8310467a44dd51fabe325f82a8ee822301b2e6",
+      "itemKey": "item_c_dyeable_sidekickcostume_yellow",
+      "definitionPathId": "8185805313570246884",
+      "sharedUiIconPathId": "-4333222645009550465",
+      "sourceSpritePathId": "-7345954707454416003",
+      "sourceSpriteName": "icon_item_c_dyeable_sidekickcostume_yellow",
+      "texturePathId": "-1191649963883009282",
+      "textureName": "sactx-35-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "c8396ecfc7c3e562421c0d4f7c10c22bb4c38379cdea2ebf950bb715eead245d",
+      "sourceKind": "atlas",
+      "renderKey": "0d619fe35b37b14a9d751ab274b372062003450100000000",
+      "textureRect": [
+        1435.0267333984375,
+        207.0761260986328,
+        253.89712524414062,
+        204.84774780273438
+      ],
+      "atlasRectOffset": [
+        1435,
+        182
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1240836766": {
+      "file": "1240836766.webp",
+      "sha256": "aaf70d19c2662459bb44f28c03ac15769843a86532402ed0f1271962061df875",
+      "itemKey": "item_c_dyeable_nightcap_mint",
+      "definitionPathId": "-1581783028530432830",
+      "sharedUiIconPathId": "2367086952806357706",
+      "sourceSpritePathId": "-6433143022970136664",
+      "sourceSpriteName": "icon_item_c_dyeable_nightcap_mint",
+      "texturePathId": "9135479077915355902",
+      "textureName": "sactx-36-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "13a440b239b0ed771746a576fd4d930a632145b9f5a28b5ab7c02100c2fd351a",
+      "sourceKind": "atlas",
+      "renderKey": "7363e93c1aeaa848a7e9adcf1938851b2003450100000000",
+      "textureRect": [
+        1405.04296875,
+        206.0761260986328,
+        214.9303436279297,
+        238.84774780273438
+      ],
+      "atlasRectOffset": [
+        1385,
+        201
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1242764556": {
+      "file": "1242764556.webp",
+      "sha256": "f4425e0afaae3623f79cd46309584aee0a803dddde511fe84d25fd9419cb2467",
+      "itemKey": "item_c_dyeable_jamboreeraspberryoutfit_purple",
+      "definitionPathId": "-956117514341114104",
+      "sharedUiIconPathId": "-2741922153637725098",
+      "sourceSpritePathId": "4167556720743869975",
+      "sourceSpriteName": "icon_item_c_dyeable_jamboreeraspberryoutfit_purple",
+      "texturePathId": "-1408290440732283369",
+      "textureName": "icon_item_c_dyeable_jamboreeraspberryoutfit_purple",
+      "textureSha256": "107f2a9e826936fe8178505c06989d6f14be8bd61240e9e89ba02f34cba597d4",
+      "sourceKind": "direct"
+    },
+    "1243125565": {
+      "file": "1243125565.webp",
+      "sha256": "fb8774575e88bd7ff93de4c4185e0f6eaee9753366d35ba894d4fb36cb038b62",
+      "itemKey": "item_c_dyeable_tggreatcoat_navygold",
+      "definitionPathId": "6415264462711363732",
+      "sharedUiIconPathId": "6541355810686710424",
+      "sourceSpritePathId": "6921800186420610951",
+      "sourceSpriteName": "icon_item_c_dyeable_tggreatcoat_navygold",
+      "texturePathId": "5956421225162622855",
+      "textureName": "icon_item_c_dyeable_tggreatcoat_navygold",
+      "textureSha256": "b3225b4f0a7919d7ab0c7b7a8f51c963550f12cc2d7d58de6fb8e1d90c93b772",
+      "sourceKind": "direct"
+    },
+    "1254337078": {
+      "file": "1254337078.webp",
+      "sha256": "28330dc824896be7274a742fca146269cc39fd7b291658f0f5ee8c8a06751c8d",
+      "itemKey": "item_c_dyeable_tgopentailcoat_skyblush",
+      "definitionPathId": "-1785026449367454452",
+      "sharedUiIconPathId": "23107242593078785",
+      "sourceSpritePathId": "7166990051793578669",
+      "sourceSpriteName": "icon_item_c_dyeable_tgopentailcoat_skyblush",
+      "texturePathId": "2638973668791691949",
+      "textureName": "icon_item_c_dyeable_tgopentailcoat_skyblush",
+      "textureSha256": "71b0c45a38c28202b5861ab7b3b71ad94fa88782c1ca36f0f809e255b9f677f9",
+      "sourceKind": "direct"
+    },
+    "1274039998": {
+      "file": "1274039998.webp",
+      "sha256": "c017c5445786469e7ef89ff4f48dfcd05ae8cff71239e69a7fcc5a4a144daf96",
+      "itemKey": "item_c_dyeable_tgopentailcoat_yelloworange",
+      "definitionPathId": "5854965176388974237",
+      "sharedUiIconPathId": "23107242593078785",
+      "sourceSpritePathId": "-7369696903292102649",
+      "sourceSpriteName": "icon_item_c_dyeable_tgopentailcoat_yelloworange",
+      "texturePathId": "-8012869754723674105",
+      "textureName": "icon_item_c_dyeable_tgopentailcoat_yelloworange",
+      "textureSha256": "fb567f0398301092117b7463466bc960ad1dec985e74dcbef2d998cc302d4db6",
+      "sourceKind": "direct"
+    },
+    "1280015952": {
+      "file": "1280015952.webp",
+      "sha256": "21c9a82f3ed2994772ba9403c623d17c25bf6320c3248950b12ee2cfe930f00c",
+      "itemKey": "item_c_dyeable_yogamat_darkgray",
+      "definitionPathId": "-6283410057618911175",
+      "sharedUiIconPathId": "-428444464473601908",
+      "sourceSpritePathId": "9148671531616773003",
+      "sourceSpriteName": "icon_item_c_dyeable_yogamat_darkgray",
+      "texturePathId": "8938919234151344894",
+      "textureName": "sactx-75-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "91ae592dd85e13c482f74fcfbc7940a21ef0a37d88af005dcbf8aafe31e3502d",
+      "sourceKind": "atlas",
+      "renderKey": "47f4e0c89dddd443b2a000b436af64bf2003450100000000",
+      "textureRect": [
+        1120.0267333984375,
+        1692.0267333984375,
+        229.89712524414062,
+        149.89712524414062
+      ],
+      "atlasRectOffset": [
+        1107,
+        1632
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1283525591": {
+      "file": "1283525591.webp",
+      "sha256": "82409e516911f9f211bcaaf41f79590dd137a2b86bc679f50fbbf55042af95c1",
+      "itemKey": "item_c_dyeable_tglongsleeveddress_skywhite",
+      "definitionPathId": "-7623820496656749511",
+      "sharedUiIconPathId": "-3327772517825296899",
+      "sourceSpritePathId": "235957538835796416",
+      "sourceSpriteName": "icon_item_c_dyeable_tglongsleeveddress_skywhite",
+      "texturePathId": "4254366403366425024",
+      "textureName": "icon_item_c_dyeable_tglongsleeveddress_skywhite",
+      "textureSha256": "2fc45faf7d4f00680cd0a0932229a7f6736de82224e74908c484b82509b3d29f",
+      "sourceKind": "direct"
+    },
+    "1289378343": {
+      "file": "1289378343.webp",
+      "sha256": "7aecdcb2ace2cc1c76477b929036fe99eac487e7c0c5ca11baf8bbd66ddaa6b8",
+      "itemKey": "item_c_dyeable_interlude_futuristic_crewpants_blush",
+      "definitionPathId": "-1200227880730522226",
+      "sharedUiIconPathId": "130660722450230957",
+      "sourceSpritePathId": "-6080662906664989555",
+      "sourceSpriteName": "icon_item_c_dyeable_interlude_futuristic_crewpants_blush",
+      "texturePathId": "6802332892582300813",
+      "textureName": "icon_item_c_dyeable_interlude_futuristic_crewpants_blush",
+      "textureSha256": "66b96a40a175c21dc42dda745fe4ba83ccaf09f88c31e3adfd0764396772670c",
+      "sourceKind": "direct"
+    },
+    "1304814647": {
+      "file": "1304814647.webp",
+      "sha256": "8ae183f114bdfa31c5ee628f4001dd29bf8215d9a2b196cab1f1f688e8a1d245",
+      "itemKey": "item_c_dyeable_tgpatternedtailcoat_yellowtan",
+      "definitionPathId": "-3583315270236785165",
+      "sharedUiIconPathId": "-7154818796287234535",
+      "sourceSpritePathId": "7059800398971057237",
+      "sourceSpriteName": "icon_item_c_dyeable_tgpatternedtailcoat_yellowtan",
+      "texturePathId": "3507949244570776661",
+      "textureName": "icon_item_c_dyeable_tgpatternedtailcoat_yellowtan",
+      "textureSha256": "94bf4885456d05e6be25922e03e746c8db5e23bf8012f02761a38594ebff3cbb",
+      "sourceKind": "direct"
+    },
+    "1319823735": {
+      "file": "1319823735.webp",
+      "sha256": "3012f5c1b4e23c57f8f267cf272c949f8c91edee6233a77ec0eb176adfb2ff31",
+      "itemKey": "item_c_dyeable_gothlolitadress_wmm",
+      "definitionPathId": "-7274441067874881539",
+      "sharedUiIconPathId": "8488453386242801308",
+      "sourceSpritePathId": "7825401006605661025",
+      "sourceSpriteName": "icon_item_c_dyeable_gothlolitadress_wmm",
+      "texturePathId": "9167529587287681790",
+      "textureName": "sactx-25-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "b84beb316560b962570f0c997b65d1782d8cfc309cc08636976eaacb442e35c0",
+      "sourceKind": "atlas",
+      "renderKey": "5d46e3cd5754af41a4f591dd5174ad2a2003450100000000",
+      "textureRect": [
+        1476.076171875,
+        689.0761108398438,
+        253.89712524414062,
+        220.84774780273438
+      ],
+      "atlasRectOffset": [
+        1475,
+        678
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1331359180": {
+      "file": "1331359180.webp",
+      "sha256": "ff794a6af8cd29c1c6626e34ba53bd4a9889404c9cbd75bd5a618705fd5fcabf",
+      "itemKey": "item_c_dyeable_luckandlanterns_lucky_tangsuit_purpleandblack",
+      "definitionPathId": "7360506972757810936",
+      "sharedUiIconPathId": "3429072794293869037",
+      "sourceSpritePathId": "-2281726691418469637",
+      "sourceSpriteName": "icon_item_c_dyeable_luckandlanterns_lucky_tangsuit_purpleandblack",
+      "texturePathId": "6071537401004460795",
+      "textureName": "icon_item_c_dyeable_luckandlanterns_lucky_tangsuit_purpleandblack",
+      "textureSha256": "678794906f7c658392a84ead35271452823ea5b826abffeba4628648fc11807f",
+      "sourceKind": "direct"
+    },
+    "1342983284": {
+      "file": "1342983284.webp",
+      "sha256": "5649b32ee11795f2fbc635df70bbb14a9cdfda4c7a207c4e9d289d1eab3c79dc",
+      "itemKey": "item_c_dyeable_jazzerciseheadband_warmpink",
+      "definitionPathId": "-2353961201984006540",
+      "sharedUiIconPathId": "-2934328457856660067",
+      "sourceSpritePathId": "5462803365224133075",
+      "sourceSpriteName": "icon_item_c_dyeable_jazzerciseheadband_warmpink",
+      "texturePathId": "7977958123903281918",
+      "textureName": "sactx-74-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "d48c013b3a5577e635bbdfe4bae0ef4711a2acaddddf95071b7b80569b13ab83",
+      "sourceKind": "atlas",
+      "renderKey": "f4170cbb90f52b4d8d8ba514b00d95d02003450100000000",
+      "textureRect": [
+        256.07611083984375,
+        1458.076171875,
+        253.84774780273438,
+        139.84774780273438
+      ],
+      "atlasRectOffset": [
+        254,
+        1397
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1351113363": {
+      "file": "1351113363.webp",
+      "sha256": "acd7b20084f7dd4349e7f1f480334a8e5b5032167e08c39a29bc18c9261bff39",
+      "itemKey": "item_c_dyeable_scholasticcheeruniform_mel",
+      "definitionPathId": "-186920736201653362",
+      "sharedUiIconPathId": "-7473339676089924945",
+      "sourceSpritePathId": "-8639641614437066403",
+      "sourceSpriteName": "icon_item_c_dyeable_scholasticcheeruniform_mel",
+      "texturePathId": "3434941765885324030",
+      "textureName": "sactx-24-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "05d8841f006b5abd5f88573d93dac357dc8186753306b9d56b601fcb229c9b36",
+      "sourceKind": "atlas",
+      "renderKey": "bbbf54a8dc8c94409e62b174e6514a152003450100000000",
+      "textureRect": [
+        1218.0267333984375,
+        747.0761108398438,
+        255.89712524414062,
+        221.84774780273438
+      ],
+      "atlasRectOffset": [
+        1218,
+        728
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1363308523": {
+      "file": "1363308523.webp",
+      "sha256": "c9a4536a7113aadd94c5a2a1ee0d3c603b5e45d38fa5223097a287f2db459247",
+      "itemKey": "item_c_dyeable_tgwaistcoat_orange",
+      "definitionPathId": "5126175953387888001",
+      "sharedUiIconPathId": "3071458459125395548",
+      "sourceSpritePathId": "9110370986847573111",
+      "sourceSpriteName": "icon_item_c_dyeable_tgwaistcoat_orange",
+      "texturePathId": "7350286781937816695",
+      "textureName": "icon_item_c_dyeable_tgwaistcoat_orange",
+      "textureSha256": "bca377016696e14f716b1d97e55a1da13473f6334fdeaf3fde5582fe26025e8e",
+      "sourceKind": "direct"
+    },
+    "1400846145": {
+      "file": "1400846145.webp",
+      "sha256": "850c71ebaa9ab2f2c80b26a7bb2d0a6c47402e1f1d7920f6690dfc4e4ac59af0",
+      "itemKey": "item_c_dyeable_jamboreedress_jam_strawberry",
+      "definitionPathId": "7344205334358526156",
+      "sharedUiIconPathId": "-4306937733790445346",
+      "sourceSpritePathId": "3030788354216960445",
+      "sourceSpriteName": "icon_item_c_dyeable_jamboreedress_jam_strawberry",
+      "texturePathId": "-9004715016744506626",
+      "textureName": "sactx-26-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "f0288e8aab075bb905380ae591bc995bfced8b2918e6c3ce886c3e600535c972",
+      "sourceKind": "atlas",
+      "renderKey": "effac52bc7a25245b9b3d50a6f67b7932003450100000000",
+      "textureRect": [
+        717,
+        698.0761108398438,
+        256,
+        217.84774780273438
+      ],
+      "atlasRectOffset": [
+        717,
+        680
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1458977407": {
+      "file": "1458977407.webp",
+      "sha256": "53b6168823c86bf16ad789441b2ee23baf562125603558adb5451dac2cc25a02",
+      "itemKey": "item_c_dyeable_cttailor_zebra",
+      "definitionPathId": "688283257853265736",
+      "sharedUiIconPathId": "3952025801184524546",
+      "sourceSpritePathId": "7318654630000694585",
+      "sourceSpriteName": "icon_item_c_dyeable_cttailor_zebra",
+      "texturePathId": "-6198464666439816450",
+      "textureName": "sactx-70-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "b56cb53bb3a2423157d10d52d71b019c4176b1fb30923f8a14803899a747735c",
+      "sourceKind": "atlas",
+      "renderKey": "862b0ee636adb443b3c97dace0d98d462003450100000000",
+      "textureRect": [
+        1423.0267333984375,
+        1530.076171875,
+        255.97325134277344,
+        149.84774780273438
+      ],
+      "atlasRectOffset": [
+        1423,
+        1471
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1487512212": {
+      "file": "1487512212.webp",
+      "sha256": "4ad94ee74ec7a938233c69b59030cd07526fd756f58cb2063896cab1ce30942f",
+      "itemKey": "item_c_dyeable_ctoveralls_violet",
+      "definitionPathId": "-8252927742716457245",
+      "sharedUiIconPathId": "-8960774574331150913",
+      "sourceSpritePathId": "3503463811243167006",
+      "sourceSpriteName": "icon_item_c_dyeable_ctoveralls_violet",
+      "texturePathId": "9135479077915355902",
+      "textureName": "sactx-36-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "13a440b239b0ed771746a576fd4d930a632145b9f5a28b5ab7c02100c2fd351a",
+      "sourceKind": "atlas",
+      "renderKey": "aa9ecf0e4b8f684ea14418b8e7a58af22003450100000000",
+      "textureRect": [
+        253.0761260986328,
+        1143.076171875,
+        255.9238739013672,
+        200.84774780273438
+      ],
+      "atlasRectOffset": [
+        253,
+        1116
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1502284359": {
+      "file": "1502284359.webp",
+      "sha256": "591e9db78cafbca89fdf9862b7a4eb2f04d1f27e260986d62f82487a37c10582",
+      "itemKey": "item_c_dyeable_tgdress_whiteorange",
+      "definitionPathId": "-3801536055631015783",
+      "sharedUiIconPathId": "6532496360356332805",
+      "sourceSpritePathId": "-2907077065373986719",
+      "sourceSpriteName": "icon_item_c_dyeable_tgdress_whiteorange",
+      "texturePathId": "8389031566831243361",
+      "textureName": "icon_item_c_dyeable_tgdress_whiteorange",
+      "textureSha256": "a0e10cf4863b5ec163d3a68f55d3992c2c9b05a6a480cb076ee622c30008b732",
+      "sourceKind": "direct"
+    },
+    "1528738118": {
+      "file": "1528738118.webp",
+      "sha256": "78a6954274ae46524d58a52f5845196de811d3826539a34c90722a84aacc1443",
+      "itemKey": "item_c_dyeable_wwmagicalfrillyoutfit_opal",
+      "definitionPathId": "4875110966285147141",
+      "sharedUiIconPathId": "2745862219491132030",
+      "sourceSpritePathId": "1646861058656495219",
+      "sourceSpriteName": "icon_item_c_dyeable_wwmagicalfrillyoutfit_opal",
+      "texturePathId": "7407305314523048702",
+      "textureName": "sactx-41-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "996f9bdc4b01e27974c30088a0a0760182e9aaac8b00ccaa47c6498543d2f5f4",
+      "sourceKind": "atlas",
+      "renderKey": "7ef0fde3c06a6c4da537bbf53d52726a2003450100000000",
+      "textureRect": [
+        1381.076171875,
+        0.07612037658691406,
+        251.89712524414062,
+        195.89712524414062
+      ],
+      "atlasRectOffset": [
+        1378,
+        -28
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1567589376": {
+      "file": "1567589376.webp",
+      "sha256": "caef20b65e93cf921a58cefd80a53b491fad530c7b88f6b91e605a1ce671b9ac",
+      "itemKey": "item_c_dyeable_tgdress_skypink",
+      "definitionPathId": "-2178297833350538700",
+      "sharedUiIconPathId": "6532496360356332805",
+      "sourceSpritePathId": "-6272064984733575778",
+      "sourceSpriteName": "icon_item_c_dyeable_tgdress_skypink",
+      "texturePathId": "-7149368725286021730",
+      "textureName": "icon_item_c_dyeable_tgdress_skypink",
+      "textureSha256": "77b52f500e0b2e44105e1d46a107da5fb18d437a2b6b111b90913337e5edfd64",
+      "sourceKind": "direct"
+    },
+    "1651734766": {
+      "file": "1651734766.webp",
+      "sha256": "18f5b0eeb1b78d18175708643e9c0e1483db60c903966b89e90a18c5dd183872",
+      "itemKey": "item_c_dyeable_tgsunhat_lilac",
+      "definitionPathId": "-598508125764957981",
+      "sharedUiIconPathId": "7003148071146226920",
+      "sourceSpritePathId": "-4828856050478557387",
+      "sourceSpriteName": "icon_item_c_dyeable_tgsunhat_lilac",
+      "texturePathId": "6823826155038234421",
+      "textureName": "icon_item_c_dyeable_tgsunhat_lilac",
+      "textureSha256": "c9fe3ea1b510756d98483742252d649ead039ddfab5b723d5eab4a77c3a4e708",
+      "sourceKind": "direct"
+    },
+    "1652397932": {
+      "file": "1652397932.webp",
+      "sha256": "1b2e48ae5ba66eb5d5be4d8db4f2a6a3765434b3bd68c813bdd2a2370028718b",
+      "itemKey": "item_c_dyeable_elegantdress_blush",
+      "definitionPathId": "-2152666820935667584",
+      "sharedUiIconPathId": "-2817173925871220958",
+      "sourceSpritePathId": "6228189763321191724",
+      "sourceSpriteName": "icon_item_c_dyeable_elegantdress_blush",
+      "texturePathId": "-6750812447536944386",
+      "textureName": "sactx-18-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "3af535e34b39d32651626f3c521a0e827c1eecd724d14a298642a082f287dfd9",
+      "sourceKind": "atlas",
+      "renderKey": "a56a41513e2945ed90b253ef5151a3a82003450100000000",
+      "textureRect": [
+        1270.076171875,
+        1448.076171875,
+        250.84774780273438,
+        237.84774780273438
+      ],
+      "atlasRectOffset": [
+        1267,
+        1440
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1666503382": {
+      "file": "1666503382.webp",
+      "sha256": "2144c31ff533ffea005026be98ff89109b63e4dbba8598b03b3139e5ae4c19d1",
+      "itemKey": "item_c_dyeable_tglongsleeveddress_softyellow",
+      "definitionPathId": "-1914869881707330098",
+      "sharedUiIconPathId": "-3327772517825296899",
+      "sourceSpritePathId": "-7292684988997538749",
+      "sourceSpriteName": "icon_item_c_dyeable_tglongsleeveddress_softyellow",
+      "texturePathId": "5001161788835195971",
+      "textureName": "icon_item_c_dyeable_tglongsleeveddress_softyellow",
+      "textureSha256": "896714e5869ccb53ca73e037793af5593488d1e8ba0a8d2d0b414e11ef594d8c",
+      "sourceKind": "direct"
+    },
+    "1672392605": {
+      "file": "1672392605.webp",
+      "sha256": "9ec56708507cf9a0460363d435028f79c7ebb738af96581ba8e49d5c84f3b602",
+      "itemKey": "item_c_dyeable_tgpatternedtailcoat_aquamarine",
+      "definitionPathId": "6751049040684304069",
+      "sharedUiIconPathId": "-7154818796287234535",
+      "sourceSpritePathId": "6183904026813058025",
+      "sourceSpriteName": "icon_item_c_dyeable_tgpatternedtailcoat_aquamarine",
+      "texturePathId": "-5080573741577548823",
+      "textureName": "icon_item_c_dyeable_tgpatternedtailcoat_aquamarine",
+      "textureSha256": "d464a066f691c27976e5d5039aed92e1b4929a7d69a2facf5004830f92070711",
+      "sourceKind": "direct"
+    },
+    "1692294031": {
+      "file": "1692294031.webp",
+      "sha256": "8a1d6ad36021472a90b745d932d47cf566f23181cdecbf8fbef5bf502c600b37",
+      "itemKey": "item_c_dyeable_interlude_futuristic_crewshirt_blush",
+      "definitionPathId": "-6772642410974283790",
+      "sharedUiIconPathId": "4893992420208005511",
+      "sourceSpritePathId": "-5001794362181775580",
+      "sourceSpriteName": "icon_item_c_dyeable_interlude_futuristic_crewshirt_blush",
+      "texturePathId": "-4730413664983806172",
+      "textureName": "icon_item_c_dyeable_interlude_futuristic_crewshirt_blush",
+      "textureSha256": "983ce16972f904560e3c6c1c40071a38237bd3fbdab1384fccfefd398170ecb7",
+      "sourceKind": "direct"
+    },
+    "1735983991": {
+      "file": "1735983991.webp",
+      "sha256": "e878d209aa51a419be3deee8801f5abf6eb8d134ad6a6d8e0076366a41e35a92",
+      "itemKey": "item_c_dyeable_ctstylist_pinkviolet",
+      "definitionPathId": "5547769267779652124",
+      "sharedUiIconPathId": "6204647812466108540",
+      "sourceSpritePathId": "7579232454101786091",
+      "sourceSpriteName": "icon_item_c_dyeable_ctstylist_pinkviolet",
+      "texturePathId": "1553460196541688574",
+      "textureName": "sactx-16-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "f1a9c6cca3afd3b5cc5f3e11f50ccf3af665c748559f26cd0080eb25df74a77a",
+      "sourceKind": "atlas",
+      "renderKey": "5ef666a95eaafa488d0aa3cd58ada9782003450100000000",
+      "textureRect": [
+        511.07611083984375,
+        752.0761108398438,
+        253.89712524414062,
+        244.89712524414062
+      ],
+      "atlasRectOffset": [
+        509,
+        746
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1799345954": {
+      "file": "1799345954.webp",
+      "sha256": "c31e85ff6cc8a2c057eab669034c56a82968187823c10246238f42632a0c28bc",
+      "itemKey": "item_c_dyeable_ctsleekoutfit_pink",
+      "definitionPathId": "-2880219174862891389",
+      "sharedUiIconPathId": "5830083710092899451",
+      "sourceSpritePathId": "-6713419165587559865",
+      "sourceSpriteName": "icon_item_c_dyeable_ctsleekoutfit_pink",
+      "texturePathId": "3783326952442587902",
+      "textureName": "sactx-19-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "a40c545b50e87917e936a87fea7442446361b6adc0e829574aa5388176ef2c79",
+      "sourceKind": "atlas",
+      "renderKey": "a27f304686fe7f438cbafd10feb458662003450100000000",
+      "textureRect": [
+        1487.0267333984375,
+        953.0761108398438,
+        255.97325134277344,
+        230.89712524414062
+      ],
+      "atlasRectOffset": [
+        1487,
+        939
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1849238801": {
+      "file": "1849238801.webp",
+      "sha256": "f859c94d61033a9c7e7162f9d6af96873c16b3fab842392a51b341a514b898c8",
+      "itemKey": "item_c_dyeable_wwmagicalhkbow_wheatflour",
+      "definitionPathId": "6167745959450776294",
+      "sharedUiIconPathId": "334671984122293570",
+      "sourceSpritePathId": "1340017306226400907",
+      "sourceSpriteName": "icon_item_c_dyeable_wwmagicalhkbow_wheatflour",
+      "texturePathId": "-2218446429612446978",
+      "textureName": "sactx-45-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "22803d9c1ce7daa9af8678da5f16655c5ca4b6ad15029c88375516bb62b478c4",
+      "sourceKind": "atlas",
+      "renderKey": "dca01870d6b7dd49b10a99c4575016f62003450100000000",
+      "textureRect": [
+        508.0267333984375,
+        823.0761108398438,
+        248.9532012939453,
+        193.88096618652344
+      ],
+      "atlasRectOffset": [
+        501,
+        783
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1977282292": {
+      "file": "1977282292.webp",
+      "sha256": "2f4eb422d05a2fd579480a43fe00438b8714868da06126656f883c3070d51445",
+      "itemKey": "item_c_dyeable_wwmagicalribbonoutfit_kuromi",
+      "definitionPathId": "-4374032918593296714",
+      "sharedUiIconPathId": "-3112856910807186409",
+      "sourceSpritePathId": "2881002674672937236",
+      "sourceSpriteName": "icon_item_c_dyeable_wwmagicalribbonoutfit_kuromi",
+      "texturePathId": "3040780950177540862",
+      "textureName": "sactx-28-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "b1b379f9584c5de753c7f94f1bd3b45f15179a1a88a29c97ef56fdba729fb942",
+      "sourceKind": "atlas",
+      "renderKey": "874468de5df0e747a1be2fa5bce8b0ec2003450100000000",
+      "textureRect": [
+        0.07612037658691406,
+        0.07612037658691406,
+        249.85997009277344,
+        219.89712524414062
+      ],
+      "atlasRectOffset": [
+        -4,
+        -18
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "1991174173": {
+      "file": "1991174173.webp",
+      "sha256": "cbc744cdcad507c59382722d29e1ae00dcb5283a0cd5ecbafe7aab5eb12d1e80",
+      "itemKey": "item_c_dyeable_sidekickmask_black",
+      "definitionPathId": "7898906785916034352",
+      "sharedUiIconPathId": "7238680315847921159",
+      "sourceSpritePathId": "3777685081857095825",
+      "sourceSpriteName": "icon_item_c_dyeable_sidekickmask_black",
+      "texturePathId": "-2435400706321650946",
+      "textureName": "sactx-76-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "ea36782edc2fe6967a9fdec2a5448bfcbd779204a641885a8328e88875f63b15",
+      "sourceKind": "atlas",
+      "renderKey": "a111564de350574e966e2e81534dffc22003450100000000",
+      "textureRect": [
+        236.0761260986328,
+        1102.076171875,
+        233.84774780273438,
+        144.89712524414062
+      ],
+      "atlasRectOffset": [
+        225,
+        1048
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "2023553236": {
+      "file": "2023553236.webp",
+      "sha256": "d04a183d6e0afee754f7f1495c34c9d107cae841d1941690bd39759eee05db8c",
+      "itemKey": "item_c_dyeable_tgempirewaistdress_periwinklegray",
+      "definitionPathId": "6432848268348504223",
+      "sharedUiIconPathId": "-6835518302177314535",
+      "sourceSpritePathId": "-434042270123981251",
+      "sourceSpriteName": "icon_item_c_dyeable_tgempirewaistdress_periwinklegray",
+      "texturePathId": "-3628712474306378179",
+      "textureName": "icon_item_c_dyeable_tgempirewaistdress_periwinklegray",
+      "textureSha256": "3fc93e1ea7c5fbd69fb1099efc65ee5faa4091fbe566f184f8abb32b7c4ddec5",
+      "sourceKind": "direct"
+    },
+    "2051522529": {
+      "file": "2051522529.webp",
+      "sha256": "688b5fe138fb1840c977cc598bbac64c75f6313ee4a06e222ce407cbac23acc7",
+      "itemKey": "item_c_dyeable_bcbffshades_red",
+      "definitionPathId": "-105647199985928506",
+      "sharedUiIconPathId": "2957323756975917188",
+      "sourceSpritePathId": "6828303198492593909",
+      "sourceSpriteName": "icon_item_c_dyeable_bcbffshades_red",
+      "texturePathId": "-2435400706321650946",
+      "textureName": "sactx-76-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "ea36782edc2fe6967a9fdec2a5448bfcbd779204a641885a8328e88875f63b15",
+      "sourceKind": "atlas",
+      "renderKey": "881c7b7d17b9b84ba8396e86312e75e72003450100000000",
+      "textureRect": [
+        1616.0267333984375,
+        860.0267333984375,
+        237.89712524414062,
+        140.94650268554688
+      ],
+      "atlasRectOffset": [
+        1604,
+        805
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "2062703116": {
+      "file": "2062703116.webp",
+      "sha256": "dde788b69d2aceaefe2a9e838991f394cee62cf0b3fff1a397df6a2a85b88735",
+      "itemKey": "item_c_dyeable_tgopentailcoat_coralblush",
+      "definitionPathId": "5559321469973206847",
+      "sharedUiIconPathId": "23107242593078785",
+      "sourceSpritePathId": "-324261156732661043",
+      "sourceSpriteName": "icon_item_c_dyeable_tgopentailcoat_coralblush",
+      "texturePathId": "-8531352165784284467",
+      "textureName": "icon_item_c_dyeable_tgopentailcoat_coralblush",
+      "textureSha256": "7a748820000f89838fadccd48ffff4ecfcaf8f5149cb112c1cbede50f1d6bcff",
+      "sourceKind": "direct"
+    },
+    "2067661774": {
+      "file": "2067661774.webp",
+      "sha256": "08c107f353744e13374902972f24a901342eed7392a2efa7725c432f830c5e18",
+      "itemKey": "item_c_dyeable_ctberet_pink",
+      "definitionPathId": "673799519484037081",
+      "sharedUiIconPathId": "9041649546869079771",
+      "sourceSpritePathId": "-6981501491179316763",
+      "sourceSpriteName": "icon_item_c_dyeable_ctberet_pink",
+      "texturePathId": "2857289608155327230",
+      "textureName": "sactx-71-2048x2048-DXT5|BC3-GlobalUIAtlas-14a14563",
+      "textureSha256": "842077082d10eb5a49548d90c43cacfd8488e086c5d22dde2fc2ee0d6eb2be07",
+      "sourceKind": "atlas",
+      "renderKey": "717fb7116e834144997a836b6ce5df0b2003450100000000",
+      "textureRect": [
+        888.0267333984375,
+        1897.076171875,
+        241.94650268554688,
+        137.89712524414062
+      ],
+      "atlasRectOffset": [
+        879,
+        1830
+      ],
+      "settingsRaw": 67,
+      "sourceSpriteMeshApplied": true
+    },
+    "2074282599": {
+      "file": "2074282599.webp",
+      "sha256": "5720493ace8ab0c976d895342aceb75f4c1adc3ce481f2b21635a9f2b5900abc",
+      "itemKey": "item_c_dyeable_tgwaistcoat_darkpink",
+      "definitionPathId": "6559644643650479382",
+      "sharedUiIconPathId": "3071458459125395548",
+      "sourceSpritePathId": "5205082437156916620",
+      "sourceSpriteName": "icon_item_c_dyeable_tgwaistcoat_darkpink",
+      "texturePathId": "-7557256663525372532",
+      "textureName": "icon_item_c_dyeable_tgwaistcoat_darkpink",
+      "textureSha256": "c7e59b81247b05a96028d0788010cb70ca5df62104b25552f47544ac64e6c0e1",
+      "sourceKind": "direct"
+    },
+    "2097599525": {
+      "file": "2097599525.webp",
+      "sha256": "028cf3649c0cb0b7a7831b18ce9da5db1848197d70fdb321fa1059a5e991b2fd",
+      "itemKey": "item_c_dyeable_tglongsleeveddress_blush",
+      "definitionPathId": "-6933260195172103907",
+      "sharedUiIconPathId": "-3327772517825296899",
+      "sourceSpritePathId": "-3594877747839761486",
+      "sourceSpriteName": "icon_item_c_dyeable_tglongsleeveddress_blush",
+      "texturePathId": "1504252674488927154",
+      "textureName": "icon_item_c_dyeable_tglongsleeveddress_blush",
+      "textureSha256": "8ac8ce3c76ffa07d7df4798cd6377be5904681ea6fe3f3ceede7354a3fe20bd8",
+      "sourceKind": "direct"
+    }
+  }
+}
