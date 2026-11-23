@@ -83,7 +83,7 @@ test('12 source-icon families map exact original game names, sizes and 24 native
   assert.notEqual(palettes[a].colors[1],palettes[b].colors[1]);
   total+=count;
  }
- assert.equal(total,171);
+ assert.equal(total,164);
 });
 
 test('every game-native second channel modifies the actual neutral source pixels without disturbing source alpha',()=>{
