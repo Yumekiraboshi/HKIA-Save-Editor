@@ -52,8 +52,8 @@ test('click state is planned only by Rust/WASM, then applied through native CAS'
  assert.match(worker,/case 'achievement-plan-toggle'/);
  assert.match(app,/planAchievementToggle\(guid,Date\.now\(\)\)/);
  assert.doesNotMatch(app,/toggleAchievementState\(|from '.\/achievement-quick'/);
- assert.match(app,/changeAchievementWithParent\(live,next\)/);
- assert.match(app,/createAchievementWithParent\(guid,next,parent\)/);
+ assert.match(app,/editAchievementAuto\(guid,live\?\.value\?\?null,next\)/);
+ assert.match(app,/editAchievementAuto\(selected\.guid,selected\.value,next\)/);
 });
 
 test('achievement detail popup no longer accepts arbitrary progress or changes it while editing a date',()=>{
