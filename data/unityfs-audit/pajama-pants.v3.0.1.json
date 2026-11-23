@@ -1,0 +1,52 @@
+{
+  "schema": "HKIA.UnityFSAudit.1",
+  "version": "3.0.1",
+  "source": "original-game-unityfs",
+  "bundle": "l_basicstyle_pants_pajamaoutfit",
+  "sha256": "5f1a1f1a46ed44507b3d7f0cecbf0c63e0f08189b12a5eb6a5a00cc4e68c3f87",
+  "compressedBytes": 6132,
+  "unityfs": {
+    "format": 8,
+    "compression": 3,
+    "blockCount": 1,
+    "nodeCount": 1,
+    "unpackedBytes": 18612
+  },
+  "serialized": {
+    "version": 22,
+    "nodeName": "CAB-bf3af877ce68db110df4cfbff29278ca",
+    "objectCount": 6,
+    "classCounts": {
+      "AssetBundle": 1,
+      "GameObject": 1,
+      "MeshFilter": 1,
+      "MeshRenderer": 1,
+      "MonoBehaviour": 1,
+      "Transform": 1
+    },
+    "verifiedGameObject": "BasicStyle_Pants_PajamaOutfit",
+    "hasEmbeddedMaterial": false,
+    "hasEmbeddedTexture2D": false,
+    "externalCABs": [
+      "CAB-2383a36f15413272ed26f383f73f6431",
+      "CAB-46b8f8fe122147493b3113f7c1c8cd0f",
+      "CAB-e0bb9c42e39165db86be2e9b0644cefd"
+    ],
+    "rendererMaterialReferences": [
+      {
+        "class": "MeshRenderer",
+        "objectPathId": "5650262087700171341",
+        "materials": [
+          {
+            "slot": 0,
+            "fileId": 3,
+            "pathId": "8104563212892143441",
+            "externalCAB": "CAB-e0bb9c42e39165db86be2e9b0644cefd"
+          }
+        ]
+      }
+    ]
+  },
+  "relationToColorwayItemIDs": "unverified-candidate; model/prefab name is not proof of per-Item-ID icon rendering",
+  "blocker": "External Material objects and textures, PatternMap/ComboMap and game UiIcon renderer parameters not yet recovered; not publishable."
+}
