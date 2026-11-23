@@ -181,10 +181,15 @@ async function inventoryOriginalArtSmoke(){
   await card.waitFor();
   await card.locator('.inventory-item-art .item-sprite').first().waitFor({timeout:30_000});
   const original=card.locator('.inventory-item-art .item-sprite').first();
+  // The original atlas is a blob URL; build-time source-icon colorway PNGs
+  // use an immutable same-origin URL instead. Both are valid, and neither
+  // silently claims a verified game-shader-exact patterned texture.
   await page.waitForFunction(()=>{
    const image=document.querySelector('.inventory-card .inventory-item-art .item-sprite');
-   return image&&getComputedStyle(image).backgroundImage.includes('blob:');
-  },{timeout:30_000});
+   if(!image)return false;
+   const bg=getComputedStyle(image).backgroundImage;
+   return /blob:|native-colorways\\/1286846063\\.png|variant-art\\/1286846063\\.(png|webp)/.test(bg);
+  },null,{timeout:30_000});
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'3');
   assert.ok(['native-icon','approximation','original','game-render'].includes(
    await original.getAttribute('data-dye-source')),
