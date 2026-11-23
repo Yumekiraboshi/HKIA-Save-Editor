@@ -529,3 +529,28 @@ This is an *approximate 2D UiIcon region*, not an authenticated Unity
 shader-material assignment or a pixel-perfect in-game 3D render.
 CI checks the generated 96px PNG hashes and channels for every original
 same-primary/different-secondary pair and rejects silent duplicates.
+
+## Paper Bow, Glasses, Leafy Mermaid and Shell Armor icons
+
+The native Steam v3.0.1 UiIcon index verifies the following four
+additional source-neutral families, all from the original
+`collections_group_events` pack:
+
+| Native item family | Game sheet/cell | Source Item IDs | Shared-primary/distinct-secondary pairs |
+| --- | --- | ---: | ---: |
+| Paper Bow Dress | 001/103 | 11 | 2 |
+| Glasses | 003/107 | 11 | 2 |
+| Leafy Mermaid Top | 000/006 | 8 | 2 |
+| Mermaid Shell Armor | 008/091 | 8 | 2 |
+
+The unchanged native 96×96 UiIcon pixels receive actual original dye
+channel 2 on source-specific neutral fabric, eyeglass trim, or marine
+armor panels. Alpha, dark outlines and already-colored details are
+preserved. No CSS rings, color swatches or wiki images are involved.
+
+The **38 original IDs and eight source-native pairs** are verified
+against the packaged game sheet index, localized source name lookup
+and full original native dye palette. The generated PNG verifier checks
+every same-primary/different-secondary pair for genuinely different
+image bytes and source channel 2. Placement remains a **guarded 2D
+approximation**, not an authenticated Unity 3D shader mask.
