@@ -142,6 +142,12 @@ const nativeTwoToneSources=[
  // second pairs per outfit family. Generated real pixels must differ.
  // Source-neutral game items with exact 22 colorways apiece:
  // Night Cap, Striped Pajama Pants, Striped Pajama Shirt.
+ // Original source Mermaids: 21 colorways and two same-first source
+ // palette pairs for each tail design.
+ ['collections_group_events',1,19,21],
+ ['collections_group_events',5,141,21],
+ ['collections_group_events',6,136,21],
+ ['collections_group_events',6,5,21],
  ['collections_group_clothing',0,24,22],
  ['collections_group_clothing',0,44,22],
  ['collections_group_clothing',0,77,22],
