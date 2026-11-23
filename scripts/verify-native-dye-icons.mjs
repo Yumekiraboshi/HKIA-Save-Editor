@@ -138,6 +138,20 @@ for(const id of ['77149467','370872413','2022277447']){
 // and per-colorway PNG signatures, not a manually curated palette list,
 // determine precisely which native variants belong to each original cell.
 const nativeTwoToneSources=[
+ // Actual Steam v3.0.1 Pink/Purple Bee UiIcon sources. The original
+ // 11-ID family and per-item source palette must render nonidentically.
+ ['collections_group_events',3,122,11],
+ ['collections_group_events',3,54,11],
+ ['collections_group_events',3,75,11],
+ ['collections_group_events',4,105,11],
+ ['collections_group_events',4,142,11],
+ ['collections_group_events',4,81,11],
+ ['collections_group_events',5,139,11],
+ ['collections_group_events',5,3,11],
+ ['collections_group_events',5,96,11],
+ ['collections_group_events',6,67,11],
+ ['collections_group_events',7,117,11],
+ ['collections_group_events',7,28,11],
  // Original v3.0.1 City Town, Clothing and Events game sprites;
  // one same-first/different-second genuine dye pair in each.
  ['collection_group_citytown',2,76,18],
