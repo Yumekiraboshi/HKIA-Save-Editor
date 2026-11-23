@@ -28,6 +28,7 @@ import {searchAchievementRows} from './achievement-search';
  import {loadNativeColorwayIcons} from './native-colorway-icons';
  import DyeSprite from './DyeSprite.svelte';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
+ import {toAchievementDateTimeValue,fromAchievementDateTimeValue} from './achievement-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
  import {searchAllCollectionItems,collectionDisplayName,filterCollectionItems} from './collection-search';
 import {verifiedFloorplanName} from './floorplan-names';
@@ -655,18 +656,10 @@ import {verifiedFloorplanName} from './floorplan-names';
   }catch(e){error=describeError(e)}
   finally{busy=false}
  }
- function formatAchievementDate(value:AchievementValue):string{
-  if(!value.completed)return '';
-  const ms=Number(value.completed[0])*1000+Math.floor(value.completed[1]/1_000_000);
-  const date=new Date(ms);
-  if(!Number.isFinite(date.getTime()))return '';
-  const pad=(v:number)=>String(v).padStart(2,'0');
-  return date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate())+'T'+pad(date.getHours())+':'+pad(date.getMinutes())+':'+pad(date.getSeconds());
- }
  async function openAchievement(row:AchievementEntry,opener:HTMLElement,index:number){
   if(busy||!row.value.complete)return;
   editingAchievement=row;achievementReturnFocus=opener;editingAchievementTitle=achievementName(achievementGuid(row.guid),index);
-  achievementDate=formatAchievementDate(row.value)||(row.value.complete?formatAchievementDate({complete:true,current:0,completed:[BigInt(Math.floor(Date.now()/1000)),0]}):'');
+  achievementDate=toAchievementDateTimeValue(row.value.completed);
   achievementValidation='';
   await tick();
   if(achievementDialogEl&&!achievementDialogEl.open)achievementDialogEl.showModal();
@@ -680,18 +673,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  async function saveAchievement(){
   const selected=editingAchievement;
   if(!snapshot||!selected||busy||!selected.value.complete)return;
-  let completed:AchievementValue['completed']=selected.value.completed;
-  if(selected.value.complete){
-   if(!achievementDate){achievementValidation=achCopy.invalid;return}
-   if(achievementDate===formatAchievementDate(selected.value)&&selected.value.completed){
-    completed=selected.value.completed;
-   }else{
-    const ms=new Date(achievementDate).getTime();
-    if(!Number.isFinite(ms)||ms<0||ms>253402300799000){achievementValidation=achCopy.invalid;return}
-    const seconds=Math.floor(ms/1000);
-    completed=[BigInt(seconds),Math.round((ms-seconds*1000)*1_000_000)];
-   }
-  }
+  if(!achievementDate){achievementValidation=achCopy.invalid;return}
+  let completed:AchievementValue['completed'];
+  try{completed=fromAchievementDateTimeValue(achievementDate,selected.value.completed)}
+  catch{achievementValidation=achCopy.invalid;return}
   const next:AchievementValue={complete:selected.value.complete,current:selected.value.current,completed};
   if(next.current===selected.value.current&&next.completed?.[0]===selected.value.completed?.[0]&&
    next.completed?.[1]===selected.value.completed?.[1]){closeAchievement();return}
