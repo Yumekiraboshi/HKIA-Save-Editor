@@ -2,6 +2,7 @@
  import type {SpriteCell} from './icon-packs';
  import type {NativeDyePalette} from './native-dye-palettes';
  import {renderDyeSprite} from './dye-recolor';
+ import {displayedDyeIconFidelity} from './item-icon-art';
 
  let {sprite,palette,sourceKey='',exactArtUrl,previewUrl}:{
   sprite:SpriteCell;palette:NativeDyePalette;sourceKey?:string;
@@ -61,6 +62,7 @@
 <span class="item-sprite"
  data-dye-rendered={displayedUrl!==null?'true':'false'}
  data-dye-source={imageSource}
+ data-icon-fidelity={displayedDyeIconFidelity(imageSource)}
  style:background-image={'url("'+(displayedUrl??sprite.url)+'")'}
  style:background-position={imageSource==='game-render'||imageSource==='native-icon'?'center':displayedUrl?'0px 0px':'-'+sprite.x+'px -'+sprite.y+'px'}
  style:background-size={imageSource==='game-render'?'contain':displayedUrl?'96px 96px':undefined}
