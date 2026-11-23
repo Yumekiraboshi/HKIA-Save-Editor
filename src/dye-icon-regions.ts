@@ -474,6 +474,21 @@ const sourceAccentProfiles:Array<{
  {group:'collections_group_events',sheet:6,cell:67,part:'right-skirt'}, // Pleated Dress
  {group:'collections_group_events',sheet:7,cell:117,part:'hat-band'}, // Origami Crane Hat
  {group:'collections_group_events',sheet:7,cell:28,part:'hat-band'}, // Pleated Tophat
+ // Exact original HKIA Steam v3.0.1 source icons for the remaining
+ // 10 shared-primary/different-secondary 2D preview families.
+ // Distinct native second dye colors affect actual source neutral pixels.
+ // Every profile requires the correct game atlas group/sheet/cell,
+ // and DOES NOT claim verified 3D shader/material palette masks.
+ {group:'collections_group_events',sheet:4,cell:139,part:'chest-panel'}, // Starfish Mermaid Top
+ {group:'collections_group_events',sheet:10,cell:4,part:'chest-panel'}, // Cowrie Shell Necklace
+ {group:'collections_group_events',sheet:2,cell:84,part:'right-skirt'}, // Jester Costume
+ {group:'collections_group_events',sheet:1,cell:61,part:'hat-band'}, // Vaporwave Neon Palm Hat
+ {group:'collections_group_events',sheet:1,cell:119,part:'plume'}, // Shell Hair Piece
+ {group:'collections_group_events',sheet:10,cell:6,part:'right-skirt'}, // Koi Tail
+ {group:'collections_group_events',sheet:5,cell:32,part:'chest-panel'}, // Clamshell Backpack
+ {group:'collections_group_events',sheet:5,cell:78,part:'chest-panel'}, // Gudetama Zip Hoodie
+ {group:'collections_group_events',sheet:6,cell:103,part:'chest-panel'}, // Mermaid Vest
+ {group:'collections_group_events',sheet:10,cell:52,part:'plume'}, // Bat Bow
  {group:'collection_group_citytown',sheet:1,cell:11,part:'right-trouser'},
  {group:'collection_group_citytown',sheet:0,cell:65,part:'chest-panel'},
  {group:'collection_group_citytown',sheet:1,cell:61,part:'diagonal-sash'},
