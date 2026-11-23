@@ -51,6 +51,13 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryLimit=$state(BATCH_SIZE);
  let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
  let inventoryBaseline:InventoryEntry[]=[];
+ // Source-verified game UiIcon ZIP packs are shared by Collection/Inventory.
+ // Inventory loads only groups currently needed by visible owned rows.
+ const inventoryIconPending=new Set<string>();
+ const inventoryIconFailed=new Set<string>();
+ let inventoryIconPacks:Record<string,IconPack>=$state({});
+ let inventoryIconPulse=$state(0);
+ let inventoryIconEpoch=0;
  let achievementIndex:AchievementIndex=$state(new Map());
  let achievementGroupHierarchy:AchievementHierarchy|null=$state(null);
  let achievementCategoryAtlas:CategoryIconAtlas|null=$state(null);
@@ -138,6 +145,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  const tabHistoryDetails=$derived(historyDetails.filter(entry=>entry.scope===activeTool));
  const historyItems=$derived(new Map(((catalog as Catalog|null)?.items??[]).map(item=>[item[0],item])));
  const inventoryHistoryItems=$derived(new Map(((snapshot as SaveSnapshot|null)?.inventory??[]).map(item=>[item.documentId,item.itemId])));
+ // Item IDs and category-to-art mappings are original Steam v3.0.1
+ // collection catalog data, NOT inferred inventory ownership/categories.
+ const inventorySourceItems=$derived(new Map(((catalog as Catalog|null)?.items??[]).map(item=>[item[0],item])));
+ const inventorySourceGroups=$derived(new Set(((catalog as Catalog|null)?.groups??[]).map(group=>group[0])));
  const sourceAchievementRows=$derived(joinAchievementCatalog(achievementIndex,(snapshot as SaveSnapshot|null)?.achievements??[]));
  const achievementGroupSummaries=$derived(achievementGroupHierarchy?summarizeAchievementGroups(achievementGroupHierarchy,sourceAchievementRows):[]);
  const unmappedAchievementRows=$derived(achievementGroupHierarchy?ungroupedRows(achievementGroupHierarchy,sourceAchievementRows):[]);
@@ -200,6 +211,9 @@ import {verifiedFloorplanName} from './floorplan-names';
    media.removeEventListener?.('change',listener);
    window.removeEventListener('beforeunload',beforeUnload);
    iconEpoch++;iconPack?.dispose();
+   inventoryIconEpoch++;
+   for(const pack of Object.values(inventoryIconPacks))pack.dispose();
+   inventoryIconPacks={};
    achievementImagesEpoch++;
    achievementIndividualAtlas?.dispose?.();
    achievementCategoryAtlas?.dispose?.();
@@ -316,6 +330,24 @@ import {verifiedFloorplanName} from './floorplan-names';
   observer.observe(el);
   return ()=>observer.disconnect();
  });
+ /* No extra image service, no speculative item artwork: load the exact
+    original game UiIcon atlas group for each visible inventory Item ID.
+    Three concurrent ZIP requests maximum, with successful groups cached.
+    If a group cannot be verified, leave its card with the safe placeholder. */
+ $effect(()=>{
+  inventoryIconPulse;
+  if(activeTool!=='inventory'||!snapshot||!catalog)return;
+  const groups=new Set<string>();
+  for(const row of inventoryRows.slice(0,inventoryLimit)){
+   const item=inventorySourceItems.get(row.itemId);
+   if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
+  }
+  for(const group of groups){
+   if(inventoryIconPending.size>=3)break;
+   if(inventoryIconPacks[group]||inventoryIconPending.has(group)||inventoryIconFailed.has(group))continue;
+   void fetchInventoryIcons(group);
+  }
+ });
  const unnamed=$derived((catalog as Catalog|null)?.items.filter((x:Item)=>!x[5]&&!x[6]&&!verifiedFloorplanName(x[0],locale)).length??0);
  function describeError(e:unknown){const raw=e instanceof Error?e.message:String(e);return editorErrors[locale==='ja'?'ja':'en'][raw]??(locale==='ja'?(raw||copy.unknown):copy.unknown);}
  function setLanguage(v:LanguagePref){
@@ -327,8 +359,25 @@ import {verifiedFloorplanName} from './floorplan-names';
  function inventoryName(itemId:number):string{
   return sourceNames[String(itemId)]??'#'+String(itemId);
  }
+ async function fetchInventoryIcons(group:string){
+  const epoch=inventoryIconEpoch;
+  inventoryIconPending.add(group);
+  try{
+   const pack=await loadIconPack(group,import.meta.env.BASE_URL);
+   if(epoch!==inventoryIconEpoch){pack.dispose();return}
+   inventoryIconPacks={...inventoryIconPacks,[group]:pack};
+  }catch{
+   if(epoch===inventoryIconEpoch)inventoryIconFailed.add(group);
+  }finally{
+   inventoryIconPending.delete(group);
+   if(epoch===inventoryIconEpoch)inventoryIconPulse++;
+  }
+ }
  function openInventoryTab(){
   activeTool='inventory';inventoryQuery='';inventoryLimit=BATCH_SIZE;editingAchievement=null;error='';
+  // Retry transient failures only when the user reopens Inventory.
+  // Successfully verified original images remain cached and unchanged.
+  inventoryIconFailed.clear();inventoryIconPulse++;
  }
  function showAchievementGroup(guid:string|null){
   achievementGroupSelection=guid;achievementQuery='';
@@ -982,8 +1031,26 @@ import {verifiedFloorplanName} from './floorplan-names';
    </div>
    <div class="inventory-grid">
     {#each inventoryRows.slice(0,inventoryLimit) as item (item.documentId)}
+     {@const definition=inventorySourceItems.get(item.itemId)}
+     {@const sprite=definition?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
      <article class="inventory-card" class:inventory-readonly={!item.editable}>
-      <strong class="inventory-name">{inventoryName(item.itemId)}</strong>
+      <div class="inventory-card-heading">
+       <span class="inventory-item-art" aria-hidden="true">
+        {#if sprite}
+         {#if nativeDyePalettes[String(item.itemId)]}
+          <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item.itemId)]}
+           sourceKey={definition?.[1]??''} exactArtUrl={exactVariantArt[String(item.itemId)]}
+           previewUrl={nativeColorwayIcons[String(item.itemId)]}/>
+         {:else}
+          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'}
+           style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
+         {/if}
+        {:else}
+         <span class="item-art-empty">✧</span>
+        {/if}
+       </span>
+       <strong class="inventory-name">{inventoryName(item.itemId)}</strong>
+      </div>
       <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>
        <label>
         <span>{iCopy.quantity}</span>
