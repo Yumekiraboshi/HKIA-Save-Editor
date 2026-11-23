@@ -9,12 +9,15 @@ const {outputFiles}=await build({
  entryPoints:[fileURLToPath(new URL('../src/variant-art.ts',import.meta.url))],
  bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'
 });
-const {parseVariantArtIndex,loadVariantArtIndex}=await import(
+const {parseVariantArtIndex,parseSourceColorwayIndex,loadVariantArtIndex}=await import(
  'data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64')
 );
 const read=(name)=>readFileSync(new URL(name,import.meta.url),'utf8');
 const manifest=JSON.parse(read('../public/variant-art/index.json'));
 const native=JSON.parse(read('../public/native-dye-palettes.json'));
+const sources=JSON.parse(read('../public/source-colorways/index.json'));
+const catalog=JSON.parse(read('../public/catalog.json'));
+const itemKeys=new Map(catalog.items.map(r=>[String(r[0]),r[1]]));
 const example={
  file:'704486536.png',sha256:'a'.repeat(64),
  provenance:'game-render',
@@ -59,13 +62,14 @@ test('loader reads verified index through local deployment base only',async()=>{
  try{
   globalThis.fetch=async (url,options)=>{
    requests.push({url,options});
-   return {ok:true,json:async()=>wrap({'704486536':example})};
+   return {ok:true,json:async()=>url.endsWith('/source-colorways/index.json')?sources:wrap({'704486536':example})};
   };
   const record=await loadVariantArtIndex('/HKIA-Save-Editor/');
   assert.equal(record['704486536'],'/HKIA-Save-Editor/variant-art/704486536.png');
-  assert.equal(requests.length,1);
-  assert.equal(requests[0].url,'/HKIA-Save-Editor/variant-art/index.json');
-  assert.equal(requests[0].options.cache,'force-cache');
+  assert.equal(record['379863484'],'/HKIA-Save-Editor/source-colorways/379863484.webp');
+  assert.equal(requests.length,2);
+  assert.deepEqual(requests.map(r=>r.url).sort(),['/HKIA-Save-Editor/source-colorways/index.json','/HKIA-Save-Editor/variant-art/index.json']);
+  assert.ok(requests.every(r=>r.options.cache==='force-cache'));
  }finally{
   globalThis.fetch=previous;
  }
@@ -109,4 +113,58 @@ test('Collection and Inventory select source-registered exact images before appr
  for(const prohibited of [/native-dye-ring/,/native-dye-swatch/,/native-dye-preview/]){
   assert.doesNotMatch(app,prohibited);
  }
+});
+
+test('all 86 named original colorway sprites match native Item ID, source key and immutable WebP bytes',()=>{
+ const urls=parseSourceColorwayIndex(sources,'/');
+ assert.equal(sources.definitionsSha256,native.definitions_sha256);
+ assert.equal(sources.runtimeUiIconReferenceMatches,false);
+ assert.equal(Object.keys(urls).length,86);
+ const files=readdirSync(new URL('../public/source-colorways/',import.meta.url)).filter(x=>x!=='index.json');
+ assert.equal(files.length,86);
+ let atlas=0,direct=0;
+ for(const [id,r] of Object.entries(sources.records)){
+  assert.ok(native.records[id]);
+  assert.equal(itemKeys.get(id),r.itemKey);
+  assert.equal(r.sourceSpriteName,'icon_'+r.itemKey);
+  assert.notEqual(r.sourceSpritePathId,r.sharedUiIconPathId);
+  const data=readFileSync(new URL('../public/source-colorways/'+r.file,import.meta.url));
+  assert.equal(createHash('sha256').update(data).digest('hex'),r.sha256);
+  assert.equal(data.toString('ascii',0,4),'RIFF');
+  assert.equal(data.toString('ascii',8,12),'WEBP');
+  assert.equal(data.toString('ascii',12,16),'VP8L');
+  assert.equal(data[20],0x2f);
+  const packed=data.readUInt32LE(21);
+  assert.equal((packed&0x3fff)+1,96);
+  assert.equal(((packed>>>14)&0x3fff)+1,96);
+  if(r.sourceKind==='atlas'){atlas++;assert.equal(r.sourceSpriteMeshApplied,true);}
+  else{direct++;assert.equal(r.textureName,r.sourceSpriteName);}
+ }
+ assert.equal(direct,39);assert.equal(atlas,47);
+ assert.equal(sources.nativeUiIconAlphaVerification.alphaPixelsMatchedPerControl,9216);
+});
+
+test('source sprite loader refuses wrong item source names, paths, and runtime-fidelity claims',()=>{
+ const id='379863484',original=sources.records[id];
+ for(const changed of [
+  {file:'../379863484.webp'},{file:'1.webp'},{sourceSpriteName:'icon_unrelated'},
+  {sourceSpritePathId:original.sharedUiIconPathId},{textureSha256:'invalid'},
+  {sourceKind:'unverified'}
+ ]){
+  assert.throws(()=>parseSourceColorwayIndex({...sources,records:{[id]:{...original,...changed}}},'/'),
+   /SOURCE_COLORWAY_RECORD_INVALID/);
+ }
+ assert.throws(()=>parseSourceColorwayIndex({...sources,runtimeUiIconReferenceMatches:true},'/'),/SOURCE_COLORWAY_INDEX_INVALID/);
+});
+
+test('original source art survives an absent exact-render index and verified renders take precedence',async()=>{
+ const prev=globalThis.fetch;
+ try{
+  globalThis.fetch=async url=>url.includes('/source-colorways/')?
+   {ok:true,json:async()=>sources}:{ok:false};
+  assert.equal((await loadVariantArtIndex('/'))['379863484'],'/source-colorways/379863484.webp');
+  globalThis.fetch=async url=>({ok:true,json:async()=>url.includes('/source-colorways/')?
+   sources:wrap({'379863484':{...example,file:'379863484.png'}})});
+  assert.equal((await loadVariantArtIndex('/'))['379863484'],'/variant-art/379863484.png');
+ }finally{globalThis.fetch=prev;}
 });
