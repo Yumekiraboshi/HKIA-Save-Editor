@@ -1,0 +1,40 @@
+{
+  "schema": "HKIA.NativeDyeShaderAudit.1",
+  "source": "original-game-unityfs",
+  "version": "3.0.1",
+  "sourceBundle": "definitions",
+  "sourceSha256": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0",
+  "serializedCab": "CAB-46b8f8fe122147493b3113f7c1c8cd0f",
+  "shader": {
+    "pathId": "477622052401609204",
+    "classId": 48,
+    "name": "Sunblink/Lynx/CustomLitCharacter",
+    "serializedBytes": 45824,
+    "objectSha256": "a1078dfbdb6da8c3e2ce40106135fd59c8a0c1749e885dd98c45a4aa094125f3",
+    "sourcePropertyNames": [
+      "_BaseMap",
+      "_BumpMap",
+      "_ComboMap",
+      "_PatternMap",
+      "_PaletteColor1",
+      "_PaletteColor2",
+      "_PaletteColor3",
+      "_PaletteColor4",
+      "_PaletteColor5"
+    ]
+  },
+  "confirmedMaterialReferences": [
+    {
+      "sourceBundle": "d_3_a792250b",
+      "materialPathId": "-5426447412062820008"
+    },
+    {
+      "sourceBundle": "d_3_af05e86d",
+      "materialPathId": "8104563212892143441"
+    }
+  ],
+  "shaderSourceCodeRecovered": false,
+  "shaderColorMappingVerified": false,
+  "gameUiIconCameraAndLightingVerified": false,
+  "outputArtworkRegistered": false
+}
