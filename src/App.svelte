@@ -554,6 +554,23 @@ import {verifiedFloorplanName} from './floorplan-names';
   }
   finally{busy=false}
  }
+ async function applyInventoryQuantity(row:InventoryEntry,event:SubmitEvent){
+  event.preventDefault();
+  if(!snapshot||busy||!row.editable)return;
+  const value=new FormData(event.currentTarget as HTMLFormElement).get('quantity');
+  if(typeof value!=='string'||!/^[1-9][0-9]*$/.test(value)){
+   error=copy.fileError;return;
+  }
+  const next=Number(value);
+  if(!Number.isSafeInteger(next)||next>2147483647){error=copy.fileError;return}
+  if(next===row.quantity)return;
+  busy=true;error='';
+  try{
+   update(await changeInventoryQuantity(row.documentId,row.quantity,next));
+   await persistDraft();
+  }catch(e){error=describeError(e)}
+  finally{busy=false}
+ }
  async function change(id:number,next:bigint|null):Promise<boolean>{
   if(!snapshot||busy)return false;
   const prev=recorded[String(id)]??null;
@@ -748,6 +765,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    {#if snapshot}<nav class="tools-nav" aria-label="Tools">
     <button type="button" class="tool-tab" class:active={activeTool==='collections'} aria-current={activeTool==='collections'?'page':undefined} onclick={goHome}>{copy.toolCollection}</button>
     <button type="button" class="tool-tab" class:active={activeTool==='achievements'} aria-current={activeTool==='achievements'?'page':undefined} onclick={openAchievementsTab}>{achCopy.title}</button>
+    <button type="button" class="tool-tab" class:active={activeTool==='inventory'} aria-current={activeTool==='inventory'?'page':undefined} onclick={openInventoryTab}>{iCopy.tab}</button>
    </nav>{/if}
    <div class="bar-actions">
     {#if snapshot}
@@ -954,6 +972,38 @@ import {verifiedFloorplanName} from './floorplan-names';
      </form>
     {/if}
    </dialog>
+  {:else if activeTool==='inventory'}
+   <div class="collection-controls inventory-controls">
+    <label class="search-field">
+     <svg class="search-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.75" cy="10.75" r="6.75"/><path d="m16 16 5 5"/></svg>
+     <input type="search" bind:value={inventoryQuery} oninput={()=>inventoryLimit=BATCH_SIZE} placeholder={iCopy.search} aria-label={iCopy.search}/>
+    </label>
+    <span class="inventory-total">{iCopy.count}: {inventoryRows.length.toLocaleString(locale)}</span>
+   </div>
+   <div class="inventory-grid">
+    {#each inventoryRows.slice(0,inventoryLimit) as item (item.documentId)}
+     <article class="inventory-card" class:inventory-readonly={!item.editable}>
+      <strong class="inventory-name">{inventoryName(item.itemId)}</strong>
+      <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>
+       <label>
+        <span>{iCopy.quantity}</span>
+        <input type="number" name="quantity" min="1" max="2147483647" step="1"
+         value={item.quantity} disabled={!item.editable||busy} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
+       </label>
+       <button type="submit" class="primary" disabled={!item.editable||busy}>{iCopy.apply}</button>
+      </form>
+      {#if !item.editable}<span class="inventory-warning" title={iCopy.readonly}>{iCopy.readonly}</span>{/if}
+     </article>
+    {/each}
+   </div>
+   {#if inventoryRows.length===0}<p class="empty-result">{iCopy.empty}</p>{/if}
+   {#if inventoryRows.length>inventoryLimit}
+    <div class="load-marker" bind:this={inventoryLoadMoreSentinel}>
+     {#if typeof IntersectionObserver==='undefined'}
+      <button type="button" onclick={()=>inventoryLimit=Math.min(inventoryLimit+BATCH_SIZE,inventoryRows.length)}>{copy.moreItems}</button>
+     {/if}
+    </div>
+   {/if}
   {:else}
    <div class="collection-controls collection-search-controls">
     <label class="search-field">
