@@ -138,6 +138,20 @@ for(const id of ['77149467','370872413','2022277447']){
 // and per-colorway PNG signatures, not a manually curated palette list,
 // determine precisely which native variants belong to each original cell.
 const nativeTwoToneSources=[
+ // Original v3.0.1 City Town, Clothing and Events game sprites;
+ // one same-first/different-second genuine dye pair in each.
+ ['collection_group_citytown',2,76,18],
+ ['collection_group_citytown',2,94,18],
+ ['collection_group_citytown',0,126,15],
+ ['collection_group_citytown',1,67,15],
+ ['collections_group_clothing',0,104,17],
+ ['collections_group_clothing',1,28,13],
+ ['collections_group_clothing',0,19,12],
+ ['collections_group_events',6,98,12],
+ ['collections_group_events',0,104,11],
+ ['collections_group_events',10,10,11],
+ ['collections_group_events',2,108,11],
+ ['collections_group_events',2,59,11],
  // Genuine Steam v3.0.1 game atlas and dye-palette cell mappings.
  // Each original source contains exactly one shared-primary /
  // distinct-secondary native Item ID pair.
