@@ -67,9 +67,9 @@ test('all 16 languages have non-claim condition and reward notices',()=>{
  }
  assert.match(labelsTs,/未確認/);
  const app=read('../src/App.svelte');
- assert.match(app,/editingSaveGuid=achievementGuid\(editingAchievement\.guid\)/);
- assert.match(app,/achievementFacts\.get\(editingSaveGuid\)/);
- assert.match(app,/gameCounters\.get\(facts\.counterGuid\)/);
- assert.match(app,/factCopy\.receiptUnverified/);
- assert.match(app,/facts\.groupCondition/);
+ // Native data are still loaded for source-defined order, without exposing
+ // conditions, rewards, or technical game counters in the end-user editor.
+ assert.match(app,/loadAchievementFacts\(import\.meta\.env\.BASE_URL,source\)/);
+ assert.match(app,/nativeAchievementOrder\(achievementGroupHierarchy,sourceAchievementRows,achievementFacts\)/);
+ assert.doesNotMatch(app,/achievement-fact-list|achievement-modal-source|factCopy\.|gameCounters\.|rewardsById\./);
 });
