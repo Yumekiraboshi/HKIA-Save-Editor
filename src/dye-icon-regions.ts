@@ -436,6 +436,26 @@ const sourceAccentProfiles:Array<{
  // Starfish Necklace. Color the actual neutral garment/trim pixels.
  // These source-cell-gated 2D regions are APPROXIMATE, not recovered
  // Unity material/shader-channel masks.
+ // Source-verified Steam v3.0.1 original UiIcon cells, each with
+ // one real same-first/different-second dye pair. Original 96px source
+ // neutral cloth/trim receives the original second dye; base color,
+ // transparency, already colored details and texture are preserved.
+ // These source-cell-gated 2D approximations are NOT Unity shader masks.
+ // City Town: Striped Bucket Hat, Striped Shorts, Loose City Shirt, Headphones.
+ {group:'collection_group_citytown',sheet:2,cell:76,part:'hat-band'},
+ {group:'collection_group_citytown',sheet:2,cell:94,part:'right-trouser'},
+ {group:'collection_group_citytown',sheet:0,cell:126,part:'chest-panel'},
+ {group:'collection_group_citytown',sheet:1,cell:67,part:'hat-band'},
+ // Clothing: Cardigan Outfit, Sidekick Costume, Crossbody Bag.
+ {group:'collections_group_clothing',sheet:0,cell:104,part:'chest-panel'},
+ {group:'collections_group_clothing',sheet:1,cell:28,part:'right-skirt'},
+ {group:'collections_group_clothing',sheet:0,cell:19,part:'diagonal-sash'},
+ // Original Events: Wizard Robe, Pleated Gown/Pants/Bow, Archer Hat.
+ {group:'collections_group_events',sheet:6,cell:98,part:'right-skirt'},
+ {group:'collections_group_events',sheet:0,cell:104,part:'right-skirt'},
+ {group:'collections_group_events',sheet:10,cell:10,part:'right-trouser'},
+ {group:'collections_group_events',sheet:2,cell:108,part:'plume'},
+ {group:'collections_group_events',sheet:2,cell:59,part:'hat-band'},
  {group:'collection_group_citytown',sheet:1,cell:11,part:'right-trouser'},
  {group:'collection_group_citytown',sheet:0,cell:65,part:'chest-panel'},
  {group:'collection_group_citytown',sheet:1,cell:61,part:'diagonal-sash'},
