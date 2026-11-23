@@ -71,3 +71,12 @@ test('audited original striped masks are flower patterns, not clothing UiIcon ma
  assert.equal(audit.applicableToClothingStripes,false);
  assert.equal(audit.provesUiIconRenderingFidelity,false);
 });
+
+test('named original colorway sprites stay distinct from verified game runtime renders',()=>{
+ const url='/HKIA-Save-Editor/source-colorways/379863484.webp';
+ assert.deepEqual(resolveItemIconArt(379863484,byId(true,{
+  verifiedById:{'379863484':url},approximateById:{'379863484':'/native-colorways/379863484.png'}
+ })),{itemId:'379863484',fidelity:'game-original',origin:'original-colorway-sprite',url});
+ assert.equal(displayedDyeIconFidelity('game-source-sprite'),'game-original');
+ assert.match(readFileSync(new URL('../src/DyeSprite.svelte',import.meta.url),'utf8'),/imageSource='game-source-sprite'/);
+});
