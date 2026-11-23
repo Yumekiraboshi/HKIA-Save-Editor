@@ -211,16 +211,16 @@ import {verifiedFloorplanName} from './floorplan-names';
  /* Native artwork loads only with a save in the Achievements tab.
     Tampered or stale image data fail closed without blocking save edits. */
  $effect(()=>{
-  if(!snapshot||activeTool!=='achievements'||achievementIndex.size!==820||!achievementGroupHierarchy||achievementImagesStarted)return;
+  if(achievementImagesFailed||!snapshot||activeTool!=='achievements'||achievementIndex.size!==820||!achievementGroupHierarchy||achievementImagesStarted)return;
   achievementImagesStarted=true;
   const epoch=++achievementImagesEpoch;
   const index=achievementIndex,groups=achievementGroupHierarchy;
-  void loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index)
+  if(!achievementIndividualAtlas)void loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index)
    .then(atlas=>{
     if(epoch!==achievementImagesEpoch){atlas.dispose?.();return;}
     achievementIndividualAtlas=atlas;
    }).catch(()=>{if(epoch===achievementImagesEpoch)achievementImagesFailed=true});
-  void loadAchievementCategoryAtlas(import.meta.env.BASE_URL,index,groups)
+  if(!achievementCategoryAtlas)void loadAchievementCategoryAtlas(import.meta.env.BASE_URL,index,groups)
    .then(atlas=>{
     if(epoch!==achievementImagesEpoch){atlas.dispose?.();return;}
     achievementCategoryAtlas=atlas;
@@ -306,6 +306,16 @@ import {verifiedFloorplanName} from './floorplan-names';
  function showAchievementGroup(guid:string|null){
   achievementGroupSelection=guid;achievementQuery='';
   achievementLimit=BATCH_SIZE;
+ }
+ function openAchievementsTab(){
+  activeTool='achievements';editingAchievement=null;showAchievementGroup(null);error='';
+  if(achievementImagesFailed){
+   // A verified atlas stays cached; only previously failed source images are
+   // re-fetched on an explicit tab visit (including selecting the current tab).
+   // The reactive error flag ensures the loader effect retries exactly once.
+   achievementImagesStarted=false;
+   achievementImagesFailed=false;
+  }
  }
  function achievementName(guid:string,index:number):string{
   const meta=achievementIndex.get(guid);
@@ -703,7 +713,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    </button>
    {#if snapshot}<nav class="tools-nav" aria-label="Tools">
     <button type="button" class="tool-tab" class:active={activeTool==='collections'} aria-current={activeTool==='collections'?'page':undefined} onclick={goHome}>{copy.toolCollection}</button>
-    <button type="button" class="tool-tab" class:active={activeTool==='achievements'} aria-current={activeTool==='achievements'?'page':undefined} onclick={()=>{activeTool='achievements';editingAchievement=null;showAchievementGroup(null);error='';}}>{achCopy.title}</button>
+    <button type="button" class="tool-tab" class:active={activeTool==='achievements'} aria-current={activeTool==='achievements'?'page':undefined} onclick={openAchievementsTab}>{achCopy.title}</button>
    </nav>{/if}
    <div class="bar-actions">
     {#if snapshot}
