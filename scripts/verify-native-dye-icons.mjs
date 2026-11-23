@@ -138,6 +138,14 @@ for(const id of ['77149467','370872413','2022277447']){
 // and per-colorway PNG signatures, not a manually curated palette list,
 // determine precisely which native variants belong to each original cell.
 const nativeTwoToneSources=[
+ // Genuine Steam v3.0.1 game atlas and dye-palette cell mappings.
+ // Each original source contains exactly one shared-primary /
+ // distinct-secondary native Item ID pair.
+ ['collection_group_citytown',1,11,24],
+ ['collection_group_citytown',0,65,20],
+ ['collection_group_citytown',1,61,18],
+ ['collections_group_events',0,122,19],
+ ['collections_group_events',1,127,22],
  // Original game atlas cell and palette audit: 3 same-first / different-
  // second pairs per outfit family. Generated real pixels must differ.
  // Source-neutral game items with exact 22 colorways apiece:
