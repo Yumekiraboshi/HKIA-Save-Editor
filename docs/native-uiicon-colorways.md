@@ -579,3 +579,29 @@ semantics. The next exact-artwork milestone is recovering those
 dependencies and verifying the channel mapping against a real
 game-origin render. Do not call a newly estimated 2D region an exact
 3D shader result merely because its two generated PNGs differ.
+
+## Five original source-icon families with a single missing second-dye pair
+
+Source-backed Steam v3.0.1 original UiIcon ZIP cells, native Item IDs,
+Babel names and palette records identify five further original game
+dyeable families:
+
+| Original family | Original atlas group | Source sheet/cell | Native Item IDs |
+|---|---|---|---:|
+| Stylist Overalls | `collection_group_citytown` | 001/011 | 24 |
+| Tailor Top | `collection_group_citytown` | 000/065 | 20 |
+| Striped Jacket | `collection_group_citytown` | 001/061 | 18 |
+| School Beret | `collections_group_events` | 000/122 | 19 |
+| Starfish Necklace | `collections_group_events` | 001/127 | 22 |
+
+Each family contains exactly one original-game same-first/different-second
+native dye pair. The image generator applies the second original palette
+value to an approximate, exact-source-cell-gated neutral cloth/trim region.
+It changes 96×96 source pixel colors directly, preserving game pixel alpha
+and pre-colored art; no wiki image, CSS ring or fake swatch is used.
+
+CI checks all **103 original IDs**, native names, palette pairs and 96×96
+generated PNG hashes. If the real original pixels cannot be colored or
+an original pair remains indistinguishable, the build must fail rather
+than claim image coverage. These 2D regions are **approximate**, not
+authenticated Unity shader/material-channel masks.

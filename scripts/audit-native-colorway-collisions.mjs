@@ -133,6 +133,14 @@ if(called){
   lowerChannelIncomplete:qa.totals.indistinguishableItems-
    qa.totals.unverifiedHigherChannelItems
  }));
+ // Exact original Item ID pairs needing at most channel 1/2 masks.
+ // Printed only in CI developer logs (never in the end-user interface).
+ // These are NOT invented masks or guesses about Unity materials.
+ const lowerChannel=qa.priorities.flatMap(family=>
+  family.unresolvedBitmapGroups.filter(group=>group.firstDifferentChannel<=2)
+   .map(group=>({source:family.key,ids:group.itemIds,
+    firstDifferentChannel:group.firstDifferentChannel})));
+ console.log('HKIA_DYE_CHANNEL2_BACKLOG '+JSON.stringify(lowerChannel));
  console.log('HKIA_DYE_MASK_PRIORITIES '+JSON.stringify(qa.priorities.slice(0,10).map(x=>({
   source:x.key,colorways:x.colorways,unresolved:x.indistinguishableItems
  }))));
