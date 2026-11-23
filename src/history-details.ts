@@ -102,7 +102,16 @@ type HistoryChangeCopy={
 function achievementChanges(
  before:AchievementValue|null,after:AchievementValue,locale:string,copy:HistoryChangeCopy
 ):string[]{
- if(!before)return [copy.created,after.complete?copy.complete:copy.incomplete];
+ if(!before){
+  // The new source-verified record's progress and timestamp are real native
+  // fields. Include them in the displayed creation transaction, rather than
+  // reducing a dated/progress-bearing edit to a generic “New record” label.
+  // Missing dates stay absent; never synthesize a clock value for history.
+  const parts=[copy.created,after.complete?copy.complete:copy.incomplete,
+   copy.progress+': '+after.current];
+  if(after.completed!==null)parts.push(copy.date+': '+achievementTime(after.completed,locale));
+  return parts;
+ }
  const parts:string[]=[];
  if(before.complete!==after.complete)
   parts.push((before.complete?copy.complete:copy.incomplete)+' → '+(after.complete?copy.complete:copy.incomplete));
