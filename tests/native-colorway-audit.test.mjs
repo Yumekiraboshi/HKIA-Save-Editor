@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {auditNativeColorwayCollisions} from '../scripts/audit-native-colorway-collisions.mjs';
+import {auditNativeColorwayCollisions,assertFullNativeColorwayFidelityFloor} from '../scripts/audit-native-colorway-collisions.mjs';
 
 const base=(records)=>({schema:'HKIA.NativeColorwayIcons.1',version:'3.0.1',records});
 const rec=(sha,cell=10)=>({group:'collections_group_events',sheet:2,cell,
@@ -103,4 +103,43 @@ test('a visible source-palette channel 1 mismatch is not misattributed to channe
  });
  assert.equal(qa.totals.unresolvedByFirstDifferentChannel[1],2);
  assert.equal(qa.totals.unverifiedHigherChannelItems,0);
+});
+
+test('all-source generated icons fail closed on new first/second-channel duplicates',()=>{
+ const qa=auditNativeColorwayCollisions(base({
+  1:rec('a'.repeat(64)),2:rec('b'.repeat(64))
+ }),native);
+ // Unit-test the production threshold independently of the full PNG build.
+ qa.totals.generatedColorways=5383;
+ assert.equal(assertFullNativeColorwayFidelityFloor(qa),qa.totals);
+ const remaining=structuredClone(qa);
+ remaining.totals.indistinguishableItems=12;
+ remaining.totals.indistinguishableFamilies=6;
+ remaining.totals.unverifiedHigherChannelItems=12;
+ remaining.totals.unresolvedByFirstDifferentChannel[3]=12;
+ assert.doesNotThrow(()=>assertFullNativeColorwayFidelityFloor(remaining));
+ // A future repair of the 12 source shader-mask gaps must stay permissible.
+ const improved=structuredClone(remaining);
+ improved.totals.indistinguishableItems=2;
+ improved.totals.indistinguishableFamilies=1;
+ improved.totals.unverifiedHigherChannelItems=2;
+ improved.totals.unresolvedByFirstDifferentChannel[3]=2;
+ assert.doesNotThrow(()=>assertFullNativeColorwayFidelityFloor(improved));
+ for(const channel of [1,2]){
+  const regression=structuredClone(remaining);
+  regression.totals.unresolvedByFirstDifferentChannel[channel]=2;
+  assert.throws(()=>assertFullNativeColorwayFidelityFloor(regression),
+   /DYE_NATIVE_COLORWAY_REGRESSION/);
+ }
+ for(const mutation of [
+  x=>x.indistinguishableItems=13,
+  x=>x.indistinguishableFamilies=7,
+  x=>x.unverifiedHigherChannelItems=11,
+  x=>x.generatedColorways=5382
+ ]){
+  const regression=structuredClone(remaining);
+  mutation(regression.totals);
+  assert.throws(()=>assertFullNativeColorwayFidelityFloor(regression),
+   /DYE_NATIVE_COLORWAY_REGRESSION/);
+ }
 });

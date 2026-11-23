@@ -119,6 +119,27 @@ export function auditNativeColorwayCollisions(manifest,nativeRecords){
   priorities:ranked.filter(x=>x.indistinguishableItems>0).slice(0,60)
  };
 }
+/**
+ * The source-original v3.0.1 all-group PNG export has 5,383 colorways.
+ * Never regress to identical previews for game-native palette channels 1/2.
+ * The last 12 higher-channel collisions remain explicitly unverified until
+ * their original Unity material masks are recovered. Improvements are allowed.
+ * This checks *actual PNG SHA-256* collisions, not metadata or CSS overlays.
+ */
+export function assertFullNativeColorwayFidelityFloor(qa){
+ const totals=qa?.totals,by=totals?.unresolvedByFirstDifferentChannel;
+ if(qa?.schema!=='HKIA.NativeColorwayQA.1'||qa.version!=='3.0.1'||
+  totals?.generatedColorways!==5383||
+  !by||by[1]!==0||by[2]!==0||
+  !Number.isInteger(totals.indistinguishableItems)||
+  totals.indistinguishableItems<0||totals.indistinguishableItems>12||
+  !Number.isInteger(totals.indistinguishableFamilies)||
+  totals.indistinguishableFamilies<0||totals.indistinguishableFamilies>6||
+  totals.unverifiedHigherChannelItems!==totals.indistinguishableItems)
+  throw Error('DYE_NATIVE_COLORWAY_REGRESSION');
+ return totals;
+}
+
 const called=process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url);
 if(called){
  const dir=resolve(process.argv[2]??'dist/native-colorways');

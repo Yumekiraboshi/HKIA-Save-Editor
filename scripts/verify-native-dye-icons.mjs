@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto';
 import {resolve,join} from 'node:path';
 import assert from 'node:assert/strict';
 import {collectNativeSprites} from './generate-native-dye-icons.mjs';
+import {auditNativeColorwayCollisions,assertFullNativeColorwayFidelityFloor} from './audit-native-colorway-collisions.mjs';
 
 const folder=resolve(process.argv[2]??'dist/native-colorways');
 const manifest=JSON.parse(readFileSync(join(folder,'index.json'),'utf8'));
@@ -297,7 +298,14 @@ for(const [group,sheet,cell,total] of nativeTwoToneSources){
   }
  }
 }
-console.log('HKIA_ORIGINAL_UICON_COLORWAYS_VERIFIED '+files.length+
+// Exhaustive game-native audit applies to the 5,383-ID production export.
+ // A newly omitted or wrongly colored original channel 1/2 cannot silently
+ // pass CI just because its family was absent from the curated pair checks.
+ if(coverage.generated===5383){
+  const qa=auditNativeColorwayCollisions(manifest,originalPalette);
+  assertFullNativeColorwayFidelityFloor(qa);
+ }
+ console.log('HKIA_ORIGINAL_UICON_COLORWAYS_VERIFIED '+files.length+
  ' / '+coverage.uniqueCandidates+' source-unique, '+coverage.ambiguous+
  ' ambiguous, '+coverage.unmatched+' unmapped, '+coverage.uncolorable+' uncolorable across '+
  coverage.sourceGroups+' game pack groups');
