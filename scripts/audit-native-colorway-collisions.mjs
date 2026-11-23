@@ -120,22 +120,20 @@ export function auditNativeColorwayCollisions(manifest,nativeRecords){
  };
 }
 /**
- * The source-original v3.0.1 all-group PNG export has 5,383 colorways.
- * Never regress to identical previews for game-native palette channels 1/2.
- * The last 12 higher-channel collisions remain explicitly unverified until
- * their original Unity material masks are recovered. Improvements are allowed.
- * This checks *actual PNG SHA-256* collisions, not metadata or CSS overlays.
+ * The original-game v3.0.1 all-group PNG export has 5,383 colorways.
+ * All source-distinct dye palettes must remain distinguishable by ACTUAL
+ * generated PNG SHA-256, not metadata, CSS overlays or swatches.
+ * This is a 2D icon uniqueness budget, NOT proof of the game's exact
+ * 3D Unity shader/material mask or pixel-perfect native rendering.
  */
 export function assertFullNativeColorwayFidelityFloor(qa){
  const totals=qa?.totals,by=totals?.unresolvedByFirstDifferentChannel;
  if(qa?.schema!=='HKIA.NativeColorwayQA.1'||qa.version!=='3.0.1'||
   totals?.generatedColorways!==5383||
-  !by||by[1]!==0||by[2]!==0||
-  !Number.isInteger(totals.indistinguishableItems)||
-  totals.indistinguishableItems<0||totals.indistinguishableItems>12||
-  !Number.isInteger(totals.indistinguishableFamilies)||
-  totals.indistinguishableFamilies<0||totals.indistinguishableFamilies>6||
-  totals.unverifiedHigherChannelItems!==totals.indistinguishableItems)
+  !by||[1,2,3,4,5].some(channel=>by[channel]!==0)||
+  totals.indistinguishableItems!==0||
+  totals.indistinguishableFamilies!==0||
+  totals.unverifiedHigherChannelItems!==0)
   throw Error('DYE_NATIVE_COLORWAY_REGRESSION');
  return totals;
 }

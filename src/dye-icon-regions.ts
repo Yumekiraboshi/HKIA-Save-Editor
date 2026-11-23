@@ -570,6 +570,53 @@ function sourceAccentIsSecond(
    return y>=42&&y<=59&&x>=24&&x<=78;
  }
 }
+/**
+ * Six original UiIcon families whose source-native dye palettes contain
+ * identical channel 1 + 2 pairs with different channel 3 values.
+ *
+ * The game's third-channel material masks are not available. These
+ * source-image 2D collar/waist/lapel/sleeve candidates are APPROXIMATE,
+ * and must never be described as exact Unity shader rendering.
+ * No new artwork, palette or save data is manufactured.
+ */
+function thirdPaletteAccent(
+ origin:SpriteCell,input:Uint8ClampedArray,mask:Uint8Array
+):Uint8Array|undefined{
+ const tea=origin.group==='collection_group_teagarden'&&origin.sheet===0;
+ const soccer=origin.group==='collections_group_events'&&
+  origin.sheet===2&&origin.cell===81;
+ if(!tea&&!soccer)return undefined;
+ let area:((x:number,y:number)=>boolean)|undefined;
+ if(tea){
+  switch(origin.cell){
+   case 52: // High Tea Long Sleeved Dress: upper bodice/collar
+    area=(x,y)=>x>=33&&x<=60&&y>=24&&y<=43;break;
+   case 63: // High Tea Open Tailcoat: left lapel, outside sash
+    area=(x,y)=>x>=30&&x<=45&&y>=29&&y<=55;break;
+   case 74: // High Tea Empire Waist Dress: upper waist/bodice
+    area=(x,y)=>x>=29&&x<=65&&y>=30&&y<=40;break;
+   case 95: // High Tea Patterned Tailcoat: left lapel/sleeve
+    area=(x,y)=>x>=20&&x<=41&&y>=29&&y<=56;break;
+   case 105: // High Tea Great Coat: left collar/lapel
+    area=(x,y)=>x>=29&&x<=45&&y>=26&&y<=49;break;
+  }
+ }else{
+  // Soccer Jersey: sleeves, outside the second-dye chest panel.
+  area=(x,y)=>y>=29&&y<=53&&
+   ((x>=16&&x<=41)||(x>=69&&x<=84));
+ }
+ if(!area)return undefined;
+ const result=new Uint8Array(mask);
+ let third=0;
+ for(let i=0;i<result.length;i++){
+  if(result[i]!==1||input[i*4+3]<64)continue;
+  const x=i%96,y=Math.floor(i/96);
+  if(area(x,y)){result[i]=3;third++;}
+ }
+ // Source geometry must be present. Otherwise retain two original channels.
+ return third>=28&&third<=1050?result:undefined;
+}
+
 function nativeBatchTwoToneRegions(
  sourceKey:string,input:Uint8ClampedArray,width:number,height:number,
  origin?:SpriteCell
@@ -602,7 +649,7 @@ function nativeBatchTwoToneRegions(
  if(visible<450||visible>6300||neutral<300||
   neutral<visible*.26||chromatic>3200||
   accent<28||accent>1700)return undefined;
- return mask;
+ return thirdPaletteAccent(origin,input,mask)??mask;
 }
 
 function distanceToSegment(x:number,y:number,ax:number,ay:number,bx:number,by:number):number{
