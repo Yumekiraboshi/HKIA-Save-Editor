@@ -14,7 +14,7 @@ test('achievement landing view contains only search and native category cards, n
  assert.doesNotMatch(section,/<h2>\{groupCopy\.categories\}<\/h2>/);
  assert.doesNotMatch(section,/\{achCopy\.completed\}:.*\{achCopy\.missing\}:/);
  assert.doesNotMatch(section,/achCopy\.title\}<\/h1>/);
- assert.match(section,/\{#if achievementGroupHierarchy && achievementGroupSelection!==null\}\s*<div class="section-heading">/);
+ assert.match(section,/\{#if achievementGroupHierarchy && achievementGroupSelection!==null && !achievementQuery\.trim\(\)\}\s*<div class="section-heading">/);
  assert.match(section,/placeholder=\{achCopy\.search\}/);
  assert.match(section,/class="category-grid achievement-category-grid"/);
  assert.match(section,/class="item-grid achievement-grid achievement-item-grid"/);
