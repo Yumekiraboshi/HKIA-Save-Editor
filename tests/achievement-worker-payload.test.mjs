@@ -91,6 +91,16 @@ test('real Worker RPC client passes clone-safe objects for both one-click/date e
   assert.deepEqual(messages[2].achievementPatches,[{guid:[11,22,33,44],
    before:{complete:false,current:4.5,completed:null},
    after:{complete:true,current:4.5,completed:[1780000000n,300000000]}}]);
+  const auto=await rpc.editAchievementAuto(guid,before,after);
+  assert.equal(auto.revision,4);
+  assert.deepEqual(messages[3],{id:4,action:'achievement-auto',guid:[11,22,33,44],
+   beforeValue:{complete:false,current:4.5,completed:null},
+   afterValue:{complete:true,current:4.5,completed:[1780000000n,300000000]}});
+  const created=await rpc.editAchievementAuto(guid,null,after);
+  assert.equal(created.revision,5);
+  assert.equal(messages[4].action,'achievement-auto');
+  assert.equal(messages[4].beforeValue,null);
+  assert.deepEqual(messages[4].afterValue.completed,[1780000000n,300000000]);
  }finally{
   if(oldWorker===undefined)delete globalThis.Worker;else globalThis.Worker=oldWorker;
   delete globalThis.__workerMock;
@@ -106,11 +116,11 @@ test('all achievement mutation entrypoints normalize at the RPC boundary, not on
   'achievementPatches.map(workerAchievementDraftPatch)','waiting.delete(id);reject']){
   assert.ok(client.includes(marker),marker);
  }
- assert.ok(app.includes('changeAchievement(live.guid,live.value,next)'));
- assert.ok(app.includes('changeAchievementWithParent(live,next)'));
- assert.ok(app.includes('changeAchievementWithParent(selected,next)'));
- assert.ok(app.includes('changeAchievementPair(child,parent)'));
- assert.ok(client.includes('workerAchievementPatch(first)'));
- assert.ok(client.includes('workerAchievementPatch(second)'));
+ assert.ok(app.includes('editAchievementAuto(guid,live?.value??null,next)'));
+ assert.ok(app.includes('editAchievementAuto(selected.guid,selected.value,next)'));
+ assert.ok(client.includes("rpc('achievement-auto'"));
+ assert.ok(client.includes('workerAchievementValue(beforeValue)'));
+ assert.ok(client.includes('workerAchievementValue(afterValue)'));
+ assert.ok(!app.includes('changeAchievementWithParent('));
  assert.ok(app.includes('applyDraft(patches,achievementPatches)'));
 });
