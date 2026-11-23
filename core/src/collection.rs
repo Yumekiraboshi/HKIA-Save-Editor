@@ -198,11 +198,13 @@ impl Editor {
   if expected.is_none() && next.is_some() && (self.slot.envelope.version!=Version::V301 || !crate::catalog::eligible_for_new_history(id)){return Err(Error::Schema)}
   if let Some(t)=next {if !(1..=MAX_TICKS).contains(&t){return Err(Error::Schema)}}
   if expected.is_none() && self.entries.len()+self.changes.len()>=1_000_000 {return Err(Error::Budget)}
+  // Finish every fallible precondition before changing native data or history.
+  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   let before=self.changes.get(&id).copied();
   let after=if self.base.get(&id).copied()==next {None}else{Some(next)};
   match after {Some(t)=>{self.changes.insert(id,t);},None=>{self.changes.remove(&id);}}
   self.undo.push(Change::Collection{id,before,after});if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
-  self.redo.retain(|change|change.scope()!=HistoryScope::Collections);self.revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  self.redo.retain(|change|change.scope()!=HistoryScope::Collections);self.revision=revision;
   Ok(())
  }
  /// Create a v3.0.1 source-defined, previously absent achievement document.
@@ -441,12 +443,14 @@ impl Editor {
   }
   let model=self.slot.index.achievements.iter().find(|m|m.guid==guid).ok_or(Error::Schema)?;
   let original=achievement::value(model)?;
+  // Revision exhaustion must not leave a partially applied CAS transaction.
+  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   let before=self.achievement_changes.get(&guid).copied();
   let after=if next==original{None}else{Some(next)};
   match after {Some(v)=>{self.achievement_changes.insert(guid,v);},None=>{self.achievement_changes.remove(&guid);}}
   self.undo.push(Change::Achievement{guid,before,after});
   if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
-  self.redo.retain(|change|change.scope()!=HistoryScope::Achievements);self.revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  self.redo.retain(|change|change.scope()!=HistoryScope::Achievements);self.revision=revision;
   Ok(())
  }
  fn restore_change(&mut self,change:&Change,reverse:bool){
