@@ -209,6 +209,60 @@ async function achievementExportReopenRoundtrip(){
  }finally{await context.close();}
 }
 
+/** A transient verified source-atlas failure must recover after revisiting
+ * Achievements, without discarding/re-fetching an already-good category atlas.
+ * Synthetic HTTP 503 is deliberately scoped to this isolated browser context.
+ */
+async function achievementAtlasRetrySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  let individualAttempts=0,categoryAttempts=0;
+  await page.route('**/achievement-individual-atlas.json',async route=>{
+   individualAttempts++;
+   if(individualAttempts===1){
+    await route.fulfill({status:503,contentType:'text/plain',body:'synthetic temporary failure'});
+   }else await route.continue();
+  });
+  await page.route('**/achievement-category-atlas.json',async route=>{
+   categoryAttempts++;
+   await route.continue();
+  });
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-hkia-3.0.1.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot())
+  });
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,1);
+  await page.locator('.compact-hint[role="status"]').waitFor({timeout:30_000});
+  await page.locator('.achievement-category-sprite').first().waitFor({timeout:30_000});
+  assert.equal(individualAttempts,1);
+  assert.equal(categoryAttempts,1);
+  const atlas=JSON.parse(readFileSync('public/achievement-individual-atlas.json','utf8'));
+  const key=atlas.icons[0].sourceKey;
+  const search=page.locator('.collection-controls input[type="search"]');
+  await search.fill(key);
+  await page.locator('.achievement-item-grid button.achievement-toggle').first().waitFor();
+  assert.equal(await page.locator('.achievement-individual-sprite').count(),0,
+   'failed native atlas must never be presented as game-original imagery');
+  // A normal tab return retries the missing image only. No extra UI control.
+  await chooseTab(page,0);
+  await chooseTab(page,1);
+  await page.locator('.collection-controls input[type="search"]').fill(key);
+  const recovered=page.locator('.achievement-item-grid .achievement-individual-sprite').first();
+  await recovered.waitFor({timeout:30_000});
+  assert.match(await recovered.evaluate(el=>getComputedStyle(el).backgroundImage),/blob:/,
+   'recovered image must be actual hash-checked game source pixels');
+  assert.equal(individualAttempts,2,'exactly one retry for missing individual atlas');
+  assert.equal(categoryAttempts,1,'already verified category atlas is retained');
+  assert.equal(await page.locator('.compact-hint[role="status"]').count(),0);
+  assert.deepEqual(errors,[],'recovered images must not throw browser exceptions');
+  console.log('CHROMIUM ACHIEVEMENT ATLAS RETRY PASS: transient failure, verified recovery, retained category art');
+ }finally{await context.close();}
+}
+
 async function run(){
  await waitForServer();
  browser=await chromium.launch({headless:true,executablePath:installedChrome(),args:['--no-sandbox','--disable-dev-shm-usage']});
@@ -643,6 +697,7 @@ async function run(){
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
  await context.close();
  await achievementExportReopenRoundtrip();
+ await achievementAtlasRetrySmoke();
 }
 try{await run()}finally{
  await browser?.close();
