@@ -7,6 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
+import {readFileSync} from 'node:fs';
 import {chromium} from 'playwright-core';
 
 const append=(...arrays)=>Uint8Array.from(arrays.flatMap(x=>Array.from(x)));
@@ -18,12 +19,13 @@ const map=(...pairs)=>{assert.ok(pairs.length%2===0&&pairs.length/2<16);return a
 const hash=(...words)=>append(...words.map(u32));
 const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
+const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot(){
+function createSyntheticSlot({childCompleted=null}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
- const child=doc(16,arr([1],hash(1,0,0,1),arr([0xc2],f32(1),[0xc0])));
+ const child=doc(16,arr([1],hash(1,0,0,1),arr([childCompleted?0xc3:0xc2],f32(1),childCompleted?timestamp(...childCompleted):[0xc0])));
  const parent=doc(16,arr([2],hash(2,0,0,1),arr([0xc2],f32(2),[0xc0])));
  const counter=doc(17,arr([1],hash(1,0,0,2),arr(f32(2),[0xc0],[0x90])));
  const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object));
@@ -99,6 +101,114 @@ async function localDraft(page){
   });
  });
 }
+
+/** Browser file upload → UI date edit → download → independent native reparse
+ * → browser re-upload. This entire scenario uses a synthetic local save. */
+async function achievementExportReopenRoundtrip(){
+ const context=await browser.newContext({
+  locale:'en-US',timezoneId:'UTC',viewport:{width:1280,height:800},acceptDownloads:true
+ });
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  const source=Buffer.from(createSyntheticSlot({childCompleted:[
+   Math.floor(Date.UTC(2026,10,23,12,34,56)/1000),987654300
+  ]}));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  const input=page.locator('input[type="file"]');
+  await input.setInputFiles({name:'synthetic-hkia-3.0.1.save',
+   mimeType:'application/octet-stream',buffer:source});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,1);
+  await page.locator('.achievement-category-grid button.achievement-category-card').last().click();
+  const dateButton=page.locator('.achievement-item-grid button.achievement-dialog-button').first();
+  await dateButton.waitFor({timeout:20_000});
+  const dialog=page.locator('dialog.achievement-dialog[open]');
+  const field=page.locator('dialog.achievement-dialog input[type="datetime-local"]');
+  await dateButton.click();
+  await dialog.waitFor();
+  assert.equal(await field.inputValue(),'2026-11-23T12:34:56');
+  await page.locator('dialog.achievement-dialog button[type="submit"]').click();
+  await dialog.waitFor({state:'hidden'});
+  assert.equal(await page.locator('.bar-actions button[title="Undo"]').isDisabled(),true,
+   'unchanged date must not create a native history step');
+  await dateButton.click();
+  await dialog.waitFor();
+  await field.fill('2026-11-24T12:34:57');
+  await page.locator('dialog.achievement-dialog button[type="submit"]').click();
+  await dialog.waitFor({state:'hidden'});
+  await page.locator('.bar-actions button[title="Undo"]:not([disabled])').waitFor();
+  await page.locator('.file-menu > summary').click();
+  const exportButton=page.locator('.file-menu .menu-popover > button').nth(2);
+  assert.equal(await exportButton.isDisabled(),false);
+  const [download]=await Promise.all([
+   page.waitForEvent('download',{timeout:30_000}),exportButton.click()
+  ]);
+  assert.equal(download.suggestedFilename(),'synthetic-hkia-3.0.1-edited.save');
+  const saved=readFileSync(await download.path());
+  assert.notDeepEqual(saved,source);
+
+  // Read exactly the ACTUAL browser-downloaded file with a clean Rust/WASM
+  // instance; do not infer the on-disk state from the displayed date.
+  const binary=readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm');
+  const {instance}=await WebAssembly.instantiate(binary,{});
+  const e=instance.exports;
+  function nativeView(bytes){
+   e.hkia_clear();
+   const p=e.hkia_stage(bytes.length);assert.ok(p>0);
+   new Uint8Array(e.memory.buffer,p,bytes.length).set(bytes);
+   assert.equal(e.hkia_open(),0,'exported save must reparse in Rust/WASM');
+   assert.equal(e.hkia_achievement_snapshot(),0);
+   const a=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+   const count=a.getUint32(0,true),achievements=new Map();
+   for(let i=0;i<count;i++){
+    const at=4+i*34;
+    const guid=Array.from({length:4},(_,j)=>a.getUint32(at+j*4,true)).join(':');
+    achievements.set(guid,{
+     complete:a.getUint8(at+16),progress:a.getFloat32(at+17,true),
+     hasDate:a.getUint8(at+21),secs:a.getBigInt64(at+22,true),
+     nanos:a.getUint32(at+30,true)
+    });
+   }
+   assert.equal(e.hkia_snapshot(),0);
+   const b=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+   const entries=new Map();
+   for(let i=0;i<b.getUint32(13,true);i++){
+    const at=17+i*12;
+    entries.set(b.getInt32(at,true),b.getBigInt64(at+4,true));
+   }
+   return {achievements,entries};
+  }
+  const before=nativeView(source),after=nativeView(saved);
+  assert.equal(after.achievements.size,2);
+  assert.deepEqual(after.entries,before.entries,'unrelated collection timestamps changed');
+  assert.deepEqual(after.achievements.get('2:0:0:1'),before.achievements.get('2:0:0:1'),
+   'unrelated saved category achievement changed');
+  const edited=after.achievements.get('1:0:0:1');
+  assert.equal(edited.complete,1);
+  assert.equal(edited.progress,1);
+  assert.equal(edited.hasDate,1);
+  assert.equal(edited.nanos,987654300,'exact 100-nanosecond fraction lost on export');
+  assert.equal(edited.secs,BigInt(Math.floor(Date.UTC(2026,10,24,12,34,57)/1000)));
+
+  // Open the saved bytes through the public file picker, not a direct engine
+  // call; explicitly accept the discard-draft confirmation.
+  page.once('dialog',prompt=>prompt.accept());
+  await input.setInputFiles({name:download.suggestedFilename(),
+   mimeType:'application/octet-stream',buffer:saved});
+  await page.locator('.bar-actions button[title="Undo"][disabled]').waitFor({timeout:30_000});
+  await chooseTab(page,1);
+  if(await page.locator('.achievement-category-grid').count())
+   await page.locator('.achievement-category-grid button.achievement-category-card').last().click();
+  await page.locator('.achievement-item-grid button.achievement-dialog-button').first().click();
+  await dialog.waitFor();
+  assert.equal(await field.inputValue(),'2026-11-24T12:34:57');
+  await page.locator('dialog.achievement-dialog button.date-dialog-cancel').click();
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM ACHIEVEMENT EXPORT/REOPEN PASS: 100ns native date, unrelated data, download and file reimport');
+ }finally{await context.close();}
+}
+
 async function run(){
  await waitForServer();
  browser=await chromium.launch({headless:true,executablePath:installedChrome(),args:['--no-sandbox','--disable-dev-shm-usage']});
@@ -532,6 +642,7 @@ async function run(){
  assert.deepEqual(errors,[],'no console exceptions or 5xx during browser replay');
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
  await context.close();
+ await achievementExportReopenRoundtrip();
 }
 try{await run()}finally{
  await browser?.close();
