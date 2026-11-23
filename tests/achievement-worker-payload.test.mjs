@@ -122,5 +122,5 @@ test('all achievement mutation entrypoints normalize at the RPC boundary, not on
  assert.ok(client.includes('workerAchievementValue(beforeValue)'));
  assert.ok(client.includes('workerAchievementValue(afterValue)'));
  assert.ok(!app.includes('changeAchievementWithParent('));
- assert.ok(app.includes('applyDraft(patches,achievementPatches)'));
+ assert.ok(app.includes('applyDraft(patches,achievementPatches,inventoryPatches)'));
 });
