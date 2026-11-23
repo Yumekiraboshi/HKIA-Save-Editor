@@ -34,6 +34,10 @@ export function fromAchievementDateTimeValue(
 ):[bigint,number]{
  const full=value.length===16?value+':00':value;
  if(!INPUT.test(full))throw Error('INVALID_ACHIEVEMENT_DATE');
+ // The same local clock time can occur twice when daylight saving ends.
+ // An unchanged display value always retains the original instant exactly.
+ if(original&&toAchievementDateTimeValue(original)===full)
+  return [original[0],original[1]];
  const ms=new Date(full).getTime();
  if(!Number.isFinite(ms)||ms<0||ms>253402300799000)
   throw Error('INVALID_ACHIEVEMENT_DATE');
