@@ -430,6 +430,17 @@ const sourceAccentProfiles:Array<{
  {group:'collections_group_events',sheet:3,cell:107,part:'hat-band'},
  {group:'collections_group_events',sheet:0,cell:6,part:'chest-panel'},
  {group:'collections_group_events',sheet:8,cell:91,part:'chest-panel'},
+ // Exact original Steam v3.0.1 UiIcon source cells with a
+ // verified same-primary / distinct-secondary game-dye pair each:
+ // Stylist Overalls, Tailor Top, Striped Jacket, School Beret and
+ // Starfish Necklace. Color the actual neutral garment/trim pixels.
+ // These source-cell-gated 2D regions are APPROXIMATE, not recovered
+ // Unity material/shader-channel masks.
+ {group:'collection_group_citytown',sheet:1,cell:11,part:'right-trouser'},
+ {group:'collection_group_citytown',sheet:0,cell:65,part:'chest-panel'},
+ {group:'collection_group_citytown',sheet:1,cell:61,part:'diagonal-sash'},
+ {group:'collections_group_events',sheet:0,cell:122,part:'hat-band'},
+ {group:'collections_group_events',sheet:1,cell:127,part:'chest-panel'},
  {group:'collection_group_citytown',sheet:2,cell:65,part:'chest-panel'},
  {group:'collections_group_clothing',sheet:1,cell:36,part:'chest-panel'},
  {group:'collection_group_teagarden',sheet:0,cell:74,part:'right-skirt'},
