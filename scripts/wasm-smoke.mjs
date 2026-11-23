@@ -69,6 +69,29 @@ assert.equal(snapshot().dirty,0);
 // are rejected without modifying the original session or its history.
 assert.ok(e.hkia_achievement_toggle_plan,'missing Rust-only achievement planner ABI');
 const verifiedGuid=[15182560,1296854392,3253409457,3976879535];
+// Native read-only source goals use the same Rust thresholds as the
+// click planner. No game counter or category target is recomputed in JS.
+assert.ok(e.hkia_achievement_goals_snapshot,'missing Rust achievement goals ABI');
+assert.equal(e.hkia_achievement_goals_snapshot(),0);
+{
+ const p=e.hkia_reply_ptr(),n=e.hkia_reply_len();
+ const v=new DataView(e.memory.buffer,p,n),count=v.getUint32(0,true);
+ assert.equal(count,820);
+ assert.equal(n,4+count*20);
+ let found=false,previous=null;
+ for(let i=0;i<count;i++){
+  const at=4+i*20;
+  const key=Array.from({length:4},(_,j)=>v.getUint32(at+j*4,true));
+  const goal=v.getFloat32(at+16,true);
+  assert.ok(Number.isSafeInteger(goal)&&goal>0);
+  if(previous)assert.ok(key.some((x,j)=>x!==previous[j])&&
+   key.findIndex((x,j)=>x!==previous[j])>=0);
+  if(key.every((x,j)=>x===verifiedGuid[j])){assert.equal(goal,12);found=true;}
+  previous=key;
+ }
+ assert.ok(found,'genuine source achievement goal missing');
+}
+assert.equal(snapshot().dirty,0,'goal lookup must not mutate loaded save');
 assert.equal(e.hkia_achievement_toggle_plan(...verifiedGuid,1795251723456n),0);
 {
  const p=e.hkia_reply_ptr(),n=e.hkia_reply_len();
