@@ -9,9 +9,9 @@
  import {decodeHistoryDetails,formatHistoryChange} from './history-details';
  import {compactAchievementCopy} from './achievement-compact-ui';
  import {removalConfirmationCopy} from './removal-confirmation';
-  import {achievementFactsCopy} from './achievement-facts-ui';
- import {loadAchievementFacts,counterIndex,type AchievementFactsIndex} from './achievement-facts';
+ import {loadAchievementFacts,type AchievementFactsIndex} from './achievement-facts';
  import {joinAchievementCatalog,type AchievementListRow} from './achievement-catalog';
+import {searchAchievementRows} from './achievement-search';
  import {loadAchievementGroups,groupRows,ungroupedRows,nativeAchievementOrder,groupSummaries as summarizeAchievementGroups,type AchievementHierarchy} from './achievement-groups';
  import {achievementGroupCopy} from './achievement-group-ui';
  import {loadAchievementCategoryAtlas,type CategoryIconAtlas} from './achievement-category-icons';
@@ -121,9 +121,6 @@ import {verifiedFloorplanName} from './floorplan-names';
  const hDetailCopy=$derived(historyDetailCopy(locale));
  const compactCopy=$derived(compactAchievementCopy(locale));
  const groupCopy=$derived(achievementGroupCopy(locale));
- const factCopy=$derived(achievementFactsCopy(locale));
- const gameCounters=$derived(counterIndex((snapshot as SaveSnapshot|null)?.counters??[]));
- const rewardsById=$derived(new Map(((catalog as Catalog|null)?.items??[]).map((item:Item)=>[item[0],nameFor(item)])));
  const actualTheme=$derived(themePref==='system'?(prefersDark?'dark':'light'):themePref);
  const entriesCount=$derived(Object.keys(recorded).length);
  const eligibleCollectionHistoryIds=$derived(new Set((snapshot as SaveSnapshot|null)?.eligibleCollectionHistoryIds??[]));
@@ -140,13 +137,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  const groupScopedAchievementRows=$derived(achievementGroupHierarchy&&achievementGroupSelection?
   achievementGroupSelection==='__unmapped'?unmappedAchievementRows:groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows,achievementFacts):
   sourceOrderedAchievementRows);
- const achievementRows=$derived(groupScopedAchievementRows.filter(x=>{
-  const q=achievementQuery.trim().toLocaleLowerCase();
-  if(!q)return true;
-  const meta=achievementIndex.get(x.guid);
-  return achievementName(x.guid,x.index).toLocaleLowerCase().includes(q)||
-   (meta?.key??'').toLocaleLowerCase().includes(q);
- }));
+ const achievementRows=$derived(searchAchievementRows(achievementQuery,sourceOrderedAchievementRows,
+  groupScopedAchievementRows,achievementName,guid=>achievementIndex.get(guid)?.key??''));
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
  const subgroups=$derived(selectedGroup?listSubcategories((catalog as Catalog|null)?.items??[],selectedGroup,recorded,locale):[]);
  const activeSubgroup=$derived(subgroups.length===1?subgroups[0].key:subgroups.some(s=>s.key===selectedSubgroup)?selectedSubgroup:null);
@@ -672,7 +664,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   return date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate())+'T'+pad(date.getHours())+':'+pad(date.getMinutes())+':'+pad(date.getSeconds());
  }
  async function openAchievement(row:AchievementEntry,opener:HTMLElement,index:number){
-  if(busy)return;
+  if(busy||!row.value.complete)return;
   editingAchievement=row;achievementReturnFocus=opener;editingAchievementTitle=achievementName(achievementGuid(row.guid),index);
   achievementDate=formatAchievementDate(row.value)||(row.value.complete?formatAchievementDate({complete:true,current:0,completed:[BigInt(Math.floor(Date.now()/1000)),0]}):'');
   achievementValidation='';
@@ -803,10 +795,10 @@ import {verifiedFloorplanName} from './floorplan-names';
    {#if achievementImagesFailed}
     <p class="compact-hint" role="status">{achCopy.imagesUnavailable}</p>
    {/if}
-   {#if achievementGroupHierarchy && achievementGroupSelection!==null}
+   {#if achievementGroupHierarchy && achievementGroupSelection!==null && !achievementQuery.trim()}
     <button type="button" class="back-link achievement-group-back" onclick={()=>showAchievementGroup(null)}>‹ {groupCopy.back}</button>
    {/if}
-   {#if achievementGroupHierarchy && achievementGroupSelection!==null}
+   {#if achievementGroupHierarchy && achievementGroupSelection!==null && !achievementQuery.trim()}
     <div class="section-heading"><h1>{achievementGroupSelection==='__unmapped'?groupCopy.uncategorized:achievementName(achievementGroupSelection,0)}</h1></div>
    {/if}
    <div class="collection-controls">
@@ -870,12 +862,12 @@ import {verifiedFloorplanName} from './floorplan-names';
          {/if}
         </span>
        </button>
-       {#if item.row}
+       {#if item.row?.value.complete}
         <button type="button" class="date-button achievement-dialog-button"
-         title={item.row.value.complete?compactCopy.date:compactCopy.details}
-         aria-label={(item.row.value.complete?compactCopy.date:compactCopy.details)+': '+title}
+         title={compactCopy.date}
+         aria-label={compactCopy.date+': '+title}
          disabled={busy} onclick={e=>{if(item.row)void openAchievement(item.row,e.currentTarget,item.index)}}>
-         {item.row.value.complete?'◷':'⋯'}
+         ◷
         </button>
        {/if}
       </article>
@@ -890,21 +882,14 @@ import {verifiedFloorplanName} from './floorplan-names';
      </div>
     {/if}
    {/if}
-   <details class="data-note achievement-info-note">
-    <summary>{copy.showAbout}</summary>
-    <p>{compactCopy.scope}</p>
-    <p>{groupCopy.groupNote}</p>
-   </details>
    <dialog class="achievement-dialog" bind:this={achievementDialogEl} onclose={onAchievementDialogClosed} oncancel={e=>{if(busy)e.preventDefault()}}>
     {#if editingAchievement}
      {@const editingSaveGuid=achievementGuid(editingAchievement.guid)}
-     {@const facts=achievementFacts.get(editingSaveGuid)}
      {@const dialogIndividualArt=achievementIndividualAtlas?.bySaveGuid.get(editingSaveGuid)}
      {@const dialogCategoryArt=achievementCategoryAtlas?.bySaveGuid.get(editingSaveGuid)}
-     {@const linkedCounter=facts?gameCounters.get(facts.counterGuid):null}
      <form class="achievement-form" onsubmit={e=>{e.preventDefault();void saveAchievement()}}>
       <div class="date-dialog-heading">
-       <h2>{editingAchievement.value.complete?compactCopy.date:compactCopy.details}</h2>
+       <h2>{compactCopy.date}</h2>
        <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeAchievement}>×</button>
       </div>
       <div class="date-dialog-item achievement-dialog-item">
@@ -930,23 +915,6 @@ import {verifiedFloorplanName} from './floorplan-names';
         <input type="datetime-local" step="1" required bind:value={achievementDate} oninput={()=>achievementValidation=''}/>
        </label>
       {/if}
-      {#if facts}
-       <details class="achievement-modal-source">
-        <summary>{compactCopy.source}</summary>
-         <dl class="achievement-fact-list">
-          <dt>{factCopy.counterKind}</dt><dd>{facts.counterKind.replace(/^GameCounter|Definition$/g,'')}</dd>
-          <dt>{factCopy.threshold}</dt><dd>{facts.threshold.toLocaleString(locale)}</dd>
-          <dt>{factCopy.savedCounter}</dt><dd>{linkedCounter?linkedCounter.current.toLocaleString(locale):factCopy.noCounter}</dd>
-         </dl>
-         {#if facts.groupCondition}<p class="achievement-caution">{factCopy.group}</p>{/if}
-         {#if facts.hasDlcCondition}<p class="achievement-caution">{factCopy.dlc}</p>{/if}
-         {#if facts.rewardQuantity>0}
-          <p class="achievement-reward">🎁 {factCopy.reward}: {facts.rewardId===null?facts.rewardKey:rewardsById.get(facts.rewardId)??facts.rewardKey} × {facts.rewardQuantity.toLocaleString(locale)}</p>
-          <p class="achievement-caution">{factCopy.receiptUnverified}</p>
-         {/if}
-       </details>
-      {/if}
-      <p class="achievement-modal-scope">{compactCopy.scope}</p>
       {#if achievementValidation}<p class="date-dialog-error" role="alert">{achievementValidation}</p>{/if}
       <div class="date-dialog-actions">
        <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeAchievement}>{copy.cancel}</button>
