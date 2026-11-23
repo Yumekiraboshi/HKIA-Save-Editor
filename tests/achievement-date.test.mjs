@@ -1,14 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import ts from 'typescript';
+import {fileURLToPath} from 'node:url';
+import {build} from 'esbuild';
 
-const source=readFileSync(new URL('../src/achievement-date.ts',import.meta.url),'utf8');
-const compiled=ts.transpileModule(source,{
- compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}
-}).outputText;
+const {outputFiles}=await build({
+ entryPoints:[fileURLToPath(new URL('../src/achievement-date.ts',import.meta.url))],
+ bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'
+});
 const {toAchievementDateTimeValue,fromAchievementDateTimeValue}=
- await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
+ await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 
 const atLocal=(year,month,day,hour,minute,second,nanos=0)=>{
  const millis=new Date(year,month-1,day,hour,minute,second).getTime();
@@ -44,6 +45,41 @@ test('unchanged ambiguous DST local time preserves the original UTC instant',()=
   const shown=toAchievementDateTimeValue(original);
   assert.equal(shown,'2026-11-01T01:30:15');
   assert.deepEqual(fromAchievementDateTimeValue(shown,original),original);
+ }finally{
+  if(saved===undefined)delete process.env.TZ;else process.env.TZ=saved;
+ }
+});
+
+test('editing within a repeated daylight-saving hour never switches UTC occurrence',()=>{
+ const saved=process.env.TZ;
+ try{
+  process.env.TZ='America/New_York';
+  for(const hour of [5,6]){
+   const original=[BigInt(Date.UTC(2026,10,1,hour,30,15)/1000),987654300];
+   assert.equal(toAchievementDateTimeValue(original),'2026-11-01T01:30:15');
+   const updated=fromAchievementDateTimeValue('2026-11-01T01:31:15',original);
+   assert.equal(updated[0]-original[0],60n,'the intended edit is exactly one minute');
+   assert.equal(updated[1],987654300,'100-ns fraction is unchanged');
+  }
+  const old=[BigInt(Date.UTC(2026,2,8,6,30,15)/1000),123456700];
+  assert.throws(()=>fromAchievementDateTimeValue('2026-03-08T02:30:15',old),
+   /INVALID_ACHIEVEMENT_DATE/,'a nonexistent spring-forward wall time must be rejected');
+ }finally{
+  if(saved===undefined)delete process.env.TZ;else process.env.TZ=saved;
+ }
+});
+
+test('thirty-minute daylight-saving folds preserve the original occurrence',()=>{
+ const saved=process.env.TZ;
+ try{
+  process.env.TZ='Australia/Lord_Howe';
+  for(const minute of [14,15]){
+   const original=[BigInt(Date.UTC(2026,3,4,minute,35,15)/1000),987654300];
+   assert.equal(toAchievementDateTimeValue(original),'2026-04-05T01:35:15');
+   const updated=fromAchievementDateTimeValue('2026-04-05T01:36:15',original);
+   assert.equal(updated[0]-original[0],60n);
+   assert.equal(updated[1],987654300);
+  }
  }finally{
   if(saved===undefined)delete process.env.TZ;else process.env.TZ=saved;
  }
