@@ -829,3 +829,145 @@ fn v301_native_planned_achievement_create_revoke_and_export_roundtrip(){
  assert!(reopened.redo());
  assert_eq!(reopened.achievement_value(guid),Some(revoked));
 }
+
+fn auto_achievement_fixture(version:&str,rows:&[([u32;4],hkia_save_core::achievement::AchievementValue)])->Vec<u8>{
+ let v=doc(18,arr(vec![vec![0],u(if version=="3.0.0"{83}else{87}),{
+  let mut s=vec![0xa0|version.len()as u8];s.extend(version.as_bytes());s
+ }]));
+ let mut models=vec![v];
+ for (i,(key,value)) in rows.iter().enumerate(){
+  let date=if let Some((seconds,nanos))=value.completed{
+   let mut b=vec![0xc7,12,0xff];
+   b.extend(nanos.to_be_bytes());b.extend(seconds.to_be_bytes());b
+  }else{vec![0xc0]};
+  models.push(doc(16,arr(vec![vec![(i+1)as u8],guid(*key),
+   arr(vec![vec![if value.complete{0xc3}else{0xc2}],f(value.current),date])])));
+ }
+ let key=map(vec![(vec![2],l(638000000000000001))]);
+ let collection=doc(39,arr(vec![map(vec![]),key]));
+ models.push(doc(32,arr(vec![vec![3],guid([0,0,0,3]),vec![0],arr(vec![collection])])));
+ slot_from_payload(version,arr(vec![vec![0],vec![4],arr(models)]))
+}
+#[test]
+fn rust_auto_category_last_child_completion_revoke_and_date_sync_one_undo(){
+ use hkia_save_core::achievement::AchievementValue as A;
+ // These three IDs are from the original v3.0.1 two-child category.
+ let p=[735910181,1277923196,579092924,1040734789];
+ let c1=[490253731,222802515,1171786643,2805829719];
+ let c2=[4168762965,1138949340,3213554308,2987728360];
+ let date1=(1_750_000_001,123_456_700),date2=(1_750_000_002,987_654_300);
+ let parent=A{complete:false,current:1.0,completed:None};
+ let first=A{complete:true,current:1.0,completed:Some(date1)};
+ let second=A{complete:false,current:0.0,completed:None};
+ let original=auto_achievement_fixture("3.0.1",&[(p,parent),(c1,first),(c2,second)]);
+ let mut e=Editor::open(original.clone()).unwrap();
+ let done=A{complete:true,current:1.0,completed:Some(date2)};
+ let stale=A{current:999.0,..second};
+ assert!(e.edit_achievement_auto(c2,Some(stale),done).is_err());
+ assert_eq!(e.achievement_value(p),Some(parent));
+ assert!(!e.dirty());
+ e.edit_achievement_auto(c2,Some(second),done).unwrap();
+ let completed_parent=A{complete:true,current:2.0,completed:Some(date2)};
+ assert_eq!(e.achievement_value(p),Some(completed_parent));
+ assert_eq!(e.achievement_value(c2),Some(done));
+ assert!(e.undo()); // both child and parent, one atomic operation
+ assert_eq!(e.achievement_value(p),Some(parent));
+ assert_eq!(e.achievement_value(c2),Some(second));
+ assert!(!e.can_undo());
+ assert!(e.redo());
+ assert_eq!(e.achievement_value(p),Some(completed_parent));
+ // Correcting the date of the previously earlier child changes the source
+ // maximum, but never invents nanoseconds or edits siblings.
+ let changed=A{completed:Some((1_750_000_004,111_111_100)),..first};
+ e.edit_achievement_auto(c1,Some(first),changed).unwrap();
+ assert_eq!(e.achievement_value(p).unwrap().completed,changed.completed);
+ assert_eq!(e.achievement_value(c2),Some(done));
+ assert!(e.undo());
+ assert_eq!(e.achievement_value(c1),Some(first));
+ assert_eq!(e.achievement_value(p),Some(completed_parent));
+ assert!(e.redo());
+ // Parent now has an independently edited timestamp, so the next child
+ // correction must leave that parent timestamp unchanged.
+ let independently_dated=A{completed:Some((1_750_000_099,100)),..e.achievement_value(p).unwrap()};
+ let now=e.achievement_value(p).unwrap();
+ e.change_achievement(p,now,independently_dated).unwrap();
+ let back=A{completed:Some((1_750_000_003,111_111_100)),..changed};
+ e.edit_achievement_auto(c1,Some(changed),back).unwrap();
+ assert_eq!(e.achievement_value(p),Some(independently_dated));
+ // Revoke the child: completed category must be revoked atomically,
+ // regardless of whether its timestamp was independently set.
+ let revoked=A{complete:false,current:0.0,completed:None};
+ e.edit_achievement_auto(c2,Some(done),revoked).unwrap();
+ assert_eq!(e.achievement_value(p).unwrap().complete,false);
+ assert_eq!(e.achievement_value(p).unwrap().completed,None);
+ assert_eq!(e.achievement_value(p).unwrap().current,1.0);
+ assert!(e.undo());
+ assert_eq!(e.achievement_value(p),Some(independently_dated));
+ assert_eq!(e.achievement_value(c2),Some(done));
+ let exported=e.export().unwrap();
+ let reopen=Editor::open(exported).unwrap();
+ assert_eq!(reopen.achievement_value(p),Some(independently_dated));
+ assert_eq!(reopen.achievement_value(c1),Some(back));
+ assert_eq!(original,auto_achievement_fixture("3.0.1",&[(p,parent),(c1,first),(c2,second)]));
+}
+#[test]
+fn rust_auto_category_missing_parent_and_child_create_atomically(){
+ use hkia_save_core::achievement::AchievementValue as A;
+ let p=[984453219,1181827523,239769736,3983475534];
+ let c=[2051027155,1091822942,2360977058,3362181438];
+ let done=A{complete:true,current:1.0,completed:Some((1_750_000_123,123_456_700))};
+ let source=auto_achievement_fixture("3.0.1",&[]);
+ let mut e=Editor::open(source.clone()).unwrap();
+ e.edit_achievement_auto(c,None,done).unwrap();
+ assert_eq!(e.achievement_value(c),Some(done));
+ assert_eq!(e.achievement_value(p),Some(done));
+ assert!(e.undo());
+ assert_eq!(e.achievement_value(c),None);
+ assert_eq!(e.achievement_value(p),None);
+ assert!(!e.can_undo());
+ assert!(e.redo());
+ let output=e.export().unwrap();
+ let again=Editor::open(output).unwrap();
+ assert_eq!(again.achievement_value(c),Some(done));
+ assert_eq!(again.achievement_value(p),Some(done));
+ assert_eq!(source,auto_achievement_fixture("3.0.1",&[]));
+ // Existing child + absent parent is also an atomic original-Union16 add.
+ let old=A{complete:false,current:0.0,completed:None};
+ let mut existing=Editor::open(auto_achievement_fixture("3.0.1",&[(c,old)])).unwrap();
+ existing.edit_achievement_auto(c,Some(old),done).unwrap();
+ assert_eq!(existing.achievement_value(p),Some(done));
+ assert!(existing.undo());
+ assert_eq!(existing.achievement_value(c),Some(old));
+ assert_eq!(existing.achievement_value(p),None);
+ // An already-saved incomplete parent + absent child uses the native
+ // source-allowlisted create-with-parent transaction.
+ let parent=A{complete:false,current:0.0,completed:None};
+ let mut present=Editor::open(auto_achievement_fixture("3.0.1",&[(p,parent)])).unwrap();
+ present.edit_achievement_auto(c,None,done).unwrap();
+ assert_eq!(present.achievement_value(c),Some(done));
+ assert_eq!(present.achievement_value(p),Some(done));
+ assert!(present.undo());
+ assert_eq!(present.achievement_value(c),None);
+ assert_eq!(present.achievement_value(p),Some(parent));
+}
+#[test]
+fn rust_auto_category_missing_siblings_and_unsupported_creation_fail_closed(){
+ use hkia_save_core::achievement::AchievementValue as A;
+ let p=[735910181,1277923196,579092924,1040734789];
+ let c=[490253731,222802515,1171786643,2805829719];
+ let before=A{complete:false,current:0.0,completed:None};
+ let done=A{complete:true,current:1.0,completed:Some((1_750_000_002,0))};
+ let mut e=Editor::open(auto_achievement_fixture("3.0.1",&[(p,before),(c,before)])).unwrap();
+ e.edit_achievement_auto(c,Some(before),done).unwrap();
+ assert_eq!(e.achievement_value(p),Some(before),"missing second child cannot be assumed completed");
+ assert!(e.undo());
+ assert_eq!(e.achievement_value(c),Some(before));
+ // Unknown ID must never become a new native document.
+ assert!(e.edit_achievement_auto([0,0,0,0],None,done).is_err());
+ assert!(e.edit_achievement_auto(c,None,done).is_err(),"stale CAS must fail");
+ assert_eq!(e.achievement_value(p),Some(before));
+ let mut old=Editor::open(auto_achievement_fixture("3.0.0",&[(p,before),(c,before)])).unwrap();
+ old.edit_achievement_auto(c,Some(before),done).unwrap();
+ assert_eq!(old.achievement_value(p),Some(before),"v3.0.0 must not inherit source-v3.0.1 parent semantics");
+ assert!(old.edit_achievement_auto([0,0,0,0],None,done).is_err());
+}
