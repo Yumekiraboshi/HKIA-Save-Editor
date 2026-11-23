@@ -33,6 +33,9 @@ export function auditNativeColorwayCollisions(manifest,nativeRecords){
   total++;
  }
  let indistinguishableItems=0,indistinguishableFamilies=0;
+ // Counts are ITEMS (not pairs). "first different" is derived only from
+ // source-native palette values of pixels that are STILL identical.
+ const unresolvedByFirstDifferentChannel={1:0,2:0,3:0,4:0,5:0};
  const ranked=[];
  for(const family of families.values()){
   const byBitmap=new Map();
@@ -43,10 +46,34 @@ export function auditNativeColorwayCollisions(manifest,nativeRecords){
    byBitmap.get(item.pngSha256).push(item);
   }
   let collisions=0;
-  const examples=[];
+  const examples=[],unresolvedBitmapGroups=[];
   for(const group of byBitmap.values()){
-   const signatures=new Set(group.map(x=>x.signature));
-   if(signatures.size<2)continue;
+   const distinct=[...new Map(group.map(x=>[x.signature,x])).values()];
+   if(distinct.length<2)continue;
+   // Derive the exact first differing *source* dye channel, never infer
+   // where its color should be painted on the game 2D/3D artwork.
+   const differing=new Set();
+   let firstDifferent=6;
+   for(let i=0;i<distinct.length;i++)for(let j=i+1;j<distinct.length;j++){
+    for(let ch=0;ch<5;ch++){
+     if(distinct[i].palette[ch]!==distinct[j].palette[ch]){
+      differing.add(ch+1);
+      firstDifferent=Math.min(firstDifferent,ch+1);
+     }
+    }
+   }
+   if(firstDifferent<1||firstDifferent>5)throw Error('DYE_COLLISION_AUDIT_PALETTE_MISMATCH');
+   unresolvedByFirstDifferentChannel[firstDifferent]+=group.length;
+   unresolvedBitmapGroups.push({
+    pngSha256:group[0].pngSha256,
+    itemIds:group.map(x=>x.id).sort((a,b)=>Number(a)-Number(b)),
+    firstDifferentChannel:firstDifferent,
+    differentNativeChannels:[...differing].sort((a,b)=>a-b),
+    // This means a real game shader/material mask is needed, NOT that an
+    // arbitrary 2D pixel patch is an acceptable substitute.
+    maskStatus:firstDifferent>=3?'higher-channel-material-mask-unverified':
+     'source-preview-channel-mask-incomplete'
+   });
    collisions+=group.length;
    if(examples.length<3){
     const sample=[];
@@ -69,6 +96,7 @@ export function auditNativeColorwayCollisions(manifest,nativeRecords){
    uniqueGamePalettes:allPalettes.size,
    uniquePreviewImages:byBitmap.size,
    indistinguishableItems:collisions,
+   unresolvedBitmapGroups,
    examples
   });
  }
@@ -83,7 +111,10 @@ export function auditNativeColorwayCollisions(manifest,nativeRecords){
    generatedColorways:total,
    indistinguishableItems,
    indistinguishableFamilies,
-   visuallyDifferentiatedItems:total-indistinguishableItems
+   visuallyDifferentiatedItems:total-indistinguishableItems,
+   unresolvedByFirstDifferentChannel,
+   unverifiedHigherChannelItems:Object.entries(unresolvedByFirstDifferentChannel)
+    .filter(([ch])=>Number(ch)>=3).reduce((sum,[,n])=>sum+n,0)
   },
   priorities:ranked.filter(x=>x.indistinguishableItems>0).slice(0,60)
  };
@@ -96,6 +127,12 @@ if(called){
  const qa=auditNativeColorwayCollisions(manifest,native);
  writeFileSync(join(dir,'qa.json'),JSON.stringify(qa,null,2)+'\n');
  console.log('HKIA_NATIVE_COLORWAY_COLLISIONS '+JSON.stringify(qa.totals));
+ console.log('HKIA_DYE_COLLISION_FIRST_DIFFERENT_CHANNEL '+JSON.stringify({
+  byChannel:qa.totals.unresolvedByFirstDifferentChannel,
+  materialMaskBlocked:qa.totals.unverifiedHigherChannelItems,
+  lowerChannelIncomplete:qa.totals.indistinguishableItems-
+   qa.totals.unverifiedHigherChannelItems
+ }));
  console.log('HKIA_DYE_MASK_PRIORITIES '+JSON.stringify(qa.priorities.slice(0,10).map(x=>({
   source:x.key,colorways:x.colorways,unresolved:x.indistinguishableItems
  }))));
