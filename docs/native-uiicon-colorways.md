@@ -628,3 +628,34 @@ Strict post-build CI checks the real generated per-ID PNG hashes for all
 
 These pixels are an **approximate original-UiIcon 2D segmentation**, NOT
 an exact Unity 3D shader/material mask or rendered 3D game model.
+
+## Last ten original second-dye collision families (Steam v3.0.1)
+
+Original source-native 96px `collections_group_events` sprites map the
+remaining ten 2D secondary-channel mismatch families to their exact
+UiIcon source sheet/cell:
+
+| Source-game item family | Native sheet/cell | Original Item IDs |
+| --- | --- | ---: |
+| Starfish Mermaid Top | 004/139 | 15 |
+| Cowrie Shell Necklace | 010/004 | 14 |
+| Jester Costume | 002/084 | 11 |
+| Vaporwave Neon Palm Hat | 001/061 | 10 |
+| Shell Hair Piece | 001/119 | 8 |
+| Koi Tail | 010/006 | 8 |
+| Clamshell Backpack | 005/032 | 8 |
+| Gudetama Zip Hoodie | 005/078 | 8 |
+| Mermaid Vest | 006/103 | 8 |
+| Bat Bow | 010/052 | 7 |
+
+All **97 game-authored original Item IDs**, names, 5-slot palettes and
+the ten same-first / different-second source dye pairs are checked in
+the original game ZIP index and standalone Node tests. The generated
+PNG verifier also requires real source-native dye channel 2 in each
+colorway and visibly different actual 96px image bytes for each pair.
+
+The source cell and palette are game-authored. The neutral fabric,
+trim and accessory region segmentation remains a guarded **2D
+approximation**, *not* a recovered Unity material shader mask or
+game-rendered 3D model. The pipeline does not add fake rings, overlays,
+third-party images, invented item IDs or unsupported channel-3 pixels.
