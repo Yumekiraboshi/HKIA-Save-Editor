@@ -40,11 +40,12 @@ test('achievement drafts retain exact GUID and 100ns timestamp through recovery'
 });
 
 test('achievement tab supports mutations without exposing native GUIDs',()=>{
- for(const mark of ['achievementRows','achievementLoadMoreSentinel','openAchievement(','saveAchievement(','diffAchievements(','decodeAchievementDraft(','changeAchievement(','achievement-grid'])
+ for(const mark of ['achievementRows','achievementLoadMoreSentinel','openAchievement(','saveAchievement(','diffAchievements(','decodeAchievementDraft(','editAchievementAuto(','achievement-grid'])
   assert.ok(app.includes(mark),mark);
  assert.doesNotMatch(app,/achievementFilter/);
  assert.match(wasm,/hkia_achievement_snapshot/);
  assert.match(wasm,/hkia_achievement_change/);
+ assert.match(wasm,/hkia_achievement_edit_auto/);
  assert.match(worker,/100000\|\|a\.length!==4\+total\*34/);
  assert.doesNotMatch(app,/\{item\.row\.guid\}/);
 });

@@ -73,6 +73,27 @@ assert.equal(e.hkia_achievement_toggle_plan(...verifiedGuid,-1n),1);
 assert.equal(e.hkia_achievement_snapshot(),0);
 assert.equal(e.hkia_reply_len(),72);
 const ag=[1,0,0,1];
+// The UI-facing Rust parent-aware operation must be atomic even when a
+// v3.0.1 save already contains a legitimate but source-unmapped record.
+assert.ok(e.hkia_achievement_edit_auto,'missing native parent-aware edit ABI');
+assert.equal(e.hkia_achievement_edit_auto(...ag,
+ 1,0,1,0n,0,0, 1,2,1750000000n,123456700,1),0);
+assert.equal(snapshot().dirty,1);
+assert.equal(e.hkia_undo(),0,'a native edit is exactly one Undo');
+assert.equal(snapshot().dirty,0);
+assert.equal(e.hkia_undo(),1,'no hidden parent or duplicate history event');
+// Unknown absent GUIDs fail without inventing saved achievement documents.
+assert.equal(e.hkia_achievement_edit_auto(0,0,0,0,
+ 0,0,0,0n,0,0, 1,1,1750000000n,123456700,1),1);
+assert.equal(snapshot().dirty,0);
+// Source-verified, absent v3.0.1 children can be created only by the Rust
+// allowlist. Missing source siblings cannot imply a category completion.
+const verifiedChild=[15182560,1296854392,3253409457,3976879535];
+assert.equal(e.hkia_achievement_edit_auto(...verifiedChild,
+ 0,0,0,0n,0,0, 1,12,1750000000n,123456700,1),0);
+assert.equal(snapshot().dirty,1);
+assert.equal(e.hkia_undo(),0);
+assert.equal(snapshot().dirty,0);
 assert.equal(e.hkia_achievement_change(...ag,0,1,0n,0,0,1,2,1750000000n,123456700,1),0);
 assert.equal(e.hkia_achievement_change(...ag,0,1,0n,0,0,1,2,1750000000n,123456700,1),1);
 assert.equal(e.hkia_export(),0);

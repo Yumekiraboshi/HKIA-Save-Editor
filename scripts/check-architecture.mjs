@@ -39,11 +39,8 @@ const illegalRuntimeJs=source.filter(p=>/\.(?:js|jsx|mjs|cjs)$/i.test(p));
 for(const p of illegalRuntimeJs)
  errors.push('Production JS source is prohibited: '+p+' (use TS for UI or Rust for save operations)');
 
+// Migrated: source-defined achievement parent mutations now live in Rust.
 const legacyRules=new Map([
- ['src/achievement-parent-auto.ts',new Set([
-  'planParent','planCategoryParentCompletion','planMissingCategoryParentCompletion',
-  'planCategoryParentRevocation','planCategoryParentDateSync'
- ])],
  ['src/achievement-progress.ts',new Set(['achievementProgressTarget'])],
  ['src/collection-eligibility.ts',new Set(['mayCreateCollectionHistory'])]
 ]);

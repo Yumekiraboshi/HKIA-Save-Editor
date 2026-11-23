@@ -1,8 +1,8 @@
-type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type AchievementValue = {complete:boolean;current:number;completed:[bigint,number]|null};
 type AchievementPatch = {guid:number[];before:AchievementValue;after:AchievementValue};
 type AchievementDraftPatch = {guid:number[];before:AchievementValue|null;after:AchievementValue};
-type Request = { id:number; action:Action; checkpoint?:Uint8Array; scope?:'collections'|'achievements'; target?:number; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];guid?:number[];nowMs?:number;beforeValue?:AchievementValue;afterValue?:AchievementValue };
+type Request = { id:number; action:Action; checkpoint?:Uint8Array; scope?:'collections'|'achievements'; target?:number; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];guid?:number[];nowMs?:number;beforeValue?:AchievementValue|null;afterValue?:AchievementValue };
 type Transport = { postMessage(data:unknown, transfer?:Transferable[]):void; onmessage:((event:MessageEvent<Request>)=>void)|null };
 type Engine = {
  memory:WebAssembly.Memory;
@@ -21,6 +21,7 @@ type Engine = {
    number,number,number,number,number,number,bigint,number,number,number,number,bigint,number,number]
  ):number;
  hkia_achievement_toggle_plan(g0:number,g1:number,g2:number,g3:number,nowMs:bigint):number;
+ hkia_achievement_edit_auto(g0:number,g1:number,g2:number,g3:number,present:number,bc:number,bp:number,bs:bigint,bn:number,bh:number,ac:number,ap:number,as:bigint,an:number,ah:number):number;
  hkia_achievement_snapshot():number;
  hkia_counter_snapshot():number;
  hkia_undo():number; hkia_redo():number; hkia_reset():number; hkia_history_snapshot():number; hkia_history_jump(scope:number,target:number):number; hkia_history_checkpoint():number; hkia_history_restore():number;
@@ -136,7 +137,7 @@ function validAchievement(v:AchievementValue):boolean{
  (v.completed===null||(Array.isArray(v.completed)&&v.completed.length===2&&typeof v.completed[0]==='bigint'&&
  v.completed[0]>=0n&&v.completed[0]<=253402300799n&&Number.isInteger(v.completed[1])&&v.completed[1]>=0&&v.completed[1]<1_000_000_000&&v.completed[1]%100===0));
 }
-function changeAchievement(e:Engine,guid:number[]|undefined,before:AchievementValue|undefined,after:AchievementValue|undefined):boolean{
+function changeAchievement(e:Engine,guid:number[]|undefined,before:AchievementValue|null|undefined,after:AchievementValue|undefined):boolean{
  if(!Array.isArray(guid)||guid.length!==4||guid.some(n=>!Number.isInteger(n)||n<0||n>0xffffffff)||!before||!after||!validAchievement(before)||!validAchievement(after))return false;
  return e.hkia_achievement_change(...guid as [number,number,number,number],Number(before.complete),before.current,before.completed?.[0]??0n,before.completed?.[1]??0,Number(before.completed!==null),Number(after.complete),after.current,after.completed?.[0]??0n,after.completed?.[1]??0,Number(after.completed!==null))===0;
 }
@@ -194,6 +195,22 @@ async function execute(r:Request):Promise<unknown>{
    };
    if(!validAchievement(value))throw Error('ACH_TOGGLE_RESPONSE_INVALID');
    return value;
+  }
+  case 'achievement-auto':{
+   const guid=r.guid, before=r.beforeValue, after=r.afterValue;
+   if(!Array.isArray(guid)||guid.length!==4||
+    guid.some(x=>!Number.isInteger(x)||x<0||x>0xffffffff)||
+    !(before===null||validAchievement(before as AchievementValue))||
+    !validAchievement(after as AchievementValue))throw Error('ACH_AUTO_INVALID');
+   if(before===undefined||after===undefined)throw Error('ACH_AUTO_INVALID');
+   if(e.hkia_achievement_edit_auto(
+    ...guid as [number,number,number,number],
+    Number(before!==null),Number(before?.complete??false),before?.current??0,
+    before?.completed?.[0]??0n,before?.completed?.[1]??0,Number(before!==null&&before.completed!==null),
+    Number(after.complete),after.current,after.completed?.[0]??0n,
+    after.completed?.[1]??0,Number(after.completed!==null)
+   )!==0)throw Error('ACH_AUTO_CONFLICT');
+   return snapshot(e);
   }
   case 'achievement':{
    if(!changeAchievement(e,r.guid,r.beforeValue,r.afterValue))throw Error('実績を変更できませんでした。編集条件を確認してください。');

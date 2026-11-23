@@ -25,7 +25,7 @@ export type SaveSnapshot={
  achievements:AchievementEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -88,6 +88,18 @@ export function planAchievementToggle(guid:AchievementEntry['guid'],nowMs:number
  return rpc('achievement-plan-toggle',{
   guid:workerAchievementGuid(guid),nowMs
  }) as Promise<AchievementValue>;
+}
+/** The sole UI-facing achievement edit: Rust validates source membership,
+ * plans any parent change and commits the entire CAS as one Undo event.
+ * Null before means a source-verified, currently absent saved record. */
+export function editAchievementAuto(
+ guid:AchievementEntry['guid'],beforeValue:AchievementValue|null,afterValue:AchievementValue
+):Promise<SaveSnapshot>{
+ return rpc('achievement-auto',{
+  guid:workerAchievementGuid(guid),
+  beforeValue:beforeValue===null?null:workerAchievementValue(beforeValue),
+  afterValue:workerAchievementValue(afterValue)
+ }) as Promise<SaveSnapshot>;
 }
 export function changeAchievement(guid:AchievementEntry['guid'],beforeValue:AchievementValue,afterValue:AchievementValue):Promise<SaveSnapshot>{
  return rpc('achievement',{

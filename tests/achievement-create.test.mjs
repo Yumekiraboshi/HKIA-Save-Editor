@@ -53,14 +53,14 @@ test('missing achievement stays absent in baseline but is recoverable via draft 
 
 test('UI displays absent 0/goal and restricts creation to a verified source-defined v3.0.1 save',()=>{
  assert.match(app,/\(item\.row\?\.value\.current\?\?0\)\.toLocaleString\(locale\)/);
- assert.match(app,/createAchievement\(guid,next\)/);
- assert.match(app,/createAchievementWithParent\(guid,next,parent\)/);
+ assert.match(app,/editAchievementAuto\(guid,live\?\.value\?\?null,next\)/);
+ assert.match(app,/editAchievementAuto\(selected\.guid,selected\.value,next\)/);
  assert.match(app,/snapshot\.version!=='3\.0\.1'\|\|!achievementIndex\.has\(item\.guid\)/);
  assert.match(app,/if\(item\.row\)void openAchievement/);
  assert.match(app,/locale==='ja'&&g\[0\]==='collection_group_citytown'\?'都市の町'/);
  assert.match(worker,/hkia_achievement_create\(\.\.\.args\)/);
- assert.match(worker,/hkia_achievement_create_parent\(\.\.\.args,\.\.\.patchArgs/);
- assert.match(wasm,/pub extern "C" fn hkia_achievement_create\(/);
+ assert.match(worker,/hkia_achievement_edit_auto\(/);
+ assert.match(wasm,/pub extern "C" fn hkia_achievement_edit_auto\(/);
  assert.match(native,/root_documents_span/);
  assert.match(rust,/pub fn create_achievement_with_parent\(/);
 });
