@@ -2,14 +2,14 @@
  import type {SpriteCell} from './icon-packs';
  import type {NativeDyePalette} from './native-dye-palettes';
  import {renderDyeSprite} from './dye-recolor';
- import {displayedDyeIconFidelity} from './item-icon-art';
+ import {displayedDyeIconFidelity,isSourceColorwayUrl} from './item-icon-art';
 
  let {sprite,palette,sourceKey='',exactArtUrl,previewUrl}:{
   sprite:SpriteCell;palette:NativeDyePalette;sourceKey?:string;
   exactArtUrl?:string;previewUrl?:string;
  }=$props();
  let displayedUrl=$state<string|null>(null);
- let imageSource=$state<'original'|'approximation'|'native-icon'|'game-render'>('original');
+ let imageSource=$state<'original'|'approximation'|'native-icon'|'game-render'|'game-source-sprite'>('original');
 
  $effect(()=>{
   const cell=sprite,colors=palette,key=sourceKey,exact=exactArtUrl,preview=previewUrl;
@@ -46,7 +46,8 @@
    void picture.decode().then(()=>{
     if(canceled)return;
     displayedUrl=exact;
-    imageSource='game-render';
+    if(isSourceColorwayUrl(exact))imageSource='game-source-sprite';
+    else imageSource='game-render';
    }).catch(showNativeIcon);
   }else showNativeIcon();
 
@@ -57,13 +58,13 @@
  });
 </script>
 
-<!-- Always retain the actual HKIA UiIcon silhouette.
-     The game-original atlas is used until recoloring becomes available. -->
+<!-- Original named colorway sprites outrank approximate recolors. They are
+     not classified as verified runtime renders. -->
 <span class="item-sprite"
  data-dye-rendered={displayedUrl!==null?'true':'false'}
  data-dye-source={imageSource}
  data-icon-fidelity={displayedDyeIconFidelity(imageSource)}
  style:background-image={'url("'+(displayedUrl??sprite.url)+'")'}
- style:background-position={imageSource==='game-render'||imageSource==='native-icon'?'center':displayedUrl?'0px 0px':'-'+sprite.x+'px -'+sprite.y+'px'}
+ style:background-position={imageSource==='game-render'||imageSource==='game-source-sprite'||imageSource==='native-icon'?'center':displayedUrl?'0px 0px':'-'+sprite.x+'px -'+sprite.y+'px'}
  style:background-size={imageSource==='game-render'?'contain':displayedUrl?'96px 96px':undefined}
- style:background-repeat={imageSource==='game-render'||imageSource==='native-icon'?'no-repeat':undefined}></span>
+ style:background-repeat={imageSource==='game-render'||imageSource==='game-source-sprite'||imageSource==='native-icon'?'no-repeat':undefined}></span>
