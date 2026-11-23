@@ -62,8 +62,8 @@ test('collection date edits retain thirty-minute DST fold identity',()=>{
  const saved=process.env.TZ;
  try{
   process.env.TZ='Australia/Lord_Howe';
-  for(const hour of [14,15]){
-   const original=ticksAt(Date.UTC(2026,3,4,hour,35,15),9876543n);
+  for(const utcMs of [Date.UTC(2026,3,4,14,35,15),Date.UTC(2026,3,4,15,5,15)]){
+   const original=ticksAt(utcMs,9876543n);
    assert.equal(toDateTimeValue(original),'2026-04-05T01:35:15');
    const updated=fromDateTimeValue('2026-04-05T01:36:15',original);
    assert.equal(updated-original,600_000_000n);
