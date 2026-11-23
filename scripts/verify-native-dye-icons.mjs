@@ -140,6 +140,11 @@ for(const id of ['77149467','370872413','2022277447']){
 const nativeTwoToneSources=[
  // Original game atlas cell and palette audit: 3 same-first / different-
  // second pairs per outfit family. Generated real pixels must differ.
+ // Source-neutral game items with exact 22 colorways apiece:
+ // Night Cap, Striped Pajama Pants, Striped Pajama Shirt.
+ ['collections_group_clothing',0,24,22],
+ ['collections_group_clothing',0,44,22],
+ ['collections_group_clothing',0,77,22],
  ['collection_group_citytown',2,65,22],
  ['collections_group_clothing',1,36,15],
  ['collection_group_teagarden',0,74,38],

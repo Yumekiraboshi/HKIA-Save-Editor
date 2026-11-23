@@ -404,6 +404,14 @@ const sourceAccentProfiles:Array<{
  // Each has three verified pairs with equal primary dye and different
  // secondary dye. Recolor source-neutral chest decoration, not an overlay.
  // Image-derived 2D APPROXIMATION; Unity shader masks remain unverified.
+ // Native Night Cap, Striped Pajama Pants and Striped Pajama Shirt (22
+ // colorways each). Each source cell contains two verified same-primary
+ // palettes with different secondary dye values. Keep a conservative,
+ // SOURCE-CELL-specific 2D visual approximation on original cloth/trim.
+ // These regions do not imply a recovered 3D material shader mask.
+ {group:'collections_group_clothing',sheet:0,cell:24,part:'hat-band'},
+ {group:'collections_group_clothing',sheet:0,cell:44,part:'right-trouser'},
+ {group:'collections_group_clothing',sheet:0,cell:77,part:'chest-panel'},
  {group:'collection_group_citytown',sheet:2,cell:65,part:'chest-panel'},
  {group:'collections_group_clothing',sheet:1,cell:36,part:'chest-panel'},
  {group:'collection_group_teagarden',sheet:0,cell:74,part:'right-skirt'},
