@@ -1,3 +1,5 @@
+import {resolveEditedLocalTime} from './local-date-fold';
+
 const EPOCH=621355968000000000n;
 const MAX_TICKS=3155378975999999999n;
 const TICKS_PER_SECOND=10000000n;
@@ -17,7 +19,11 @@ export function toDateTimeValue(ticks:bigint):string{
 export function fromDateTimeValue(value:string,original:bigint):bigint{
  const full=value.length===16?value+':00':value;
  if(!INPUT.test(full))throw Error('INVALID_RECORD_DATE');
- const ms=new Date(full).getTime();
+ // Never reinterpret an unchanged second-occurrence local timestamp.
+ if(toDateTimeValue(original)===full)return original;
+ const sourceDelta=original-EPOCH;
+ const sourceMs=sourceDelta>=0n?sourceDelta/10000n:(sourceDelta-9999n)/10000n;
+ const ms=resolveEditedLocalTime(full,Number(sourceMs));
  if(!Number.isFinite(ms))throw Error('INVALID_RECORD_DATE');
  const fraction=((original-EPOCH)%TICKS_PER_SECOND+TICKS_PER_SECOND)%TICKS_PER_SECOND;
  const ticks=EPOCH+BigInt(ms)*10000n+fraction;

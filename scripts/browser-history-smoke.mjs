@@ -209,6 +209,60 @@ async function achievementExportReopenRoundtrip(){
  }finally{await context.close();}
 }
 
+/** The production UI must not shift a second-occurrence completion into
+ * the earlier UTC occurrence when a user edits only one local minute.
+ * The downloaded synthetic save is reparsed by the independent Rust/WASM core.
+ */
+async function achievementDstFoldExportSmoke(){
+ const context=await browser.newContext({
+  locale:'en-US',timezoneId:'America/New_York',
+  viewport:{width:1280,height:800},acceptDownloads:true
+ });
+ try{
+  const page=await context.newPage();
+  const originalSeconds=Math.floor(Date.UTC(2026,10,1,6,30,15)/1000);
+  const source=Buffer.from(createSyntheticSlot({childCompleted:[originalSeconds,987654300]}));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-hkia-dst-fold.save',mimeType:'application/octet-stream',buffer:source
+  });
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,1);
+  await page.locator('.achievement-category-grid button.achievement-category-card').last().click();
+  await page.locator('.achievement-item-grid button.achievement-dialog-button').first().click();
+  const field=page.locator('.achievement-dialog input[type="datetime-local"]');
+  await field.waitFor();
+  assert.equal(await field.inputValue(),'2026-11-01T01:30:15');
+  await field.fill('2026-11-01T01:31:15');
+  await page.locator('.achievement-dialog button[type="submit"]').click();
+  await page.locator('dialog.achievement-dialog[open]').waitFor({state:'hidden'});
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([
+   page.waitForEvent('download',{timeout:30_000}),
+   page.locator('.file-menu .menu-popover > button').nth(2).click()
+  ]);
+  const bytes=readFileSync(await download.path());
+  const wasm=readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm');
+  const {instance}=await WebAssembly.instantiate(wasm,{});
+  const engine=instance.exports;
+  const ptr=engine.hkia_stage(bytes.length);
+  assert.ok(ptr>0);
+  new Uint8Array(engine.memory.buffer,ptr,bytes.length).set(bytes);
+  assert.equal(engine.hkia_open(),0,'download must reparse independently');
+  assert.equal(engine.hkia_achievement_snapshot(),0);
+  const view=new DataView(engine.memory.buffer,engine.hkia_reply_ptr(),engine.hkia_reply_len());
+  assert.equal(view.getUint32(0,true),2);
+  const first=4;
+  assert.deepEqual(Array.from({length:4},(_,i)=>view.getUint32(first+4*i,true)),
+   [1,0,0,1]);
+  assert.equal(view.getBigInt64(first+22,true),BigInt(originalSeconds+60),
+   'date-only UI edit must not jump back into first DST occurrence');
+  assert.equal(view.getUint32(first+30,true),987654300,
+   'native 100ns timestamp fraction must survive editing and export');
+  console.log('CHROMIUM DST FOLD EXPORT PASS: second-occurrence UI time, +60s native delta, exact 100ns');
+ }finally{await context.close();}
+}
+
 /** A transient verified source-atlas failure must recover after revisiting
  * Achievements, without discarding/re-fetching an already-good category atlas.
  * Synthetic HTTP 503 is deliberately scoped to this isolated browser context.
@@ -697,6 +751,7 @@ async function run(){
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
  await context.close();
  await achievementExportReopenRoundtrip();
+ await achievementDstFoldExportSmoke();
  await achievementAtlasRetrySmoke();
 }
 try{await run()}finally{
