@@ -554,3 +554,28 @@ and full original native dye palette. The generated PNG verifier checks
 every same-primary/different-secondary pair for genuinely different
 image bytes and source channel 2. Placement remains a **guarded 2D
 approximation**, not an authenticated Unity 3D shader mask.
+
+## Precise remaining-collision diagnosis (no invented shader masks)
+
+`scripts/audit-native-colorway-collisions.mjs` uses the **generated
+96×96 PNG SHA-256** plus each matching original Steam v3.0.1 five-slot
+dye palette. For each still-identical source sprite, it now records
+`unresolvedBitmapGroups` with exact Item IDs, the earliest truly
+different native dye channel (1–5), and *all* channels whose original
+palette values differ. These values are emitted in the generated
+`dist/native-colorways/qa.json` and summarized in the CI log.
+
+This prevents confusing two independent problems:
+
+- A real palette difference in channel 1 or 2 whose pixels still render
+  identically means the existing 2D recoloring masks need inspection.
+- A pair whose first difference is in channel 3, 4 or 5 needs verified
+  higher-channel mapping from original Unity materials/combination maps.
+  **The audit does not manufacture any shader-to-pixel assignment.**
+
+Current original-asset audit identifies Material references, but not
+their complete accessible dependencies or the game renderer's mask
+semantics. The next exact-artwork milestone is recovering those
+dependencies and verifying the channel mapping against a real
+game-origin render. Do not call a newly estimated 2D region an exact
+3D shader result merely because its two generated PNGs differ.
