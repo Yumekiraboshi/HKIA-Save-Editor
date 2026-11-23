@@ -421,6 +421,15 @@ const sourceAccentProfiles:Array<{
  {group:'collections_group_events',sheet:5,cell:141,part:'right-skirt'},
  {group:'collections_group_events',sheet:6,cell:136,part:'right-skirt'},
  {group:'collections_group_events',sheet:6,cell:5,part:'right-skirt'},
+ // Source-native Paper Bow Dress, Glasses, Leafy Mermaid Top and
+ // Mermaid Shell Armor. All four original cells have two equal-primary
+ // / different-secondary source-dye pairs. Recolor actual neutral pixels
+ // in the dress panel, eyewear frame and marine body trim only.
+ // 2D source-image approximation, not a proven Unity shader mask.
+ {group:'collections_group_events',sheet:1,cell:103,part:'right-skirt'},
+ {group:'collections_group_events',sheet:3,cell:107,part:'hat-band'},
+ {group:'collections_group_events',sheet:0,cell:6,part:'chest-panel'},
+ {group:'collections_group_events',sheet:8,cell:91,part:'chest-panel'},
  {group:'collection_group_citytown',sheet:2,cell:65,part:'chest-panel'},
  {group:'collections_group_clothing',sheet:1,cell:36,part:'chest-panel'},
  {group:'collection_group_teagarden',sheet:0,cell:74,part:'right-skirt'},
