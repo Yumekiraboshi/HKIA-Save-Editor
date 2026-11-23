@@ -76,16 +76,17 @@ test('dimension mismatch or no neutral texture never introduces a fake recolor',
  for(let i=0;i<colorful.length;i+=4){colorful[i]=240;colorful[i+1]=20;colorful[i+2]=30;}
  assert.equal(recolorDyePixels(colorful,12,12,ice),null);
 });
-test('5,383 source-color variants are wired into all three image views without ring/chips',()=>{
+test('5,383 source-color variants are wired into Collection and Inventory artwork without ring/chips',()=>{
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  const sprite=readFileSync(new URL('../src/DyeSprite.svelte',import.meta.url),'utf8');
  const css=readFileSync(new URL('../src/style.css',import.meta.url),'utf8');
  assert.equal(Object.keys(raw.records).length,5383);
  assert.match(app,/loadNativeDyePalettes\(import\.meta\.env\.BASE_URL\)/);
  assert.match(app,/import DyeSprite from '\.\/DyeSprite\.svelte'/);
- assert.equal((app.match(/<DyeSprite /g)||[]).length,3);
- assert.equal((app.match(/sourceKey=\{/g)||[]).length,3);
+ assert.equal((app.match(/<DyeSprite /g)||[]).length,4);
+ assert.equal((app.match(/sourceKey=\{/g)||[]).length,4);
  assert.match(app,/palette=\{nativeDyePalettes\[String\(item\[0\]\)\]\}/);
+ assert.match(app,/palette=\{nativeDyePalettes\[String\(item\.itemId\)\]\}/);
  assert.match(app,/palette=\{nativeDyePalettes\[String\(sub\.previewId\)\]\}/);
  assert.match(app,/palette=\{nativeDyePalettes\[String\(dateDialogItem\[0\]\)\]\}/);
  assert.match(sprite,/data-dye-rendered=/);
