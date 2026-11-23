@@ -29,7 +29,7 @@ test('revocation and missing-source handling are Rust-defined, existing CAS and 
  assert.match(wasm,/e\.achievement_value\(guid\)/);
  assert.match(wasm,/a\.reply=bytes;0/);
  assert.match(app,/planAchievementToggle\(guid,Date\.now\(\)\)/);
- assert.match(app,/changeAchievementWithParent\(live,next\)/);
+ assert.match(app,/editAchievementAuto\(guid,live\?\.value\?\?null,next\)/);
 });
 
 test('collection-like achievement cards create source-defined absent records on user click and keep a separate date popup',()=>{
