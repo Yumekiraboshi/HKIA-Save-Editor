@@ -552,6 +552,14 @@ impl Editor {
    if updated[..map.start]!=original_payload[..map.start]||updated[map.start+inserted..]!=original_payload[map.end..]{return Err(Error::Schema)}
    patches.push((map.clone(),updated[map.start..map.start+inserted].to_vec()));
   }
+  for row in &self.slot.index.inventory {
+   if let Some(v)=self.inventory_changes.get(&row.id){
+    if !self.inventory_can_edit(row){return Err(Error::Schema)}
+    let span=row.fields[2].clone().ok_or(Error::Schema)?;
+    let mut encoded=vec![0xd2];encoded.extend(v.to_be_bytes());
+    patches.push((span,encoded));
+   }
+  }
   for model in &self.slot.index.achievements {
    if let Some(value)=self.achievement_changes.get(&model.guid){
     patches.extend(achievement::replacements(model,*value)?);
@@ -597,6 +605,17 @@ impl Editor {
   let expected=self.entries();
   if reread.index.collections.len()!=expected.len() ||
    !reread.index.collections.iter().zip(&expected).all(|(r,e)|r.id==e.id&&r.ticks==e.ticks) {return Err(Error::Schema)}
+  if reread.index.inventory.len()!=self.slot.index.inventory.len(){return Err(Error::Schema)}
+  if reread.index.inventory.iter().zip(&self.slot.index.inventory).any(|(a,b)|{
+   a.id!=b.id||a.item_id!=b.item_id||a.unique_id!=b.unique_id||
+   a.unique_is_nil!=b.unique_is_nil||
+   a.quantity!=self.inventory_changes.get(&b.id).copied().or(b.quantity)||
+   match (&a.fields[3],&b.fields[3]){
+    (Some(a_span),Some(b_span))=>reread.envelope.decoded[a_span.clone()]!=
+     self.slot.envelope.decoded[b_span.clone()],
+    (None,None)=>false,_=>true
+   }
+  }){return Err(Error::Schema)}
   let expected_achievements=self.achievements();
   if reread.index.achievements.len()!=expected_achievements.len() ||
    !reread.index.achievements.iter().zip(&expected_achievements).all(|(r,e)|r.guid==e.guid&&achievement::value(r).ok()==Some(e.value)){return Err(Error::Schema)}
@@ -967,6 +986,13 @@ impl Editor {
      history_write_ticks(&mut out,before.unwrap_or_else(||self.base.get(&id).copied()));
      history_write_ticks(&mut out,after.unwrap_or_else(||self.base.get(&id).copied()));
     }
+    Change::Inventory{document_id,before,after}=>{
+     out.push(6);out.extend(document_id.to_le_bytes());
+     let original=self.slot.index.inventory.iter().find(|r|r.id==document_id)
+      .and_then(|r|r.quantity).ok_or(Error::Schema)?;
+     out.extend(before.unwrap_or(original).to_le_bytes());
+     out.extend(after.unwrap_or(original).to_le_bytes());
+    }
     Change::Achievement{guid,before,after}=>{
      out.push(1);history_write_guid(&mut out,guid);
      history_write_value(&mut out,self.history_effective_achievement(guid,false,before)?);
@@ -1028,6 +1054,11 @@ impl Editor {
      let id=r.i32()?;let before=r.ticks()?;let after=r.ticks()?;
      candidate.change(id,before,after)?;
      scopes.push(HistoryScope::Collections);
+    }
+    6=>{
+     let id=r.u32()?;let before=r.i32()?;let after=r.i32()?;
+     candidate.change_inventory_quantity(id,before,after)?;
+     scopes.push(HistoryScope::Inventory);
     }
     1=>{
      let guid=r.guid()?;let before=r.value()?;let after=r.value()?;
