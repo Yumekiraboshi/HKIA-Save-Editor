@@ -479,3 +479,28 @@ generated PNG file hashes**, the applied channel-2 mask and source-sheet
 SHA-256; a pair that still renders identically is a test failure.
 The mask placement remains an **approximate 2D UiIcon segmentation**,
 not an authenticated Unity shader or 3D material-channel assignment.
+
+## Source-original Night Cap and striped pajama icons
+
+The original Steam v3.0.1 `collections_group_clothing` game UiIcon index
+contains three additional source-neutral, 22-colorway families:
+
+| Game-original item family | Original sheet/cell | Native Item IDs | Same-primary / distinct-secondary pairs |
+| --- | --- | ---: | ---: |
+| Night Cap | 000/024 | 22 | 2 |
+| Striped Pajama Pants | 000/044 | 22 | 2 |
+| Striped Pajama Shirt | 000/077 | 22 | 2 |
+
+Six pairs among these 66 game-authored IDs have identical original
+primary dye values but different native secondary dyes. The source-image
+region profile applies only that actual second dye color to neutral
+hat fabric, garment panel or pant trim, preserving original image alpha,
+shading, unchanged pixel details and original Item ID association.
+No wiki images, fake dye colors or rings/swatches are introduced.
+
+**Accuracy boundary:** The exact Item IDs, Babel names, five-channel
+palette records, icon sheet/cell and generated pixel differences are
+checked against original game source data. The placement of each
+source-2D cloth/trim region is an estimate, not proof of the Unity 3D
+material/shader channels. The post-build PNG verifier must detect each
+of the six source-distinct variant pairs, or CI fails.
