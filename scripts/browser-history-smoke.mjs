@@ -188,7 +188,9 @@ async function inventoryOriginalArtSmoke(){
    const image=document.querySelector('.inventory-card .inventory-item-art .item-sprite');
    if(!image)return false;
    const bg=getComputedStyle(image).backgroundImage;
-   return /blob:|native-colorways\\/1286846063\\.png|variant-art\\/1286846063\\.(png|webp)/.test(bg);
+   return bg.includes('blob:')||
+    bg.includes('/native-colorways/1286846063.png')||
+    bg.includes('/variant-art/1286846063.');
   },null,{timeout:30_000});
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'3');
   assert.ok(['native-icon','approximation','original','game-render'].includes(
