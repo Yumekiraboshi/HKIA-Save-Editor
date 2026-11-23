@@ -605,3 +605,26 @@ generated PNG hashes. If the real original pixels cannot be colored or
 an original pair remains indistinguishable, the build must fail rather
 than claim image coverage. These 2D regions are **approximate**, not
 authenticated Unity shader/material-channel masks.
+
+## Pink and Purple Bee original game colorways
+
+Original Steam v3.0.1 `collections_group_events` UiIcon sources map
+**12 further 11-colorway families** to their unique 96px original
+game sheet/cells: Pleated Sunhat (003/122), Parade Vest (003/054),
+Parade Pants (003/075), Pleated Vest (004/105), Pinwheel (004/142),
+Pleated Cap (004/081), Origami Helm (005/139), Paper Bow (005/003),
+Wings (005/096), Pleated Dress (006/067), Origami Crane Hat
+(007/117), Pleated Tophat (007/028).
+
+For each of the 132 genuine original Item IDs, the source ZIP atlas,
+game English name and five-slot original native dye palette are verified.
+Each of the 12 families includes one pair with identical native first
+dye `#3a3840`, but Pink Bee `#fd8de0` versus Purple Bee `#a66fbe`
+as the second dye. A source-cell-restricted 2D neutral cloth/trim region
+applies that original channel 2 color **directly within the sprite**,
+preserving original source alpha, linework and existing colored details.
+Strict post-build CI checks the real generated per-ID PNG hashes for all
+12 pairs and rejects indistinguishable previews.
+
+These pixels are an **approximate original-UiIcon 2D segmentation**, NOT
+an exact Unity 3D shader/material mask or rendered 3D game model.
