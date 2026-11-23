@@ -978,3 +978,50 @@ fn rust_auto_category_missing_siblings_and_unsupported_creation_fail_closed(){
  assert_eq!(old.achievement_value(p),Some(before),"v3.0.0 must not inherit source-v3.0.1 parent semantics");
  assert!(old.edit_achievement_auto([0,0,0,0],None,done).is_err());
 }
+
+#[test]
+fn native_collection_creation_eligibility_gates_and_updates(){
+ // Only a genuine Rust editor for Steam v3.0.1 with compatible membership
+ // layout may offer source-known, missing collected-HISTORY records.
+ let source=slot("3.0.1");
+ let mut e=Editor::open(source.clone()).unwrap();
+ let before=e.creatable_collection_history_ids();
+ assert!(e.can_change_membership());
+ assert!(before.contains(&315822),"ordinary source-defined history");
+ assert!(before.contains(&259795663),"verified floorplan exception");
+ assert!(before.contains(&2146463597),"all verified floorplans");
+ assert!(!before.contains(&0));
+ assert!(!before.contains(&i32::MAX));
+ assert!(!before.contains(&259795662),"unverified adjacent floorplan");
+ for pair in before.windows(2){assert!(pair[0]<pair[1],"sorted and unique");}
+ assert_eq!(before.len(),crate_catalog_eligible_count_for_test(),"snapshot matches native source");
+ // Present original history IDs must not be offered as new records.
+ assert!(!before.contains(&2));
+ assert!(!before.contains(&3));
+ let initial_revision=e.revision();
+ let _read_again=e.creatable_collection_history_ids();
+ assert_eq!(e.revision(),initial_revision,"eligibility must be read-only");
+ assert!(!e.dirty());
+ let now=638000000000000000;
+ e.change(315822,None,Some(now)).unwrap();
+ assert!(!e.creatable_collection_history_ids().contains(&315822));
+ assert!(e.undo());
+ assert_eq!(e.creatable_collection_history_ids(),before);
+ assert!(e.redo());
+ assert!(!e.creatable_collection_history_ids().contains(&315822));
+ let exported=e.export().unwrap();
+ let reopened=Editor::open(exported).unwrap();
+ assert!(!reopened.creatable_collection_history_ids().contains(&315822));
+ assert_eq!(source,slot("3.0.1"),"source file unmodified");
+ let old=Editor::open(slot("3.0.0")).unwrap();
+ assert!(old.creatable_collection_history_ids().is_empty());
+ assert!(old.can_change_membership());
+ assert!(old.creatable_collection_history_ids().is_empty(),"v3.0.0 may not reuse v3.0.1 allowlist");
+}
+fn crate_catalog_eligible_count_for_test()->usize{
+ // The source list may contain IDs already saved in the synthetic baseline
+ // and i32::MAX, which are excluded from the UI snapshot.
+ use hkia_save_core::catalog::eligible_history_ids;
+ let mut ids=eligible_history_ids().filter(|&id|id>0&&id!=i32::MAX&&id!=2&&id!=3).collect::<Vec<_>>();
+ ids.sort_unstable();ids.dedup();ids.len()
+}
