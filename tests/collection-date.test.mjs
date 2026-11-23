@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import ts from 'typescript';
+import {fileURLToPath} from 'node:url';
+import {build} from 'esbuild';
 
-const source=readFileSync(new URL('../src/collection-date.ts',import.meta.url),'utf8');
-const compiled=ts.transpileModule(source,{
- compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}
-}).outputText;
-const {toDateTimeValue,fromDateTimeValue}=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
+const {outputFiles}=await build({
+ entryPoints:[fileURLToPath(new URL('../src/collection-date.ts',import.meta.url))],
+ bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'
+});
+const {toDateTimeValue,fromDateTimeValue}=
+ await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const EPOCH=621355968000000000n;
 
 function ticksAt(utcMilliseconds,fraction=0n){return EPOCH+BigInt(utcMilliseconds)*10000n+fraction}
@@ -32,6 +34,42 @@ test('timestamps before Unix epoch and invalid calendar input are handled safely
  assert.equal(fromDateTimeValue(toDateTimeValue(original),original),original);
  for(const input of ['', '2026-02-30T12:00:00','2026-11-21T25:00:00','2026-11-21T12:60:00']){
   assert.throws(()=>fromDateTimeValue(input,original),/INVALID_RECORD_DATE/);
+ }
+});
+
+test('collection date edits keep the source DST occurrence and exact saved tick fraction',()=>{
+ const saved=process.env.TZ;
+ try{
+  process.env.TZ='America/New_York';
+  for(const hour of [5,6]){
+   const original=ticksAt(Date.UTC(2026,10,1,hour,30,15),9876543n);
+   const displayed=toDateTimeValue(original);
+   assert.equal(displayed,'2026-11-01T01:30:15');
+   assert.equal(fromDateTimeValue(displayed,original),original);
+   const updated=fromDateTimeValue('2026-11-01T01:31:15',original);
+   assert.equal(updated-original,600_000_000n,'one-minute local edit should be one UTC minute');
+   assert.equal((updated-EPOCH)%10_000_000n,9876543n);
+  }
+  const before=ticksAt(Date.UTC(2026,2,8,6,30,15),1234567n);
+  assert.throws(()=>fromDateTimeValue('2026-03-08T02:30:15',before),
+   /INVALID_RECORD_DATE/);
+ }finally{
+  if(saved===undefined)delete process.env.TZ;else process.env.TZ=saved;
+ }
+});
+
+test('collection date edits retain thirty-minute DST fold identity',()=>{
+ const saved=process.env.TZ;
+ try{
+  process.env.TZ='Australia/Lord_Howe';
+  for(const hour of [14,15]){
+   const original=ticksAt(Date.UTC(2026,3,4,hour,35,15),9876543n);
+   assert.equal(toDateTimeValue(original),'2026-04-05T01:35:15');
+   const updated=fromDateTimeValue('2026-04-05T01:36:15',original);
+   assert.equal(updated-original,600_000_000n);
+  }
+ }finally{
+  if(saved===undefined)delete process.env.TZ;else process.env.TZ=saved;
  }
 });
 
