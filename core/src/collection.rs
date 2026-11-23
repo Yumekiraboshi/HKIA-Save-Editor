@@ -11,9 +11,12 @@ const MAX_UNDO:usize=256;
 pub struct Entry {pub id:i32,pub ticks:i64}
 #[derive(Clone,Copy,Debug,PartialEq)]
 pub struct CounterEntry {pub guid:[u32;4],pub current:f32,pub counted_values:Option<usize>,pub counted_guids:usize}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub struct InventoryEntry {pub document_id:u32,pub item_id:i32,pub quantity:i32,pub editable:bool}
 #[derive(Clone,Copy,Debug)]
 enum Change {
  Collection{id:i32,before:Option<Option<i64>>,after:Option<Option<i64>>},
+ Inventory{document_id:u32,before:Option<i32>,after:Option<i32>},
  Achievement{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
  AchievementCreated{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
  AchievementCreatedPair{guid:[u32;4],value:AchievementValue,parent:([u32;4],Option<AchievementValue>,Option<AchievementValue>)},
@@ -24,7 +27,7 @@ enum Change {
 
 
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
-pub enum HistoryScope { Collections, Achievements }
+pub enum HistoryScope { Collections, Achievements, Inventory }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub struct HistoryRecord {
  pub scope:HistoryScope,
@@ -35,11 +38,12 @@ pub struct HistoryRecord {
 }
 impl Change {
  fn scope(&self)->HistoryScope{
-  match self {Self::Collection{..}=>HistoryScope::Collections,_=>HistoryScope::Achievements}
+  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
  }
  fn history_record(&self,applied:bool)->HistoryRecord{
   let (item_id,guid,paired)=match self {
    Self::Collection{id,..}=>(*id,[0;4],false),
+   Self::Inventory{document_id,..}=>(*document_id as i32,[0;4],false),
    Self::Achievement{guid,..}|Self::AchievementCreated{guid,..}=>(0,*guid,false),
    Self::AchievementCreatedPair{guid,..}|Self::AchievementParentNew{child:(guid,..),..}=>(0,*guid,true),
    Self::AchievementPair{first:(guid,..),..}=>(0,*guid,true),
@@ -56,6 +60,7 @@ pub struct Editor {
  base:HashMap<i32,i64>,
  entries:Vec<Entry>,
  changes:HashMap<i32,Option<i64>>,
+ inventory_changes:HashMap<u32,i32>,
  achievement_changes:HashMap<[u32;4],AchievementValue>,
  achievement_created:HashMap<[u32;4],AchievementValue>,
  undo:Vec<Change>,
@@ -82,7 +87,7 @@ impl Editor {
    if base.insert(row.id,row.ticks).is_some(){return Err(Error::Duplicate)}
    entries.push(Entry{id:row.id,ticks:row.ticks});
   }
-  Ok(Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0})
+  Ok(Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0})
  }
  fn compatible(slot:&ReadSlot)->bool{
   let n=slot.index.collection_version.as_ref().map(|v|v.number);
@@ -123,6 +128,32 @@ impl Editor {
   added.sort_by_key(|r|r.guid);
   rows.extend(added);rows
  }
+ /// Original native inventory records only. Unique items are read-only.
+ pub fn inventory(&self)->Vec<InventoryEntry>{
+  self.slot.index.inventory.iter().filter_map(|r|{
+   Some(InventoryEntry{document_id:r.id,item_id:r.item_id?,quantity:
+    self.inventory_changes.get(&r.id).copied().or(r.quantity)?,
+    editable:self.inventory_can_edit(r)})
+  }).collect()
+ }
+ fn inventory_can_edit(&self,r:&crate::native::InventoryRow)->bool{
+  self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
+   r.item_id.is_some_and(|id|id>0)&&r.quantity.is_some_and(|v|v>0)&&
+   r.unique_is_nil==Some(true)&&r.fields[2].is_some()
+ }
+ /// CAS updates only existing ordinary stack quantities, never IDs or unique payloads.
+ pub fn change_inventory_quantity(&mut self,id:u32,expected:i32,next:i32)->Result<(),Error>{
+  let row=self.slot.index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
+  if !self.inventory_can_edit(row)||next<1||expected==next||
+   self.inventory_changes.get(&id).copied().or(row.quantity)!=Some(expected){return Err(Error::Schema)}
+  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let before=self.inventory_changes.get(&id).copied();
+  let after=if row.quantity==Some(next){None}else{Some(next)};
+  match after{Some(v)=>{self.inventory_changes.insert(id,v);},None=>{self.inventory_changes.remove(&id);}}
+  self.undo.push(Change::Inventory{document_id:id,before,after});
+  if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
+  self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);self.revision=revision;Ok(())
+ }
  pub fn counters(&self)->Vec<CounterEntry>{
   self.slot.index.counters.iter().filter_map(|model|match &model.state{
    ModelState::Counter{current,counted_values,counted_guids}=>Some(CounterEntry{
@@ -141,7 +172,7 @@ impl Editor {
   self.achievement_created.get(&guid).copied().or_else(||self.achievement_changes.get(&guid).copied())
    .or_else(||self.slot.index.achievements.iter().find(|m|m.guid==guid).and_then(|m|achievement::value(m).ok()))
  }
- pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
+ pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.inventory_changes.is_empty()||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
  pub fn can_undo(&self)->bool {!self.undo.is_empty()}
  pub fn can_redo(&self)->bool {!self.redo.is_empty()}
  pub fn history(&self)->Vec<HistoryRecord>{
@@ -460,6 +491,12 @@ impl Editor {
      Some(v)=>{self.changes.insert(id,v);},None=>{self.changes.remove(&id);}
     }
    },
+   Change::Inventory{document_id,before,after}=>{
+    match if reverse{before}else{after}{
+     Some(v)=>{self.inventory_changes.insert(document_id,v);},
+     None=>{self.inventory_changes.remove(&document_id);}
+    }
+   }
    Change::Achievement{guid,before,after}=>{
     match if reverse{before}else{after}{
      Some(v)=>{self.achievement_changes.insert(guid,v);},None=>{self.achievement_changes.remove(&guid);}
@@ -503,7 +540,7 @@ impl Editor {
   self.restore_change(&change,false);self.undo.push(change);
   self.revision=self.revision.wrapping_add(1);true
  }
- pub fn reset(&mut self){self.changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
+ pub fn reset(&mut self){self.changes.clear();self.inventory_changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
  pub fn export(&self)->Result<Vec<u8>,Error>{
   if !self.dirty(){return Err(Error::Schema)}
   let original_payload=&self.slot.envelope.decoded;
