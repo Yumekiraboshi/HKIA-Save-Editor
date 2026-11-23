@@ -77,8 +77,12 @@ test('altered or absent WebP bytes never become a displayable image',async()=>{
 });
 
 test('achievement image downloads begin only for an opened save and use failure-safe placeholders',()=>{
- assert.match(app,/if\(!snapshot\|\|activeTool!=='achievements'\|\|achievementIndex\.size!==820/);
+ assert.match(app,/if\(achievementImagesFailed\|\|!snapshot\|\|activeTool!=='achievements'\|\|achievementIndex\.size!==820/);
  assert.match(app,/achievementImagesStarted=true;/);
+ assert.match(app,/if\(!achievementIndividualAtlas\)void loadAchievementIndividualAtlas\(/);
+ assert.match(app,/if\(!achievementCategoryAtlas\)void loadAchievementCategoryAtlas\(/);
+ assert.match(app,/if\(achievementImagesFailed\)\{[^}]*achievementImagesStarted=false;[^}]*achievementImagesFailed=false;/);
+ assert.match(app,/onclick=\{openAchievementsTab\}/);
  assert.match(app,/achievementImagesFailed=true/);
  assert.match(app,/achievementImagesEpoch\+\+;/);
  assert.match(app,/achievementIndividualAtlas\?\.dispose\?\.\(\)/);
