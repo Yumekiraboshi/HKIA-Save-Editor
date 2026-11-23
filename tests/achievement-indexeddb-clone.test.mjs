@@ -86,11 +86,11 @@ test('IndexedDB payload normalization deep-copies reactive GUIDs, timestamps and
   assert.deepEqual(writes,[{key:'current',payload:{
    version:1,
    patches:[{id:17,before:null,after:'638000000000001234'}],
-   achievementPatches:[expected],
+   achievementPatches:[expected],inventoryPatches:[],
    ui:{group:'fish',subgroup:'nested'},historyCheckpoint:null
   }}]);
   await store.saveDraftChanges(reactive([]),reactive({group:null,subgroup:null}),reactive([]));
-  assert.deepEqual(writes.at(-1).payload,{version:1,patches:[],achievementPatches:[],
+  assert.deepEqual(writes.at(-1).payload,{version:1,patches:[],achievementPatches:[],inventoryPatches:[],
    ui:{group:null,subgroup:null},historyCheckpoint:null});
   assert.deepEqual(expected.after.completed,['1780000000',123456700]);
  }finally{
@@ -98,6 +98,16 @@ test('IndexedDB payload normalization deep-copies reactive GUIDs, timestamps and
  }
 });
 
+test('existing inventory stack patches survive reactive state and reject duplicate or invalid documents',()=>{
+ const before=reactive([{documentId:4,itemId:315822,quantity:6,editable:true}]);
+ const after=reactive([{documentId:4,itemId:315822,quantity:25,editable:true}]);
+ const patches=store.diffInventory(before,after);
+ assert.deepEqual(patches,[{documentId:4,before:6,after:25}]);
+ assert.deepEqual(structuredClone(patches),patches);
+ assert.deepEqual(store.diffInventory(before,before),[]);
+ assert.throws(()=>store.safeInventoryPatches([{documentId:4,before:6,after:25},{documentId:4,before:6,after:8}]),/DRAFT_INVALID/);
+ assert.throws(()=>store.safeInventoryPatches([{documentId:4,before:6,after:0}]),/DRAFT_INVALID/);
+});
 test('tampered or duplicated achievement drafts cannot be persisted',()=>{
  const duplicate=reactive([expected,expected]);
  assert.throws(()=>draft.cloneStoredAchievementPatches(duplicate),/DRAFT_INVALID/);
@@ -112,7 +122,7 @@ test('worker values still use normalized draft payloads with native history chec
  const source=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  const worker=readFileSync(new URL('../src/worker-client.ts',import.meta.url),'utf8');
  assert.match(source,/diffAchievements\(achievementBaseline,snapshot\?\.achievements\?\?\[\]\)/);
- assert.match(source,/saveDraftChanges\(patches,ui,achievements,checkpoint\)/);
+ assert.match(source,/saveDraftChanges\(patches,ui,achievements,checkpoint,inventoryPatches\)/);
  assert.match(worker,/workerAchievementGuid\(guid\)/);
  assert.match(worker,/workerAchievementValue\(beforeValue\)/);
 });

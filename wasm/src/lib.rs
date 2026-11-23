@@ -60,6 +60,37 @@ pub extern "C" fn hkia_change(id:i32,expected_present:u32,expected_ticks:i64,nex
  })
 }
 
+/// Existing nonunique inventory stack; Rust owns CAS and unique-data gate.
+#[no_mangle]
+pub extern "C" fn hkia_inventory_change(document_id:u32,before:i32,after:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.change_inventory_quantity(document_id,before,after)){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+/// 4-byte count + N rows of (document id u32, item id i32, quantity i32,
+/// editable u32). Display-only; no inventory records are ever synthesized.
+#[no_mangle]
+pub extern "C" fn hkia_inventory_snapshot()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let rows=editor.inventory();
+  if rows.len()>1_000_000{return 1}
+  let mut b=Vec::with_capacity(4+rows.len()*16);
+  b.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{
+   b.extend(row.document_id.to_le_bytes());
+   b.extend(row.item_id.to_le_bytes());
+   b.extend(row.quantity.to_le_bytes());
+   b.extend(u32::from(row.editable).to_le_bytes());
+  }
+  a.reply=b;0
+ })
+}
+
 /// Last source-defined child completion + absent parent creation in one
 /// fully validated Rust transaction, including one-step Undo/Redo.
 #[no_mangle]
@@ -370,7 +401,8 @@ pub extern "C" fn hkia_history_snapshot()->u32{
   for row in rows{
    bytes.push(match row.scope{
     hkia_save_core::collection::HistoryScope::Collections=>0,
-    hkia_save_core::collection::HistoryScope::Achievements=>1
+    hkia_save_core::collection::HistoryScope::Achievements=>1,
+    hkia_save_core::collection::HistoryScope::Inventory=>2
    });
    bytes.push(u8::from(row.applied));
    bytes.push(u8::from(row.paired));
@@ -387,6 +419,7 @@ pub extern "C" fn hkia_history_jump(scope:u32,target:u32)->u32{
   let scope=match scope{
    0=>hkia_save_core::collection::HistoryScope::Collections,
    1=>hkia_save_core::collection::HistoryScope::Achievements,
+   2=>hkia_save_core::collection::HistoryScope::Inventory,
    _=>return 1
   };
   match a.editor.as_mut(){

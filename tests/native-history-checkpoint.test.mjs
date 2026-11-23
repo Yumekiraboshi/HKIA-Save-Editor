@@ -39,9 +39,9 @@ test('WASM checkpoint bytes reach IndexedDB and can be restored atomically throu
  assert.match(client,/export function restoreHistory\(checkpoint:Uint8Array\)/);
  assert.match(store,/historyCheckpoint:savedHistory/);
  assert.match(store,/historyCheckpoint:safeHistoryCheckpoint\(state\?\.historyCheckpoint\)/);
- assert.match(app,/saveDraftChanges\(patches,ui,achievements,checkpoint\)/);
+ assert.match(app,/saveDraftChanges\(patches,ui,achievements,checkpoint,inventoryPatches\)/);
  assert.match(app,/await restoreHistory\(draft\.historyCheckpoint\)/);
- assert.match(app,/recoveredMatchesDraft\(originalRows,s\.achievements,recovered,draft\.patches,draft\.achievementPatches\)/);
+ assert.match(app,/recoveredMatchesDraft\(originalRows,s\.achievements,s\.inventory,recovered,draft\.patches,draft\.achievementPatches,inventoryPatches\)/);
  assert.match(app,/await openSave\(draft\.file\);/);
 });
 

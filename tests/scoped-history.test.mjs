@@ -8,7 +8,7 @@ test('native/WASM history records preserve scopes and atomic pair identity',()=>
  const wasm=read('../wasm/src/lib.rs');
  const client=read('../src/worker-client.ts');
  const worker=read('../src/editor.worker.ts');
- assert.match(core,/pub enum HistoryScope \{ Collections, Achievements \}/);
+ assert.match(core,/pub enum HistoryScope \{ Collections, Achievements, Inventory \}/);
  assert.match(core,/pub fn history\(&self\)->Vec<HistoryRecord>/);
  assert.match(core,/pub fn undo_scope\(&mut self,scope:HistoryScope\)/);
  assert.match(core,/pub fn redo_scope\(&mut self,scope:HistoryScope\)/);
@@ -20,10 +20,10 @@ test('native/WASM history records preserve scopes and atomic pair identity',()=>
  assert.match(wasm,/pub extern "C" fn hkia_history_snapshot\(\)/);
  assert.match(wasm,/pub extern "C" fn hkia_history_jump\(scope:u32,target:u32\)/);
  assert.match(worker,/hkia_history_snapshot\(\)/);
- assert.match(worker,/hkia_history_jump\(r\.scope==='collections'\?0:1,r\.target\)/);
+ assert.match(worker,/hkia_history_jump\(r\.scope==='collections'\?0:r\.scope==='achievements'\?1:2,r\.target\)/);
  assert.match(worker,/h\.length!==4\+historyCount\*23/);
  assert.match(worker,/history\.push\(/);
- assert.match(client,/export type HistoryScope='collections'\|'achievements'/);
+ assert.match(client,/export type HistoryScope='collections'\|'achievements'\|'inventory'/);
  assert.match(client,/export function jumpHistory\(scope:HistoryScope,target:number\)/);
 });
 

@@ -3,6 +3,7 @@ import {toDateTimeValue} from './collection-date';
 
 export type HistoryDetail =
  | {scope:'collections';itemId:number;before:bigint|null;after:bigint|null}
+ | {scope:'inventory';documentId:number;before:number;after:number}
  | {scope:'achievements';guid:[number,number,number,number];before:AchievementValue|null;after:AchievementValue;parentGuid:[number,number,number,number]|null;parentBefore:AchievementValue|null;parentAfter:AchievementValue|null};
 
 const MAGIC='HKIAHS01';
@@ -63,6 +64,10 @@ export function decodeHistoryDetails(
    if(kind===0){
     const itemId=i32(),before=ticks(),after=ticks();
     result.push({scope:'collections',itemId,before,after});
+   }else if(kind===6){
+    const documentId=u32(),before=i32(),after=i32();
+    if(documentId<=0||documentId>2147483647||before<1||after<1||before===after)return [];
+    result.push({scope:'inventory',documentId,before,after});
    }else if(kind===1){
     const id=guid(),before=value(),after=value();
     result.push({scope:'achievements',guid:id,before,after,parentGuid:null,parentBefore:null,parentAfter:null});
@@ -86,6 +91,7 @@ export function decodeHistoryDetails(
    if(record.scope!==detail.scope||record.paired!==(kind===3||kind===4||kind===5)||
     (detail.scope==='collections'
      ?record.itemId!==detail.itemId
+     :detail.scope==='inventory'?record.itemId!==detail.documentId
      :record.guid?.every((x,j)=>x===detail.guid[j])!==true))return [];
   }
   if(at!==input.byteLength)return [];
@@ -125,9 +131,10 @@ function achievementChanges(
 /** Details derive only from the native Rust history journal, including
  * category side effects within a single atomic achievement transaction. */
 export function formatHistoryChange(
- detail:HistoryDetail|undefined,locale:string,copy:HistoryChangeCopy,pairedLabel=''
+ detail:HistoryDetail|undefined,locale:string,copy:HistoryChangeCopy,pairedLabel='',quantityLabel='Quantity'
 ):string{
  if(!detail)return '';
+ if(detail.scope==='inventory')return quantityLabel+': '+detail.before+' → '+detail.after;
  if(detail.scope==='collections'){
   if(detail.before===null)return copy.added;
   if(detail.after===null)return copy.removed;

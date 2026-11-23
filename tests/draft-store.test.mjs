@@ -41,7 +41,7 @@ test('draft validation rejects malformed identities and duplicated records',()=>
 test('restoration code keeps source and changes separate and clears both on close',()=>{
  assert.match(source,/transaction\(\[BASE,EDITS\],'readwrite'\)/);
  assert.match(source,/objectStore\(BASE\)\.put\(file,KEY\)/);
- assert.match(source,/objectStore\(EDITS\)\.put\(\{version:VERSION,patches:savedPatches,achievementPatches:savedAchievements,ui:savedUi,historyCheckpoint:savedHistory\},KEY\)/);
+ assert.match(source,/objectStore\(EDITS\)\.put\(\{version:VERSION,patches:savedPatches,achievementPatches:savedAchievements,inventoryPatches:savedInventory,ui:savedUi,historyCheckpoint:savedHistory\},KEY\)/);
  assert.match(source,/cloneStoredAchievementPatches\(achievementPatches\)/);
  assert.match(source,/objectStore\(BASE\)\.delete\(KEY\)/);
  assert.match(source,/objectStore\(EDITS\)\.delete\(KEY\)/);

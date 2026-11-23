@@ -31,7 +31,7 @@ test('topbar and HTML identity refer to HKIA Save Editor, never the parent proje
 });
 
 test('file menu chevron and both search magnifiers are centered source-independent SVGs',()=>{
- assert.equal((app.match(/<svg class="search-symbol" viewBox="0 0 24 24"/g)??[]).length,2);
+ assert.equal((app.match(/<svg class="search-symbol" viewBox="0 0 24 24"/g)??[]).length,3);
  assert.match(app,/<summary class="bar-button icon-button file-action" title=\{copy\.file\} aria-label=\{copy\.file\}>/);
  assert.match(app,/<svg class="header-icon"[^>]*>[\s\S]*?<\/svg><svg class="chevron"/);
  assert.doesNotMatch(app,/<span class="chevron">|<span class="search-symbol"/);

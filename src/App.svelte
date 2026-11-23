@@ -1,10 +1,11 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
- import {diffPatches,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
+ import {openSave,changeCollection,changeInventoryQuantity,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {diffPatches,diffInventory,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
+ import {inventoryCopy} from './inventory-copy';
  import {loadSourceItemNames,type SourceItemNames} from './source-names';
  import {decodeHistoryDetails,formatHistoryChange} from './history-details';
  import {compactAchievementCopy} from './achievement-compact-ui';
@@ -36,7 +37,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
  type Filter='all'|'recorded'|'unrecorded';
- type Tool='collections'|'achievements';
+ type Tool='collections'|'achievements'|'inventory';
  type ThemePref='system'|'light'|'dark';
  type PendingRemoval=
   | {kind:'collections';id:number;name:string;before:bigint;revision:number;fromDateDialog:boolean}
@@ -46,6 +47,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  const ICONS=import.meta.env.BASE_URL+'icons/';
  let activeTool:Tool=$state('collections');
  let achievementQuery=$state('');
+ let inventoryQuery=$state('');
+ let inventoryLimit=$state(BATCH_SIZE);
+ let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
+ let inventoryBaseline:InventoryEntry[]=[];
  let achievementIndex:AchievementIndex=$state(new Map());
  let achievementGroupHierarchy:AchievementHierarchy|null=$state(null);
  let achievementCategoryAtlas:CategoryIconAtlas|null=$state(null);
@@ -118,6 +123,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const copy=$derived(localizedCopy(locale));
  const removalCopy=$derived(removalConfirmationCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
+ const iCopy=$derived(inventoryCopy(locale));
  const hCopy=$derived(historyCopy(locale));
  const hDetailCopy=$derived(historyDetailCopy(locale));
  const compactCopy=$derived(compactAchievementCopy(locale));
@@ -131,6 +137,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const historyDetails=$derived(decodeHistoryDetails((snapshot as SaveSnapshot|null)?.historyCheckpoint??null,(snapshot as SaveSnapshot|null)?.history??[]));
  const tabHistoryDetails=$derived(historyDetails.filter(entry=>entry.scope===activeTool));
  const historyItems=$derived(new Map(((catalog as Catalog|null)?.items??[]).map(item=>[item[0],item])));
+ const inventoryHistoryItems=$derived(new Map(((snapshot as SaveSnapshot|null)?.inventory??[]).map(item=>[item.documentId,item.itemId])));
  const sourceAchievementRows=$derived(joinAchievementCatalog(achievementIndex,(snapshot as SaveSnapshot|null)?.achievements??[]));
  const achievementGroupSummaries=$derived(achievementGroupHierarchy?summarizeAchievementGroups(achievementGroupHierarchy,sourceAchievementRows):[]);
  const unmappedAchievementRows=$derived(achievementGroupHierarchy?ungroupedRows(achievementGroupHierarchy,sourceAchievementRows):[]);
@@ -138,6 +145,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  const groupScopedAchievementRows=$derived(achievementGroupHierarchy&&achievementGroupSelection?
   achievementGroupSelection==='__unmapped'?unmappedAchievementRows:groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows,achievementFacts):
   sourceOrderedAchievementRows);
+ const inventoryRows=$derived(((snapshot as SaveSnapshot|null)?.inventory??[]).filter(row=>{
+  const q=inventoryQuery.trim().toLocaleLowerCase();
+  return !q||inventoryName(row.itemId).toLocaleLowerCase().includes(q)||String(row.itemId).includes(q);
+ }));
  const achievementRows=$derived(searchAchievementRows(achievementQuery,sourceOrderedAchievementRows,
   groupScopedAchievementRows,achievementName,guid=>achievementIndex.get(guid)?.key??''));
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
@@ -295,6 +306,16 @@ import {verifiedFloorplanName} from './floorplan-names';
   observer.observe(el);
   return ()=>observer.disconnect();
  });
+ $effect(()=>{
+  const el=inventoryLoadMoreSentinel;
+  if(!el||typeof IntersectionObserver==='undefined')return;
+  const observer=new IntersectionObserver(entries=>{
+   if(entries.some(x=>x.isIntersecting))
+    inventoryLimit=Math.min(inventoryLimit+BATCH_SIZE,inventoryRows.length);
+  },{rootMargin:'720px 0px'});
+  observer.observe(el);
+  return ()=>observer.disconnect();
+ });
  const unnamed=$derived((catalog as Catalog|null)?.items.filter((x:Item)=>!x[5]&&!x[6]&&!verifiedFloorplanName(x[0],locale)).length??0);
  function describeError(e:unknown){const raw=e instanceof Error?e.message:String(e);return editorErrors[locale==='ja'?'ja':'en'][raw]??(locale==='ja'?(raw||copy.unknown):copy.unknown);}
  function setLanguage(v:LanguagePref){
@@ -302,6 +323,12 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function setTheme(v:ThemePref){
   themePref=v;try{localStorage.setItem('hkia-display-theme',v)}catch{}
+ }
+ function inventoryName(itemId:number):string{
+  return sourceNames[String(itemId)]??'#'+String(itemId);
+ }
+ function openInventoryTab(){
+  activeTool='inventory';inventoryQuery='';inventoryLimit=BATCH_SIZE;editingAchievement=null;error='';
  }
  function showAchievementGroup(guid:string|null){
   achievementGroupSelection=guid;achievementQuery='';
@@ -382,7 +409,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
  function historyEntryChange(i:number):string{
-  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired)||
+  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity)||
    (tabHistory[i]?.paired?hCopy.paired:'');
  }
  function historyEntryLabel(entry:HistoryRecord):string{
@@ -390,6 +417,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const item=historyItems.get(entry.itemId??0);
    return item?nameFor(item):'#'+String(entry.itemId);
   }
+  if(entry.scope==='inventory')return inventoryName(inventoryHistoryItems.get(entry.itemId??0)??0);
   if(!entry.guid)return hCopy.title;
   return achievementName(achievementGuid(entry.guid),0);
  }
@@ -398,8 +426,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   * Canonical comparison retains lossless decimal timestamp strings.
   */
  function recoveredMatchesDraft(
-  baseRows:ReadonlyMap<number,bigint>,baseAchievements:readonly AchievementEntry[],
-  recovered:SaveSnapshot,collectionPatches:readonly DraftPatch[],achievementPatches:readonly StoredPatch[]
+  baseRows:ReadonlyMap<number,bigint>,baseAchievements:readonly AchievementEntry[],baseInventory:readonly InventoryEntry[],
+  recovered:SaveSnapshot,collectionPatches:readonly DraftPatch[],achievementPatches:readonly StoredPatch[],inventoryPatches:readonly InventoryPatch[]
  ):boolean{
   const current=Object.fromEntries(recovered.entries.map(([id,t])=>[String(id),t]));
   const sortedCollection=(xs:readonly DraftPatch[])=>
@@ -410,15 +438,17 @@ import {verifiedFloorplanName} from './floorplan-names';
     return 0;
    }));
   return sortedCollection(diffPatches(baseRows,current))===sortedCollection(collectionPatches)&&
-   sortedAchievement(diffAchievements(baseAchievements,recovered.achievements))===sortedAchievement(achievementPatches);
+   sortedAchievement(diffAchievements(baseAchievements,recovered.achievements))===sortedAchievement(achievementPatches)&&
+   JSON.stringify(diffInventory(baseInventory,recovered.inventory))===JSON.stringify(inventoryPatches);
  }
  function persistDraft():Promise<void>{
   if(!original)return Promise.resolve();
   const patches=diffPatches(baseline,recorded);
   const achievements=diffAchievements(achievementBaseline,snapshot?.achievements??[]);
+  const inventoryPatches=diffInventory(inventoryBaseline,snapshot?.inventory??[]);
   const ui={group:selectedGroup,subgroup:selectedSubgroup};
   const checkpoint=(snapshot as SaveSnapshot|null)?.historyCheckpoint??null;
-  const job=draftWrites.catch(()=>{}).then(()=>saveDraftChanges(patches,ui,achievements,checkpoint));
+  const job=draftWrites.catch(()=>{}).then(()=>saveDraftChanges(patches,ui,achievements,checkpoint,inventoryPatches));
   draftWrites=job;
   return job.then(()=>{draftReady=true;draftWarning=false},()=>{draftReady=false;draftWarning=true});
  }
@@ -436,11 +466,12 @@ import {verifiedFloorplanName} from './floorplan-names';
      return {id:p.id,before,after};
     });
     const achievementPatches=decodeAchievementDraft(draft.achievementPatches,s.achievements);
+    const inventoryPatches=draft.inventoryPatches;
     let session:SaveSnapshot|null=null;
     if(draft.historyCheckpoint){
      try{
       const recovered=await restoreHistory(draft.historyCheckpoint);
-      if(!recoveredMatchesDraft(originalRows,s.achievements,recovered,draft.patches,draft.achievementPatches))
+      if(!recoveredMatchesDraft(originalRows,s.achievements,s.inventory,recovered,draft.patches,draft.achievementPatches,inventoryPatches))
        throw Error('HISTORY_RESTORE_CONFLICT');
       session=recovered;
      }catch{
@@ -449,9 +480,9 @@ import {verifiedFloorplanName} from './floorplan-names';
       await openSave(draft.file);
      }
     }
-    if(!session)session=patches.length||achievementPatches.length?await applyDraft(patches,achievementPatches):s;
+    if(!session)session=patches.length||achievementPatches.length||inventoryPatches.length?await applyDraft(patches,achievementPatches,inventoryPatches):s;
    collectionSearchDrilldown=false;query='';
-    original=draft.file;baseline=originalRows;achievementBaseline=s.achievements;update(session);
+    original=draft.file;baseline=originalRows;achievementBaseline=s.achievements;inventoryBaseline=s.inventory;update(session);
     selectedGroup=draft.ui.group;selectedSubgroup=draft.ui.subgroup;
     if(draft.ui.group)void fetchImages(draft.ui.group);
    }
@@ -471,6 +502,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   const priorBaseline=baseline;
   const priorRecorded=recorded;
   const priorAchievements=snapshot?.achievements??[];
+  const priorInventory=snapshot?.inventory??[];
+  const priorInventoryBaseline=inventoryBaseline;
   const priorAchievementBaseline=achievementBaseline;
   const priorHistoryCheckpoint=(snapshot as SaveSnapshot|null)?.historyCheckpoint??null;
   const priorGroup=selectedGroup;
@@ -481,7 +514,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(file.size>60*1024*1024||file.size===0)throw Error(copy.typeIssue);
    await draftWrites.catch(()=>{});
    const session=await openSave(file);
-   original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;update(session);
+   original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;inventoryBaseline=session.inventory;update(session);
    selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';collectionSearchDrilldown=false;filter='all';
    iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;
    try{await saveOriginalLocally(file);draftReady=true;draftWarning=false}
@@ -498,26 +531,44 @@ import {verifiedFloorplanName} from './floorplan-names';
      }));
      const achievementPatches=diffAchievements(priorAchievementBaseline,priorAchievements);
      const decodedAchievements=decodeAchievementDraft(achievementPatches,opened.achievements);
+     const inventoryPatches=diffInventory(priorInventoryBaseline,priorInventory);
      let previous:SaveSnapshot|null=null;
      if(priorHistoryCheckpoint){
       try{
        const recovered=await restoreHistory(priorHistoryCheckpoint);
-       if(!recoveredMatchesDraft(priorBaseline,opened.achievements,recovered,
-        diffPatches(priorBaseline,priorRecorded),achievementPatches))throw Error('HISTORY_RESTORE_CONFLICT');
+       if(!recoveredMatchesDraft(priorBaseline,opened.achievements,opened.inventory,recovered,
+        diffPatches(priorBaseline,priorRecorded),achievementPatches,inventoryPatches))throw Error('HISTORY_RESTORE_CONFLICT');
        previous=recovered;
       }catch{await openSave(priorFile)}
      }
-     if(!previous)previous=patches.length||decodedAchievements.length?await applyDraft(patches,decodedAchievements):opened;
-     original=priorFile;baseline=priorBaseline;achievementBaseline=priorAchievementBaseline;update(previous);
+     if(!previous)previous=patches.length||decodedAchievements.length||inventoryPatches.length?await applyDraft(patches,decodedAchievements,inventoryPatches):opened;
+     original=priorFile;baseline=priorBaseline;achievementBaseline=priorAchievementBaseline;inventoryBaseline=priorInventoryBaseline;update(previous);
      selectedGroup=priorGroup;selectedSubgroup=priorSubgroup;showVariants=priorVariants;visibleLimit=BATCH_SIZE;
      if(priorGroup&&(!iconPack||iconPack.group!==priorGroup))void fetchImages(priorGroup);
     }catch{
-     original=null;snapshot=null;recorded={};baseline=new Map();achievementBaseline=[];
+     original=null;snapshot=null;recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];
      selectedGroup=null;selectedSubgroup=null;showVariants=false;iconEpoch++;iconPack?.dispose();iconPack=null;
     }
    }
    error=reason;
   }
+  finally{busy=false}
+ }
+ async function applyInventoryQuantity(row:InventoryEntry,event:SubmitEvent){
+  event.preventDefault();
+  if(!snapshot||busy||!row.editable)return;
+  const value=new FormData(event.currentTarget as HTMLFormElement).get('quantity');
+  if(typeof value!=='string'||!/^[1-9][0-9]*$/.test(value)){
+   error=copy.fileError;return;
+  }
+  const next=Number(value);
+  if(!Number.isSafeInteger(next)||next>2147483647){error=copy.fileError;return}
+  if(next===row.quantity)return;
+  busy=true;error='';
+  try{
+   update(await changeInventoryQuantity(row.documentId,row.quantity,next));
+   await persistDraft();
+  }catch(e){error=describeError(e)}
   finally{busy=false}
  }
  async function change(id:number,next:bigint|null):Promise<boolean>{
@@ -605,7 +656,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy)return;
   if(snapshot.dirty&&!confirm(copy.discard))return;
   busy=true;error='';
-  try{await draftWrites.catch(()=>{});await forgetLocalDraft();await clear();snapshot=null;original=null;recorded={};baseline=new Map();achievementBaseline=[];editingAchievement=null;goHome();draftReady=true;draftWarning=false;}
+  try{await draftWrites.catch(()=>{});await forgetLocalDraft();await clear();snapshot=null;original=null;recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];editingAchievement=null;goHome();draftReady=true;draftWarning=false;}
   catch(e){error=e instanceof Error?e.message:copy.unknown}
   finally{busy=false}
  }
@@ -714,6 +765,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    {#if snapshot}<nav class="tools-nav" aria-label="Tools">
     <button type="button" class="tool-tab" class:active={activeTool==='collections'} aria-current={activeTool==='collections'?'page':undefined} onclick={goHome}>{copy.toolCollection}</button>
     <button type="button" class="tool-tab" class:active={activeTool==='achievements'} aria-current={activeTool==='achievements'?'page':undefined} onclick={openAchievementsTab}>{achCopy.title}</button>
+    <button type="button" class="tool-tab" class:active={activeTool==='inventory'} aria-current={activeTool==='inventory'?'page':undefined} onclick={openInventoryTab}>{iCopy.tab}</button>
    </nav>{/if}
    <div class="bar-actions">
     {#if snapshot}
@@ -920,6 +972,38 @@ import {verifiedFloorplanName} from './floorplan-names';
      </form>
     {/if}
    </dialog>
+  {:else if activeTool==='inventory'}
+   <div class="collection-controls inventory-controls">
+    <label class="search-field">
+     <svg class="search-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.75" cy="10.75" r="6.75"/><path d="m16 16 5 5"/></svg>
+     <input type="search" bind:value={inventoryQuery} oninput={()=>inventoryLimit=BATCH_SIZE} placeholder={iCopy.search} aria-label={iCopy.search}/>
+    </label>
+    <span class="inventory-total">{iCopy.count}: {inventoryRows.length.toLocaleString(locale)}</span>
+   </div>
+   <div class="inventory-grid">
+    {#each inventoryRows.slice(0,inventoryLimit) as item (item.documentId)}
+     <article class="inventory-card" class:inventory-readonly={!item.editable}>
+      <strong class="inventory-name">{inventoryName(item.itemId)}</strong>
+      <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>
+       <label>
+        <span>{iCopy.quantity}</span>
+        <input type="number" name="quantity" min="1" max="2147483647" step="1"
+         value={item.quantity} disabled={!item.editable||busy} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
+       </label>
+       <button type="submit" class="primary" disabled={!item.editable||busy}>{iCopy.apply}</button>
+      </form>
+      {#if !item.editable}<span class="inventory-warning" title={iCopy.readonly}>{iCopy.readonly}</span>{/if}
+     </article>
+    {/each}
+   </div>
+   {#if inventoryRows.length===0}<p class="empty-result">{iCopy.empty}</p>{/if}
+   {#if inventoryRows.length>inventoryLimit}
+    <div class="load-marker" bind:this={inventoryLoadMoreSentinel}>
+     {#if typeof IntersectionObserver==='undefined'}
+      <button type="button" onclick={()=>inventoryLimit=Math.min(inventoryLimit+BATCH_SIZE,inventoryRows.length)}>{copy.moreItems}</button>
+     {/if}
+    </div>
+   {/if}
   {:else}
    <div class="collection-controls collection-search-controls">
     <label class="search-field">
