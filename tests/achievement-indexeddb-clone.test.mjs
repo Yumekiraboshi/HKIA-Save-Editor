@@ -112,7 +112,7 @@ test('worker values still use normalized draft payloads with native history chec
  const source=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  const worker=readFileSync(new URL('../src/worker-client.ts',import.meta.url),'utf8');
  assert.match(source,/diffAchievements\(achievementBaseline,snapshot\?\.achievements\?\?\[\]\)/);
- assert.match(source,/saveDraftChanges\(patches,ui,achievements,checkpoint\)/);
+ assert.match(source,/saveDraftChanges\(patches,ui,achievements,checkpoint,inventoryPatches\)/);
  assert.match(worker,/workerAchievementGuid\(guid\)/);
  assert.match(worker,/workerAchievementValue\(beforeValue\)/);
 });
