@@ -40,9 +40,8 @@ for(const p of illegalRuntimeJs)
  errors.push('Production JS source is prohibited: '+p+' (use TS for UI or Rust for save operations)');
 
 // Migrated: source-defined achievement parent mutations now live in Rust.
-const legacyRules=new Map([
- ['src/achievement-progress.ts',new Set(['achievementProgressTarget'])]
-]);
+// All explicitly tracked runtime TS rule exceptions have migrated to Rust.
+const legacyRules=new Map();
 // Current transport/draft-display adapters are not authoritative game-state writers.
 const transportAdapters=new Set([
  'src/editor.worker.ts','src/worker-client.ts','src/achievement-draft.ts',
