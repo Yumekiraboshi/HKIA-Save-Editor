@@ -1,13 +1,14 @@
-type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'inventory-change'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type AchievementValue = {complete:boolean;current:number;completed:[bigint,number]|null};
 type AchievementPatch = {guid:number[];before:AchievementValue;after:AchievementValue};
 type AchievementDraftPatch = {guid:number[];before:AchievementValue|null;after:AchievementValue};
-type Request = { id:number; action:Action; checkpoint?:Uint8Array; scope?:'collections'|'achievements'; target?:number; file?:Uint8Array; itemId?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];guid?:number[];nowMs?:number;beforeValue?:AchievementValue|null;afterValue?:AchievementValue };
+type Request = { id:number; action:Action; checkpoint?:Uint8Array; scope?:'collections'|'achievements'|'inventory'; target?:number; file?:Uint8Array; itemId?:number;documentId?:number;beforeQuantity?:number;nextQuantity?:number; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];inventoryPatches?:Array<{documentId:number;before:number;after:number}>;guid?:number[];nowMs?:number;beforeValue?:AchievementValue|null;afterValue?:AchievementValue };
 type Transport = { postMessage(data:unknown, transfer?:Transferable[]):void; onmessage:((event:MessageEvent<Request>)=>void)|null };
 type Engine = {
  memory:WebAssembly.Memory;
  hkia_stage(n:number):number; hkia_open():number;
  hkia_collection_creatable_snapshot():number;
+ hkia_inventory_snapshot():number;hkia_inventory_change(id:number,before:number,after:number):number;
  hkia_change(id:number,expectedPresent:number,old:bigint,nextPresent:number,value:bigint):number;
  hkia_achievement_parent_create(...args:[ number,number,number,number, number, number,number,bigint,number,number, number,number,bigint,number,number, number,number,number,number, number,number,bigint,number,number]):number;
  hkia_achievement_create(g0:number,g1:number,g2:number,g3:number,complete:number,progress:number,seconds:bigint,nanos:number,hasDate:number):number;
@@ -71,6 +72,21 @@ function snapshot(e:Engine){
  if(!version)throw Error('セーブ一覧の形式が不正です。');
  const entries:Array<[number,bigint]>=[];
  for(let i=0;i<count;i++){const p=17+i*12;entries.push([v.getInt32(p,true),v.getBigInt64(p+4,true)]);}
+ if(e.hkia_inventory_snapshot()!==0)throw Error('INVENTORY_SNAPSHOT_FAILED');
+ const bytesInv=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+ if(bytesInv.length<4)throw Error('INVENTORY_SNAPSHOT_INVALID');
+ const iv=new DataView(bytesInv.buffer,bytesInv.byteOffset,bytesInv.byteLength);
+ const countInv=iv.getUint32(0,true);
+ if(countInv>1_000_000||bytesInv.length!==4+countInv*16)throw Error('INVENTORY_SNAPSHOT_INVALID');
+ const inventory:Array<{documentId:number;itemId:number;quantity:number;editable:boolean}>=[];
+ const docIds=new Set<number>();
+ for(let i=0;i<countInv;i++){
+  const at=4+i*16,documentId=iv.getUint32(at,true),itemId=iv.getInt32(at+4,true),
+   quantity=iv.getInt32(at+8,true),editable=iv.getUint32(at+12,true);
+  if(docIds.has(documentId)||editable>1)throw Error('INVENTORY_SNAPSHOT_INVALID');
+  docIds.add(documentId);
+  inventory.push({documentId,itemId,quantity,editable:editable===1});
+ }
  if(e.hkia_achievement_snapshot()!==0)throw Error('実績の取得に失敗しました。');
  const a=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
  if(a.byteLength<4)throw Error('実績データの形式が不正です。');
@@ -128,22 +144,22 @@ function snapshot(e:Engine){
  const historyCount=new DataView(h.buffer,h.byteOffset,h.byteLength).getUint32(0,true);
  if(historyCount>512||h.length!==4+historyCount*23)throw Error('HISTORY_SNAPSHOT_INVALID');
  const history:Array<{
-  scope:'collections'|'achievements';applied:boolean;paired:boolean;
+  scope:'collections'|'achievements'|'inventory';applied:boolean;paired:boolean;
   itemId:number|null;guid:[number,number,number,number]|null
  }>=[];
  const hv=new DataView(h.buffer,h.byteOffset,h.byteLength);
  for(let i=0;i<historyCount;i++){
   const offset=4+i*23,scope=h[offset],applied=h[offset+1],paired=h[offset+2];
-  if(scope>1||applied>1||paired>1)throw Error('HISTORY_SNAPSHOT_INVALID');
+  if(scope>2||applied>1||paired>1)throw Error('HISTORY_SNAPSHOT_INVALID');
   const itemId=hv.getInt32(offset+3,true);
   const guid:[number,number,number,number]=[
    hv.getUint32(offset+7,true),hv.getUint32(offset+11,true),
    hv.getUint32(offset+15,true),hv.getUint32(offset+19,true)
   ];
-  if(scope===0&&itemId<=0)throw Error('HISTORY_SNAPSHOT_INVALID');
-  history.push({scope:scope===0?'collections':'achievements',
+  if(scope!==1&&itemId<=0)throw Error('HISTORY_SNAPSHOT_INVALID');
+  history.push({scope:scope===0?'collections':scope===1?'achievements':'inventory',
    applied:applied===1,paired:paired===1,
-   itemId:scope===0?itemId:null,guid:scope===1?guid:null});
+   itemId:scope!==1?itemId:null,guid:scope===1?guid:null});
  }
  // A large legacy session may exceed the bounded replay limit.
  // Keep edits and net-diff autosave functional instead of failing snapshot().
@@ -166,7 +182,7 @@ function snapshot(e:Engine){
   eligibleCollectionHistoryIds.push(id);
   lastId=id;
  }
- return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,achievements,counters,history,historyCheckpoint:checkpoint,eligibleCollectionHistoryIds,achievementGoals};
+ return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,inventory,achievements,counters,history,historyCheckpoint:checkpoint,eligibleCollectionHistoryIds,achievementGoals};
 }
 function validAchievement(v:AchievementValue):boolean{
  return !!v&&typeof v.complete==='boolean'&&typeof v.current==='number'&&Number.isFinite(v.current)&&v.current>=0&&
@@ -212,6 +228,15 @@ async function execute(r:Request):Promise<unknown>{
    if(typeof r.itemId!=='number'||!Number.isInteger(r.itemId)||r.itemId<=0||r.itemId>2147483647)throw Error('ItemIdが不正です。');
    const a=r.expected??null,b=r.next??null;
    if(e.hkia_change(r.itemId,a===null?0:1,a??0n,b===null?0:1,b??0n)!==0)throw Error('変更できませんでした。元の値か編集条件が一致しません。');
+   return snapshot(e);
+  }
+  case 'inventory-change':{
+   const id=r.documentId,before=r.beforeQuantity,next=r.nextQuantity;
+   if(!Number.isInteger(id)||id===undefined||id<1||id>2147483647||
+    !Number.isInteger(before)||before===undefined||before<1||
+    !Number.isInteger(next)||next===undefined||next<1||next>2147483647)
+    throw Error('INVENTORY_INVALID');
+   if(e.hkia_inventory_change(id,before,next)!==0)throw Error('INVENTORY_CONFLICT');
    return snapshot(e);
   }
   case 'achievement-plan-toggle':{
@@ -316,6 +341,13 @@ async function execute(r:Request):Promise<unknown>{
      e.hkia_reset();throw Error('DRAFT_CONFLICT');
     }
    }
+   for(const p of r.inventoryPatches??[]){
+    if(!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>2147483647||
+     !Number.isInteger(p.before)||!Number.isInteger(p.after)||
+     e.hkia_inventory_change(p.documentId,p.before,p.after)!==0){
+     e.hkia_reset();throw Error('DRAFT_CONFLICT');
+    }
+   }
    for(const p of achievements){
     const ok=p.before===null?
      e.hkia_achievement_create(...createArgs(p.guid,p.after))===0:
@@ -327,9 +359,9 @@ async function execute(r:Request):Promise<unknown>{
   case 'undo':if(e.hkia_undo()!==0)throw Error('戻せる変更がありません。');return snapshot(e);
   case 'redo':if(e.hkia_redo()!==0)throw Error('やり直せる変更がありません。');return snapshot(e);
    case 'history-jump':{
-    if((r.scope!=='collections'&&r.scope!=='achievements')||!Number.isSafeInteger(r.target)||
+    if((r.scope!=='collections'&&r.scope!=='achievements'&&r.scope!=='inventory')||!Number.isSafeInteger(r.target)||
      r.target===undefined||r.target<0||r.target>512)throw Error('HISTORY_JUMP_INVALID');
-    if(e.hkia_history_jump(r.scope==='collections'?0:1,r.target)!==0)throw Error('HISTORY_JUMP_CONFLICT');
+    if(e.hkia_history_jump(r.scope==='collections'?0:r.scope==='achievements'?1:2,r.target)!==0)throw Error('HISTORY_JUMP_CONFLICT');
     return snapshot(e);
    }
   case 'history-restore':{
