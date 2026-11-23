@@ -138,6 +138,18 @@ for(const id of ['77149467','370872413','2022277447']){
 // and per-colorway PNG signatures, not a manually curated palette list,
 // determine precisely which native variants belong to each original cell.
 const nativeTwoToneSources=[
+ // Final source-native channel 2 gaps verified in the original v3.0.1
+ // game UiIcon index; matching PNG pixels must differ, not just metadata.
+ ['collections_group_events',4,139,15],
+ ['collections_group_events',10,4,14],
+ ['collections_group_events',2,84,11],
+ ['collections_group_events',1,61,10],
+ ['collections_group_events',1,119,8],
+ ['collections_group_events',10,6,8],
+ ['collections_group_events',5,32,8],
+ ['collections_group_events',5,78,8],
+ ['collections_group_events',6,103,8],
+ ['collections_group_events',10,52,7],
  // Actual Steam v3.0.1 Pink/Purple Bee UiIcon sources. The original
  // 11-ID family and per-item source palette must render nonidentically.
  ['collections_group_events',3,122,11],
