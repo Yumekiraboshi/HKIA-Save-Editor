@@ -67,5 +67,5 @@ test('achievement detail popup no longer accepts arbitrary progress or changes i
  assert.match(app,/\{#if facts\}\s*<details class="achievement-modal-source">/);
  assert.match(app,/linkedCounter\?linkedCounter\.current\.toLocaleString/);
  assert.match(app,/factCopy\.receiptUnverified/);
- assert.match(app,/planCategoryParentCompletion\(/);
+ assert.match(app,/editAchievementAuto\(guid,live\?\.value\?\?null,next\)/);
 });
