@@ -73,8 +73,8 @@ test('thirty-minute daylight-saving folds preserve the original occurrence',()=>
  const saved=process.env.TZ;
  try{
   process.env.TZ='Australia/Lord_Howe';
-  for(const minute of [14,15]){
-   const original=[BigInt(Date.UTC(2026,3,4,minute,35,15)/1000),987654300];
+  for(const utcMs of [Date.UTC(2026,3,4,14,35,15),Date.UTC(2026,3,4,15,5,15)]){
+   const original=[BigInt(utcMs/1000),987654300];
    assert.equal(toAchievementDateTimeValue(original),'2026-04-05T01:35:15');
    const updated=fromAchievementDateTimeValue('2026-04-05T01:36:15',original);
    assert.equal(updated[0]-original[0],60n);
