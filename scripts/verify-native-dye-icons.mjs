@@ -144,6 +144,12 @@ const nativeTwoToneSources=[
  // Night Cap, Striped Pajama Pants, Striped Pajama Shirt.
  // Original source Mermaids: 21 colorways and two same-first source
  // palette pairs for each tail design.
+ // Verified neutral 2D original costume/eyewear source icons:
+ // two same-primary / different-secondary pairs each.
+ ['collections_group_events',1,103,11],
+ ['collections_group_events',3,107,11],
+ ['collections_group_events',0,6,8],
+ ['collections_group_events',8,91,8],
  ['collections_group_events',1,19,21],
  ['collections_group_events',5,141,21],
  ['collections_group_events',6,136,21],
