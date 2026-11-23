@@ -21,7 +21,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -29,7 +29,9 @@ function createSyntheticSlot({childCompleted=null}={}){
  const parent=doc(16,arr([2],hash(2,0,0,1),arr([0xc2],f32(2),[0xc0])));
  const counter=doc(17,arr([1],hash(1,0,0,2),arr(f32(2),[0xc0],[0x90])));
  const inventory=doc(1,arr([4],u32(315822),[0],u32(6),[0xc0]));
- const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory));
+ const originalArtItem=doc(1,arr([5],u32(1286846063),[0],u32(3),[0xc0]));
+ const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
+  ...(artInventory?[originalArtItem]:[])));
  const prefix=Uint8Array.from('135b4aa4f702a45d1cc562aeb5a386ed5d17e1fd588f424dcfc59d2e140cf597'.match(/../g).map(x=>parseInt(x,16)));
  const magic=Uint8Array.from('a1a2f8333c66ec455baa2dfc6325c2437a779c9906eecff0c022e5f6b6ca73b8'.match(/../g).map(x=>parseInt(x,16)));
  const lit=[0xf0];let remain=model.length-15;
@@ -154,6 +156,45 @@ async function inventoryEditExportSmoke(){
   assert.equal(iv.getUint32(16,true),1,'native edit eligibility retained');
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM INVENTORY EDIT/EXPORT PASS: search, CAS edit, local draft recovery, Rust/WASM reparse');
+ }finally{await context.close();}
+}
+
+/** Existing native game UiIcon ZIP / colorway resolver must appear for a
+ * source-mapped inventory item, not just its item name and quantity.
+ * Colorway fidelity is inherited from the same shared Collection pipeline:
+ * an approximate render is NEVER asserted to be an exact game shader image.
+ */
+async function inventoryOriginalArtSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-inventory-game-icon.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({artInventory:true}))
+  });
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,2);
+  await page.locator('.inventory-controls input[type="search"]').fill('1286846063');
+  const card=page.locator('.inventory-card').first();
+  await card.waitFor();
+  await card.locator('.inventory-item-art .item-sprite').first().waitFor({timeout:30_000});
+  const original=card.locator('.inventory-item-art .item-sprite').first();
+  await page.waitForFunction(()=>{
+   const image=document.querySelector('.inventory-card .inventory-item-art .item-sprite');
+   return image&&getComputedStyle(image).backgroundImage.includes('blob:');
+  },{timeout:30_000});
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'3');
+  assert.ok(['native-icon','approximation','original','game-render'].includes(
+   await original.getAttribute('data-dye-source')),
+   'same source-aware icon pipeline as Collection must be used');
+  await chooseTab(page,0);
+  await chooseTab(page,2);
+  await page.locator('.inventory-controls input[type="search"]').fill('1286846063');
+  await page.locator('.inventory-card .inventory-item-art .item-sprite').first().waitFor();
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM INVENTORY GAME ICON PASS: source-mapped Item ID, shared dye image, retained tab cache');
  }finally{await context.close();}
 }
 
@@ -807,6 +848,7 @@ async function run(){
  await context.close();
  await achievementExportReopenRoundtrip();
  await inventoryEditExportSmoke();
+ await inventoryOriginalArtSmoke();
  await achievementDstFoldExportSmoke();
  await achievementAtlasRetrySmoke();
 }
