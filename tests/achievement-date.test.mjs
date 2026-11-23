@@ -34,6 +34,21 @@ test('changing the calendar date changes seconds but preserves original nanoseco
  assert.equal(changedSecond[1],original[1]);
 });
 
+test('unchanged ambiguous DST local time preserves the original UTC instant',()=>{
+ const saved=process.env.TZ;
+ try{
+  process.env.TZ='America/New_York';
+  // 01:30 occurs twice during the 2026-11-01 DST fall-back.
+  // This timestamp is the *second* occurrence (EST), not the earlier EDT.
+  const original=[BigInt(Date.UTC(2026,10,1,6,30,15)/1000),987654300];
+  const shown=toAchievementDateTimeValue(original);
+  assert.equal(shown,'2026-11-01T01:30:15');
+  assert.deepEqual(fromAchievementDateTimeValue(shown,original),original);
+ }finally{
+  if(saved===undefined)delete process.env.TZ;else process.env.TZ=saved;
+ }
+});
+
 test('missing native date stays blank; an explicitly entered value may create a date',()=>{
  assert.equal(toAchievementDateTimeValue(null),'');
  const typed='2026-11-23T12:34:56';
