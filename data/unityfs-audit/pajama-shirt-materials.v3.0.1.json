@@ -1,0 +1,115 @@
+{
+  "schema": "HKIA.NativeDyeMaterialAudit.1",
+  "source": "original-game-unityfs",
+  "renderFidelity": "unverified",
+  "actualGameUiIconConfirmed": false,
+  "sourceBundle": "d_3_a792250b",
+  "sourceSha256": "2401324bc916f9fdf85e736d5ec046e11dad1aee89164f82326916152b523562",
+  "compressedBytes": 214831,
+  "serializedCab": "CAB-2c8955220482d29703ec32949ce6e4c8",
+  "materials": {
+    "-5426447412062820008": {
+      "name": "BasicStyle_Shirt_PajamaOutfit",
+      "shader": {
+        "fileId": 1,
+        "pathId": "477622052401609204"
+      },
+      "textures": {
+        "_BaseMap": {
+          "fileId": 0,
+          "pathId": "3085884547929396287",
+          "scale": [
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0
+          ]
+        },
+        "_BumpMap": {
+          "fileId": 0,
+          "pathId": "2343202787280610340",
+          "scale": [
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0
+          ]
+        },
+        "_ComboMap": {
+          "fileId": 0,
+          "pathId": "7802926041820637313",
+          "scale": [
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0
+          ]
+        },
+        "_PatternMap": {
+          "fileId": 0,
+          "pathId": "3184891306419590300",
+          "scale": [
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0
+          ]
+        }
+      }
+    }
+  },
+  "textures": {
+    "3085884547929396287": {
+      "name": "BasicStyle_Shirt_PajamaOutfit_C",
+      "width": 512,
+      "height": 512,
+      "format": "BC1/DXT1",
+      "compressedBytes": 174776,
+      "streamOffset": 349552,
+      "streamPath": "archive:/CAB-2c8955220482d29703ec32949ce6e4c8/CAB-2c8955220482d29703ec32949ce6e4c8.resS",
+      "baseMipSha256": "f9385559d882c428b3ed93228e0531fd5a072439e78c0a5fcc2efa1582fadf73",
+      "streamSha256": "a557ff79ffc81ffb558c191d16c989d28217d3f7cfde1e7d7dc52f283b0002d4"
+    },
+    "2343202787280610340": {
+      "name": "BasicStyle_Shirt_PajamaOutfit_N",
+      "width": 512,
+      "height": 512,
+      "format": "BC3/DXT5",
+      "compressedBytes": 349552,
+      "streamOffset": 0,
+      "streamPath": "archive:/CAB-2c8955220482d29703ec32949ce6e4c8/CAB-2c8955220482d29703ec32949ce6e4c8.resS",
+      "baseMipSha256": "2db28255e7f3d8b62e6d5f6b800bfd72ba90f2a570432bb1e38fbb9fd1b460e3",
+      "streamSha256": "a83c6f9dc99971742179cfd448e61fefe7ff5e4a68fd07287f5e87115713f921"
+    },
+    "7802926041820637313": {
+      "name": "BasicStyle_Shirt_PajamaOutfit_X",
+      "width": 512,
+      "height": 512,
+      "format": "BC3/DXT5",
+      "compressedBytes": 349552,
+      "streamOffset": 699120,
+      "streamPath": "archive:/CAB-2c8955220482d29703ec32949ce6e4c8/CAB-2c8955220482d29703ec32949ce6e4c8.resS",
+      "baseMipSha256": "97013236d7b75057d58a94d205dc2d2bf67465d439af28e41d690f5f1f11c22e",
+      "streamSha256": "27cffc585bac3b9582c4f47860e1b04fe70d2800a647b191081c5d9b4f718c2c"
+    },
+    "3184891306419590300": {
+      "name": "BasicStyle_Shirt_PajamaOutfit_P",
+      "width": 512,
+      "height": 512,
+      "format": "BC1/DXT1",
+      "compressedBytes": 174776,
+      "streamOffset": 524336,
+      "streamPath": "archive:/CAB-2c8955220482d29703ec32949ce6e4c8/CAB-2c8955220482d29703ec32949ce6e4c8.resS",
+      "baseMipSha256": "abba00db9492d026f19e23cb7eb385911eeec83f7a4958a40eab2c464222fd82",
+      "streamSha256": "82e1f0c64b16cdc8e5158bb3b07b2e132149f705a73a0b03c590c3faa9540b4f"
+    }
+  }
+}
