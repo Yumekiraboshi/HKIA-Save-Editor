@@ -23,6 +23,7 @@ type Engine = {
  ):number;
  hkia_achievement_toggle_plan(g0:number,g1:number,g2:number,g3:number,nowMs:bigint):number;
  hkia_achievement_edit_auto(g0:number,g1:number,g2:number,g3:number,present:number,bc:number,bp:number,bs:bigint,bn:number,bh:number,ac:number,ap:number,as:bigint,an:number,ah:number):number;
+ hkia_achievement_goals_snapshot():number;
  hkia_achievement_snapshot():number;
  hkia_counter_snapshot():number;
  hkia_undo():number; hkia_redo():number; hkia_reset():number; hkia_history_snapshot():number; hkia_history_jump(scope:number,target:number):number; hkia_history_checkpoint():number; hkia_history_restore():number;
@@ -87,6 +88,26 @@ function snapshot(e:Engine){
   const completed=hasDate===1?[d.getBigInt64(p+22,true),d.getUint32(p+30,true)] as [bigint,number]:null;
   achievements.push({guid,value:{complete,current,completed}});
  }
+ if(e.hkia_achievement_goals_snapshot()!==0)throw Error('ACH_GOALS_FAILED');
+ const goalsBytes=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+ if(goalsBytes.length<4)throw Error('ACH_GOALS_INVALID');
+ const gv=new DataView(goalsBytes.buffer,goalsBytes.byteOffset,goalsBytes.byteLength);
+ const goalCount=gv.getUint32(0,true);
+ if(goalCount>820||goalsBytes.length!==4+goalCount*20||
+  (version==='3.0.1'?goalCount!==820:goalCount!==0))throw Error('ACH_GOALS_INVALID');
+ const achievementGoals:Array<[string,number]>=[];
+ let lastGoalKey='';
+ for(let i=0;i<goalCount;i++){
+  const at=4+i*20;
+  const words=[gv.getUint32(at,true),gv.getUint32(at+4,true),
+   gv.getUint32(at+8,true),gv.getUint32(at+12,true)];
+  const key=words.map(w=>w.toString(16).padStart(8,'0')).join(':');
+  const goal=gv.getFloat32(at+16,true);
+  if(!Number.isSafeInteger(goal)||goal<=0||goal>1_000_000||
+   (i>0&&key<=lastGoalKey))throw Error('ACH_GOALS_INVALID');
+  achievementGoals.push([key,goal]);
+  lastGoalKey=key;
+ }
  if(e.hkia_counter_snapshot()!==0)throw Error('COUNTER_SNAPSHOT_FAILED');
  const raw=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
  if(raw.length<4)throw Error('COUNTER_SNAPSHOT_INVALID');
@@ -145,7 +166,7 @@ function snapshot(e:Engine){
   eligibleCollectionHistoryIds.push(id);
   lastId=id;
  }
- return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,achievements,counters,history,historyCheckpoint:checkpoint,eligibleCollectionHistoryIds};
+ return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,achievements,counters,history,historyCheckpoint:checkpoint,eligibleCollectionHistoryIds,achievementGoals};
 }
 function validAchievement(v:AchievementValue):boolean{
  return !!v&&typeof v.complete==='boolean'&&typeof v.current==='number'&&Number.isFinite(v.current)&&v.current>=0&&
