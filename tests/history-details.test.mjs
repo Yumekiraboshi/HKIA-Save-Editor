@@ -90,6 +90,41 @@ test('source-gated creation and each native grouped transaction remain single de
  assert.match(formatHistoryChange(d[2],'ja',historyDetailCopy('ja'),label),/カテゴリーを含む: 新規記録 · 達成済み/);
 });
 
+test('created achievements show exact native progress and 100ns date in undo history',()=>{
+ const completed=value(true,12,1_750_000_000n,987_654_300);
+ const noDate=value(false,0);
+ const parentCompleted=value(true,7,1_750_000_001n,123_456_700);
+ const noPrior=bytes([u8(0),new Uint8Array(18)]);
+ const ops=[
+  bytes([u8(2),guid(leaf),completed]),
+  bytes([u8(2),guid(parent),noDate]),
+  bytes([u8(4),guid(leaf),noPrior,completed,guid(parent),parentCompleted])
+ ];
+ const records=[
+  meta('achievements',null,leaf),
+  meta('achievements',null,parent),
+  meta('achievements',null,leaf,true)
+ ];
+ const details=decodeHistoryDetails(log(ops,ops.length),records);
+ assert.equal(details.length,3);
+ const copy=historyDetailCopy('ja'),paired=historyCopy('ja').paired;
+ const created=formatHistoryChange(details[0],'ja',copy);
+ assert.match(created,/^新規記録 · 達成済み · 進捗: 12 · 日時: /);
+ assert.match(created,/\.9876543$/,'100ns fraction must be visible without rounding');
+ const absent=formatHistoryChange(details[1],'ja',copy);
+ assert.equal(absent,'新規記録 · 未達成 · 進捗: 0');
+ assert.doesNotMatch(absent,/日時|Date|2026/,'no native timestamp means no inferred date');
+ const pairedChange=formatHistoryChange(details[2],'ja',copy,paired);
+ assert.match(pairedChange,/^新規記録 · 達成済み · 進捗: 12 · 日時: /);
+ assert.match(pairedChange,/カテゴリーを含む: 新規記録 · 達成済み · 進捗: 7 · 日時: /);
+ assert.match(pairedChange,/\.1234567$/,'category date must preserve its own native fraction');
+ for(const locale of ['ja','en','ar','de','es','fr','it','ko','nl','pt-BR','ru','tr','zh-Hans','zh-Hant','fr-CA']){
+  const localized=formatHistoryChange(details[0],locale,historyDetailCopy(locale));
+  assert.match(localized,/\.9876543$/,locale);
+  assert.ok(localized.includes('12'),locale);
+ }
+});
+
 test('mismatched scope, GUID, trailing bytes or bad optional-value markers fail closed',()=>{
  const valid=log([collection(2,null,first)],1);
  const m=[meta('collections',2,null)];
