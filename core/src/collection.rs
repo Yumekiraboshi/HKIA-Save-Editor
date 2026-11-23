@@ -198,11 +198,13 @@ impl Editor {
   if expected.is_none() && next.is_some() && (self.slot.envelope.version!=Version::V301 || !crate::catalog::eligible_for_new_history(id)){return Err(Error::Schema)}
   if let Some(t)=next {if !(1..=MAX_TICKS).contains(&t){return Err(Error::Schema)}}
   if expected.is_none() && self.entries.len()+self.changes.len()>=1_000_000 {return Err(Error::Budget)}
+  // Finish every fallible precondition before changing native data or history.
+  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   let before=self.changes.get(&id).copied();
   let after=if self.base.get(&id).copied()==next {None}else{Some(next)};
   match after {Some(t)=>{self.changes.insert(id,t);},None=>{self.changes.remove(&id);}}
   self.undo.push(Change::Collection{id,before,after});if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
-  self.redo.retain(|change|change.scope()!=HistoryScope::Collections);self.revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  self.redo.retain(|change|change.scope()!=HistoryScope::Collections);self.revision=revision;
   Ok(())
  }
  /// Create a v3.0.1 source-defined, previously absent achievement document.
@@ -441,12 +443,14 @@ impl Editor {
   }
   let model=self.slot.index.achievements.iter().find(|m|m.guid==guid).ok_or(Error::Schema)?;
   let original=achievement::value(model)?;
+  // Revision exhaustion must not leave a partially applied CAS transaction.
+  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   let before=self.achievement_changes.get(&guid).copied();
   let after=if next==original{None}else{Some(next)};
   match after {Some(v)=>{self.achievement_changes.insert(guid,v);},None=>{self.achievement_changes.remove(&guid);}}
   self.undo.push(Change::Achievement{guid,before,after});
   if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
-  self.redo.retain(|change|change.scope()!=HistoryScope::Achievements);self.revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  self.redo.retain(|change|change.scope()!=HistoryScope::Achievements);self.revision=revision;
   Ok(())
  }
  fn restore_change(&mut self,change:&Change,reverse:bool){
@@ -764,6 +768,91 @@ mod tests {
  fn map_header_works(){
   assert_eq!(mp_map_len(1).unwrap(),[0x81]);
   assert_eq!(mp_map_len(16).unwrap(),[0xde,0,16]);
+ }
+
+ // Small *synthetic* HKIA v3.0.1 source-shaped slot. No player save data.
+ // An in-module test is needed to put revision at the u32 boundary without
+ // changing the public API or introducing a test-only production backdoor.
+ fn revision_test_slot()->Vec<u8>{
+  fn u(n:u32)->Vec<u8>{let mut b=vec![0xce];b.extend(n.to_be_bytes());b}
+  fn f(n:f32)->Vec<u8>{let mut b=vec![0xca];b.extend(n.to_be_bytes());b}
+  fn i(n:i64)->Vec<u8>{let mut b=vec![0xd3];b.extend(n.to_be_bytes());b}
+  fn array(parts:Vec<Vec<u8>>)->Vec<u8>{
+   assert!(parts.len()<16);
+   let mut out=vec![0x90|parts.len() as u8];
+   for part in parts{out.extend(part)}out
+  }
+  fn map(pairs:Vec<(Vec<u8>,Vec<u8>)>)->Vec<u8>{
+   assert!(pairs.len()<16);
+   let mut out=vec![0x80|pairs.len() as u8];
+   for (k,v) in pairs{out.extend(k);out.extend(v)}out
+  }
+  fn guid(words:[u32;4])->Vec<u8>{words.into_iter().flat_map(u).collect()}
+  fn document(tag:u8,body:Vec<u8>)->Vec<u8>{array(vec![vec![tag],body])}
+  let mut name=vec![0xa5];name.extend(b"3.0.1");
+  let version=document(18,array(vec![vec![0],u(87),name]));
+  let achievement_a=document(16,array(vec![vec![1],guid([1,0,0,1]),
+   array(vec![vec![0xc2],f(1.0),vec![0xc0]])]));
+  let achievement_b=document(16,array(vec![vec![2],guid([2,0,0,1]),
+   array(vec![vec![0xc2],f(2.0),vec![0xc0]])]));
+  let counter=document(17,array(vec![vec![1],guid([1,0,0,2]),
+   array(vec![f(2.0),vec![0xc0],vec![0x90]])]));
+  let collection=document(39,array(vec![map(vec![]),
+   map(vec![(vec![2],i(638000000000000001)),(vec![3],i(9))])]));
+  let object=document(32,array(vec![vec![3],guid([0,0,0,3]),
+   vec![0],array(vec![collection])]));
+  let payload=array(vec![vec![0],vec![4],array(vec![
+   version,achievement_a,achievement_b,counter,object
+  ])]);
+  let mut compressed=vec![0xf0];let mut left=payload.len()-15;
+  while left>=255{compressed.push(255);left-=255}
+  compressed.push(left as u8);compressed.extend(&payload);
+  let prefix=[0x13,0x5b,0x4a,0xa4,0xf7,0x02,0xa4,0x5d,0x1c,0xc5,0x62,0xae,0xb5,0xa3,0x86,0xed,
+   0x5d,0x17,0xe1,0xfd,0x58,0x8f,0x42,0x4d,0xcf,0xc5,0x9d,0x2e,0x14,0x0c,0xf5,0x97];
+  let magic=[0xa1,0xa2,0xf8,0x33,0x3c,0x66,0xec,0x45,0x5b,0xaa,0x2d,0xfc,0x63,0x25,0xc2,0x43,
+   0x7a,0x77,0x9c,0x99,0x06,0xee,0xcf,0xf0,0xc0,0x22,0xe5,0xf6,0xb6,0xca,0x73,0xb8];
+  let mut slot=prefix.to_vec();slot.push(0x98);
+  for _ in 0..4{slot.extend(u(0))}
+  slot.push(0xa5);slot.extend(b"3.0.1");slot.extend(u(30001));
+  slot.extend([0x92,0xd6,0xff]);slot.extend(1_750_000_000u32.to_be_bytes());
+  slot.extend([0,0,0x80,0x90,0x91,9]);slot.extend(magic);
+  slot.extend([0x92,0xc8,0,3,98,0xcd]);slot.extend((payload.len() as u16).to_be_bytes());
+  slot.push(0xc6);slot.extend((compressed.len() as u32).to_be_bytes());slot.extend(compressed);
+  slot
+ }
+
+ #[test]
+ fn revision_overflow_rejects_both_edits_without_changing_native_data_or_history(){
+  let original=revision_test_slot();
+  let mut editor=Editor::open(original.clone()).expect("synthetic source must parse");
+  let guid=[1,0,0,1];
+  let before=editor.achievement_value(guid).unwrap();
+  let done=AchievementValue{complete:true,current:2.0,
+   completed:Some((1_750_000_000,123_456_700))};
+  // Populate a redo branch: a rejected edit must not truncate it.
+  editor.change_achievement(guid,before,done).unwrap();
+  assert!(editor.undo());
+  assert!(editor.can_redo());
+  let expected_history=editor.history();
+  let expected_achievements=editor.achievements();
+  let expected_entries=editor.entries();
+  editor.revision=u32::MAX;
+  assert_eq!(editor.change(2,Some(638000000000000001),
+   Some(638000000000010001)),Err(Error::Overflow));
+  assert_eq!(editor.change_achievement(guid,before,done),Err(Error::Overflow));
+  assert_eq!(editor.revision(),u32::MAX);
+  assert_eq!(editor.history(),expected_history,"failed CAS removed redo or added undo");
+  assert_eq!(editor.achievements(),expected_achievements);
+  assert_eq!(editor.entries(),expected_entries);
+  assert!(!editor.dirty(),"failed mutations must not become exportable");
+  assert!(editor.can_redo());
+  // A prior successful transaction is still redoable, exportable, and reparsed.
+  assert!(editor.redo());
+  let saved=editor.export().unwrap();
+  let reread=Editor::open(saved).unwrap();
+  assert_eq!(reread.achievement_value(guid),Some(done));
+  assert_eq!(reread.value(2),Some(638000000000000001));
+  assert_eq!(Editor::open(original).unwrap().achievement_value(guid),Some(before));
  }
 }
 
