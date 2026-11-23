@@ -105,39 +105,31 @@ test('a visible source-palette channel 1 mismatch is not misattributed to channe
  assert.equal(qa.totals.unverifiedHigherChannelItems,0);
 });
 
-test('all-source generated icons fail closed on new first/second-channel duplicates',()=>{
+test('all 5,383 native 2D icons fail closed on any new SHA-256 collision in channels 1–5',()=>{
  const qa=auditNativeColorwayCollisions(base({
   1:rec('a'.repeat(64)),2:rec('b'.repeat(64))
  }),native);
- // Unit-test the production threshold independently of the full PNG build.
+ // Unit-test the production budget independently of the full PNG export.
  qa.totals.generatedColorways=5383;
  assert.equal(assertFullNativeColorwayFidelityFloor(qa),qa.totals);
- const remaining=structuredClone(qa);
- remaining.totals.indistinguishableItems=12;
- remaining.totals.indistinguishableFamilies=6;
- remaining.totals.unverifiedHigherChannelItems=12;
- remaining.totals.unresolvedByFirstDifferentChannel[3]=12;
- assert.doesNotThrow(()=>assertFullNativeColorwayFidelityFloor(remaining));
- // A future repair of the 12 source shader-mask gaps must stay permissible.
- const improved=structuredClone(remaining);
- improved.totals.indistinguishableItems=2;
- improved.totals.indistinguishableFamilies=1;
- improved.totals.unverifiedHigherChannelItems=2;
- improved.totals.unresolvedByFirstDifferentChannel[3]=2;
- assert.doesNotThrow(()=>assertFullNativeColorwayFidelityFloor(improved));
- for(const channel of [1,2]){
-  const regression=structuredClone(remaining);
+ // A regression must fail even when the original renderer mask is unverified.
+ // This tests PNG differentiation only, not native Unity shader fidelity.
+ for(const channel of [1,2,3,4,5]){
+  const regression=structuredClone(qa);
+  regression.totals.indistinguishableItems=2;
+  regression.totals.indistinguishableFamilies=1;
   regression.totals.unresolvedByFirstDifferentChannel[channel]=2;
+  regression.totals.unverifiedHigherChannelItems=channel>=3?2:0;
   assert.throws(()=>assertFullNativeColorwayFidelityFloor(regression),
    /DYE_NATIVE_COLORWAY_REGRESSION/);
  }
  for(const mutation of [
-  x=>x.indistinguishableItems=13,
-  x=>x.indistinguishableFamilies=7,
-  x=>x.unverifiedHigherChannelItems=11,
+  x=>x.indistinguishableItems=12,
+  x=>x.indistinguishableFamilies=6,
+  x=>x.unverifiedHigherChannelItems=2,
   x=>x.generatedColorways=5382
  ]){
-  const regression=structuredClone(remaining);
+  const regression=structuredClone(qa);
   mutation(regression.totals);
   assert.throws(()=>assertFullNativeColorwayFidelityFloor(regression),
    /DYE_NATIVE_COLORWAY_REGRESSION/);
