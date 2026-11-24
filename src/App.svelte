@@ -6,7 +6,7 @@
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
  import {inventoryCopy} from './inventory-copy';
- import {browseInventory,inventoryGroupCounts,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {inventoryCategoryRepresentative,browseInventory,inventoryGroupCounts,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
@@ -361,6 +361,13 @@ import {verifiedFloorplanName} from './floorplan-names';
   for(const row of inventoryRows.slice(0,inventoryLimit)){
    if(inventoryNativeArt?.entries.has(row.itemId)||inventoryNativeArt?.withheld.has(row.itemId))continue;
    const item=inventorySourceItems.get(row.itemId);
+   if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
+  }
+  // The category representatives use the same verified item atlas/cache.
+  for(const tab of NATIVE_INVENTORY_TABS){
+   const id=inventoryCategoryRepresentative(tab.key,nativeInventoryIndex);
+   if(id===undefined||inventoryNativeArt?.entries.has(id))continue;
+   const item=inventorySourceItems.get(id);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
   for(const group of groups){
@@ -1060,9 +1067,25 @@ import {verifiedFloorplanName} from './floorplan-names';
     
     <nav class="inventory-group-strip" aria-label={iCopy.tab}>
      {#each inventoryVisibleGroups as t (t.key)}
+      {@const representative=inventoryCategoryRepresentative(t.key,nativeInventoryIndex)}
+      {@const representativeSource=representative===undefined?undefined:inventorySourceItems.get(representative)}
+      {@const representativeNative=representative===undefined?undefined:inventoryNativeArt?.entries.get(representative)}
+      {@const representativeSprite=representativeNative??(representativeSource&&representative!==undefined?inventoryIconPacks[representativeSource[3]]?.entries[String(representative)]:undefined)}
       <button type="button" class="inventory-group-option" data-inventory-group={t.key} class:active={activeInventoryGroup===t.key}
        aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;inventoryLimit=BATCH_SIZE}}>
-       {#if t.art}<img src={INVENTORY_UI+t.art} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>{/if}
+       {#if representativeSprite&&representative!==undefined}
+        <span class="inventory-category-representative" aria-hidden="true">
+         {#if !representativeNative&&nativeDyePalettes[String(representative)]}
+          <DyeSprite sprite={representativeSprite} palette={nativeDyePalettes[String(representative)]}
+           sourceKey={representativeSource?.[1]??''} exactArtUrl={exactVariantArt[String(representative)]} originalArtUrl={originalVariantArt[String(representative)]}
+           previewUrl={nativeColorwayIcons[String(representative)]}/>
+         {:else}
+          <span style:background-image={'url("'+representativeSprite.url+'")'} style:background-position={'-'+representativeSprite.x+'px -'+representativeSprite.y+'px'}></span>
+         {/if}
+        </span>
+       {:else if t.art}
+        <img src={ICONS+t.art} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>
+       {/if}
        <span>{inventoryGroupLabel(locale,t.key)}</span><small>{(inventoryGroupTotals.get(t.key)??0).toLocaleString(locale)}</small>
       </button>
      {/each}

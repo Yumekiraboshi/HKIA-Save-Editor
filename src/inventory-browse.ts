@@ -6,24 +6,42 @@ import {FLOWER_CREATION_SOURCE_IDS} from './inventory-native-crafting';
 /** Original InventoryViewModel.RawCategories array: v3.0.1 metadata 0xC1E150.
  * Category mask browsing preserves records and multiple matching tabs; specialized
  * runtime visibility/filter behavior is not asserted to match the game exactly.
- * Original TabItemView.CategoryIcons artwork for all 13 native categories.
+ * Native category semantics; colored representative game art for navigation.
  */
 export const NATIVE_INVENTORY_TABS=[
- {key:'key-items',bit:134217728,art:'category-key-items.webp'},
- {key:'items',bit:0,art:'category-items.webp'},
- {key:'food',bit:65536,art:'category-food.webp'},
- {key:'chef-station',bit:4096,art:'category-chef-station.webp'},
- {key:'flowers',bit:50331648,art:'category-flowers.webp'},
- {key:'creation-station',bit:32,art:'category-creation-station.webp'},
- {key:'critters',bit:8,art:'category-critters.webp'},
- {key:'fish',bit:16384,art:'category-fish.webp'},
- {key:'clothes',bit:256,art:'category-clothes.webp'},
- {key:'furniture',bit:64,art:'category-furniture.webp'},
- {key:'comics',bit:67108864,art:'category-comics.webp'},
- {key:'music',bit:2097152,art:'category-music.webp'},
- {key:'wands',bit:8388608,art:'category-wands.webp'}
+ {key:'key-items',bit:134217728,art:null},
+ {key:'items',bit:0,art:null},
+ {key:'food',bit:65536,art:'collections_group_food.webp'},
+ {key:'chef-station',bit:4096,art:'collections_group_recipes.webp'},
+ {key:'flowers',bit:50331648,art:'collections_group_flowers.webp'},
+ {key:'creation-station',bit:32,art:'collections_group_plans.webp'},
+ {key:'critters',bit:8,art:'collections_group_critters.webp'},
+ {key:'fish',bit:16384,art:'collections_group_fish.webp'},
+ {key:'clothes',bit:256,art:'collections_group_clothing.webp'},
+ {key:'furniture',bit:64,art:'collections_group_furniture.webp'},
+ {key:'comics',bit:67108864,art:'collections_group_comics.webp'},
+ {key:'music',bit:2097152,art:'collections_group_musicdiscs.webp'},
+ {key:'wands',bit:8388608,art:null}
 ] as const;
 export type InventoryGroupKey=(typeof NATIVE_INVENTORY_TABS)[number]['key']|'other';
+/** Navigation artwork is a visual representative, not a classification rule.
+ * IDs point to original game item art with motifs close to TabItemView.CategoryIcons.
+ * A backpack may be a wearable item while representing the general Items tab. */
+export const INVENTORY_CATEGORY_REPRESENTATIVES:Partial<Record<InventoryGroupKey,number>>={
+ 'key-items':767455829, // Toolbox
+ items:433573896, // Mint Hiking Backpack
+ food:1328220329, // Milk Bread
+ 'chef-station':633402456, // Omelet (pan)
+ flowers:274491259, // Tulias
+ 'creation-station':1434684945, // Friendship Bouquet
+ critters:71754032, // Phantom Flutterby
+ furniture:286009791, // Nordic Armchair
+ wands:1277599998 // Lala's Magic Wand
+};
+export function inventoryCategoryRepresentative(key:InventoryGroupKey,index:NativeInventoryIndex):number|undefined{
+ const id=INVENTORY_CATEGORY_REPRESENTATIVES[key];
+ return id!==undefined&&index.has(id)?id:undefined;
+}
 export const OTHER_INVENTORY_GROUP:InventoryGroupKey='other';
 export function nativeInventoryGroups(itemId:number,index:NativeInventoryIndex):InventoryGroupKey[]{
  const source=index.get(itemId);

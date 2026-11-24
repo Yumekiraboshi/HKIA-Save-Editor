@@ -100,8 +100,10 @@ test('every registered exact image is an audited, local, unmodified PNG or WebP'
 test('Collection and Inventory select source-registered exact images before approximations',()=>{
  const app=read('../src/App.svelte'),sprite=read('../src/DyeSprite.svelte');
  assert.match(app,/loadVariantArtSources\(import\.meta\.env\.BASE_URL\)/);
- assert.equal((app.match(/exactArtUrl=\{/g)||[]).length,4);
- assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,4);
+ assert.equal((app.match(/exactArtUrl=\{/g)||[]).length,5);
+ assert.match(app,/exactArtUrl=\{exactVariantArt\[String\(representative\)\]\}/);
+ assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,5);
+ assert.match(app,/originalArtUrl=\{originalVariantArt\[String\(representative\)\]\}/);
  assert.match(sprite,/if\(exact\)showExact\(exact,showOriginal\)/);
  assert.match(sprite,/showExact\(original,showNativeIcon\)/);
  assert.match(app,/exactVariantArt\[String\(item\.itemId\)\]/);
