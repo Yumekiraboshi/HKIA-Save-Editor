@@ -31,5 +31,28 @@
     ]
   },
   "nativeLightingVerified": false,
-  "nativeIconVerified": false
+  "nativeIconVerified": false,
+  "lightingPrototype": {
+    "normalMapPathId": "8975871802653956239",
+    "normalMapBaseMipSha256": "a145f36b6acf4af4dca5cfe4697bd4aadc3004d64f9d8021834529074ee480fd",
+    "comboMapPathId": "2373240428055138946",
+    "comboMapBaseMipSha256": "9306be90d62855cb7a2c6c5daa55d9124bf0275ad306d94f69c68b4f05315f73",
+    "candidateCount": 27,
+    "camera": {
+      "yaw": 340,
+      "pitch": 15,
+      "mirror": true,
+      "roll": 15
+    },
+    "silhouetteIoU": 0.8871424080477838,
+    "score": 0.7571260959617337,
+    "trainPixels": 1882,
+    "heldOutPixels": 459,
+    "unlitHeldOutRgbMae": 0.1201854238317741,
+    "meshNormalHeldOutRgbMae": 0.08654204179557352,
+    "normalMapHeldOutRgbMae": 0.08626230586337916,
+    "nativeLightingVerified": false,
+    "nativeIconVerified": false,
+    "note": "Measured with local prototype, not a cross-item validation. Normal-map unpack, light parameters and camera are approximate; ComboMap not yet used in lighting."
+  }
 }
