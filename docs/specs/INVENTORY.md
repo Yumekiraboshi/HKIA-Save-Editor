@@ -18,4 +18,14 @@
 
 ## Current implementation boundary (not a reduction of scope)
 
-The v3.0.1 native inventory index recognizes Document ID, Item ID, Unique ID, quantity and optional InventoryUniqueData. The existing Rust quantity writer accepts supported ordinary stacks with a nil unique payload only. Non-nil payloads are preserved on export. This does not establish the concrete schema or allowed values for flower, furniture or clothing customization; those edits must not be enabled until their evidence and end-to-end validation exist.
+The v3.0.1 native inventory index recognizes Document ID, Item ID, Unique ID, quantity and optional InventoryUniqueData. The existing Rust quantity writer accepts supported ordinary stacks with a nil unique payload only. Non-nil payloads are preserved on export. The current Rust schema and inherited [v3.0.1 native schema](https://github.com/Yumekiraboshi/HKIA-Editor-Dev/blob/main/scripts/research/native-v301-dbroot-schema.json) agree on these native union variants:
+
+| Tag | Type | Serialized fields in order |
+| --- | --- | --- |
+| 7 | FlowerUniqueDataV2 | FlowerGrowState (byte), FlowerColorIndex (int), FlowerPatternIndex (int), FlowerColorIndex (int) |
+| 8 | FurnitureUniqueDataV2 | FurnitureMaterialIndex (int) × 3 |
+| 6 | PaletteUniqueData | Color (four float32 components) × 3 |
+
+Tags 1 and 2 are deprecated furniture/flower types using Hash128, not interchangeable with V2. PaletteUniqueData is a native color payload and appears in the shared union used by outfit models; this does not prove that every customizable clothing Item ID uses that payload. Field positions and storage types are known, but the valid option values, per-item applicability, semantic roles of the two flower colors, and native identity/reference behavior are not established by the schema alone. Do not expose arbitrary numeric index or color edits as valid game choices. Preserve opaque and deprecated payloads pending evidence.
+
+Implementation reference: `core/src/schema.rs`, `core/src/native.rs`, `core/src/collection.rs`. Reuse the current native index and session, not the historical JS research reader.
