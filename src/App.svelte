@@ -8,6 +8,7 @@
  import {inventoryCopy} from './inventory-copy';
  import {browseInventory,inventoryGroupCounts,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
+ import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
  import {inventoryGroupLabel} from './inventory-native-category-copy';
  import {loadSourceItemNames,type SourceItemNames} from './source-names';
  import {decodeHistoryDetails,formatHistoryChange} from './history-details';
@@ -53,6 +54,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryQuery=$state('');
  let inventoryGroup:InventoryGroupKey|null=$state(null);
  let nativeInventoryIndex:NativeInventoryIndex=$state(new Map());
+ let inventoryNativeArt:InventoryNativeArt|null=$state(null);
  let inventoryEditableOnly=$state(false);
  let inventoryLimit=$state(BATCH_SIZE);
  let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
@@ -182,6 +184,7 @@ import {verifiedFloorplanName} from './floorplan-names';
 
  onMount(()=>{
   void loadNativeInventoryIndex(import.meta.env.BASE_URL).then(index=>nativeInventoryIndex=index).catch(()=>{});
+  void loadInventoryNativeArt(import.meta.env.BASE_URL).then(art=>inventoryNativeArt=art).catch(()=>{});
   // Exact game dye palettes, used exclusively for recoloring item image pixels.
   void loadNativeDyePalettes(import.meta.env.BASE_URL)
    .then(palettes=>nativeDyePalettes=palettes).catch(()=>{});
@@ -349,6 +352,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(activeTool!=='inventory'||!snapshot||!catalog)return;
   const groups=new Set<string>();
   for(const row of inventoryRows.slice(0,inventoryLimit)){
+   if(inventoryNativeArt?.entries.has(row.itemId)||inventoryNativeArt?.withheld.has(row.itemId))continue;
    const item=inventorySourceItems.get(row.itemId);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
@@ -1049,7 +1053,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     
     <nav class="inventory-group-strip" aria-label={iCopy.tab}>
      {#each inventoryVisibleGroups as t (t.key)}
-      <button type="button" class="inventory-group-option" class:active={activeInventoryGroup===t.key}
+      <button type="button" class="inventory-group-option" data-inventory-group={t.key} class:active={activeInventoryGroup===t.key}
        aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;inventoryLimit=BATCH_SIZE}}>
        {#if t.art}<img src={ICONS+t.art} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>{/if}
        <span>{inventoryGroupLabel(locale,t.key)}</span><small>{(inventoryGroupTotals.get(t.key)??0).toLocaleString(locale)}</small>
@@ -1067,11 +1071,15 @@ import {verifiedFloorplanName} from './floorplan-names';
    <div class="inventory-grid">
     {#each inventoryRows.slice(0,inventoryLimit) as item (item.documentId)}
      {@const definition=inventorySourceItems.get(item.itemId)}
-     {@const sprite=definition?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
+     {@const nativeSprite=inventoryNativeArt?.entries.get(item.itemId)}
+     {@const sprite=definition&&!inventoryNativeArt?.withheld.has(item.itemId)?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
      <article class="inventory-card" class:inventory-readonly={!item.editable}>
       <div class="inventory-card-heading">
        <span class="inventory-item-art" aria-hidden="true">
-        {#if sprite}
+        {#if nativeSprite}
+         <span class="item-sprite" data-inventory-art="native" style:background-image={'url("'+nativeSprite.url+'")'}
+          style:background-position={'-'+nativeSprite.x+'px -'+nativeSprite.y+'px'}></span>
+        {:else if sprite}
          {#if nativeDyePalettes[String(item.itemId)]}
           <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item.itemId)]}
            sourceKey={definition?.[1]??''} exactArtUrl={exactVariantArt[String(item.itemId)]}

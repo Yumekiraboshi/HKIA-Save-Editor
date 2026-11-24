@@ -31,8 +31,9 @@ function createSyntheticSlot({childCompleted=null,artInventory=false}={}){
  const inventory=doc(1,arr([4],u32(315822),[0],u32(6),[0xc0]));
  const originalArtItem=doc(1,arr([5],u32(1286846063),[0],u32(3),[0xc0]));
  const sourceFitItem=doc(1,arr([6],u32(54272482),[0],u32(2),[0xc0]));
+ const nonCollectionItem=doc(1,arr([7],u32(427689),[0],u32(5),[0xc0]));
  const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
-  ...(artInventory?[originalArtItem,sourceFitItem]:[])));
+  ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[])));
  const prefix=Uint8Array.from('135b4aa4f702a45d1cc562aeb5a386ed5d17e1fd588f424dcfc59d2e140cf597'.match(/../g).map(x=>parseInt(x,16)));
  const magic=Uint8Array.from('a1a2f8333c66ec455baa2dfc6325c2437a779c9906eecff0c022e5f6b6ca73b8'.match(/../g).map(x=>parseInt(x,16)));
  const lit=[0xf0];let remain=model.length-15;
@@ -223,6 +224,19 @@ async function inventoryOriginalArtSmoke(){
   assert.equal(await fitted.getAttribute('data-icon-fidelity'),'approximate');
   assert.ok((await fitted.evaluate(el=>getComputedStyle(el).backgroundImage))
    .includes('/native-colorways/source-fit/54272482.png?v='));
+  await page.locator('.inventory-group-option[data-inventory-group="furniture"]').click();
+  await page.locator('.inventory-controls input[type="search"]').fill('427689');
+  const extra=page.locator('.inventory-card .item-sprite[data-inventory-art="native"]');
+  await extra.waitFor({timeout:30_000});
+  await page.waitForFunction(()=>document.querySelector('.inventory-card .inventory-name')?.textContent?.trim()==='Nul Rug');
+  assert.ok(await extra.evaluate(async el=>{
+   const bg=getComputedStyle(el).backgroundImage;
+   const url=bg.match(/^url\("(.+)"\)$/)?.[1];
+   if(!url||!url.includes('/inventory-art/sheet-005.webp'))return false;
+   const img=new Image();img.src=url;await img.decode();
+   return img.naturalWidth===1152&&img.naturalHeight===1152;
+  }),'original non-collection item atlas must be loaded');
+  assert.equal(await page.locator('.inventory-card input[name="quantity"]').first().inputValue(),'5');
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM INVENTORY GAME ICON PASS: source-mapped Item ID, shared dye image, retained tab cache');
  }finally{await context.close();}
