@@ -6,21 +6,21 @@ import {FLOWER_CREATION_SOURCE_IDS} from './inventory-native-crafting';
 /** Original InventoryViewModel.RawCategories array: v3.0.1 metadata 0xC1E150.
  * Category mask browsing preserves records and multiple matching tabs; specialized
  * runtime visibility/filter behavior is not asserted to match the game exactly.
- * Non-inventory-specific artwork reuses original game Collection UI art.
+ * Original TabItemView.CategoryIcons only; unresolved art is text-only.
  */
 export const NATIVE_INVENTORY_TABS=[
- {key:'key-items',bit:134217728,art:null},
- {key:'items',bit:0,art:null},
- {key:'food',bit:65536,art:'collections_group_food.webp'},
- {key:'chef-station',bit:4096,art:'collections_group_recipes.webp'},
- {key:'flowers',bit:50331648,art:'inventory-category-flowers.png'},
- {key:'creation-station',bit:32,art:'collections_group_plans.webp'},
- {key:'critters',bit:8,art:'collections_group_critters.webp'},
- {key:'fish',bit:16384,art:'collections_group_fish.webp'},
- {key:'clothes',bit:256,art:'collections_group_clothing.webp'},
- {key:'furniture',bit:64,art:'inventory-category-furniture.png'},
- {key:'comics',bit:67108864,art:'collections_group_comics.webp'},
- {key:'music',bit:2097152,art:'collections_group_musicdiscs.webp'},
+ {key:'key-items',bit:134217728,art:'category-key-items.webp'},
+ {key:'items',bit:0,art:'category-items.webp'},
+ {key:'food',bit:65536,art:'category-food.webp'},
+ {key:'chef-station',bit:4096,art:null},
+ {key:'flowers',bit:50331648,art:'category-flowers.webp'},
+ {key:'creation-station',bit:32,art:null},
+ {key:'critters',bit:8,art:'category-critters.webp'},
+ {key:'fish',bit:16384,art:null},
+ {key:'clothes',bit:256,art:'category-clothes.webp'},
+ {key:'furniture',bit:64,art:'category-furniture.webp'},
+ {key:'comics',bit:67108864,art:null},
+ {key:'music',bit:2097152,art:'category-music.webp'},
  {key:'wands',bit:8388608,art:null}
 ] as const;
 export type InventoryGroupKey=(typeof NATIVE_INVENTORY_TABS)[number]['key']|'other';
