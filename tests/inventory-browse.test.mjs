@@ -110,3 +110,15 @@ test('original native flower and furniture images are pinned',()=>{
  assert.equal(createHash('sha256').update(readFileSync(new URL('../public/icons/inventory-category-flowers.png',import.meta.url))).digest('hex'),'b4134139e5ba02972e4320e3ece8b598408b6decd3a88216d4d49d8ef990400d');
  assert.equal(createHash('sha256').update(readFileSync(new URL('../public/icons/inventory-category-furniture.png',import.meta.url))).digest('hex'),'f428d50dea3962fae65d6b3ae787aecf4b9ffccca45f86ac1089446e6db3e7ad');
 });
+
+test('compact inventory keeps quantity controls accessible and locks unsupported records',()=>{
+ const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../src/style.css',import.meta.url),'utf8');
+ assert.match(css,/\.inventory-grid\{[^}]*minmax\(min\(136px,100%\),1fr\)/);
+ assert.match(css,/\.inventory-item-art\{[^}]*width:64px;height:64px/);
+ assert.match(css,/\.inventory-item-art \.item-sprite\{[^}]*transform:scale/);
+ assert.match(app,/\{#if item\.editable\}\s*<form class="inventory-quantity-form"/);
+ assert.match(app,/aria-label=\{iCopy\.apply\}/);
+ assert.match(app,/class="inventory-readonly-quantity" title=\{iCopy\.readonly\}/);
+ assert.match(app,/title=\{inventoryName\(item\.itemId\)\}/);
+});
