@@ -9,7 +9,7 @@ const {outputFiles}=await build({
  entryPoints:[fileURLToPath(new URL('../src/variant-art.ts',import.meta.url))],
  bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'
 });
-const {parseVariantArtIndex,parseSourceColorwayIndex,loadVariantArtIndex}=await import(
+const {parseVariantArtIndex,parseSourceColorwayIndex,parseDynamicColorwayIndex,loadVariantArtIndex}=await import(
  'data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64')
 );
 const read=(name)=>readFileSync(new URL(name,import.meta.url),'utf8');
@@ -17,6 +17,7 @@ const manifest=JSON.parse(read('../public/variant-art/index.json'));
 const native=JSON.parse(read('../public/native-dye-palettes.json'));
 const sources=JSON.parse(read('../public/source-colorways/index.json'));
 const catalog=JSON.parse(read('../public/catalog.json'));
+const dynamic=JSON.parse(read('../public/dynamic-colorways/index.json'));
 const itemKeys=new Map(catalog.items.map(r=>[String(r[0]),r[1]]));
 const example={
  file:'704486536.png',sha256:'a'.repeat(64),
@@ -62,13 +63,13 @@ test('loader reads verified index through local deployment base only',async()=>{
  try{
   globalThis.fetch=async (url,options)=>{
    requests.push({url,options});
-   return {ok:true,json:async()=>url.endsWith('/source-colorways/index.json')?sources:wrap({'704486536':example})};
+   return {ok:true,json:async()=>url.endsWith('/source-colorways/index.json')?sources:url.endsWith('/dynamic-colorways/index.json')?dynamic:wrap({'704486536':example})};
   };
   const record=await loadVariantArtIndex('/HKIA-Save-Editor/');
   assert.equal(record['704486536'],'/HKIA-Save-Editor/variant-art/704486536.png');
   assert.equal(record['379863484'],'/HKIA-Save-Editor/source-colorways/379863484.webp');
-  assert.equal(requests.length,2);
-  assert.deepEqual(requests.map(r=>r.url).sort(),['/HKIA-Save-Editor/source-colorways/index.json','/HKIA-Save-Editor/variant-art/index.json']);
+  assert.equal(requests.length,3);
+  assert.deepEqual(requests.map(r=>r.url).sort(),['/HKIA-Save-Editor/dynamic-colorways/index.json','/HKIA-Save-Editor/source-colorways/index.json','/HKIA-Save-Editor/variant-art/index.json']);
   assert.ok(requests.every(r=>r.options.cache==='force-cache'));
  }finally{
   globalThis.fetch=previous;
@@ -177,4 +178,21 @@ test('the newly extracted mint striped pajama source sprites are original colore
   assert.ok(r.itemKey.startsWith('item_c_dyeable_stripedpajama'));
   assert.equal(parseSourceColorwayIndex(sources,'/')[id],'/source-colorways/'+id+'.webp');
  }
+});
+
+test('all 5383 native dye IDs resolve to one genuine original sprite with a verified local digest',()=>{
+ const urls=parseDynamicColorwayIndex(dynamic,'/');
+ const originalUrls=parseSourceColorwayIndex(sources,'/');
+ assert.equal(Object.keys(urls).length,5021);
+ assert.equal(Object.keys(originalUrls).length,362);
+ assert.deepEqual(Object.keys({...urls,...originalUrls}).sort(),Object.keys(native.records).sort());
+ assert.equal(readdirSync(new URL('../public/dynamic-colorways/',import.meta.url)).filter(x=>x.endsWith('.webp')).length,5021);
+ for(const [id,hash] of Object.entries(dynamic.records)){
+  assert.ok(!Object.hasOwn(originalUrls,id));
+  const data=readFileSync(new URL('../public/dynamic-colorways/'+id+'.webp',import.meta.url));
+  assert.equal(createHash('sha256').update(data).digest('hex'),hash);
+  assert.equal(urls[id],'/dynamic-colorways/'+id+'.webp?v='+hash);
+ }
+ assert.throws(()=>parseDynamicColorwayIndex({...dynamic,records:{...dynamic.records,1700096245:'invalid'}},'/'),/DYNAMIC_COLORWAY_RECORD_INVALID/);
+ assert.throws(()=>parseDynamicColorwayIndex({...dynamic,records:{}},'/'),/DYNAMIC_COLORWAY_INDEX_INVALID/);
 });
