@@ -140,6 +140,16 @@ impl Editor {
  pub fn inventory_unique_data(&self,id:u32)->Option<crate::native::InventoryUniqueData>{
   self.slot.index.inventory.iter().find(|row|row.id==id)?.unique_data
  }
+ /// Display-only v3.0.1 flower rows, keyed by native document identity.
+ pub fn inventory_flowers(&self)->impl Iterator<Item=(u32,u8,i32,i32,i32)>+'_{
+  self.slot.index.inventory.iter().filter_map(move |row|{
+   if self.slot.envelope.version!=Version::V301||row.item_id.is_none()||row.quantity.is_none(){return None}
+   match row.unique_data{
+    Some(crate::native::InventoryUniqueData::Flower{grow_state,base_color,pattern,pattern_color})=>Some((row.id,grow_state,base_color,pattern,pattern_color)),
+    _=>None
+   }
+  })
+ }
  fn inventory_can_edit(&self,r:&crate::native::InventoryRow)->bool{
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
    r.item_id.is_some_and(|id|id>0)&&r.quantity.is_some_and(|v|v>0)&&

@@ -7,6 +7,7 @@
  import {historyCopy,historyDetailCopy} from './history-copy';
  import {inventoryCopy} from './inventory-copy';
  import {browseInventory,inventoryGroupCounts,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
  import {inventoryGroupLabel} from './inventory-native-category-copy';
@@ -49,11 +50,14 @@ import {verifiedFloorplanName} from './floorplan-names';
  const BATCH_SIZE=40;
  const EPOCH=621355968000000000n;
  const ICONS=import.meta.env.BASE_URL+'icons/';
+ const INVENTORY_UI=import.meta.env.BASE_URL+'inventory-ui/';
  let activeTool:Tool=$state('collections');
  let achievementQuery=$state('');
  let inventoryQuery=$state('');
  let inventoryGroup:InventoryGroupKey|null=$state(null);
  let nativeInventoryIndex:NativeInventoryIndex=$state(new Map());
+ let flowerDefinitions:FlowerDisplayDefinitions|null=$state(null);
+ let flowerLabels:FlowerLabels=$state({});
  let inventoryNativeArt:InventoryNativeArt|null=$state(null);
  let inventoryEditableOnly=$state(false);
  let inventoryLimit=$state(BATCH_SIZE);
@@ -184,6 +188,8 @@ import {verifiedFloorplanName} from './floorplan-names';
 
  onMount(()=>{
   void loadNativeInventoryIndex(import.meta.env.BASE_URL).then(index=>nativeInventoryIndex=index).catch(()=>{});
+  void loadFlowerDisplayDefinitions(import.meta.env.BASE_URL).then(data=>flowerDefinitions=data).catch(()=>{});
+  void loadFlowerLabels(import.meta.env.BASE_URL).then(data=>flowerLabels=data).catch(()=>{});
   void loadInventoryNativeArt(import.meta.env.BASE_URL).then(art=>inventoryNativeArt=art).catch(()=>{});
   // Exact game dye palettes, used exclusively for recoloring item image pixels.
   void loadNativeDyePalettes(import.meta.env.BASE_URL)
@@ -1055,7 +1061,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {#each inventoryVisibleGroups as t (t.key)}
       <button type="button" class="inventory-group-option" data-inventory-group={t.key} class:active={activeInventoryGroup===t.key}
        aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;inventoryLimit=BATCH_SIZE}}>
-       {#if t.art}<img src={ICONS+t.art} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>{/if}
+       {#if t.art}<img src={INVENTORY_UI+t.art} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>{/if}
        <span>{inventoryGroupLabel(locale,t.key)}</span><small>{(inventoryGroupTotals.get(t.key)??0).toLocaleString(locale)}</small>
       </button>
      {/each}
@@ -1073,9 +1079,10 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const definition=inventorySourceItems.get(item.itemId)}
      {@const nativeSprite=inventoryNativeArt?.entries.get(item.itemId)}
      {@const sprite=definition&&!inventoryNativeArt?.withheld.has(item.itemId)?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
+     {@const flower=flowerDisplay(item.flower,flowerDefinitions,flowerLabels[locale]??{})}
      <article class="inventory-card" class:inventory-readonly={!item.editable}>
       <div class="inventory-card-heading">
-       <span class="inventory-item-art" aria-hidden="true">
+       <span class="inventory-item-art" class:flower-variant={!!flower} aria-hidden="true">
         {#if nativeSprite}
          <span class="item-sprite" data-inventory-art="native" style:background-image={'url("'+nativeSprite.url+'")'}
           style:background-position={'-'+nativeSprite.x+'px -'+nativeSprite.y+'px'}></span>
@@ -1091,8 +1098,15 @@ import {verifiedFloorplanName} from './floorplan-names';
         {:else}
          <span class="item-art-empty">✧</span>
         {/if}
+        {#if flower}
+         <span class="inventory-flower-decorators">
+          {#if flower.color}<span class="inventory-flower-color" style:background-color={flower.color}></span>{/if}
+          {#if flower.patternUrl}<img class="inventory-flower-pattern" src={INVENTORY_UI+flower.patternUrl} alt=""/>{/if}
+         </span>
+        {/if}
        </span>
        <strong class="inventory-name" title={inventoryName(item.itemId)}>{inventoryName(item.itemId)}</strong>
+       {#if flower?.title}<span class="inventory-flower-variant-name" title={flower.title}>{flower.title}</span>{/if}
       </div>
       {#if item.editable}
        <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>

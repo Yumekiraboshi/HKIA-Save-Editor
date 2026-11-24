@@ -91,6 +91,24 @@ pub extern "C" fn hkia_inventory_snapshot()->u32{
  })
 }
 
+/// Read-only flower display payload: count + rows (u32 document ID, u32 grow
+/// state, i32 base color, i32 pattern, i32 pattern color). No edit authority.
+#[no_mangle]
+pub extern "C" fn hkia_inventory_flowers_snapshot()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let mut b=vec![0;4];let mut count=0u32;
+  for (id,grow,color,pattern,accent) in editor.inventory_flowers(){
+   if count==1_000_000{return 1}
+   count+=1;
+   b.extend(id.to_le_bytes());b.extend(u32::from(grow).to_le_bytes());
+   b.extend(color.to_le_bytes());b.extend(pattern.to_le_bytes());b.extend(accent.to_le_bytes());
+  }
+  b[..4].copy_from_slice(&count.to_le_bytes());a.reply=b;0
+ })
+}
+
 /// Last source-defined child completion + absent parent creation in one
 /// fully validated Rust transaction, including one-step Undo/Redo.
 #[no_mangle]

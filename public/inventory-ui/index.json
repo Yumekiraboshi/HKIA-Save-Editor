@@ -1,0 +1,43 @@
+{
+  "schema": "HKIA.NativeInventoryUiArt.1",
+  "version": "3.0.1",
+  "sourceBundles": {
+    "l_inventoryview": "061a47ae598d0bcc8c067463e19e18b360ba37d0124b94e08c484818e24d280d",
+    "definitions": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0"
+  },
+  "codec": "VP8L, method 6, exact RGBA readback",
+  "files": {
+    "category-clothes.webp": "108f8c8f756b6cc17933335747f7a9871f93a8f13ee470ad45aa8ee654d9cea3",
+    "category-critters.webp": "a8c80c03d7f2774d2f10a2c03116554d4917ed196460153f8134272fbded7a00",
+    "category-flowers.webp": "b1f6fb0cc07a14fcf47e7069726d7d057ba163f1e360ba7e7ac795d18e3b7f59",
+    "category-food.webp": "27a4b64e336a271bd293a0bcf8bea738eed8e51fa5b034785eb80bbb02d365ef",
+    "category-furniture.webp": "e29c24ceec5d6a8168c4c42defd26f5b924a50114cb04fff82f7ef420b4d7d5f",
+    "category-items.webp": "b13344c7e41130cdf28be375aa04c9051a40880ccdd5408a2ae4db183717b0c1",
+    "category-key-items.webp": "84be165c5f7d04791a3563933f571fc9ff998c26b9e683b09d87ab212912cfe6",
+    "category-music.webp": "6972eb3014fd4f30a344e1d0ad06fd739dabdd4f63a87134e8453819c5f1171c",
+    "flowers.json": "a92aea32a46dd00b5a526be38f693ddce1280b7f7e7819cd6d667b9d9c790443",
+    "pattern-1.webp": "95d889a48ddfbdec21cf7d585da85c50d10ebeca7821d2146bf978547700c8ee",
+    "pattern-10.webp": "d3f494b487e4ca2f3a9d1f9b1eae63e6749fb0ea00165153a2d66aad8b68e3e5",
+    "pattern-11.webp": "396abb6f6af9a60d2967ecd7841a54de33bfb606b9c47ae715ef037f70fc597d",
+    "pattern-12.webp": "ecd83476607fa791c316c08089d7037e41a0217015e50923ba910472d2a5cf13",
+    "pattern-13.webp": "e1c91f3fa47b5a1923c86bcb67a44a12e8b0ed9948493146e30d7cf96abb6f72",
+    "pattern-14.webp": "f8f33e1a967f8664a64af47d724332b6b3a605344af770917b14954c8082b499",
+    "pattern-15.webp": "99bbb44c65b56a906b5556d682e8fe7290cca8fb1cf0961a8b36980899d17446",
+    "pattern-16.webp": "52e56fe644930f1b5a5acaeb41c2d82c1faf5ea02894a98c657bf30c9fef99a4",
+    "pattern-2.webp": "6502f916bb00a494d90f3c8a4e23d653e1d09e1a89ff4ea2d9f79b8712abc1b8",
+    "pattern-3.webp": "54fcf742a954c3ec4b5c0867084740f77ba6b7e22d89170bd31a1d80fa3bdd06",
+    "pattern-4.webp": "10b113aff526184c681f34a10e1e4a65df373aee5476f3ea7588be3e8de67909",
+    "pattern-5.webp": "223422baa3adc62afc0072ce93e094e8881eb352e48a173673c26ff08f057f20",
+    "pattern-6.webp": "94303f139f8cf65872c4fd48c99661e60ea8559ffdbc48e83ac09f8f19994ffc",
+    "pattern-7.webp": "3ab8dcd4c017f8c1d17ec0615316fc69d1c834685449ac47faaab61c1d3810d2",
+    "pattern-8.webp": "ecf428e0cb448f9e595342bcae6733a011d7a0abb8085958627367353c2f8a86",
+    "pattern-9.webp": "da36aa9a405a605b774a7055bc9143a3fec71f0072b14d3443daf4bcc8dc8b79"
+  },
+  "unresolvedCategorySprites": {
+    "comics": "-4705491803030431318",
+    "fish": "3849438999172405686",
+    "wands": "-1387383487320539105",
+    "chef-station": "-8201946148192522891",
+    "creation-station": "-832215694926364129"
+  }
+}

@@ -5,7 +5,8 @@ export type AchievementEntry={guid:[number,number,number,number];value:Achieveme
 export type AchievementPatch={guid:[number,number,number,number];before:AchievementValue;after:AchievementValue};
 export type AchievementDraftPatch={guid:[number,number,number,number];before:AchievementValue|null;after:AchievementValue};
 export type CounterEntry={guid:[number,number,number,number];current:number;countedValues:number|null;countedGuids:number};
-export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean};
+import type {InventoryFlower} from './inventory-flower-display';
+export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean;flower?:InventoryFlower};
 export type InventoryPatch={documentId:number;before:number;after:number};
 export type HistoryScope='collections'|'achievements'|'inventory';
 export type HistoryRecord={

@@ -3,9 +3,10 @@
 ## Confirmed scope
 
 - The inventory editor is a comprehensive local save editor, separate from collection registration. The inventory has no fixed UI slot or page capacity.
-- Use the original game inventory category order and mappings; keep unknown records visible without inventing a category or dropping them.
+- Use the original game inventory category order, mappings and native UI sprites, stored at original dimensions as alpha-preserving lossless WebP. Unresolved sprites remain text-only rather than substituting collection artwork. Keep unknown records visible without inventing a category or dropping them.
 - Display a dense, responsive, image-first grid with item name and owned quantity. Use compact controls, native item artwork, search and automatic incremental scrolling; no repeated technical labels or unused slot placeholders.
 - Allow users to edit ordinary inventory quantities and the native unique data of flowers, customizable furniture and customizable clothing. Unique-data editing is a confirmed product requirement, even while individual operations are not yet supported.
+- For flowers, display the original color swatch and pattern/effect sprite above the item image, with localized color and pattern names sourced from the game. Render the actual variant when its native dynamic-color composition is verified; do not represent an unmodified species sprite or approximation as an exact variant.
 - Preserve distinct native records with different unique data; do not merge them merely because they have the same Item ID. Show the appropriate variant appearance when verified source data permits. Expose individual customization controls on demand rather than enlarging every inventory tile.
 
 ## Safety and implementation constraints
@@ -29,3 +30,7 @@ The v3.0.1 native inventory index recognizes Document ID, Item ID, Unique ID, qu
 Tags 1 and 2 are deprecated furniture/flower types using Hash128, not interchangeable with V2. PaletteUniqueData is a native color payload and appears in the shared union used by outfit models; this does not prove that every customizable clothing Item ID uses that payload. Field positions and storage types are known, but the valid option values, per-item applicability, semantic roles of the two flower colors, and native identity/reference behavior are not established by the schema alone. Do not expose arbitrary numeric index or color edits as valid game choices. Preserve opaque and deprecated payloads pending evidence.
 
 Implementation reference: `core/src/schema.rs`, `core/src/native.rs`, `core/src/collection.rs`. Reuse the current native index and session, not the historical JS research reader.
+
+### Native inventory UI assets (v3.0.1)
+
+`public/inventory-ui/index.json` records original source references and exact decoded-pixel verification of eight category sprites and sixteen flower pattern/effect sprites. Five category sprite references remain unresolved at the pixel level. The flower color and pattern definitions and all 16 locale label maps derive from native assets. The new Rust/WASM flower snapshot is keyed by document identity and read-only. Dynamic flower image tint/mask composition, native name formatting, and unique-data mutation are not yet verified.
