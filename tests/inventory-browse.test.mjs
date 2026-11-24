@@ -1,57 +1,98 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {gunzipSync} from 'node:zlib';
+import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 
-const {outputFiles}=await build({
- entryPoints:[fileURLToPath(new URL('../src/inventory-browse.ts',import.meta.url))],
- bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'
-});
-const {browseInventory,inventoryGroupCounts,sourceCollectionGroup,OTHER_INVENTORY_GROUP}=
- await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const buildSource=async file=>{
+ const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL(file,import.meta.url))],
+  bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
+ return import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+};
+const {decodeNativeInventoryIndex}=await buildSource('../src/inventory-native-data.ts');
+const {nativeInventoryGroups,inventoryGroupCounts,browseInventory,defaultInventoryGroup,NATIVE_INVENTORY_TABS}=await buildSource('../src/inventory-browse.ts');
 const catalog=JSON.parse(readFileSync(new URL('../public/catalog.json',import.meta.url)));
-const groups=new Set(catalog.groups.map(g=>g[0]));
-const items=new Map(catalog.items.map(i=>[i[0],i]));
+const items=new Map(catalog.items.map(x=>[x[0],x]));
+const packed=JSON.parse(readFileSync(new URL('../public/inventory-native-categories.json',import.meta.url)));
+const raw=gunzipSync(Buffer.from(packed.data,'base64'));
+const names={'315822':'ミント色のストライプのパジャマシャツ','517031':'青の妖精の服','567052':'サクラ・チーズケーキ'};
+const index=decodeNativeInventoryIndex(packed,raw);
+const unknownId=0;
+assert.equal(index.has(unknownId),false);
 const rows=[
  {documentId:10,itemId:315822,quantity:4,editable:true},
  {documentId:11,itemId:517031,quantity:1,editable:false},
  {documentId:12,itemId:567052,quantity:8,editable:true},
- {documentId:13,itemId:0,quantity:1,editable:false},
+ {documentId:13,itemId:unknownId,quantity:1,editable:false},
  {documentId:14,itemId:315822,quantity:9,editable:true}
 ];
-const names={'315822':'ミント色のストライプのパジャマシャツ','517031':'青の妖精の服',
- '567052':'サクラ・チーズケーキ'};
-const filter=(term='',group=null,editable=false,locale='ja')=>
- browseInventory(rows,term,group,editable,names,items,groups,locale);
+const filter=(q='',group='clothes',editable=false)=>browseInventory(rows,q,group,editable,names,items,index,'ja');
 
-test('original collection groups are only assigned through verified item source IDs',()=>{
- assert.equal(sourceCollectionGroup(315822,items,groups),'collections_group_clothing');
- assert.equal(sourceCollectionGroup(567052,items,groups),'collections_group_food');
- assert.equal(sourceCollectionGroup(0,items,groups),OTHER_INVENTORY_GROUP);
- const totals=inventoryGroupCounts(rows,items,groups);
- assert.equal(totals.get('collections_group_clothing'),2,'counts native document stacks');
- assert.equal(totals.get('collections_group_events'),1);
- assert.equal(totals.get(OTHER_INVENTORY_GROUP),1,'never hide unknown native items');
+test('original v3.0.1 item definition source covers every native inventory category and UI override',()=>{
+ assert.equal(packed.schema,'HKIA.NativeInventoryCategoryIndex.1');
+ assert.equal(packed.version,'3.0.1');
+ assert.equal(packed.source.sha256,'ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0');
+ assert.equal(createHash('sha256').update(raw).digest('hex'),packed.rawSha256);
+ assert.equal(createHash('sha256').update(readFileSync(new URL('../public/inventory-native-categories.json',import.meta.url))).digest('hex'),'30116af6becce0b587d1613886a0191090792d2493e0a8367695b7096ea749bf');
+ assert.equal(index.size,12163);
+ assert.deepEqual(NATIVE_INVENTORY_TABS.map(t=>t.bit),[134217728,0,65536,4096,50331648,32,8,16384,256,64,67108864,2097152,8388608]);
+ assert.deepEqual(nativeInventoryGroups(203331651,index),['food','chef-station']);
+ assert.equal([...index.values()].filter(x=>x.hasUiOverride).length,1238);
+ assert.deepEqual(index.get(315822),{rawFlags:1048832,hasUiOverride:false,uiOverrideFlags:0});
+ assert.deepEqual(index.get(567052),{rawFlags:269557760,hasUiOverride:false,uiOverrideFlags:0});
+ assert.equal(nativeInventoryGroups(315822,index)[0],'clothes');
+ assert.equal(nativeInventoryGroups(567052,index)[0],'food');
+ assert.equal(nativeInventoryGroups(216433,index)[0],'furniture');
+ const overridden=[...index.entries()].find(([,r])=>r.hasUiOverride&&r.uiOverrideFlags===134217728);
+ assert.ok(overridden,'source contains explicit KeyItem UI overrides');
+ assert.equal(nativeInventoryGroups(overridden[0],index)[0],'key-items');
 });
 
-test('category, localized native item names, fallback names, ID and editable-only compose safely',()=>{
- assert.deepEqual(filter('ミント','collections_group_clothing').map(r=>r.documentId),[10,14]);
- assert.equal(filter('blue','collections_group_events').length,1,'English catalog fallback is searchable');
- assert.equal(filter('315822').length,2,'expert ID search remains available but invisible in tiles');
- assert.deepEqual(filter('','collections_group_events',true),[],'read-only row is not silently editable');
- assert.deepEqual(filter('','__inventory_other__').map(r=>r.documentId),[13]);
- assert.equal(filter('','collections_group_food',true).length,1);
- assert.equal(rows[0].quantity,4,'filters are presentation-only');
+test('native categories never confuse Collection GUID categories with the InventoryItemDefinitionAsset flags',()=>{
+ assert.ok(!NATIVE_INVENTORY_TABS.some(x=>x.key==='collection_group_clothing'));
+ assert.equal(nativeInventoryGroups(unknownId,index)[0],'other');
+ const counts=inventoryGroupCounts(rows,index);
+ assert.equal(defaultInventoryGroup(counts),'food');
+ assert.equal(defaultInventoryGroup(new Map([['clothes',1]])),'clothes');
+ assert.equal(defaultInventoryGroup(new Map([['other',1]])),'other');
+ assert.equal(defaultInventoryGroup(new Map()),'key-items');
+ assert.equal(counts.get('clothes'),3);
+ assert.equal(counts.get('food'),1);
+ assert.equal(counts.get('other'),1);
+ assert.deepEqual(filter('ミント','clothes').map(x=>x.documentId),[10,14]);
+ assert.equal(filter('Blue','clothes').length,1,'English fallback remains searchable in Japanese');
+ assert.equal(filter('315822').length,2);
+ assert.deepEqual(filter('','clothes',true).map(x=>x.documentId),[10,14]);
+ assert.deepEqual(filter('','other').map(x=>x.documentId),[13]);
+ assert.equal(rows[0].quantity,4,'read-only classification never edits a save');
 });
 
-test('UI reuses game source category art and existing native editor path',()=>{
+test('tampered native index, unknown palette, truncated entries and unverified version are rejected',()=>{
+ assert.throws(()=>decodeNativeInventoryIndex({...packed,version:'3.0.0'},raw));
+ assert.throws(()=>decodeNativeInventoryIndex({...packed,source:{...packed.source,sha256:'0'.repeat(64)}},raw));
+ assert.throws(()=>decodeNativeInventoryIndex({...packed,rawSha256:'0'.repeat(64)},raw));
+ assert.throws(()=>decodeNativeInventoryIndex(packed,raw.subarray(0,raw.length-1)));
+ assert.throws(()=>decodeNativeInventoryIndex({...packed,palette:[]},raw));
+});
+
+test('Inventory UI selects native source definitions, retains original game art packs and Rust CAS editing',()=>{
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
+ assert.match(app,/loadNativeInventoryIndex\(import\.meta\.env\.BASE_URL\)/);
  assert.match(app,/inventoryGroupTotals=\$derived\(inventoryGroupCounts\(/);
  assert.match(app,/inventoryRows=\$derived\(browseInventory\(/);
- assert.match(app,/src=\{ICONS\+g\[5\]\}/);
+ assert.match(app,/inventoryGroupLabel\(locale,t\.key\)/);
+ assert.match(app,/inventoryQuery,activeInventoryGroup,/);
+ assert.doesNotMatch(app,/\{iCopy\.all\}/);
  assert.match(app,/inventoryIconPacks\[definition\[3\]\]/);
  assert.match(app,/changeInventoryQuantity\(row.documentId,row.quantity,next\)/);
  assert.match(app,/class:inventory-readonly=\{!item.editable\}/);
  assert.match(app,/bind:this=\{inventoryLoadMoreSentinel\}/);
+ assert.doesNotMatch(app,/inventoryGroupTotals\(\s*\(snapshot.*inventorySourceItems/);
+});
+
+test('original native flower and furniture images are pinned',()=>{
+ assert.equal(createHash('sha256').update(readFileSync(new URL('../public/icons/inventory-category-flowers.png',import.meta.url))).digest('hex'),'b4134139e5ba02972e4320e3ece8b598408b6decd3a88216d4d49d8ef990400d');
+ assert.equal(createHash('sha256').update(readFileSync(new URL('../public/icons/inventory-category-furniture.png',import.meta.url))).digest('hex'),'f428d50dea3962fae65d6b3ae787aecf4b9ffccca45f86ac1089446e6db3e7ad');
 });
