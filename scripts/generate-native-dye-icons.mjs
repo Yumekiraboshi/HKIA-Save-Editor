@@ -22,6 +22,7 @@ import {createHash} from 'node:crypto';
 import {build} from 'esbuild';
 import {chromium} from 'playwright-core';
 import {execFileSync} from 'node:child_process';
+import {generateSourceFits} from './fit-native-colorway-sprites.mjs';
 
 const ROOT=resolve(fileURLToPath(new URL('..',import.meta.url)));
 const ID=/^[1-9][0-9]{0,9}$/;
@@ -166,6 +167,7 @@ async function main(){
  const browser=await chromium.launch({headless:true,executablePath:installedChrome(),
   args:['--no-sandbox','--disable-dev-shm-usage']});
  const records={};
+ let sourceFits;
  let notColorable=0;
  try{
   const page=await browser.newPage();
@@ -235,6 +237,7 @@ async function main(){
     channels:result.channels
    };
   }
+  sourceFits=await generateSourceFits({root:ROOT,out,page,selected,palette,itemKeys,records,allGroups});
  }finally{await browser.close()}
  const unmatched=Object.keys(palette.records).length-selected.size-ambiguous.size;
  const manifest={
@@ -243,7 +246,7 @@ async function main(){
   coverage:{sourceGroups:groups.length,uniqueCandidates:selected.size,
    nativeMatches,ambiguous:ambiguous.size,unmatched,
    generated:Object.keys(records).length,uncolorable:notColorable},
-  records
+  records,sourceFits
  };
  writeFileSync(join(out,'index.json'),JSON.stringify(manifest));
  console.log('Native game UiIcon colorways generated: '+Object.keys(records).length+
