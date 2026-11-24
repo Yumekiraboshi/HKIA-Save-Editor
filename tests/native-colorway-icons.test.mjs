@@ -105,3 +105,20 @@ test('calibrated source-sprite previews outrank ordinary approximation but never
   assert.equal(parseNativeColorwayIcons({...native,sourceFits:bad},'/')[id],fallback);
  }
 });
+
+test('v2 calibration rejects a preview beyond its original palette distance bound',()=>{
+ const id='1286846063',family='fixture-dress',record={file:id+'.png',sha256:'c'.repeat(64),family,
+  sourceType:'original-named-sprite-fit',fidelity:'approximate',nearestPaletteDistance:.2};
+ const f={anchorIds:[1,2,3],anchorSha256:Array(3).fill('d'.repeat(64)),sharedUiIconPathId:'-3327772517825296899',
+  group:sample.group,sheet:sample.sheet,cell:sample.cell,meanMae:5.8,worstMae:7.2,alphaIdentical:true,
+  method:'palette-multiply-v2',calibration:{method:'palette-multiply-v2',gamma:1.45,penalty:0,chromaPrior:0,channels:[0,1,2,3,4]},
+  maxPaletteDistance:.25,excludedIds:[]};
+ const fits={schema:'HKIA.SourceSpriteFit.1',fidelity:'approximate',families:{[family]:f},records:{[id]:record}};
+ const native=wrap({[id]:sample});
+ assert.match(parseNativeColorwayIcons({...native,sourceFits:fits},'/')[id],/source-fit/);
+ for(const bad of [
+  {...fits,records:{[id]:{...record,nearestPaletteDistance:.3}}},
+  {...fits,families:{[family]:{...f,excludedIds:[Number(id)]}}},
+  {...fits,families:{[family]:{...f,calibration:{...f.calibration,channels:[0,0]}}}}
+ ])assert.equal(parseNativeColorwayIcons({...native,sourceFits:bad},'/')[id],parseNativeColorwayIcons(native,'/')[id]);
+});
