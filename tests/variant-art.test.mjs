@@ -115,14 +115,14 @@ test('Collection and Inventory select source-registered exact images before appr
  }
 });
 
-test('all 86 named original colorway sprites match native Item ID, source key and immutable WebP bytes',()=>{
+test('all 362 named original colorway sprites match native Item ID, source key and immutable WebP bytes',()=>{
  const urls=parseSourceColorwayIndex(sources,'/');
  assert.equal(sources.definitionsSha256,native.definitions_sha256);
  assert.equal(sources.runtimeUiIconReferenceMatches,false);
- assert.equal(Object.keys(urls).length,86);
+ assert.equal(Object.keys(urls).length,362);
  const files=readdirSync(new URL('../public/source-colorways/',import.meta.url)).filter(x=>x!=='index.json');
- assert.equal(files.length,86);
- let atlas=0,direct=0;
+ assert.equal(files.length,362);
+ let atlas=0,direct=0,atlasObjects=0;
  for(const [id,r] of Object.entries(sources.records)){
   assert.ok(native.records[id]);
   assert.equal(itemKeys.get(id),r.itemKey);
@@ -138,9 +138,11 @@ test('all 86 named original colorway sprites match native Item ID, source key an
   assert.equal((packed&0x3fff)+1,96);
   assert.equal(((packed>>>14)&0x3fff)+1,96);
   if(r.sourceKind==='atlas'){atlas++;assert.equal(r.sourceSpriteMeshApplied,true);}
-  else{direct++;assert.equal(r.textureName,r.sourceSpriteName);}
+  if(r.sourceSpriteBundle==='atlas_global'){atlasObjects++;assert.match(r.pack,/^atlas-colorways-\d{2}\.zip$/);}
+  if(r.sourceKind==='direct'){direct++;assert.equal(r.textureName,r.sourceSpriteName);}
  }
- assert.equal(direct,39);assert.equal(atlas,47);
+ assert.equal(direct,39);assert.equal(atlas,323);assert.equal(atlasObjects,276);
+ assert.equal(sources.atlasOriginalPacks.reduce((sum,p)=>sum+p.count,0),276);
  assert.equal(sources.nativeUiIconAlphaVerification.alphaPixelsMatchedPerControl,9216);
 });
 
@@ -149,7 +151,7 @@ test('source sprite loader refuses wrong item source names, paths, and runtime-f
  for(const changed of [
   {file:'../379863484.webp'},{file:'1.webp'},{sourceSpriteName:'icon_unrelated'},
   {sourceSpritePathId:original.sharedUiIconPathId},{textureSha256:'invalid'},
-  {sourceKind:'unverified'}
+  {sourceKind:'unverified'},{sourceSpriteBundle:'definitions'},{pack:'../other.zip'}
  ]){
   assert.throws(()=>parseSourceColorwayIndex({...sources,records:{[id]:{...original,...changed}}},'/'),
    /SOURCE_COLORWAY_RECORD_INVALID/);
@@ -167,4 +169,12 @@ test('original source art survives an absent exact-render index and verified ren
    sources:wrap({'379863484':{...example,file:'379863484.png'}})});
   assert.equal((await loadVariantArtIndex('/'))['379863484'],'/variant-art/379863484.png');
  }finally{globalThis.fetch=prev;}
+});
+
+test('the newly extracted mint striped pajama source sprites are original colored art',()=>{
+ for(const id of ['315822','421906853']){
+  const r=sources.records[id];assert.equal(r.sourceSpriteBundle,'atlas_global');
+  assert.ok(r.itemKey.startsWith('item_c_dyeable_stripedpajama'));
+  assert.equal(parseSourceColorwayIndex(sources,'/')[id],'/source-colorways/'+id+'.webp');
+ }
 });

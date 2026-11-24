@@ -52,6 +52,7 @@ type SourceColorwayRecord={
  definitionPathId:string;sourceSpritePathId:string;sharedUiIconPathId:string;
  texturePathId:string;textureName:string;textureSha256:string;
  sourceKind:'direct'|'atlas';sourceSpriteMeshApplied?:boolean;
+ sourceSpriteBundle?:'atlas_global';pack?:string;
 };
 type SourceColorwayIndex={
  schema:'HKIA.NamedNativeColorwaySprite.1';version:'3.0.1';
@@ -86,6 +87,8 @@ export function parseSourceColorwayIndex(value:unknown,base:string):Record<strin
    ![r.definitionPathId,r.sourceSpritePathId,r.sharedUiIconPathId,r.texturePathId]
     .every(x=>typeof x==='string'&&I64.test(x))||
    r.sourceSpritePathId===r.sharedUiIconPathId||
+   (r.sourceSpriteBundle!==undefined&&(r.sourceSpriteBundle!=='atlas_global'||r.sourceKind!=='atlas'||typeof r.pack!=='string'||!/^atlas-colorways-\d{2}\.zip$/.test(r.pack)))||
+   (r.pack!==undefined&&r.sourceSpriteBundle!=='atlas_global')||
    (r.sourceKind==='direct'?r.textureName!==r.sourceSpriteName:
     r.sourceKind==='atlas'?r.sourceSpriteMeshApplied!==true||
      !/^sactx-[0-9]+-2048x2048-DXT5\|BC3-GlobalUIAtlas-[0-9a-f]+$/.test(r.textureName):true))
