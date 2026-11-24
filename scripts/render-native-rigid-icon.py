@@ -73,7 +73,7 @@ def texture(obj,res,pid,digest):
     header=b"DDS "+struct.pack("<7I",124,0x81007,h,w,size,0,1)+bytes(44)+struct.pack("<II4s5I",32,4,b"DXT5",0,0,0,0,0)+struct.pack("<5I",0x1000,0,0,0,0)
     return Image.open(io.BytesIO(header+raw)).convert("RGBA")
 
-def raster(pos,uv,idx,yaw,pitch,N):
+def raster(pos,uv,idx,yaw,pitch,N,mirror=False,roll=0,scale=.85):
     """Orthographic triangle z-buffer; camera is an experimental parameter."""
     import numpy as np
     yaw,pitch=np.deg2rad([yaw,pitch])
@@ -81,9 +81,12 @@ def raster(pos,uv,idx,yaw,pitch,N):
     forward=np.array([np.sin(yaw)*np.cos(pitch),np.sin(pitch),np.cos(yaw)*np.cos(pitch)])
     up=np.cross(forward,right)
     v=pos@np.stack([right,-up,forward]).T
+    if mirror: v[:,0]*=-1
+    angle=np.deg2rad(roll)
+    v[:,:2]=v[:,:2]@np.array([[np.cos(angle),-np.sin(angle)],[np.sin(angle),np.cos(angle)]])
     lo=v[:,:2].min(0);hi=v[:,:2].max(0)
-    xy=(v[:,:2]-(lo+hi)/2)*(N*.85/max(hi-lo))+N/2
-    z=np.full((N,N),-np.inf);uvimg=np.zeros((N,N,2))
+    xy=(v[:,:2]-(lo+hi)/2)*(N*scale/max(hi-lo))+N/2
+    z=np.full((N,N),-np.inf);uvimg=np.zeros((N,N,uv.shape[1]))
     for tri in idx:
         p=xy[tri];d=v[tri,2];a,b,c=p
         x0=max(0,int(np.floor(p[:,0].min())));x1=min(N,int(np.ceil(p[:,0].max())))
@@ -146,7 +149,7 @@ def compare(im,target):
     colors=[iou(v==k,target==k) for k in (1,2,3)]
     return .5*silhouette+.5*float(np.mean(colors)),silhouette,colors
 
-def run(bundle,out):
+def run(bundle,out,with_lighting=False):
     import numpy as np
     from PIL import Image
     raw=bundle.read_bytes();require(source.sha(raw)==source.SOURCE,"source version")
@@ -208,6 +211,15 @@ def run(bundle,out):
             "camera":{"yaw":yaw,"pitch":pitch,"mirror":mirror,"roll":roll},
             "score":score,"silhouetteIoU":sil,"colorRegionIoUs":colors,
             "nativeLightingVerified":False,"nativeIconVerified":False}
+    if with_lighting:
+        from native_icon_lighting import fit_lighting
+        normal=np.ndarray((count,3),dtype="<f2",buffer=vertices,offset=12,strides=(36,2)).astype(float)
+        tangent=np.ndarray((count,4),dtype="<f2",buffer=vertices,offset=20,strides=(36,2)).astype(float)
+        require(np.isfinite(normal).all() and np.isfinite(tangent).all() and np.all(np.abs(tangent[:,3])==1),"invalid tangent frame")
+        bump_id="8975871802653956239"
+        require(material["textures"]["_BumpMap"]=={"fileId":0,"pathId":bump_id,"scale":[1.,1.],"offset":[0.,0.]},"normal map binding")
+        bump=texture(objects[bump_id],res,bump_id,"a145f36b6acf4af4dca5cfe4697bd4aadc3004d64f9d8021834529074ee480fd")
+        report["lightingDiagnostic"]=fit_lighting(pos,uv,normal,tangent,idx,images["_BaseMap"],images["_PatternMap"],bump,p,ref,raster,normalize,labels,out)
     (out/"report.json").write_text(json.dumps(report,indent=2)+"\n")
     print(json.dumps(report,indent=2))
 
@@ -226,7 +238,8 @@ if __name__=="__main__":
     parser.add_argument("definitions",type=Path,nargs="?")
     parser.add_argument("--out",type=Path)
     parser.add_argument("--self-test",action="store_true")
+    parser.add_argument("--fit-lighting",action="store_true",help="optional approximate fit; requires SciPy")
     args=parser.parse_args()
     if args.self_test:self_test()
-    elif args.definitions and args.out:run(args.definitions,args.out)
+    elif args.definitions and args.out:run(args.definitions,args.out,args.fit_lighting)
     else:parser.error("local definitions and --out required")
