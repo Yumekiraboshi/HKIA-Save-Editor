@@ -233,8 +233,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(typeof document!=='undefined'){document.documentElement.lang=locale;document.documentElement.dir=isRtl(locale)?'rtl':'ltr';document.documentElement.dataset.theme=actualTheme;}
  });
  /* v3.0.1 Name.selectedString provides an exact original Babel lookup
-    for all 10,262 source-mapped collection item IDs in all 16 locales.
-    Fall back to previous names if the source-names asset cannot load. */
+    for 10,262 collection IDs in all 16 locales plus 1,901 additional inventory
+    IDs in 15 verified locales. No guessed title for an unknown inventory ID. */
  $effect(()=>{
   const language=locale;
   const epoch=++sourceNameEpoch;
