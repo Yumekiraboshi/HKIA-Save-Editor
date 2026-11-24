@@ -1,0 +1,61 @@
+{
+  "schema": "HKIA.NativeCharacterShaderEvidence.1",
+  "version": "3.0.1",
+  "sourceSha256": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0",
+  "cab": "CAB-46b8f8fe122147493b3113f7c1c8cd0f",
+  "shaderPathId": "477622052401609204",
+  "shaderObjectSha256": "a1078dfbdb6da8c3e2ce40106135fd59c8a0c1749e885dd98c45a4aa094125f3",
+  "shaderName": "Sunblink/Lynx/CustomLitCharacter",
+  "properties": [
+    "_BaseMap",
+    "_BumpMap",
+    "_ComboMap",
+    "_PatternMap",
+    "_PaletteColor1",
+    "_PaletteColor2",
+    "_PaletteColor3",
+    "_PaletteColor4",
+    "_PaletteColor5"
+  ],
+  "segments": [
+    {
+      "offset": 0,
+      "compressedBytes": 512,
+      "bytes": 796,
+      "sha256": "e682052f6daa8cfdb0816866502357482712b5781b89d820e5a6895b446e8def",
+      "pixelPrograms": 0,
+      "vertexPrograms": 0
+    },
+    {
+      "offset": 512,
+      "compressedBytes": 18897,
+      "bytes": 523516,
+      "sha256": "15ed0e156dc5c1edf39ebbd6bd7ded978cd03897b667aeb42a64eb61ef559448",
+      "pixelPrograms": 25,
+      "vertexPrograms": 9
+    },
+    {
+      "offset": 19409,
+      "compressedBytes": 9981,
+      "bytes": 122948,
+      "sha256": "0344f6ea6428f28da4b7e96d2feb8e76359abf24e19cef56503943139ea98e22",
+      "pixelPrograms": 7,
+      "vertexPrograms": 3
+    }
+  ],
+  "summary": {
+    "materials": 50,
+    "patternMaterials": 24,
+    "textureReferences": 174,
+    "pixelPrograms": 32,
+    "vertexPrograms": 12
+  },
+  "archerSkinMaterial": {
+    "pathId": "6824069125264728142",
+    "name": "Lit",
+    "shaderPathId": "-4055751637662985151",
+    "baseMapPathId": "0",
+    "isDyeShader": false
+  },
+  "nativeIconRenderVerified": false
+}

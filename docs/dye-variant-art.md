@@ -263,3 +263,9 @@ The source-accurate Unity renderer is still blocked until the remaining
 Material-hosting CAB files are identified, materials and shaders loaded,
 palette-to-surface behavior validated and a real transparent PNG produced.
 No external Wiki images or simulated 3D outputs have been registered.
+
+## Verified native character Shader and definitions dependency (2026-11-24)
+
+Reacquired the original Steam 3.0.1 definitions and atlas bundles and matched both existing SHA-256 fingerprints. The definitions CAB is the previously unresolved Archer skin Material dependency. Its exact Material pathID 6824069125264728142 is ordinary Lit with no bound BaseMap, NOT a dye material. The other Archer renderer CAB remains unresolved. The definitions bundle also contains the exact CustomLitCharacter Shader (pathID 477622052401609204), its four map properties and five palette colors. Fifty local Materials reference this Shader, including 24 with PatternMap, and all 174 non-null map PPtrs resolve to local Texture2D objects. Its three compressed program segments contain 12 vertex and 32 pixel DXBC containers. No shader execution, channel semantics or native icon pose/render is verified yet.
+
+Reproduce the source metadata locally: `python3 scripts/audit-native-character-shader.py /path/to/definitions`. The tool emits metadata and hashes only, never shader program bytes. The pinned SHA prevents applying this layout to unverified versions. See `data/unityfs-audit/definitions-character-shader.v3.0.1.json` for observed source evidence. Existing original icon images remain unchanged.

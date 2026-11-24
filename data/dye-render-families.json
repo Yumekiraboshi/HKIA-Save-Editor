@@ -22,7 +22,13 @@
         "cell": 103
       },
       "rendererStatus": "blocked-unresolved-materials",
-      "verifiedMaterialDependencies": [],
+      "verifiedMaterialDependencies": [
+        {
+          "bundle": "definitions",
+          "sha256": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0",
+          "cab": "CAB-46b8f8fe122147493b3113f7c1c8cd0f"
+        }
+      ],
       "verifiedShaderPaletteMask": false
     },
     {
