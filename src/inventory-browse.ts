@@ -24,15 +24,23 @@ export const NATIVE_INVENTORY_TABS=[
  {key:'wands',bit:8388608,art:null}
 ] as const;
 export type InventoryGroupKey=(typeof NATIVE_INVENTORY_TABS)[number]['key']|'other';
-/** Actual original UiIcon candidates for tabs without a colored Collection category image.
- * Select only a source-defined category match with available original artwork. */
-export const INVENTORY_CATEGORY_REPRESENTATIVES:Partial<Record<InventoryGroupKey,readonly number[]>>={
- 'key-items':[71243528,532698833,542561916,1841194698,2011033874],
- items:[1185152302,1938461745,767455829],
- wands:[786771409,1277599998]
+/** Navigation artwork is a visual representative, not a classification rule.
+ * IDs point to original game item art with motifs close to TabItemView.CategoryIcons.
+ * A backpack may be a wearable item while representing the general Items tab. */
+export const INVENTORY_CATEGORY_REPRESENTATIVES:Partial<Record<InventoryGroupKey,number>>={
+ 'key-items':767455829, // Toolbox
+ items:433573896, // Mint Hiking Backpack
+ food:1328220329, // Milk Bread
+ 'chef-station':633402456, // Omelet (pan)
+ flowers:274491259, // Tulias
+ 'creation-station':1434684945, // Friendship Bouquet
+ critters:71754032, // Phantom Flutterby
+ furniture:286009791, // Nordic Armchair
+ wands:1277599998 // Lala's Magic Wand
 };
-export function inventoryCategoryRepresentative(key:InventoryGroupKey,index:NativeInventoryIndex,available:ReadonlyMap<number,unknown>):number|undefined{
- return INVENTORY_CATEGORY_REPRESENTATIVES[key]?.find(id=>available.has(id)&&nativeInventoryGroups(id,index).includes(key));
+export function inventoryCategoryRepresentative(key:InventoryGroupKey,index:NativeInventoryIndex):number|undefined{
+ const id=INVENTORY_CATEGORY_REPRESENTATIVES[key];
+ return id!==undefined&&index.has(id)?id:undefined;
 }
 export const OTHER_INVENTORY_GROUP:InventoryGroupKey='other';
 export function nativeInventoryGroups(itemId:number,index:NativeInventoryIndex):InventoryGroupKey[]{
