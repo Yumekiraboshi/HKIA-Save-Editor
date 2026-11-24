@@ -6,7 +6,9 @@
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
  import {inventoryCopy} from './inventory-copy';
- import {browseInventory,inventoryGroupCounts,OTHER_INVENTORY_GROUP} from './inventory-browse';
+ import {browseInventory,inventoryGroupCounts,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
+ import {inventoryGroupLabel} from './inventory-native-category-copy';
  import {loadSourceItemNames,type SourceItemNames} from './source-names';
  import {decodeHistoryDetails,formatHistoryChange} from './history-details';
  import {compactAchievementCopy} from './achievement-compact-ui';
@@ -49,7 +51,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  let activeTool:Tool=$state('collections');
  let achievementQuery=$state('');
  let inventoryQuery=$state('');
- let inventoryGroup:string|null=$state(null);
+ let inventoryGroup:InventoryGroupKey|null=$state(null);
+ let nativeInventoryIndex:NativeInventoryIndex=$state(new Map());
  let inventoryEditableOnly=$state(false);
  let inventoryLimit=$state(BATCH_SIZE);
  let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
@@ -160,12 +163,12 @@ import {verifiedFloorplanName} from './floorplan-names';
   achievementGroupSelection==='__unmapped'?unmappedAchievementRows:groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows,achievementFacts):
   sourceOrderedAchievementRows);
  const inventoryGroupTotals=$derived(inventoryGroupCounts(
-  (snapshot as SaveSnapshot|null)?.inventory??[],inventorySourceItems,inventorySourceGroups));
- const inventoryVisibleGroups=$derived(((catalog as Catalog|null)?.groups??[])
-  .filter(g=>(inventoryGroupTotals.get(g[0])??0)>0));
+  (snapshot as SaveSnapshot|null)?.inventory??[],nativeInventoryIndex));
+ const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
+ const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
  const inventoryRows=$derived(browseInventory(
-  (snapshot as SaveSnapshot|null)?.inventory??[],inventoryQuery,inventoryGroup,
-  inventoryEditableOnly,sourceNames,inventorySourceItems,inventorySourceGroups,locale));
+  (snapshot as SaveSnapshot|null)?.inventory??[],inventoryQuery,activeInventoryGroup,
+  inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale));
  const achievementRows=$derived(searchAchievementRows(achievementQuery,sourceOrderedAchievementRows,
   groupScopedAchievementRows,achievementName,guid=>achievementIndex.get(guid)?.key??''));
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
@@ -178,6 +181,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const dateChanged=$derived(dateDialogTick!==null&&dateValue!==toDateTimeValue(dateDialogTick));
 
  onMount(()=>{
+  void loadNativeInventoryIndex(import.meta.env.BASE_URL).then(index=>nativeInventoryIndex=index).catch(()=>{});
   // Exact game dye palettes, used exclusively for recoloring item image pixels.
   void loadNativeDyePalettes(import.meta.env.BASE_URL)
    .then(palettes=>nativeDyePalettes=palettes).catch(()=>{});
@@ -1042,22 +1046,18 @@ import {verifiedFloorplanName} from './floorplan-names';
     <span class="inventory-total">{iCopy.count}: {inventoryRows.length.toLocaleString(locale)}</span>
    </div>
    {#if inventoryVisibleGroups.length>0||(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)>0}
-    <div class="inventory-group-heading">{iCopy.collectionGroups}</div>
-    <nav class="inventory-group-strip" aria-label={iCopy.collectionGroups}>
-     <button type="button" class="inventory-group-option" class:active={inventoryGroup===null}
-      aria-pressed={inventoryGroup===null} onclick={()=>{inventoryGroup=null;inventoryLimit=BATCH_SIZE}}>
-      <span>{iCopy.all}</span><small>{snapshot?.inventory.length.toLocaleString(locale)}</small>
-     </button>
-     {#each inventoryVisibleGroups as g (g[0])}
-      <button type="button" class="inventory-group-option" class:active={inventoryGroup===g[0]}
-       aria-pressed={inventoryGroup===g[0]} onclick={()=>{inventoryGroup=g[0];inventoryLimit=BATCH_SIZE}}>
-       <img src={ICONS+g[5]} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>
-       <span>{locale==='ja'?g[1]:g[2]}</span><small>{inventoryGroupTotals.get(g[0])?.toLocaleString(locale)}</small>
+    
+    <nav class="inventory-group-strip" aria-label={iCopy.tab}>
+     {#each inventoryVisibleGroups as t (t.key)}
+      <button type="button" class="inventory-group-option" class:active={activeInventoryGroup===t.key}
+       aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;inventoryLimit=BATCH_SIZE}}>
+       {#if t.art}<img src={ICONS+t.art} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>{/if}
+       <span>{inventoryGroupLabel(locale,t.key)}</span><small>{(inventoryGroupTotals.get(t.key)??0).toLocaleString(locale)}</small>
       </button>
      {/each}
      {#if (inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)>0}
-      <button type="button" class="inventory-group-option" class:active={inventoryGroup===OTHER_INVENTORY_GROUP}
-       aria-pressed={inventoryGroup===OTHER_INVENTORY_GROUP}
+      <button type="button" class="inventory-group-option" class:active={activeInventoryGroup===OTHER_INVENTORY_GROUP}
+       aria-pressed={activeInventoryGroup===OTHER_INVENTORY_GROUP}
        onclick={()=>{inventoryGroup=OTHER_INVENTORY_GROUP;inventoryLimit=BATCH_SIZE}}>
        <span>{iCopy.other}</span><small>{inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)?.toLocaleString(locale)}</small>
       </button>
