@@ -33,7 +33,7 @@ export type ItemIconSources = Readonly<{
 const ID=/^[1-9][0-9]{0,9}$/;
 const own=(source:object,id:string)=>Object.prototype.hasOwnProperty.call(source,id);
 /** Original named asset, not a claim about the runtime game UI render. */
-export const isSourceColorwayUrl=(url:string)=>/^\/(?:[^/]+\/)*source-colorways\/[1-9][0-9]{0,9}\.webp$/.test(url);
+export const isSourceColorwayUrl=(url:string)=>/^\/(?:[^/]+\/)*dynamic-colorways\/[1-9][0-9]{0,9}\.webp\?v=[a-f0-9]{64}$/.test(url)||/^\/(?:[^/]+\/)*source-colorways\/[1-9][0-9]{0,9}\.webp$/.test(url);
 
 export const isSourceFitUrl=(url:string)=>/^\/(?:[^/]+\/)*native-colorways\/source-fit\/[1-9][0-9]{0,9}\.png\?v=[a-f0-9]{64}$/.test(url);
 

@@ -4,15 +4,15 @@
  import {renderDyeSprite} from './dye-recolor';
  import {displayedDyeIconFidelity,isSourceColorwayUrl,isSourceFitUrl} from './item-icon-art';
 
- let {sprite,palette,sourceKey='',exactArtUrl,previewUrl}:{
+ let {sprite,palette,sourceKey='',exactArtUrl,originalArtUrl,previewUrl}:{
   sprite:SpriteCell;palette:NativeDyePalette;sourceKey?:string;
-  exactArtUrl?:string;previewUrl?:string;
+  exactArtUrl?:string;originalArtUrl?:string;previewUrl?:string;
  }=$props();
  let displayedUrl=$state<string|null>(null);
  let imageSource=$state<'original'|'approximation'|'native-icon'|'game-render'|'game-source-sprite'|'source-fit'>('original');
 
  $effect(()=>{
-  const cell=sprite,colors=palette,key=sourceKey,exact=exactArtUrl,preview=previewUrl;
+  const cell=sprite,colors=palette,key=sourceKey,exact=exactArtUrl,original=originalArtUrl,preview=previewUrl;
   let canceled=false;
   let createdUrl:string|null=null;
   displayedUrl=null;
@@ -39,18 +39,24 @@
     else imageSource='native-icon';
    }).catch(renderApproximation);
   };
-  if(exact){
-   // A source-validated item icon may outrank an approximate 2D recolor.
-   // An alternate 3D pose is not a replacement for the game's UiIcon.
+  const showExact=(url:string,onFailure:()=>void)=>{
+   if(canceled)return;
    const picture=new Image();
-   picture.src=exact;
+   picture.src=url;
    void picture.decode().then(()=>{
     if(canceled)return;
-    displayedUrl=exact;
-    if(isSourceColorwayUrl(exact))imageSource='game-source-sprite';
+    displayedUrl=url;
+    if(isSourceColorwayUrl(url))imageSource='game-source-sprite';
     else imageSource='game-render';
-   }).catch(showNativeIcon);
-  }else showNativeIcon();
+   }).catch(()=>{if(!canceled)onFailure();});
+  };
+  // A missing verified override must not discard an available original.
+  const showOriginal=()=>{
+   if(original&&original!==exact)showExact(original,showNativeIcon);
+   else showNativeIcon();
+  };
+  if(exact)showExact(exact,showOriginal);
+  else showOriginal();
 
   return ()=>{
    canceled=true;

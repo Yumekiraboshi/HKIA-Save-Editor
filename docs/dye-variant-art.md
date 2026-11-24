@@ -295,3 +295,8 @@ Reproduce locally with Python, NumPy and Pillow: `python3 scripts/render-native-
 ### Lighting diagnostic refinement
 
 The source WitchHat tangent frames and normal map are now used for a fitted diffuse/rim/specular approximation. A 27-candidate local camera refinement improved silhouette IoU from 0.8381 to 0.8871. On 459 held-out, color-region-matched pixels of the same source icon, normalized RGB MAE fell from 0.120185 to 0.086262 (28.2%). This is an intra-icon diagnostic, not cross-variant or cross-family validation. The source normal map is hash-pinned; the normal unpack hypothesis and illumination coefficients have not been recovered from the actual lighting shader. ComboMap has been identified but is not applied. Do not publish this render as a native icon. Reproduce with the rigid-icon tool's optional `--fit-lighting` argument (requires SciPy as well as NumPy and Pillow).
+
+
+## Superseding source-art discovery (2026-11-25)
+
+The original dynamic inventory icon bundles and existing original sprite atlas cover all 5,383 dye Item IDs. Use those completed original sprites, not the earlier 3D camera/lighting fits or neutral image recoloring, for ordinary item icons. The earlier sections are diagnostic history and do not establish runtime rendering fidelity. The source extraction and image display pipeline is documented in [native-uiicon-colorways.md](native-uiicon-colorways.md). Comparison may validate results, never supply fitted generation parameters.

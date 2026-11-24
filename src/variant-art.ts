@@ -102,18 +102,47 @@ export async function loadSourceColorwayIndex(base:string):Promise<Record<string
  if(!response.ok)throw Error('SOURCE_COLORWAY_INDEX_FETCH');
  return parseSourceColorwayIndex(await response.json(),base);
 }
-export async function loadVariantArtIndex(base:string):Promise<Record<string,string>>{
- const [original,verified]=await Promise.allSettled([
+/** Compact, build-verified index of actual named dynamic inventory sprites.
+ * These are original game images; the live runtime lookup is not established.
+ */
+export function parseDynamicColorwayIndex(value:unknown,base:string):Record<string,string>{
+ const raw=value as {schema?:string;version?:string;definitionsSha256?:string;records?:Record<string,string>};
+ if(!raw||raw.schema!=='HKIA.DynamicColorwayDisplay.1'||raw.version!=='3.0.1'||
+  raw.definitionsSha256!==DEFINITIONS_SHA||!raw.records||typeof raw.records!=='object'||
+  Array.isArray(raw.records)||Object.keys(raw.records).length!==5021)
+  throw Error('DYNAMIC_COLORWAY_INDEX_INVALID');
+ if(!base.startsWith('/')||!base.endsWith('/')||base.includes('..')||base.includes('\\')||base.includes('//'))
+  throw Error('VARIANT_ART_BASE_INVALID');
+ const result:Record<string,string>={};
+ for(const [id,hash] of Object.entries(raw.records)){
+  if(!ITEM_ID.test(id)||Number(id)>0x7fffffff||typeof hash!=='string'||!SHA.test(hash))
+   throw Error('DYNAMIC_COLORWAY_RECORD_INVALID');
+  result[id]=base+'dynamic-colorways/'+id+'.webp?v='+hash;
+ }
+ return result;
+}
+export async function loadDynamicColorwayIndex(base:string):Promise<Record<string,string>>{
+ const response=await fetch(base+'dynamic-colorways/index.json',{cache:'force-cache'});
+ if(!response.ok)throw Error('DYNAMIC_COLORWAY_INDEX_FETCH');
+ return parseDynamicColorwayIndex(await response.json(),base);
+}
+export async function loadVariantArtSources(base:string):Promise<{primary:Record<string,string>;originals:Record<string,string>}>{
+ const [original,dynamic,verified]=await Promise.allSettled([
   loadSourceColorwayIndex(base),
+  loadDynamicColorwayIndex(base),
   (async()=>{
    const response=await fetch(base+'variant-art/index.json',{cache:'force-cache'});
    if(!response.ok)throw Error('VARIANT_ART_INDEX_FETCH');
    return parseVariantArtIndex(await response.json(),base);
   })()
  ]);
- if(original.status==='rejected'&&verified.status==='rejected')throw verified.reason;
+ if(original.status==='rejected'&&dynamic.status==='rejected'&&verified.status==='rejected')throw verified.reason;
  // A verified runtime render outranks a named source sprite. A failed
  // optional index must not hide valid artwork from the other index.
- return {...(original.status==='fulfilled'?original.value:{}),
-  ...(verified.status==='fulfilled'?verified.value:{})};
+ const originals={...(dynamic.status==='fulfilled'?dynamic.value:{}),
+  ...(original.status==='fulfilled'?original.value:{})};
+ return {originals,primary:{...originals,...(verified.status==='fulfilled'?verified.value:{})}};
+}
+export async function loadVariantArtIndex(base:string):Promise<Record<string,string>>{
+ return (await loadVariantArtSources(base)).primary;
 }

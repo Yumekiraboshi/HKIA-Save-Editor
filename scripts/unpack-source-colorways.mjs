@@ -77,5 +77,83 @@ export function unpackSourceColorways(root){
  console.log('HKIA_ORIGINAL_COLORWAY_PACKS '+files.size+' materialized; '+Object.keys(index.records).length+' original sprites');
  return files.size;
 }
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))
- unpackSourceColorways(fileURLToPath(new URL('..',import.meta.url)));
+/** Build-only validation and extraction of the actual per-item dynamic sprites.
+ * Keep the full provenance index private to the build and ship only digests.
+ */
+export function unpackDynamicColorways(root){
+ const dir=join(root,'data/dynamic-colorway-packs'),out=join(root,'public/dynamic-colorways');
+ const read=p=>JSON.parse(readFileSync(p,'utf8'));
+ const index=read(join(dir,'index.json')),native=read(join(root,'public/native-dye-palettes.json'));
+ const originals=read(join(root,'public/source-colorways/index.json'));
+ const catalog=read(join(root,'public/catalog.json'));
+ const itemKeys=new Map(catalog.items.map(r=>[String(r[0]),r[1]]));
+ const sourceBundles=Array.from({length:11},(_,i)=>'dynamicinventory_icons_'+String(i+1).padStart(2,'0'));
+ const shards=Array.from({length:11},(_,i)=>'index-'+String(i+1).padStart(2,'0')+'.json');
+ if(index.schema!=='HKIA.DynamicOriginalColorways.1'||index.version!=='3.0.1'||
+    index.definitionsSha256!==native.definitions_sha256||index.definitionsSha256!==originals.definitionsSha256||
+    index.runtimeUiIconReferenceMatches!==false||index.coveredDyeItemCount!==5383||
+    index.originalDynamicCount!==5344||index.existingOriginalCount!==362||
+    JSON.stringify(index.recordFiles)!==JSON.stringify(shards)||
+    !Array.isArray(index.sourceBundles)||index.sourceBundles.length!==11||
+    !Array.isArray(index.packs)||index.packs.length!==35)throw Error('DYNAMIC_SOURCE_INDEX');
+ const sources=new Map(),packs=new Map(),expected=new Map(),records=new Map(),fileBytes=new Map();
+ for(const [i,b] of index.sourceBundles.entries()){
+  if(b.name!==sourceBundles[i]||!HASH.test(b.sha256)||!/^CAB-[0-9a-f]{32}$/.test(b.cab)||
+   !Number.isInteger(b.count)||b.count<1||b.count>500)throw Error('DYNAMIC_SOURCE_BUNDLE');
+  sources.set(b.name,b);
+ }
+ if(index.sourceBundles.reduce((sum,b)=>sum+b.count,0)!==5345)throw Error('DYNAMIC_SOURCE_COUNT');
+ for(const [i,p] of index.packs.entries()){
+  if(p.file!=='dynamic-colorways-'+String(i).padStart(2,'0')+'.zip'||!HASH.test(p.sha256)||
+     !Number.isInteger(p.count)||p.count<1||p.count>144)throw Error('DYNAMIC_SOURCE_PACK');
+  packs.set(p.file,p);expected.set(p.file,new Map());
+ }
+ const i64=/^-?[1-9][0-9]{0,18}$/;
+ const spriteIds=new Set(),textureIds=new Set(),definitionIds=new Set();
+ for(const [i,shard] of shards.entries()){
+  const data=read(join(dir,shard));
+  if(!data||typeof data!=='object'||Array.isArray(data)||Object.keys(data).length>500)throw Error('DYNAMIC_SOURCE_SHARD');
+  for(const [id,r] of Object.entries(data)){
+   const b=sources.get(r.sourceSpriteBundle);
+   if(!Object.hasOwn(native.records,id)||Object.hasOwn(originals.records,id)||records.has(id)||
+      !ID.test(r.file)||r.file!==id+'.webp'||Number(id)>0x7fffffff||!HASH.test(r.sha256)||
+      !HASH.test(r.textureSha256)||r.sourceKind!=='dynamic'||r.sourceSpriteBundle!==sourceBundles[i]||
+      !b||r.sourceBundleSha256!==b.sha256||!expected.has(r.pack)||
+      r.itemKey!==itemKeys.get(id)||!/^item_c_dyeable_[a-z0-9_]+$/.test(r.itemKey)||
+      r.sourceSpriteName!=='icon_'+r.itemKey||r.textureName!==r.sourceSpriteName||
+      ![r.definitionPathId,r.sourceSpritePathId,r.sharedUiIconPathId,r.texturePathId].every(x=>typeof x==='string'&&i64.test(x))||
+      r.sourceSpritePathId===r.sharedUiIconPathId)throw Error('DYNAMIC_SOURCE_RECORD '+id);
+   const sprite=b.name+':'+r.sourceSpritePathId,texture=b.name+':'+r.texturePathId;
+   if(spriteIds.has(sprite)||textureIds.has(texture)||definitionIds.has(r.definitionPathId))throw Error('DYNAMIC_SOURCE_DUPLICATE');
+   spriteIds.add(sprite);textureIds.add(texture);definitionIds.add(r.definitionPathId);
+   records.set(id,r.sha256);expected.get(r.pack).set(r.file,r.sha256);
+  }
+ }
+ if(records.size!==5021||Object.keys(originals.records).length!==362||
+    Object.keys(native.records).length!==5383||
+    Object.keys(native.records).some(id=>!records.has(id)&&!Object.hasOwn(originals.records,id)))
+    throw Error('DYNAMIC_SOURCE_COVERAGE');
+ const listed=readdirSync(dir).filter(x=>x.endsWith('.zip'));
+ if(listed.length!==packs.size||listed.some(x=>!packs.has(x)))throw Error('DYNAMIC_SOURCE_ORPHAN');
+ for(const [name,p] of packs){
+  const bytes=readFileSync(join(dir,name)),entries=expected.get(name);
+  if(sha(bytes)!==p.sha256||entries.size!==p.count)throw Error('DYNAMIC_SOURCE_PACK_HASH');
+  for(const [file,data] of readStoredIconPack(bytes,entries)){
+   if(fileBytes.has(file))throw Error('DYNAMIC_SOURCE_DUPLICATE_FILE');fileBytes.set(file,data);
+  }
+ }
+ mkdirSync(out,{recursive:true});
+ for(const name of readdirSync(out).filter(x=>x.endsWith('.webp'))){
+  if(!fileBytes.has(name)||sha(readFileSync(join(out,name)))!==records.get(name.slice(0,-5)))
+   throw Error('DYNAMIC_SOURCE_UNTRACKED_OR_CHANGED');
+ }
+ for(const [file,data] of fileBytes)if(!existsSync(join(out,file)))writeFileSync(join(out,file),data,{flag:'wx'});
+ writeFileSync(join(out,'index.json'),JSON.stringify({schema:'HKIA.DynamicColorwayDisplay.1',version:'3.0.1',
+  definitionsSha256:index.definitionsSha256,records:Object.fromEntries(records)}));
+ console.log('HKIA_DYNAMIC_ORIGINAL_COLORWAYS '+fileBytes.size+' materialized; 5383/5383 combined source-original icons');
+ return fileBytes.size;
+}
+if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+ const root=fileURLToPath(new URL('..',import.meta.url));
+ unpackSourceColorways(root);unpackDynamicColorways(root);
+}
