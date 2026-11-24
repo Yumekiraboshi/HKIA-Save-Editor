@@ -597,13 +597,19 @@ async function run(){
     .filter({hasText:new RegExp('^'+name+'$')}).first().click();
    // The original named cyan wireframe hat outranks its old approximation.
    // Other cases still exercise the existing generated-colorway path.
-   const source=id===528999373?'game-source-sprite':'native-icon';
+   const source=id===528999373?'game-source-sprite':
+    [17843192,17354545,1147294046].includes(id)?'source-fit':'native-icon';
    const sprite=page.locator('#collection-item-'+id+' .item-sprite[data-dye-source="'+source+'"]');
    await sprite.waitFor({timeout:30_000});
    if(id===528999373){
     assert.equal(await sprite.getAttribute('data-icon-fidelity'),'game-original');
     assert.ok((await sprite.evaluate(el=>getComputedStyle(el).backgroundImage))
      .includes('/source-colorways/528999373.webp'));
+   }
+   if(source==='source-fit'){
+    assert.equal(await sprite.getAttribute('data-icon-fidelity'),'approximate');
+    assert.ok((await sprite.evaluate(el=>getComputedStyle(el).backgroundImage))
+     .includes('/native-colorways/source-fit/'+id+'.png?v='));
    }
    return sampledSprite(sprite);
   }
