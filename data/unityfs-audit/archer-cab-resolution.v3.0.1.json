@@ -19,11 +19,29 @@
         "AssetBundle": 1
       },
       "kind": "script-dependency-not-a-renderer-material"
+    },
+    {
+      "cab": "CAB-46b8f8fe122147493b3113f7c1c8cd0f",
+      "bundle": "definitions",
+      "sha256": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0",
+      "bytes": 54295149,
+      "contains": {
+        "Material": 59,
+        "Shader": 8,
+        "Texture2D": 779
+      },
+      "kind": "renderer-material-confirmed-non-dyeable",
+      "material": {
+        "pathId": "6824069125264728142",
+        "name": "Lit",
+        "shaderPathId": "-4055751637662985151",
+        "baseMapPathId": "0",
+        "isDyeShader": false
+      }
     }
   ],
   "unresolvedMaterialCABs": [
-    "CAB-6d01000bf1aa6b026bad1ed5b70c73c7",
-    "CAB-46b8f8fe122147493b3113f7c1c8cd0f"
+    "CAB-6d01000bf1aa6b026bad1ed5b70c73c7"
   ],
-  "note": "Material CAB targets established from the original Archer Renderers' material PPtrs. The physical UnityFS filenames for these two CABs have not yet been found; do not claim exact rendering or publish images."
+  "note": "The Archer skin renderer points to a verified ordinary Lit material with no bound BaseMap, not the native dye shader. The separate MeshRenderer Material CAB remains unresolved. No exact icon render is verified."
 }
