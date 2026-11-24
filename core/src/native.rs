@@ -4,6 +4,8 @@ use std::{collections::{HashMap,HashSet},ops::Range};
 const MAX_NODES:usize=2_000_000;
 const MAX_DEPTH:usize=80;
 const DOC:&str="Sunblink.UserData.IDocument";
+const INVENTORY_UNIQUE:&str="Sunblink.Game.InventoryUniqueData";
+const INVENTORY_UNIQUE_CAPTURE:&str="inventory-unique-capture";
 const ROOT:&str="MessagePackCollectionProvider.DbRoot";
 const TRAIT:&str="Sunblink.UserData.TraitModel";
 const SHOP:&str="ShopManagerTraitModel.ShopItemKey";
@@ -29,7 +31,16 @@ pub struct CelebrationSpan {pub id:u32,pub bytes:Range<usize>,pub guid_count:usi
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub struct DeprecatedEntry {pub guid:[u32;4],pub ticks:i64,pub value:Range<usize>,pub pair:Range<usize>}
 #[derive(Debug,Clone,PartialEq,Eq)]
-pub struct InventoryRow {pub id:u32,pub item_id:Option<i32>,pub unique_id:Option<i32>,pub quantity:Option<i32>,pub fields:[Option<Range<usize>>;4],pub unique_is_nil:Option<bool>}
+pub struct InventoryRow {pub id:u32,pub item_id:Option<i32>,pub unique_id:Option<i32>,pub quantity:Option<i32>,pub fields:[Option<Range<usize>>;4],pub unique_is_nil:Option<bool>,pub unique_data:Option<InventoryUniqueData>}
+/// Typed, read-only original inventory payload. Float bits preserve exact values,
+/// including signed zero. Opaque includes historical/other/partial union records.
+#[derive(Debug,Clone,Copy,PartialEq,Eq)]
+pub enum InventoryUniqueData {
+ Flower {grow_state:u8,base_color:i32,pattern:i32,pattern_color:i32},
+ Furniture {materials:[i32;3]},
+ Palette {rgba_bits:[[u32;4];3]},
+ Opaque {tag:i32},
+}
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub struct CollectionVersion {pub id:u32,pub number:i32,pub span:Range<usize>}
 /// One fully schema-walked, source-relative HomeModel *candidate*.
@@ -129,7 +140,7 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 enum Key<'a>{Int(i128),Str(&'a str),Guid([u32;4]),Shop([u32;4],[u32;4],i128)}
 #[derive(Clone,Debug)]
-enum Value<'a>{DocumentId(i128),Other,Nil,Bool(bool),Float(f32),Time(i64,u32),Int(i128),Str(&'a str),Guid([u32;4]),Count(usize),Fields(Vec<(Value<'a>,Range<usize>)>),Key(Key<'a>),CabinApartmentPairs(Vec<CabinApartmentSourcePair>)}
+enum Value<'a>{DocumentId(i128),Other,Nil,Bool(bool),Float(f32),Color([u32;4]),InventoryUnique(InventoryUniqueData),Time(i64,u32),Int(i128),Str(&'a str),Guid([u32;4]),Count(usize),Fields(Vec<(Value<'a>,Range<usize>)>),Key(Key<'a>),CabinApartmentPairs(Vec<CabinApartmentSourcePair>)}
 impl<'a> Value<'a>{
  fn int(&self)->Result<i128,Error>{if let Self::Int(v)=self{Ok(*v)}else{Err(Error::Schema)}}
  fn guid(&self)->Result<[u32;4],Error>{if let Self::Guid(v)=self{Ok(*v)}else{Err(Error::Schema)}}
@@ -148,7 +159,10 @@ impl<'a> Walk<'a>{
    "float"=>match self.c.token()?{Token::F32(v) if v.is_finite()=>Ok(Value::Float(v)),_=>Err(Error::Schema)},
    "bool"=>match self.c.token()?{Token::Bool(v)=>Ok(Value::Bool(v)),_=>Err(Error::Schema)},
    "DateTime"=>{if !matches!(self.c.peek()?,0xd6|0xd7|0xc7){return Err(Error::Schema)}let (sec,nano)=self.c.timestamp()?;if nano%100!=0||!(-8640000000000..=8640000000000).contains(&sec){return Err(Error::Schema)}Ok(Value::Time(sec,nano))},
-   "Vector3"|"Quaternion"|"Color"=>{let n=if s=="Vector3"{3}else{4};if self.c.array()?!=n{return Err(Error::Schema)}for _ in 0..n{self.budget(depth+1)?;self.primitive("float",depth+1)?;}Ok(Value::Other)},
+   "Vector3"|"Quaternion"|"Color"=>{let n=if s=="Vector3"{3}else{4};if self.c.array()?!=n{return Err(Error::Schema)}
+    let mut bits=[0u32;4];
+    for component in bits.iter_mut().take(n){self.budget(depth+1)?;let Value::Float(v)=self.primitive("float",depth+1)? else{return Err(Error::Schema)};*component=v.to_bits();}
+    Ok(if s=="Color"{Value::Color(bits)}else{Value::Other})},
    _=>Err(Error::Schema)
   }
  }
@@ -222,7 +236,27 @@ impl<'a> Walk<'a>{
     match shape{
      Shape::Enum(_)=>unreachable!(),
      Shape::Union(branches)=>{let union_start=self.c.pos;if self.c.array()?!=2{return Err(Error::Schema)}self.budget(depth+1)?;let tag=self.c.int(i32::MIN as i128,i32::MAX as i128)? as i32;let branch=branches.iter().find(|(t,_)|*t==tag).ok_or(Error::Schema)?.1;
-      let value=self.read(branch,depth+1,Some((name,tag)),false)?;
+      let capture_unique=name==INVENTORY_UNIQUE&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,0));
+      let value=self.read(branch,depth+1,Some((if capture_unique{INVENTORY_UNIQUE_CAPTURE}else{name},tag)),false)?;
+      if capture_unique {
+       let data=match (&value,tag){
+        (Value::Fields(a),7) if a.len()==4=>InventoryUniqueData::Flower{
+         grow_state:u8::try_from(a[0].0.int()?).map_err(|_|Error::Schema)?,
+         base_color:i32::try_from(a[1].0.int()?).map_err(|_|Error::Schema)?,
+         pattern:i32::try_from(a[2].0.int()?).map_err(|_|Error::Schema)?,
+         pattern_color:i32::try_from(a[3].0.int()?).map_err(|_|Error::Schema)?},
+        (Value::Fields(a),8) if a.len()==3=>InventoryUniqueData::Furniture{materials:[
+         i32::try_from(a[0].0.int()?).map_err(|_|Error::Schema)?,
+         i32::try_from(a[1].0.int()?).map_err(|_|Error::Schema)?,
+         i32::try_from(a[2].0.int()?).map_err(|_|Error::Schema)?]},
+        (Value::Fields(a),6) if a.len()==3=>{
+         let mut rgba_bits=[[0u32;4];3];
+         for (dest,(v,_)) in rgba_bits.iter_mut().zip(a){let Value::Color(bits)=v else{return Err(Error::Schema)};*dest=*bits;}
+         InventoryUniqueData::Palette{rgba_bits}},
+        _=>InventoryUniqueData::Opaque{tag},
+       };
+       return Ok(Value::InventoryUnique(data));
+      }
       if name==DOC{let (id,a)=match value{
        Value::DocumentId(id)=>(u32::try_from(id).map_err(|_|Error::Schema)?,None),
        Value::Fields(a)=>{let id=u32::try_from(a.first().ok_or(Error::Schema)?.0.int()?).map_err(|_|Error::Schema)?;(id,Some(a))},
@@ -230,7 +264,7 @@ impl<'a> Walk<'a>{
       };
        // V33 requires a two-field Celebration document with a non-null Hash128 list.
        // Record the full union token range, not a reconstructed value or a deduplicated list.
-       if tag==1{let a=a.as_ref().ok_or(Error::Schema)?;let int=|k:usize|->Result<Option<i32>,Error>{a.get(k).map(|v|i32::try_from(v.0.int()?).map_err(|_|Error::Schema)).transpose()};let fields=std::array::from_fn(|i|a.get(i+1).map(|v|v.1.clone()));let unique_is_nil=a.get(4).map(|v|matches!(&v.0,Value::Nil));self.index.inventory.push(InventoryRow{id,item_id:int(1)?,unique_id:int(2)?,quantity:int(3)?,fields,unique_is_nil});}
+       if tag==1{let a=a.as_ref().ok_or(Error::Schema)?;let int=|k:usize|->Result<Option<i32>,Error>{a.get(k).map(|v|i32::try_from(v.0.int()?).map_err(|_|Error::Schema)).transpose()};let fields=std::array::from_fn(|i|a.get(i+1).map(|v|v.1.clone()));let unique_is_nil=a.get(4).map(|v|matches!(&v.0,Value::Nil));let unique_data=a.get(4).and_then(|v|match &v.0{Value::InventoryUnique(data)=>Some(*data),_=>None});self.index.inventory.push(InventoryRow{id,item_id:int(1)?,unique_id:int(2)?,quantity:int(3)?,fields,unique_is_nil,unique_data});}
        if tag==8{let a=a.as_ref().ok_or(Error::Schema)?;if a.len()!=2{return Err(Error::Schema)}let guid_count=match &a[1].0{Value::Count(n)=>*n,_=>return Err(Error::Schema)};self.index.celebrations.push(CelebrationSpan{id,bytes:union_start..self.c.pos,guid_count});}
        // The schema already checked tag membership. Store each u32 only once in its tag bucket.
        if !self.ids.entry(tag).or_default().insert(id){return Err(Error::Duplicate)}self.index.documents+=1;}
@@ -241,9 +275,9 @@ impl<'a> Walk<'a>{
       // copied UI representation or a caller-supplied digest.
       let source_start=self.c.pos;
       let n=self.c.array()?;if n>specs.len(){return Err(Error::Schema)}
-      let short=name.rsplit('.').next().unwrap_or(name);let is_doc=matches!(ctx,Some((DOC,_)));let capture_all=matches!(short,"AchievementData"|"GameCounterData"|"GameCollectionsTraitModel"|"CollectionVersion"|"AchievementModel"|"GameCounterModel")||name==ROOT||name==SHOP||name==CELEBRATION||(short=="InventoryItem"&&ctx==Some((DOC,1)))||name==HOME||name==CABIN||name==VISITOR_MANAGER;
+      let short=name.rsplit('.').next().unwrap_or(name);let is_doc=matches!(ctx,Some((DOC,_)));let capture_all=matches!(short,"AchievementData"|"GameCounterData"|"GameCollectionsTraitModel"|"CollectionVersion"|"AchievementModel"|"GameCounterModel")||name==ROOT||name==SHOP||name==CELEBRATION||(short=="InventoryItem"&&ctx==Some((DOC,1)))||name==HOME||name==CABIN||name==VISITOR_MANAGER||matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,6|7|8)));
       let mut fields=Vec::new();let mut document_id=None;
-      for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
+      for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
        if capture_all{fields.push((value,at..self.c.pos));}
        else if is_doc&&i==0{document_id=Some(value);}
       }

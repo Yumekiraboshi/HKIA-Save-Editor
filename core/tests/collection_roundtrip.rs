@@ -1108,3 +1108,33 @@ fn v301_source_achievement_goals_read_only_exact_and_version_gated(){
  let old=Editor::open(slot("3.0.0")).unwrap();
  assert!(old.source_achievement_progress_goals().is_empty(),"do not infer unverified thresholds on v3.0.0");
 }
+
+#[test]
+fn inventory_unique_data_is_typed_per_document_and_preserved(){
+ use hkia_save_core::native::InventoryUniqueData as U;
+ let mut payload=synthetic_payload("3.0.1");
+ payload[3]=0x9b;
+ let flower=arr(vec![vec![7],arr(vec![vec![6],vec![1],vec![10],vec![16]])]);
+ let flower2=arr(vec![vec![7],arr(vec![vec![7],vec![9],vec![0],vec![0]])]);
+ let furniture=arr(vec![vec![8],arr(vec![u(18),u(877),u(0)])]);
+ let color=arr(vec![f(0.25),f(-0.0),f(0.75),f(1.0)]);
+ let palette=arr(vec![vec![6],arr(vec![color.clone(),color.clone(),color])]);
+ let partial=arr(vec![vec![7],arr(vec![vec![6],vec![1]])]);
+ for (doc_id,uid,unique) in [(4,1,flower),(5,2,flower2),(6,3,furniture),(7,4,palette),(8,5,partial)]{
+  payload.extend(doc(1,arr(vec![u(doc_id),u(315822),u(uid),u(1),unique])));
+ }
+ payload.extend(doc(1,arr(vec![u(9),u(567052),u(0),u(6),vec![0xc0]])));
+ let mut e=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
+ assert_eq!(e.inventory_unique_data(4),Some(U::Flower{grow_state:6,base_color:1,pattern:10,pattern_color:16}));
+ assert_eq!(e.inventory_unique_data(5),Some(U::Flower{grow_state:7,base_color:9,pattern:0,pattern_color:0}));
+ assert_eq!(e.inventory_unique_data(6),Some(U::Furniture{materials:[18,877,0]}));
+ assert_eq!(e.inventory_unique_data(7),Some(U::Palette{rgba_bits:[[0.25f32.to_bits(),(-0.0f32).to_bits(),0.75f32.to_bits(),1.0f32.to_bits()];3]}));
+ assert_eq!(e.inventory_unique_data(8),Some(U::Opaque{tag:7}));
+ assert_eq!(e.inventory_unique_data(9),None);
+ assert_eq!(e.inventory_unique_data(999),None);
+ for id in 4..=8 {assert!(e.change_inventory_quantity(id,1,2).is_err());}
+ e.change_inventory_quantity(9,6,20).unwrap();
+ let reopened=Editor::open(e.export().unwrap()).unwrap();
+ for id in 4..=9{assert_eq!(reopened.inventory_unique_data(id),e.inventory_unique_data(id));}
+ assert_eq!(reopened.inventory().last().unwrap().quantity,20);
+}
