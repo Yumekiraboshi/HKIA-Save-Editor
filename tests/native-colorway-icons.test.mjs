@@ -79,3 +79,29 @@ test('all native colorway UI views use original game-icon assets and keep per-it
  assert.doesNotMatch(generator,/wiki\.gg|ImageGen|UnityEditor|UnityEngine/);
  assert.match(generator,/fidelity:'approximate'/);
 });
+
+
+test('calibrated source-sprite previews outrank ordinary approximation but never claim exactness',()=>{
+ const id='1286846063',family='fixture-dress';
+ const record={file:id+'.png',sha256:'c'.repeat(64),family,
+  sourceType:'original-named-sprite-fit',fidelity:'approximate'};
+ const fits={schema:'HKIA.SourceSpriteFit.1',fidelity:'approximate',
+  families:{[family]:{anchorIds:[1,2,3],anchorSha256:Array(3).fill('d'.repeat(64)),
+   sharedUiIconPathId:'-3327772517825296899',group:sample.group,sheet:sample.sheet,cell:sample.cell,
+   meanMae:4.8,worstMae:6.1,alphaIdentical:true,method:'bounded-two-channel-neutral-lighting-v1'}},
+  records:{[id]:record}};
+ const native=wrap({[id]:sample});
+ const expected='/native-colorways/source-fit/'+id+'.png?v='+record.sha256;
+ assert.equal(parseNativeColorwayIcons({...native,sourceFits:fits},'/')[id],expected);
+ const fallback=parseNativeColorwayIcons(native,'/')[id];
+ for(const bad of [
+  {...fits,fidelity:'verified-reconstruction'},
+  {...fits,records:{[id]:{...record,fidelity:'verified-reconstruction'}}},
+  {...fits,records:{[id]:{...record,file:'../'+id+'.png'}}},
+  {...fits,families:{[family]:{...fits.families[family],meanMae:12}}},
+  {...fits,families:{[family]:{...fits.families[family],cell:0}}},
+  {...fits,families:{[family]:{...fits.families[family],anchorIds:[1,2,Number(id)]}}}
+ ]){
+  assert.equal(parseNativeColorwayIcons({...native,sourceFits:bad},'/')[id],fallback);
+ }
+});
