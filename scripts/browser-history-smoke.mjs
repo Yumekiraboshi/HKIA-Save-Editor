@@ -130,7 +130,22 @@ async function inventoryEditExportSmoke(){
   await quantity.fill('25');
   await card.locator('button[type="submit"]').click();
   await page.locator('.inventory-card input[name="quantity"]').first().waitFor();
-  await page.waitForFunction(()=>document.querySelector('.inventory-card input[name="quantity"]')?.value==='25');
+  // The filled DOM input already contains 25 before the native edit. Wait for
+  // the completed CAS transaction and actual committed IndexedDB draft, not
+  // just the input's value, before exercising recovery.
+  await page.locator('.inventory-card button[type="submit"]:not([disabled])').first().waitFor();
+  await page.locator('.state-dot.changed').waitFor();
+  const storedInventory=await page.evaluate(()=>new Promise((resolve,reject)=>{
+   const open=indexedDB.open('hkia-editor-local-session',1);
+   open.onerror=()=>reject(open.error);
+   open.onsuccess=()=>{
+    const db=open.result;
+    const request=db.transaction('unsaved-changes','readonly').objectStore('unsaved-changes').get('current');
+    request.onsuccess=()=>{db.close();resolve(request.result?.inventoryPatches??[])};
+    request.onerror=()=>{db.close();reject(request.error)};
+   };
+  }));
+  assert.deepEqual(storedInventory,[{documentId:4,before:6,after:25}],'native quantity edit must be committed to IndexedDB before refresh');
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');
