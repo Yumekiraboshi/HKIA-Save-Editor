@@ -1,6 +1,7 @@
 import type {InventoryEntry} from './worker-client';
 import type {CollectionItem} from './subcategories';
 import type {NativeInventoryIndex} from './inventory-native-data';
+import {FLOWER_CREATION_SOURCE_IDS} from './inventory-native-crafting';
 
 /** Original InventoryViewModel.RawCategories array: v3.0.1 metadata 0xC1E150.
  * Category mask browsing preserves records and multiple matching tabs; specialized
@@ -29,7 +30,14 @@ export function nativeInventoryGroups(itemId:number,index:NativeInventoryIndex):
  if(!source)return [OTHER_INVENTORY_GROUP];
  const flags=source.hasUiOverride?source.uiOverrideFlags:source.rawFlags;
  if(flags<0)return [OTHER_INVENTORY_GROUP];
- const matches:InventoryGroupKey[]=NATIVE_INVENTORY_TABS.filter(t=>t.bit!==0&&(flags&t.bit)!==0).map(t=>t.key);
+ // CreationStationFilterViewModel.BaseFilter reads CraftingSources (FlowerCreationStation=24)
+ // and excludes effective Outfit. ChefStationFilterViewModel.BaseFilter reads raw definition category.
+ // Do not reproduce game runtime visibility gating here: every saved row must remain manageable.
+ const matches:InventoryGroupKey[]=NATIVE_INVENTORY_TABS.filter(t=>{
+  if(t.key==='creation-station')return (flags&256)===0&&FLOWER_CREATION_SOURCE_IDS.has(itemId);
+  if(t.key==='chef-station')return (source.rawFlags&t.bit)!==0;
+  return t.bit!==0&&(flags&t.bit)!==0;
+ }).map(t=>t.key);
  return matches.length?matches:['items'];
 }
 export function inventoryGroupCounts(rows:readonly InventoryEntry[],index:NativeInventoryIndex):Map<InventoryGroupKey,number>{
