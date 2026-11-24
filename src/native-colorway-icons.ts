@@ -19,11 +19,13 @@ const GROUP=/^[a-z_]+$/;
 type SourceFitFamily={
  anchorIds:number[];anchorSha256:string[];sharedUiIconPathId:string;
  group:string;sheet:number;cell:number;meanMae:number;worstMae:number;
- alphaIdentical:true;method:'bounded-two-channel-neutral-lighting-v1';
+ alphaIdentical:true;method:'bounded-two-channel-neutral-lighting-v1'|'palette-delta-v2'|'palette-multiply-v2';
+ calibration?:{method:string;gamma:number;penalty:number;chromaPrior:number;channels:number[]};
+ maxPaletteDistance?:number|null;excludedIds?:number[];
 };
 type SourceFitRecord={
  file:string;sha256:string;family:string;
- sourceType:'original-named-sprite-fit';fidelity:'approximate';
+ sourceType:'original-named-sprite-fit';fidelity:'approximate';nearestPaletteDistance?:number;
 };
 type SourceFitIndex={
  schema:'HKIA.SourceSpriteFit.1';fidelity:'approximate';
@@ -51,8 +53,20 @@ export function parseSourceFits(raw:unknown,base:string,original:Record<string,N
    !Number.isInteger(f.cell)||f.cell<0||f.cell>=144||
    !Number.isFinite(f.meanMae)||f.meanMae<0||f.meanMae>6||
    !Number.isFinite(f.worstMae)||f.worstMae<f.meanMae||f.worstMae>9||
-   f.alphaIdentical!==true||f.method!=='bounded-two-channel-neutral-lighting-v1')
+   f.alphaIdentical!==true||!['bounded-two-channel-neutral-lighting-v1','palette-delta-v2','palette-multiply-v2'].includes(f.method))
    throw Error('SOURCE_FIT_FAMILY_INVALID');
+  if(f.method!=='bounded-two-channel-neutral-lighting-v1'){
+   const c=f.calibration;
+   if(!c||c.method!==f.method||!Number.isFinite(c.gamma)||c.gamma<1||c.gamma>2.2||
+    !Number.isFinite(c.penalty)||c.penalty<0||c.penalty>.01||
+    !Number.isFinite(c.chromaPrior)||c.chromaPrior<0||c.chromaPrior>1||
+    !Array.isArray(c.channels)||c.channels.length<1||c.channels.length>5||
+    new Set(c.channels).size!==c.channels.length||c.channels.some(n=>!Number.isInteger(n)||n<0||n>4)||
+    (f.maxPaletteDistance!==null&&(!Number.isFinite(f.maxPaletteDistance)||f.maxPaletteDistance!<0||f.maxPaletteDistance!>1))||
+    !Array.isArray(f.excludedIds)||f.excludedIds.some(id=>!Number.isInteger(id)||id<=0||id>0x7fffffff)||
+    new Set(f.excludedIds).size!==f.excludedIds.length||f.excludedIds.some(id=>f.anchorIds.includes(id)))
+    throw Error('SOURCE_FIT_CALIBRATION_INVALID');
+  }
  }
  const result:Record<string,string>={};
  for(const [id,r] of Object.entries(index.records)){
@@ -63,6 +77,11 @@ export function parseSourceFits(raw:unknown,base:string,original:Record<string,N
   const f=index.families[r.family],s=original[id];
   if(f.anchorIds.includes(Number(id))||s.group!==f.group||s.sheet!==f.sheet||s.cell!==f.cell)
    throw Error('SOURCE_FIT_RECORD_SOURCE_MISMATCH');
+  if(f.method!=='bounded-two-channel-neutral-lighting-v1'&&
+   (!Number.isFinite(r.nearestPaletteDistance)||r.nearestPaletteDistance!<0||r.nearestPaletteDistance!>1||
+    f.excludedIds?.includes(Number(id))||
+    (f.maxPaletteDistance!==null&&r.nearestPaletteDistance!>f.maxPaletteDistance!)))
+   throw Error('SOURCE_FIT_PALETTE_DISTANCE_INVALID');
   result[id]=base+'native-colorways/source-fit/'+id+'.png?v='+r.sha256;
  }
  return result;
