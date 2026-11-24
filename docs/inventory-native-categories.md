@@ -31,7 +31,7 @@ Original inventory-specific textures extracted from Steam definitions CAB-46b8f8
   }
 }
 
-Other populated category art reuses the existing original game Collection UI icons; these are not asserted to be the exact Inventory TabItemView.CategoryIcons sprite mapping. Three categories remain text-only. No wiki assets or fabricated images. Original binaries and personal saves are not committed.
+All 13 native tabs now use the exact `TabItemView.CategoryIcons` Sprite references from `l_inventoryview`. Fish, wands, chef station and creation station resolve through `d_23_7e3a06d4` (CAB-0f2e3940b6dc3309fd0d44b6af2b4a83). Comics resolves through the definitions Sprite `ui_tag_icon_comic` and its exact render-data key in GlobalUIAtlas, restored to its original 93×93 canvas. Source-size RGBA images are encoded losslessly with method 6; hashes are pinned in `public/inventory-ui/index.json`. No wiki or collection substitutes. Original bundles and personal saves are not committed.
 
 ## Native station filter correction
 

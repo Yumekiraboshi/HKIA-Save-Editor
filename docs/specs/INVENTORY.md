@@ -33,4 +33,4 @@ Implementation reference: `core/src/schema.rs`, `core/src/native.rs`, `core/src/
 
 ### Native inventory UI assets (v3.0.1)
 
-`public/inventory-ui/index.json` records original source references and exact decoded-pixel verification of eight category sprites and sixteen flower pattern/effect sprites. Five category sprite references remain unresolved at the pixel level. The flower color and pattern definitions and all 16 locale label maps derive from native assets. The new Rust/WASM flower snapshot is keyed by document identity and read-only. Dynamic flower image tint/mask composition, native name formatting, and unique-data mutation are not yet verified.
+`public/inventory-ui/index.json` records original source references and exact decoded-pixel verification of all thirteen category sprites and sixteen flower pattern/effect sprites. The flower color and pattern definitions and all 16 locale label maps derive from native assets. The new Rust/WASM flower snapshot is keyed by document identity and read-only. Dynamic flower image tint/mask composition, native name formatting, and unique-data mutation are not yet verified.
