@@ -6,7 +6,7 @@
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
  import {inventoryCopy} from './inventory-copy';
- import {browseInventory,inventoryGroupCounts,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {inventoryCategoryRepresentative,browseInventory,inventoryGroupCounts,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
@@ -1059,9 +1059,14 @@ import {verifiedFloorplanName} from './floorplan-names';
     
     <nav class="inventory-group-strip" aria-label={iCopy.tab}>
      {#each inventoryVisibleGroups as t (t.key)}
+      {@const representative=inventoryNativeArt?inventoryCategoryRepresentative(t.key,nativeInventoryIndex,inventoryNativeArt.entries):undefined}
+      {@const representativeSprite=representative===undefined?undefined:inventoryNativeArt?.entries.get(representative)}
       <button type="button" class="inventory-group-option" data-inventory-group={t.key} class:active={activeInventoryGroup===t.key}
        aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;inventoryLimit=BATCH_SIZE}}>
-       {#if t.art}<img src={INVENTORY_UI+t.art} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>{/if}
+       {#if t.art}<img src={ICONS+t.art} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>
+       {:else if representativeSprite}
+        <span class="inventory-category-representative" aria-hidden="true"><span style:background-image={'url("'+representativeSprite.url+'")'} style:background-position={'-'+representativeSprite.x+'px -'+representativeSprite.y+'px'}></span></span>
+       {/if}
        <span>{inventoryGroupLabel(locale,t.key)}</span><small>{(inventoryGroupTotals.get(t.key)??0).toLocaleString(locale)}</small>
       </button>
      {/each}
