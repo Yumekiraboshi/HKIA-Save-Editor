@@ -224,6 +224,11 @@ async function inventoryOriginalArtSmoke(){
   assert.equal(await fitted.getAttribute('data-icon-fidelity'),'approximate');
   assert.ok((await fitted.evaluate(el=>getComputedStyle(el).backgroundImage))
    .includes('/native-colorways/source-fit/54272482.png?v='));
+  await page.locator('.inventory-controls input[type="search"]').fill('315822');
+  const pajama=page.locator('.inventory-card .inventory-item-art .item-sprite[data-dye-source="game-source-sprite"]');
+  await pajama.waitFor({timeout:30_000});
+  assert.equal(await pajama.getAttribute('data-icon-fidelity'),'game-original');
+  assert.ok((await pajama.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/source-colorways/315822.webp'));
   await page.locator('.inventory-group-option[data-inventory-group="furniture"]').click();
   await page.locator('.inventory-controls input[type="search"]').fill('427689');
   const extra=page.locator('.inventory-card .item-sprite[data-inventory-art="native"]');
