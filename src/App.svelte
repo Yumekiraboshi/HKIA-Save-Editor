@@ -1092,17 +1092,25 @@ import {verifiedFloorplanName} from './floorplan-names';
          <span class="item-art-empty">✧</span>
         {/if}
        </span>
-       <strong class="inventory-name">{inventoryName(item.itemId)}</strong>
+       <strong class="inventory-name" title={inventoryName(item.itemId)}>{inventoryName(item.itemId)}</strong>
       </div>
-      <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>
-       <label>
-        <span>{iCopy.quantity}</span>
-        <input type="number" name="quantity" min="1" max="2147483647" step="1"
-         value={item.quantity} disabled={!item.editable||busy} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
-       </label>
-       <button type="submit" class="primary" disabled={!item.editable||busy}>{iCopy.apply}</button>
-      </form>
-      {#if !item.editable}<span class="inventory-warning" title={iCopy.readonly}>{iCopy.readonly}</span>{/if}
+      {#if item.editable}
+       <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>
+        <label>
+         <span class="visually-hidden">{iCopy.quantity}</span>
+         <input type="number" name="quantity" min="1" max="2147483647" step="1"
+          value={item.quantity} disabled={busy} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
+        </label>
+        <button type="submit" class="primary" disabled={busy} title={iCopy.apply} aria-label={iCopy.apply}>
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+        </button>
+       </form>
+      {:else}
+       <span class="inventory-readonly-quantity" title={iCopy.readonly}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        <span class="visually-hidden">{iCopy.readonly} · {iCopy.quantity}: </span>{item.quantity}
+       </span>
+      {/if}
      </article>
     {/each}
    </div>
