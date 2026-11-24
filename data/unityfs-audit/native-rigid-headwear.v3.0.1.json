@@ -1,0 +1,171 @@
+{
+  "schema": "HKIA.NativeRigidHeadwearDiagnostic.1",
+  "version": "3.0.1",
+  "definitionsSha256": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0",
+  "sharedToGameObjectEvidence": "exact original shared name and pinned GameObject; not a resolved prefab asset-reference GUID",
+  "nativeIconVerified": false,
+  "families": [
+    {
+      "name": "WitchHat",
+      "shared": "-970819309203920775",
+      "go": "7049031096430060783",
+      "mesh": "-8218739919101907736",
+      "material": "-7633722947615229647",
+      "outfit": "-7787111060264843729",
+      "vertices": 1320,
+      "triangles": 1988,
+      "stride": 36,
+      "items": [
+        {
+          "id": 528610065,
+          "definition": "-7754450116206399698",
+          "key": "item_c_dyeable_witchhat_spookywitch"
+        },
+        {
+          "id": 698106669,
+          "definition": "6557726080905028533",
+          "key": "item_c_dyeable_witchhat_tealgoth"
+        },
+        {
+          "id": 903702706,
+          "definition": "-2342061302601830805",
+          "key": "item_c_dyeable_witchhat_pastelgoth"
+        },
+        {
+          "id": 1115275003,
+          "definition": "-9032052963174413689",
+          "key": "item_c_dyeable_witchhat_galaxy"
+        },
+        {
+          "id": 1361445132,
+          "definition": "-410664676627183984",
+          "key": "item_c_dyeable_witchhat_icecream"
+        }
+      ]
+    },
+    {
+      "name": "FrankenHat",
+      "shared": "-2458892062406433499",
+      "go": "7078700429401583899",
+      "mesh": "-2758714514331608283",
+      "material": "-2964218257839831021",
+      "outfit": "-4226785514416353168",
+      "vertices": 932,
+      "triangles": 1340,
+      "stride": 32,
+      "items": [
+        {
+          "id": 219104983,
+          "definition": "7639951207182077367",
+          "key": "item_c_dyeable_frankenhat_halloweenjacketpastel"
+        },
+        {
+          "id": 986527124,
+          "definition": "-9109217610060110361",
+          "key": "item_c_dyeable_frankenhat_candycorn"
+        },
+        {
+          "id": 1164010114,
+          "definition": "-4109446484868783853",
+          "key": "item_c_dyeable_frankenhat_blues"
+        },
+        {
+          "id": 1823091687,
+          "definition": "-4200702789208952300",
+          "key": "item_c_dyeable_frankenhat_frankensam"
+        },
+        {
+          "id": 1869689767,
+          "definition": "6334105258738526889",
+          "key": "item_c_dyeable_frankenhat_darkpurples"
+        },
+        {
+          "id": 2084509045,
+          "definition": "945523045021980763",
+          "key": "item_c_dyeable_frankenhat_classicfrank"
+        },
+        {
+          "id": 2147413558,
+          "definition": "4940152039030011873",
+          "key": "item_c_dyeable_frankenhat_franken"
+        }
+      ]
+    },
+    {
+      "name": "MonsterBeanie",
+      "shared": "3797118322783551970",
+      "go": "2652929559990538825",
+      "mesh": "-4942539455711314487",
+      "material": "-492867581711901490",
+      "outfit": "4838668380814907251",
+      "vertices": 1040,
+      "triangles": 1648,
+      "stride": 32,
+      "items": [
+        {
+          "id": 241843750,
+          "definition": "5006238008742596351",
+          "key": "item_c_dyeable_monsterbeanie_monsterpastel"
+        },
+        {
+          "id": 312811582,
+          "definition": "-5801686057166971513",
+          "key": "item_c_dyeable_monsterbeanie_monsterpurple"
+        },
+        {
+          "id": 378586320,
+          "definition": "-1499957697480161596",
+          "key": "item_c_dyeable_monsterbeanie_sunflower"
+        },
+        {
+          "id": 617434769,
+          "definition": "2699170174998559992",
+          "key": "item_c_dyeable_monsterbeanie_crimsonscale"
+        },
+        {
+          "id": 804224138,
+          "definition": "5241462676429741597",
+          "key": "item_c_dyeable_monsterbeanie_monster"
+        },
+        {
+          "id": 1910525229,
+          "definition": "-5787210227825319013",
+          "key": "item_c_dyeable_monsterbeanie_mintchocolate"
+        },
+        {
+          "id": 1968345981,
+          "definition": "6197235935188205318",
+          "key": "item_c_dyeable_monsterbeanie_critterforest"
+        }
+      ]
+    },
+    {
+      "name": "DetectiveHat",
+      "shared": "-4512988791217784224",
+      "go": "-6233159332742903296",
+      "mesh": "-7693844901455221108",
+      "material": "-6545491273204938523",
+      "outfit": "7326036526142777251",
+      "vertices": 380,
+      "triangles": 576,
+      "stride": 32,
+      "items": [
+        {
+          "id": 429612784,
+          "definition": "7037586327307866320",
+          "key": "item_c_dyeable_detectivehat_detectivetan"
+        },
+        {
+          "id": 1303780158,
+          "definition": "-3586842500860538208",
+          "key": "item_c_dyeable_detectivehat_graysuit"
+        },
+        {
+          "id": 1706492579,
+          "definition": "4963713198498647826",
+          "key": "item_c_dyeable_detectivehat_cream"
+        }
+      ]
+    }
+  ]
+}
