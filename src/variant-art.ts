@@ -126,7 +126,7 @@ export async function loadDynamicColorwayIndex(base:string):Promise<Record<strin
  if(!response.ok)throw Error('DYNAMIC_COLORWAY_INDEX_FETCH');
  return parseDynamicColorwayIndex(await response.json(),base);
 }
-export async function loadVariantArtIndex(base:string):Promise<Record<string,string>>{
+export async function loadVariantArtSources(base:string):Promise<{primary:Record<string,string>;originals:Record<string,string>}>{
  const [original,dynamic,verified]=await Promise.allSettled([
   loadSourceColorwayIndex(base),
   loadDynamicColorwayIndex(base),
@@ -139,7 +139,10 @@ export async function loadVariantArtIndex(base:string):Promise<Record<string,str
  if(original.status==='rejected'&&dynamic.status==='rejected'&&verified.status==='rejected')throw verified.reason;
  // A verified runtime render outranks a named source sprite. A failed
  // optional index must not hide valid artwork from the other index.
- return {...(dynamic.status==='fulfilled'?dynamic.value:{}),
-  ...(original.status==='fulfilled'?original.value:{}),
-  ...(verified.status==='fulfilled'?verified.value:{})};
+ const originals={...(dynamic.status==='fulfilled'?dynamic.value:{}),
+  ...(original.status==='fulfilled'?original.value:{})};
+ return {originals,primary:{...originals,...(verified.status==='fulfilled'?verified.value:{})}};
+}
+export async function loadVariantArtIndex(base:string):Promise<Record<string,string>>{
+ return (await loadVariantArtSources(base)).primary;
 }

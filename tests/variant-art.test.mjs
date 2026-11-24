@@ -9,7 +9,7 @@ const {outputFiles}=await build({
  entryPoints:[fileURLToPath(new URL('../src/variant-art.ts',import.meta.url))],
  bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'
 });
-const {parseVariantArtIndex,parseSourceColorwayIndex,parseDynamicColorwayIndex,loadVariantArtIndex}=await import(
+const {parseVariantArtIndex,parseSourceColorwayIndex,parseDynamicColorwayIndex,loadVariantArtIndex,loadVariantArtSources}=await import(
  'data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64')
 );
 const read=(name)=>readFileSync(new URL(name,import.meta.url),'utf8');
@@ -99,8 +99,11 @@ test('every registered exact image is an audited, local, unmodified PNG or WebP'
 
 test('Collection and Inventory select source-registered exact images before approximations',()=>{
  const app=read('../src/App.svelte'),sprite=read('../src/DyeSprite.svelte');
- assert.match(app,/loadVariantArtIndex\(import\.meta\.env\.BASE_URL\)/);
+ assert.match(app,/loadVariantArtSources\(import\.meta\.env\.BASE_URL\)/);
  assert.equal((app.match(/exactArtUrl=\{/g)||[]).length,4);
+ assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,4);
+ assert.match(sprite,/if\(exact\)showExact\(exact,showOriginal\)/);
+ assert.match(sprite,/showExact\(original,showNativeIcon\)/);
  assert.match(app,/exactVariantArt\[String\(item\.itemId\)\]/);
  assert.match(app,/exactVariantArt\[String\(sub\.previewId\)\]/);
  assert.match(app,/exactVariantArt\[String\(item\[0\]\)\]/);
@@ -195,4 +198,15 @@ test('all 5383 native dye IDs resolve to one genuine original sprite with a veri
  }
  assert.throws(()=>parseDynamicColorwayIndex({...dynamic,records:{...dynamic.records,1700096245:'invalid'}},'/'),/DYNAMIC_COLORWAY_RECORD_INVALID/);
  assert.throws(()=>parseDynamicColorwayIndex({...dynamic,records:{}},'/'),/DYNAMIC_COLORWAY_INDEX_INVALID/);
+});
+
+test('verified overrides retain the original source URL for decode failure',async()=>{
+ const prev=globalThis.fetch;
+ try{
+  globalThis.fetch=async url=>({ok:true,json:async()=>url.includes('/source-colorways/')?sources:url.includes('/dynamic-colorways/')?dynamic:wrap({'585726126':{...example,file:'585726126.png'}})});
+  const {primary,originals}=await loadVariantArtSources('/');
+  assert.equal(primary['585726126'],'/variant-art/585726126.png');
+  assert.equal(originals['585726126'],'/dynamic-colorways/585726126.webp?v='+dynamic.records['585726126']);
+  assert.equal(Object.keys(originals).length,5383);
+ }finally{globalThis.fetch=prev;}
 });

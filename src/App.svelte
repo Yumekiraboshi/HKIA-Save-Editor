@@ -30,7 +30,7 @@ import {searchAchievementRows} from './achievement-search';
  import {loadLocaleIndex,loadGameLabels,EMPTY_LABELS,type GameLabels} from './game-localization';
  import {loadIconPack,type IconPack} from './icon-packs';
  import {loadNativeDyePalettes,type NativeDyePalettes} from './native-dye-palettes';
- import {loadVariantArtIndex} from './variant-art';
+ import {loadVariantArtSources} from './variant-art';
  import {loadNativeColorwayIcons} from './native-colorway-icons';
  import DyeSprite from './DyeSprite.svelte';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
@@ -124,6 +124,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let iconPack:IconPack|null=$state(null);
  let nativeDyePalettes:NativeDyePalettes=$state({});
  let exactVariantArt:Record<string,string>=$state({});
+ let originalVariantArt:Record<string,string>=$state({});
  let nativeColorwayIcons:Record<string,string>=$state({});
  let iconEpoch=0;
  let iconError=$state(false);
@@ -194,8 +195,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   // Exact game dye palettes, used exclusively for recoloring item image pixels.
   void loadNativeDyePalettes(import.meta.env.BASE_URL)
    .then(palettes=>nativeDyePalettes=palettes).catch(()=>{});
-  void loadVariantArtIndex(import.meta.env.BASE_URL)
-   .then(art=>exactVariantArt=art).catch(()=>{});
+  void loadVariantArtSources(import.meta.env.BASE_URL)
+   .then(art=>{originalVariantArt=art.originals;exactVariantArt=art.primary;}).catch(()=>{});
   void loadNativeColorwayIcons(import.meta.env.BASE_URL)
    .then(icons=>nativeColorwayIcons=icons).catch(()=>{});
   browserLanguage=detectLocale(navigator.languages?.length?navigator.languages:[navigator.language||'en']);
@@ -1089,7 +1090,7 @@ import {verifiedFloorplanName} from './floorplan-names';
         {:else if sprite}
          {#if nativeDyePalettes[String(item.itemId)]}
           <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item.itemId)]}
-           sourceKey={definition?.[1]??''} exactArtUrl={exactVariantArt[String(item.itemId)]}
+           sourceKey={definition?.[1]??''} exactArtUrl={exactVariantArt[String(item.itemId)]} originalArtUrl={originalVariantArt[String(item.itemId)]}
            previewUrl={nativeColorwayIcons[String(item.itemId)]}/>
          {:else}
           <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'}
@@ -1201,7 +1202,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <span class="subcategory-art" aria-hidden="true">
        {#if sprite}
         {#if sub.previewId!==null&&nativeDyePalettes[String(sub.previewId)]}
-         <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(sub.previewId)]} sourceKey={catalog?.items.find(x=>x[0]===sub.previewId)?.[1]??''} exactArtUrl={exactVariantArt[String(sub.previewId)]} previewUrl={nativeColorwayIcons[String(sub.previewId)]}/>
+         <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(sub.previewId)]} sourceKey={catalog?.items.find(x=>x[0]===sub.previewId)?.[1]??''} exactArtUrl={exactVariantArt[String(sub.previewId)]} originalArtUrl={originalVariantArt[String(sub.previewId)]} previewUrl={nativeColorwayIcons[String(sub.previewId)]}/>
         {:else}
         <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
         {/if}
@@ -1249,7 +1250,7 @@ import {verifiedFloorplanName} from './floorplan-names';
        <span class="item-art" aria-hidden="true">
         {#if sprite}
          {#if nativeDyePalettes[String(item[0])]}
-          <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item[0])]} sourceKey={item[1]} exactArtUrl={exactVariantArt[String(item[0])]} previewUrl={nativeColorwayIcons[String(item[0])]}/>
+          <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item[0])]} sourceKey={item[1]} exactArtUrl={exactVariantArt[String(item[0])]} originalArtUrl={originalVariantArt[String(item[0])]} previewUrl={nativeColorwayIcons[String(item[0])]}/>
          {:else}
          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
          {/if}
@@ -1288,7 +1289,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <span class="date-dialog-art" aria-hidden="true">
       {#if sprite}
        {#if nativeDyePalettes[String(dateDialogItem[0])]}
-        <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(dateDialogItem[0])]} sourceKey={dateDialogItem[1]} exactArtUrl={exactVariantArt[String(dateDialogItem[0])]} previewUrl={nativeColorwayIcons[String(dateDialogItem[0])]}/>
+        <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(dateDialogItem[0])]} sourceKey={dateDialogItem[1]} exactArtUrl={exactVariantArt[String(dateDialogItem[0])]} originalArtUrl={originalVariantArt[String(dateDialogItem[0])]} previewUrl={nativeColorwayIcons[String(dateDialogItem[0])]}/>
        {:else}
        <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
        {/if}

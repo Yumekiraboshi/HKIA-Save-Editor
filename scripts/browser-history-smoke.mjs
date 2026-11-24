@@ -899,7 +899,11 @@ async function run(){
   'verified image uses direct static item-specific pixels rather than a recolored Blob');
  await finalSearch.fill('Orange Archer Hat');
  await page.locator('.collection-search-result').first().click();
- await page.locator('#collection-item-585726126 .item-sprite[data-dye-source="game-source-sprite"]').waitFor({timeout:30_000});
+ const originalFallback=page.locator('#collection-item-585726126 .item-sprite[data-dye-source="game-source-sprite"]');
+ await originalFallback.waitFor({timeout:30_000});
+ assert.equal(await originalFallback.getAttribute('data-icon-fidelity'),'game-original');
+ assert.ok((await originalFallback.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/dynamic-colorways/585726126.webp?v='),
+  'a missing verified override must display the actual item-specific original, not an approximation');
 
  assert.deepEqual(errors,[],'no console exceptions or 5xx during browser replay');
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
