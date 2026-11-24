@@ -559,8 +559,16 @@ async function run(){
    await search.fill(name);
    await page.locator('.collection-search-result-name')
     .filter({hasText:new RegExp('^'+name+'$')}).first().click();
-   const sprite=page.locator('#collection-item-'+id+' .item-sprite[data-dye-source="native-icon"]');
+   // The original named cyan wireframe hat outranks its old approximation.
+   // Other cases still exercise the existing generated-colorway path.
+   const source=id===528999373?'game-source-sprite':'native-icon';
+   const sprite=page.locator('#collection-item-'+id+' .item-sprite[data-dye-source="'+source+'"]');
    await sprite.waitFor({timeout:30_000});
+   if(id===528999373){
+    assert.equal(await sprite.getAttribute('data-icon-fidelity'),'game-original');
+    assert.ok((await sprite.evaluate(el=>getComputedStyle(el).backgroundImage))
+     .includes('/source-colorways/528999373.webp'));
+   }
    return sampledSprite(sprite);
   }
   const firstPixels=await findNativeIcon(name1,id1);
