@@ -36,3 +36,14 @@ export function flowerDisplay(flower:InventoryFlower|undefined,defs:FlowerDispla
  const title=[primary&&strings[primary.labelId],accent&&pattern&&!pattern.effect&&strings[accent.labelId],pattern&&strings[pattern.labelId]].filter(Boolean).join(' · ');
  return {color,patternUrl,title,accent:flowerSwatch(accent)};
 }
+
+export type FlowerLabels=Record<string,Readonly<Record<string,string>>>;
+export async function loadFlowerLabels(base:string):Promise<FlowerLabels>{
+ const r=await fetch(base+'inventory-ui/flower-labels.json');
+ if(!r.ok)throw Error('FLOWER_LABELS_UNAVAILABLE');
+ const data=await r.arrayBuffer();
+ if(data.byteLength>60000)throw Error('FLOWER_LABELS_INVALID');
+ const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data)),x=>x.toString(16).padStart(2,'0')).join('');
+ if(hash!=='06519628a93327d82ef66ccc336c29244c5e91f433169ac9cb1b290ea6063a0b')throw Error('FLOWER_LABELS_INVALID');
+ return JSON.parse(new TextDecoder().decode(data)).locales as FlowerLabels;
+}
