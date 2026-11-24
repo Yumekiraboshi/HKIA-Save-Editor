@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {gunzipSync} from 'node:zlib';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/source-names.ts',import.meta.url))],
  bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
-const {decodeSourceItemNames}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {decodeSourceItemNames,decodeInventoryAdditionalNames}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const locales=['ar','zh-Hans','zh-Hant','nl','en-GB','en','fr-CA','fr','de','it','ja','ko','pt-BR','ru','es','tr'];
 const source='ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0';
 
@@ -55,4 +56,31 @@ test('UI prefers exact native names while retaining existing fallback if externa
  assert.match(app,/sourceNames\[String\(item\[0\]\)\]\?\?verifiedFloorplanName/);
  assert.match(app,/if\(epoch===sourceNameEpoch\)sourceNames=names/);
  assert.match(app,/if\(epoch===sourceNameEpoch\)sourceNames=\{\}/);
+});
+
+
+test('additional native inventory names cover all 12,163 original IDs in 15 source-verified locales',()=>{
+ const packed=JSON.parse(readFileSync(new URL('../public/inventory-native-categories.json',import.meta.url),'utf8'));
+ const data=gunzipSync(Buffer.from(packed.data,'base64'));
+ const ids=new Set();let id=0,pos=0;
+ for(let i=0;i<packed.count;i++){
+  let delta=0,shift=0,byte=0;
+  do{byte=data[pos++];delta+=(byte&127)*2**shift;shift+=7;}while(byte&128);
+  id+=delta;pos++;ids.add(String(id));
+ }
+ assert.equal(pos,data.length);assert.equal(ids.size,12163);
+ for(const locale of locales.filter(x=>x!=='ar')){
+  const base=decodeSourceItemNames(JSON.parse(readFileSync(new URL('../public/source-names/'+locale+'.json',import.meta.url))),locale);
+  const raw=JSON.parse(readFileSync(new URL('../public/inventory-names/'+locale+'.json',import.meta.url)));
+  const extra=decodeInventoryAdditionalNames(raw,locale,base);
+  assert.equal(Object.keys(extra).length,1901);
+  assert.deepEqual(new Set([...Object.keys(base),...Object.keys(extra)]),ids,locale);
+  assert.throws(()=>decodeInventoryAdditionalNames({...raw,locale:'ar'},locale,base));
+  assert.throws(()=>decodeInventoryAdditionalNames(raw,locale,{...base,[Object.keys(extra)[0]]:'collision'}));
+ }
+ const ja=JSON.parse(readFileSync(new URL('../public/inventory-names/ja.json',import.meta.url))).names;
+ const en=JSON.parse(readFileSync(new URL('../public/inventory-names/en.json',import.meta.url))).names;
+ assert.equal(en['427689'],"Nul Rug");
+ assert.equal(ja['427689'],"ヌルのしきもの");
+ assert.equal(ja['5365022'],"ホラガイ");
 });
