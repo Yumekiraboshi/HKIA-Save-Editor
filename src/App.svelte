@@ -823,9 +823,9 @@ import {verifiedFloorplanName} from './floorplan-names';
     <span class="brand-mark" aria-hidden="true">✦</span><span class="brand-name">{copy.brand}</span>
    </button>
    {#if snapshot}<nav class="tools-nav" aria-label="Tools">
-    <button type="button" class="tool-tab" class:active={activeTool==='collections'} aria-current={activeTool==='collections'?'page':undefined} onclick={goHome}>{copy.toolCollection}</button>
-    <button type="button" class="tool-tab" class:active={activeTool==='achievements'} aria-current={activeTool==='achievements'?'page':undefined} onclick={openAchievementsTab}>{achCopy.title}</button>
-    <button type="button" class="tool-tab" class:active={activeTool==='inventory'} aria-current={activeTool==='inventory'?'page':undefined} onclick={openInventoryTab}>{iCopy.tab}</button>
+    <button type="button" class="tool-tab" data-tool="inventory" class:active={activeTool==='inventory'} aria-current={activeTool==='inventory'?'page':undefined} onclick={openInventoryTab}>{iCopy.tab}</button>
+    <button type="button" class="tool-tab" data-tool="collections" class:active={activeTool==='collections'} aria-current={activeTool==='collections'?'page':undefined} onclick={goHome}>{copy.toolCollection}</button>
+    <button type="button" class="tool-tab" data-tool="achievements" class:active={activeTool==='achievements'} aria-current={activeTool==='achievements'?'page':undefined} onclick={openAchievementsTab}>{achCopy.title}</button>
    </nav>{/if}
    <div class="bar-actions">
     {#if snapshot}

@@ -76,8 +76,8 @@ async function countHistory(page,n){
  assert.equal(await steps.count(),n,'expected n native timeline positions');
  return steps;
 }
-async function chooseTab(page,index){
- await page.locator('.tools-nav button.tool-tab').nth(index).click();
+async function chooseTab(page,tool){
+ await page.locator(`.tools-nav button.tool-tab[data-tool="${tool}"]`).click();
 }
 async function localDraft(page){
  return page.evaluate(async()=>{
@@ -118,7 +118,8 @@ async function inventoryEditExportSmoke(){
    name:'synthetic-hkia-inventory.save',mimeType:'application/octet-stream',buffer:source
   });
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
-  await chooseTab(page,2);
+  assert.deepEqual(await page.locator('.tools-nav button.tool-tab').evaluateAll(tabs=>tabs.map(tab=>tab.dataset.tool)),['inventory','collections','achievements']);
+  await chooseTab(page,'inventory');
   const search=page.locator('.inventory-controls input[type="search"]');
   await search.fill('315822');
   const card=page.locator('.inventory-card').first();
@@ -132,7 +133,7 @@ async function inventoryEditExportSmoke(){
   await page.waitForFunction(()=>document.querySelector('.inventory-card input[name="quantity"]')?.value==='25');
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
-  await chooseTab(page,2);
+  await chooseTab(page,'inventory');
   await page.locator('.inventory-controls input[type="search"]').fill('315822');
   assert.equal(await page.locator('.inventory-card input[name="quantity"]').first().inputValue(),'25',
    'browser refresh must restore unsaved inventory changes locally');
@@ -175,7 +176,7 @@ async function inventoryOriginalArtSmoke(){
    buffer:Buffer.from(createSyntheticSlot({artInventory:true}))
   });
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
-  await chooseTab(page,2);
+  await chooseTab(page,'inventory');
   await page.locator('.inventory-controls input[type="search"]').fill('1286846063');
   const card=page.locator('.inventory-card').first();
   await card.waitFor();
@@ -196,8 +197,8 @@ async function inventoryOriginalArtSmoke(){
   assert.ok(['native-icon','approximation','original','game-render'].includes(
    await original.getAttribute('data-dye-source')),
    'same source-aware icon pipeline as Collection must be used');
-  await chooseTab(page,0);
-  await chooseTab(page,2);
+  await chooseTab(page,'collections');
+  await chooseTab(page,'inventory');
   await page.locator('.inventory-controls input[type="search"]').fill('1286846063');
   await page.locator('.inventory-card .inventory-item-art .item-sprite').first().waitFor();
   assert.deepEqual(errors,[]);
@@ -222,7 +223,7 @@ async function achievementExportReopenRoundtrip(){
   await input.setInputFiles({name:'synthetic-hkia-3.0.1.save',
    mimeType:'application/octet-stream',buffer:source});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
-  await chooseTab(page,1);
+  await chooseTab(page,'achievements');
   await page.locator('.achievement-category-grid button.achievement-category-card').last().click();
   const dateButton=page.locator('.achievement-item-grid button.achievement-dialog-button').first();
   await dateButton.waitFor({timeout:20_000});
@@ -300,7 +301,7 @@ async function achievementExportReopenRoundtrip(){
   await input.setInputFiles({name:download.suggestedFilename(),
    mimeType:'application/octet-stream',buffer:saved});
   await page.locator('.bar-actions button[title="Undo"][disabled]').waitFor({timeout:30_000});
-  await chooseTab(page,1);
+  await chooseTab(page,'achievements');
   if(await page.locator('.achievement-category-grid').count())
    await page.locator('.achievement-category-grid button.achievement-category-card').last().click();
   await page.locator('.achievement-item-grid button.achievement-dialog-button').first().click();
@@ -330,7 +331,7 @@ async function achievementDstFoldExportSmoke(){
    name:'synthetic-hkia-dst-fold.save',mimeType:'application/octet-stream',buffer:source
   });
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
-  await chooseTab(page,1);
+  await chooseTab(page,'achievements');
   await page.locator('.achievement-category-grid button.achievement-category-card').last().click();
   await page.locator('.achievement-item-grid button.achievement-dialog-button').first().click();
   const field=page.locator('.achievement-dialog input[type="datetime-local"]');
@@ -392,7 +393,7 @@ async function achievementAtlasRetrySmoke(){
    buffer:Buffer.from(createSyntheticSlot())
   });
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
-  await chooseTab(page,1);
+  await chooseTab(page,'achievements');
   await page.locator('.compact-hint[role="status"]').waitFor({timeout:30_000});
   await page.locator('.achievement-category-sprite').first().waitFor({timeout:30_000});
   assert.equal(individualAttempts,1);
@@ -405,8 +406,8 @@ async function achievementAtlasRetrySmoke(){
   assert.equal(await page.locator('.achievement-individual-sprite').count(),0,
    'failed native atlas must never be presented as game-original imagery');
   // A normal tab return retries the missing image only. No extra UI control.
-  await chooseTab(page,0);
-  await chooseTab(page,1);
+  await chooseTab(page,'collections');
+  await chooseTab(page,'achievements');
   await page.locator('.collection-controls input[type="search"]').fill(key);
   const recovered=page.locator('.achievement-item-grid .achievement-individual-sprite').first();
   await recovered.waitFor({timeout:30_000});
@@ -713,7 +714,7 @@ async function run(){
  assert.equal(await page.locator('.bar-actions button[title="Undo"]').isDisabled(),true);
 
  // The synthetic unknown GUIDs must remain editable in the ungrouped category.
- await chooseTab(page,1);
+ await chooseTab(page,'achievements');
  const unknownCategory=page.locator('.achievement-category-grid button.achievement-category-card').last();
  await unknownCategory.waitFor({timeout:20_000});
  await unknownCategory.click();
@@ -759,11 +760,11 @@ async function run(){
  await steps.nth(1).click(); // redo one collection entry after recovery
  await page.locator('.bar-actions button[title="Undo"]:not([disabled])').waitFor({timeout:15_000});
 
- await chooseTab(page,1);
+ await chooseTab(page,'achievements');
  steps=await countHistory(page,2);
  assert.match(await steps.nth(1).getAttribute('class')??'',/active/);
  await steps.nth(0).click(); // independently undo saved achievement
- await chooseTab(page,0);
+ await chooseTab(page,'collections');
  await page.locator('.bar-actions button[title="Undo"]:not([disabled])').waitFor({timeout:15_000});
  assert.equal(await page.locator('.bar-actions button[title="Undo"]').isDisabled(),false,
   'achievement undo must not reset Collections cursor');
@@ -799,7 +800,7 @@ async function run(){
  await page.locator('dialog.date-dialog[open]').waitFor({state:'hidden'});
  await page.locator('article.item-tile button.item-toggle[aria-pressed="false"]').first().waitFor();
 
- await chooseTab(page,1);
+ await chooseTab(page,'achievements');
  if(await page.locator('.achievement-category-grid').count()){
   await page.locator('.achievement-category-grid button.achievement-category-card').last().click();
  }
@@ -836,7 +837,7 @@ async function run(){
  await page.route('**/variant-art/585726126.png',route=>route.fulfill({status:404,body:'missing'}));
  await page.reload({waitUntil:'networkidle'});
  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
- await chooseTab(page,0);
+ await chooseTab(page,'collections');
  const finalSearch=page.locator('.collection-controls input[type="search"]');
  await finalSearch.fill('Ice Cream Archer Hat');
  await page.locator('.collection-search-result').first().click();
