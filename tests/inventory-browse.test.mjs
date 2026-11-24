@@ -13,7 +13,7 @@ const buildSource=async file=>{
 };
 const {decodeNativeInventoryIndex}=await buildSource('../src/inventory-native-data.ts');
 const {FLOWER_CREATION_SOURCE_IDS}=await buildSource('../src/inventory-native-crafting.ts');
-const {nativeInventoryGroups,inventoryGroupCounts,browseInventory,defaultInventoryGroup,NATIVE_INVENTORY_TABS}=await buildSource('../src/inventory-browse.ts');
+const {nativeInventoryGroups,inventoryGroupCounts,browseInventory,defaultInventoryGroup,NATIVE_INVENTORY_TABS,inventoryCategoryRepresentative,INVENTORY_CATEGORY_REPRESENTATIVES}=await buildSource('../src/inventory-browse.ts');
 const catalog=JSON.parse(readFileSync(new URL('../public/catalog.json',import.meta.url)));
 const items=new Map(catalog.items.map(x=>[x[0],x]));
 const packed=JSON.parse(readFileSync(new URL('../public/inventory-native-categories.json',import.meta.url)));
@@ -121,4 +121,25 @@ test('compact inventory keeps quantity controls accessible and locks unsupported
  assert.match(app,/aria-label=\{iCopy\.apply\}/);
  assert.match(app,/class="inventory-readonly-quantity" title=\{iCopy\.readonly\}/);
  assert.match(app,/title=\{inventoryName\(item\.itemId\)\}/);
+});
+
+test('native category navigation uses colored game artwork independently of grouping',()=>{
+ const art=JSON.parse(readFileSync(new URL('../public/inventory-art/index.json',import.meta.url)));
+ const available=new Map(art.records.map(row=>[row[0],row]));
+ assert.equal(NATIVE_INVENTORY_TABS.length,13);
+ for(const tab of NATIVE_INVENTORY_TABS){
+  if(tab.art){
+   assert.match(tab.art,/^collections_group_.+\.webp$/);
+   assert.ok(readFileSync(new URL('../public/icons/'+tab.art,import.meta.url)).length>0);
+  }else{
+   assert.ok(INVENTORY_CATEGORY_REPRESENTATIVES[tab.key]?.every(id=>available.has(id)));
+   const representative=inventoryCategoryRepresentative(tab.key,index,available);
+   assert.ok(representative,tab.key+' needs a source-defined representative');
+   assert.ok(nativeInventoryGroups(representative,index).includes(tab.key));
+  }
+ }
+ const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
+ assert.match(app,/src=\{ICONS\+t\.art\}/);
+ assert.match(app,/inventoryCategoryRepresentative\(t\.key,nativeInventoryIndex,inventoryNativeArt\.entries\)/);
+ assert.doesNotMatch(app,/src=\{INVENTORY_UI\+t\.art\}/);
 });
