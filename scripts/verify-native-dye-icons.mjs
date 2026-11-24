@@ -46,6 +46,55 @@ for(const [id,r] of Object.entries(records)){
  assert.equal(data[25],6,'actual RGBA PNG preserves transparent icon background');
  assert.equal(createHash('sha256').update(data).digest('hex'),r.sha256);
 }
+// Reconstructed previews are a separate layer. Keep the original 5,383
+// source-cell export and collision checks unchanged, and independently
+// check every fit against actual original artwork, palette and family.
+const fit=manifest.sourceFits;
+if(fit){
+ assert.equal(fit.schema,'HKIA.SourceSpriteFit.1');
+ assert.equal(fit.fidelity,'approximate');
+ const source=JSON.parse(readFileSync('public/source-colorways/index.json','utf8'));
+ for(const [name,f] of Object.entries(fit.families)){
+  assert.equal(f.alphaIdentical,true);
+  assert.equal(f.method,'bounded-two-channel-neutral-lighting-v1');
+  assert.ok(f.anchorIds.length>=3);
+  assert.ok(f.meanMae<=6&&f.worstMae<=9);
+  assert.deepEqual(f.holdout.map(x=>x.id),f.anchorIds);
+  assert.ok(f.holdout.every(x=>Number.isFinite(x.mae)&&x.mae>=0));
+  assert.equal(f.worstMae,Math.max(...f.holdout.map(x=>x.mae)));
+  assert.ok(Math.abs(f.meanMae-f.holdout.reduce((s,x)=>s+x.mae,0)/f.holdout.length)<=0.001);
+  for(let i=0;i<f.anchorIds.length;i++){
+   const id=f.anchorIds[i],r=source.records[id];
+   assert.equal(r.sharedUiIconPathId,f.sharedUiIconPathId);
+   assert.equal(r.sha256,f.anchorSha256[i]);
+   assert.equal(createHash('sha256').update(readFileSync(join('public/source-colorways',r.file))).digest('hex'),r.sha256);
+   assert.deepEqual(indexedGroups.get(f.group).sprites.get(String(id)),{sheet:f.sheet,cell:f.cell});
+  }
+ }
+ const fitIds=Object.keys(fit.records);
+ if(fitIds.length){
+  assert.equal(readdirSync(join(folder,'source-fit')).length,fitIds.length);
+  for(const [id,r] of Object.entries(fit.records)){
+   const f=fit.families[r.family],base=records[id];
+   assert.ok(f&&base&&!source.records[id]);
+   assert.equal(r.file,id+'.png');
+   assert.equal(r.fidelity,'approximate');
+   assert.equal(r.sourceType,'original-named-sprite-fit');
+   assert.deepEqual([base.group,base.sheet,base.cell],[f.group,f.sheet,f.cell]);
+   const data=readFileSync(join(folder,'source-fit',r.file));
+   assert.equal(data.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
+   assert.equal(data.readUInt32BE(16),96);
+   assert.equal(data.readUInt32BE(20),96);
+   assert.equal(data[25],6);
+   assert.equal(createHash('sha256').update(data).digest('hex'),r.sha256);
+  }
+ }
+ if(coverage.generated===5383){
+  assert.equal(fitIds.length,66);
+  assert.equal(Object.values(fit.records).filter(r=>r.family==='high-tea-long-sleeved-dress').length,30);
+  assert.equal(Object.values(fit.records).filter(r=>r.family==='high-tea-open-tailcoat').length,36);
+ }
+}
 for(const [left,right] of [
  ['704486536','585726126'],
  ['1286846063','935642973'],
