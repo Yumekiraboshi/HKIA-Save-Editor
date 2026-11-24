@@ -3,7 +3,9 @@
   "version": "3.0.1",
   "sourceBundles": {
     "l_inventoryview": "061a47ae598d0bcc8c067463e19e18b360ba37d0124b94e08c484818e24d280d",
-    "definitions": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0"
+    "definitions": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0",
+    "d_23_7e3a06d4": "062c4326eea8d464adead7874c131da9b1c0942f237876b1eb68df03b3704e99",
+    "atlas_global": "04c1f4c191b0a821a0bbcb15e67a75bec85cf343a0b2e875ee8e525e1e8dfc7b"
   },
   "codec": "VP8L, method 6, exact RGBA readback",
   "files": {
@@ -31,9 +33,15 @@
     "pattern-6.webp": "94303f139f8cf65872c4fd48c99661e60ea8559ffdbc48e83ac09f8f19994ffc",
     "pattern-7.webp": "3ab8dcd4c017f8c1d17ec0615316fc69d1c834685449ac47faaab61c1d3810d2",
     "pattern-8.webp": "ecf428e0cb448f9e595342bcae6733a011d7a0abb8085958627367353c2f8a86",
-    "pattern-9.webp": "da36aa9a405a605b774a7055bc9143a3fec71f0072b14d3443daf4bcc8dc8b79"
+    "pattern-9.webp": "da36aa9a405a605b774a7055bc9143a3fec71f0072b14d3443daf4bcc8dc8b79",
+    "category-fish.webp": "0eff4b9fb0fcd80a733e9a39bfacd4000e1bfb99f35f242e2ad722f24f0f668f",
+    "category-comics.webp": "81b50edeb9d21c9d0c25d53e99ac706f5969cbb10d8240152241e243bf4aff2a",
+    "category-wands.webp": "261ee06b0cc9f6cc48835f3c64ad76d9a4a5d1ae803c839a99ae0139a096544d",
+    "category-chef-station.webp": "ebbfe43309a209768c2ffbadaddf689be64d49af8dbf22cb63dd58e50748ffb6",
+    "category-creation-station.webp": "2837e16e6350884b32ac972b118145c8aef72f464d77b3843b026c034f47d50b"
   },
-  "unresolvedCategorySprites": {
+  "unresolvedCategorySprites": {},
+  "resolvedCategorySprites": {
     "comics": "-4705491803030431318",
     "fish": "3849438999172405686",
     "wands": "-1387383487320539105",

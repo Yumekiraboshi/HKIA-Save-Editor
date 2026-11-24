@@ -8,8 +8,8 @@ const json=n=>JSON.parse(read(n));
 const digest=b=>createHash('sha256').update(b).digest('hex');
 test('original inventory sprites are native-sized lossless WebP',()=>{
  const index=json('index.json');
- const sizes={flowers:128,music:93};
- assert.equal(Object.keys(index.unresolvedCategorySprites).length,5);
+ const sizes={flowers:128,music:93,comics:93};
+ assert.equal(Object.keys(index.unresolvedCategorySprites).length,0);
  for(const [name,sha] of Object.entries(index.files)){
   const b=read(name);assert.equal(digest(b),sha,name);
   if(!name.endsWith('.webp'))continue;
@@ -21,7 +21,7 @@ test('original inventory sprites are native-sized lossless WebP',()=>{
   assert.equal((bits&16383)+1,size,name);
   assert.equal(((bits>>>14)&16383)+1,size,name);
  }
- assert.equal(Object.keys(index.files).filter(n=>n.startsWith('category-')).length,8);
+ assert.equal(Object.keys(index.files).filter(n=>n.startsWith('category-')).length,13);
  assert.equal(Object.keys(index.files).filter(n=>n.startsWith('pattern-')).length,16);
 });
 test('native labels cover all source color and pattern definitions in 16 locales',()=>{
