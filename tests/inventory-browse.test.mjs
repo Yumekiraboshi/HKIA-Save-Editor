@@ -12,6 +12,7 @@ const buildSource=async file=>{
  return import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 };
 const {decodeNativeInventoryIndex}=await buildSource('../src/inventory-native-data.ts');
+const {FLOWER_CREATION_SOURCE_IDS}=await buildSource('../src/inventory-native-crafting.ts');
 const {nativeInventoryGroups,inventoryGroupCounts,browseInventory,defaultInventoryGroup,NATIVE_INVENTORY_TABS}=await buildSource('../src/inventory-browse.ts');
 const catalog=JSON.parse(readFileSync(new URL('../public/catalog.json',import.meta.url)));
 const items=new Map(catalog.items.map(x=>[x[0],x]));
@@ -67,6 +68,19 @@ test('native categories never confuse Collection GUID categories with the Invent
  assert.deepEqual(filter('','clothes',true).map(x=>x.documentId),[10,14]);
  assert.deepEqual(filter('','other').map(x=>x.documentId),[13]);
  assert.equal(rows[0].quantity,4,'read-only classification never edits a save');
+});
+
+test('native specialized station filters use original crafting sources and raw chef category',()=>{
+ assert.equal(FLOWER_CREATION_SOURCE_IDS.size,181);
+ assert.equal(createHash('sha256').update([...FLOWER_CREATION_SOURCE_IDS].join(',')).digest('hex'),'422f19613ff4f3accfcb3810a4b1c806da5060fe008f58469d676e0026af1620');
+ assert.ok([...FLOWER_CREATION_SOURCE_IDS].every(id=>index.has(id)));
+ assert.deepEqual(nativeInventoryGroups(1873326,index),['creation-station']);
+ assert.deepEqual(nativeInventoryGroups(30258712,index),['creation-station']);
+ assert.deepEqual(nativeInventoryGroups(29444931,index),['clothes']);
+ assert.deepEqual(nativeInventoryGroups(42361582,index),['food','chef-station']);
+ assert.equal([...index.keys()].filter(id=>nativeInventoryGroups(id,index).includes('creation-station')).length,135);
+ assert.equal([...index.keys()].filter(id=>nativeInventoryGroups(id,index).includes('chef-station')).length,33);
+ assert.ok([...index.keys()].every(id=>nativeInventoryGroups(id,index).length>0));
 });
 
 test('tampered native index, unknown palette, truncated entries and unverified version are rejected',()=>{
