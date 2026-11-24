@@ -136,6 +136,10 @@ impl Editor {
     editable:self.inventory_can_edit(r)})
   }).collect()
  }
+ /// Read-only lookup by document identity, never by Item ID alone.
+ pub fn inventory_unique_data(&self,id:u32)->Option<crate::native::InventoryUniqueData>{
+  self.slot.index.inventory.iter().find(|row|row.id==id)?.unique_data
+ }
  fn inventory_can_edit(&self,r:&crate::native::InventoryRow)->bool{
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
    r.item_id.is_some_and(|id|id>0)&&r.quantity.is_some_and(|v|v>0)&&
