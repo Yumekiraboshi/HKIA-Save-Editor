@@ -123,23 +123,34 @@ test('compact inventory keeps quantity controls accessible and locks unsupported
  assert.match(app,/title=\{inventoryName\(item\.itemId\)\}/);
 });
 
-test('native category navigation uses colored game artwork independently of grouping',()=>{
- const art=JSON.parse(readFileSync(new URL('../public/inventory-art/index.json',import.meta.url)));
- const available=new Map(art.records.map(row=>[row[0],row]));
+test('category representatives use source item IDs chosen by visual motif, not classification',()=>{
+ const readJson=path=>JSON.parse(readFileSync(new URL(path,import.meta.url)));
+ const art=readJson('../public/inventory-art/index.json');
+ const available=new Set(art.records.map(row=>row[0]));
+ const verifiedNames={...readJson('../public/source-names/en.json').names,...readJson('../public/inventory-names/en.json').names};
+ const expected={
+  'key-items':'Toolbox',items:'Mint Hiking Backpack',food:'Milk Bread',
+  'chef-station':'Omelet',flowers:'Tulias','creation-station':'Friendship Bouquet',
+  critters:'Phantom Flutterby',furniture:'Nordic Armchair',wands:"Lala's Magic Wand"
+ };
  assert.equal(NATIVE_INVENTORY_TABS.length,13);
+ assert.deepEqual(Object.keys(INVENTORY_CATEGORY_REPRESENTATIVES),Object.keys(expected));
  for(const tab of NATIVE_INVENTORY_TABS){
+  const representative=inventoryCategoryRepresentative(tab.key,index);
   if(tab.art){
    assert.match(tab.art,/^collections_group_.+\.webp$/);
    assert.ok(readFileSync(new URL('../public/icons/'+tab.art,import.meta.url)).length>0);
-  }else{
-   assert.ok(INVENTORY_CATEGORY_REPRESENTATIVES[tab.key]?.every(id=>available.has(id)));
-   const representative=inventoryCategoryRepresentative(tab.key,index,available);
-   assert.ok(representative,tab.key+' needs a source-defined representative');
-   assert.ok(nativeInventoryGroups(representative,index).includes(tab.key));
   }
+  if(representative!==undefined){
+   assert.equal(verifiedNames[String(representative)],expected[tab.key]);
+   assert.ok(available.has(representative)||items.has(representative),tab.key+' needs a source artwork record');
+  }else assert.ok(tab.art,tab.key+' needs a readable image fallback');
  }
+ assert.equal(inventoryCategoryRepresentative('items',new Map()),undefined);
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
+ assert.match(app,/inventoryCategoryRepresentative\(t\.key,nativeInventoryIndex\)/);
+ assert.match(app,/inventoryNativeArt\?\.entries\.get\(representative\)/);
+ assert.match(app,/inventoryIconPacks\[representativeSource\[3\]\]/);
  assert.match(app,/src=\{ICONS\+t\.art\}/);
- assert.match(app,/inventoryCategoryRepresentative\(t\.key,nativeInventoryIndex,inventoryNativeArt\.entries\)/);
  assert.doesNotMatch(app,/src=\{INVENTORY_UI\+t\.art\}/);
 });
