@@ -50,13 +50,18 @@ for(const [id,r] of Object.entries(records)){
 // source-cell export and collision checks unchanged, and independently
 // check every fit against actual original artwork, palette and family.
 const fit=manifest.sourceFits;
+const fitNativePalette=JSON.parse(readFileSync('public/native-dye-palettes.json','utf8')).records;
 if(fit){
  assert.equal(fit.schema,'HKIA.SourceSpriteFit.1');
  assert.equal(fit.fidelity,'approximate');
  const source=JSON.parse(readFileSync('public/source-colorways/index.json','utf8'));
  for(const [name,f] of Object.entries(fit.families)){
   assert.equal(f.alphaIdentical,true);
-  assert.equal(f.method,'bounded-two-channel-neutral-lighting-v1');
+  assert.ok(['palette-delta-v2','palette-multiply-v2'].includes(f.method));
+  assert.equal(f.calibration.method,f.method);
+  assert.ok(f.calibration.channels.length>=1&&f.calibration.channels.every(c=>Number.isInteger(c)&&c>=0&&c<5));
+  assert.ok(new Set(f.calibration.channels).size===f.calibration.channels.length);
+  assert.ok(Array.isArray(f.excludedIds));
   assert.ok(f.anchorIds.length>=3);
   assert.ok(f.meanMae<=6&&f.worstMae<=9);
   assert.deepEqual(f.holdout.map(x=>x.id),f.anchorIds);
@@ -81,6 +86,14 @@ if(fit){
    assert.equal(r.fidelity,'approximate');
    assert.equal(r.sourceType,'original-named-sprite-fit');
    assert.deepEqual([base.group,base.sheet,base.cell],[f.group,f.sheet,f.cell]);
+   assert.ok(!f.excludedIds.includes(Number(id)));
+   // Independently recompute the target's RGB distance to its nearest
+   // original anchor, and enforce the recipe's extrapolation bound.
+   const channels=f.calibration.channels;
+   const rgb=(id,ch)=>{const c=fitNativePalette[id].colors[ch];assert.match(c,/^#[0-9a-f]{6}$/);return [1,3,5].map(i=>parseInt(c.slice(i,i+2),16)/255);};
+   const distance=Math.min(...f.anchorIds.map(anchor=>Math.sqrt(channels.reduce((sum,ch)=>sum+rgb(id,ch).reduce((v,x,c)=>v+(x-rgb(anchor,ch)[c])**2,0),0)/(channels.length*3))));
+   assert.ok(Math.abs(r.nearestPaletteDistance-distance)<1e-10);
+   if(f.maxPaletteDistance!==null)assert.ok(distance<=f.maxPaletteDistance);
    const data=readFileSync(join(folder,'source-fit',r.file));
    assert.equal(data.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
    assert.equal(data.readUInt32BE(16),96);
@@ -90,9 +103,14 @@ if(fit){
   }
  }
  if(coverage.generated===5383){
-  assert.equal(fitIds.length,66);
+  assert.equal(fitIds.length,120);
   assert.equal(Object.values(fit.records).filter(r=>r.family==='high-tea-long-sleeved-dress').length,30);
   assert.equal(Object.values(fit.records).filter(r=>r.family==='high-tea-open-tailcoat').length,36);
+  assert.equal(Object.values(fit.records).filter(r=>r.family==='high-tea-waistcoat').length,39);
+  assert.equal(Object.values(fit.records).filter(r=>r.family==='high-tea-empire-waist-dress').length,15);
+  assert.equal(fit.families['high-tea-empire-waist-dress'].excludedIds.length,20);
+  assert.equal(fit.families['high-tea-empire-waist-dress'].maxPaletteDistance,.25);
+  for(const id of fit.families['high-tea-empire-waist-dress'].excludedIds)assert.ok(records[id]&&!fit.records[id]);
  }
 }
 for(const [left,right] of [

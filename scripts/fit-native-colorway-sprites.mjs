@@ -5,14 +5,23 @@
 import {readFileSync,mkdirSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
+import {calibratedPalette,fitCalibratedModel,renderCalibratedModel,calibratedHoldouts} from './fit-native-colorway-calibration.mjs';
 
 const SIDE=96, PIXELS=SIDE*SIDE, SIZE=PIXELS*4;
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const hex=/^#[0-9a-f]{6}$/;
 const clamp=x=>Math.min(255,Math.max(0,Math.round(x*255)));
+// Anchor IDs and complete family counts are from v3.0.1 ItemDefinition
+// UiIcon PPtrs. No guessed palette values: sparse waistcoat palettes
+// use only channels 1 and 2, present in every original and target.
 export const FIT_RECIPES=[
- {family:'high-tea-long-sleeved-dress',prefix:'item_c_dyeable_tglongsleeveddress_',uiIcon:'-3327772517825296899',anchors:[936308070,980933319,993727524,1283525591,1666503382,2097599525],penalty:0.0002,count:36,meanLimit:6,worstLimit:9},
- {family:'high-tea-open-tailcoat',prefix:'item_c_dyeable_tgopentailcoat_',uiIcon:'23107242593078785',anchors:[805349350,1254337078,1274039998,2062703116],penalty:0.001,count:40,meanLimit:6,worstLimit:8}
+ {family:'high-tea-long-sleeved-dress',prefix:'item_c_dyeable_tglongsleeveddress_',uiIcon:'-3327772517825296899',anchors:[936308070,980933319,993727524,1283525591,1666503382,2097599525],count:36,meanLimit:6,worstLimit:9,expectedPreviews:30,options:{method:'palette-delta-v2',gamma:1.25,penalty:.00005,chromaPrior:.3,channels:[0,1,2,3,4]}},
+ {family:'high-tea-open-tailcoat',prefix:'item_c_dyeable_tgopentailcoat_',uiIcon:'23107242593078785',anchors:[805349350,1254337078,1274039998,2062703116],count:40,meanLimit:6,worstLimit:8,expectedPreviews:36,options:{method:'palette-delta-v2',gamma:1,penalty:.0002,chromaPrior:.1,channels:[0,1,2,3,4]}},
+ {family:'high-tea-waistcoat',prefix:'item_c_dyeable_tgwaistcoat_',uiIcon:'3071458459125395548',anchors:[562308351,1363308523,2074282599],count:42,meanLimit:6,worstLimit:9,expectedPreviews:39,options:{method:'palette-delta-v2',gamma:1.5,penalty:.001,chromaPrior:.3,channels:[0,1]}},
+ // Three pastel anchors do not adequately constrain distant dark /
+ // saturated palettes. Keep the old preview outside this conservative
+ // nearest-anchor RGB RMS distance, rather than publishing artifacts.
+ {family:'high-tea-empire-waist-dress',prefix:'item_c_dyeable_tgempirewaistdress_',uiIcon:'-6835518302177314535',anchors:[647232370,829551644,2023553236],count:38,meanLimit:6,worstLimit:9,expectedPreviews:15,maxPaletteDistance:.25,options:{method:'palette-multiply-v2',gamma:1.45,penalty:0,chromaPrior:0,channels:[0,1,2,3,4]}}
 ];
 export function paletteVector(colors){
  if(!Array.isArray(colors)||colors.length!==5||!colors.every(x=>typeof x==='string'&&hex.test(x)))throw Error('SOURCE_FIT_FULL_PALETTE_REQUIRED');
@@ -96,6 +105,10 @@ export function holdoutErrors(samples,penalty){
  });
 }
 const cellKey=s=>s.group+':'+s.sheet+':'+s.cell;
+export function nearestPaletteDistance(palette,samples,channels){
+ return Math.min(...samples.map(s=>Math.sqrt(channels.reduce((sum,i)=>
+  sum+palette[i].reduce((v,x,c)=>v+(x-s.palette[i][c])**2,0),0)/(channels.length*3))));
+}
 export async function generateSourceFits({root,out,page,selected,palette,itemKeys,records,allGroups}){
  const source=JSON.parse(readFileSync(join(root,'public/source-colorways/index.json'),'utf8'));
  if(source.version!=='3.0.1'||source.schema!=='HKIA.NamedNativeColorwaySprite.1'||
@@ -123,19 +136,26 @@ export async function generateSourceFits({root,out,page,selected,palette,itemKey
     const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0);
     return Array.from(ctx.getImageData(0,0,96,96).data);
    },bytes.toString('base64'));
-   samples.push({id,palette:paletteVector(palette.records[id].colors),rgba});
+   samples.push({id,palette:calibratedPalette(palette.records[id].colors,recipe.options.channels),rgba});
   }
-  const errors=holdoutErrors(samples,recipe.penalty),mean=errors.reduce((a,b)=>a+b.mae,0)/errors.length;
+  const errors=calibratedHoldouts(samples,recipe.options),mean=errors.reduce((a,b)=>a+b.mae,0)/errors.length;
   const worst=Math.max(...errors.map(x=>x.mae));
   if(mean>recipe.meanLimit||worst>recipe.worstLimit)throw Error('SOURCE_FIT_HOLDOUT_LIMIT '+recipe.family+' '+JSON.stringify(errors));
   families[recipe.family]={anchorIds:recipe.anchors,anchorSha256:recipe.anchors.map(id=>source.records[id].sha256),
    sharedUiIconPathId:recipe.uiIcon,group:sourceCell.group,sheet:sourceCell.sheet,cell:sourceCell.cell,
-   meanMae:Math.round(mean*1000)/1000,worstMae:worst,holdout:errors,alphaIdentical:true,method:'bounded-two-channel-neutral-lighting-v1'};
-  const model=fitColorwayModel(samples,recipe.penalty);
+   meanMae:Math.round(mean*1000)/1000,worstMae:worst,holdout:errors,alphaIdentical:true,method:recipe.options.method,calibration:recipe.options,
+   maxPaletteDistance:recipe.maxPaletteDistance??null,excludedIds:[]};
+  const model=fitCalibratedModel(samples,recipe.options);
+  let generated=0;
   for(const [id,sprite] of members){
    if(source.records[id])continue; // Never replace an actual colored original.
    if(!records[id])throw Error('SOURCE_FIT_NO_BASE_PREVIEW '+id);
-   const rgba=renderColorwayModel(model,paletteVector(palette.records[id].colors));
+   const target=calibratedPalette(palette.records[id].colors,recipe.options.channels);
+   const distance=nearestPaletteDistance(target,samples,recipe.options.channels);
+   if(recipe.maxPaletteDistance!==undefined&&distance>recipe.maxPaletteDistance){
+    families[recipe.family].excludedIds.push(Number(id));continue;
+   }
+   const rgba=renderCalibratedModel(model,target);
    const png=await page.evaluate(data=>{
     const c=document.createElement('canvas');c.width=c.height=96;
     const ctx=c.getContext('2d',{willReadFrequently:true});ctx.putImageData(new ImageData(new Uint8ClampedArray(data),96,96),0,0);
@@ -144,9 +164,11 @@ export async function generateSourceFits({root,out,page,selected,palette,itemKey
    const bytes=Buffer.from(png,'base64');
    if(bytes.toString('hex',0,8)!=='89504e470d0a1a0a'||bytes.readUInt32BE(16)!==96||bytes.readUInt32BE(20)!==96||bytes[25]!==6)throw Error('SOURCE_FIT_PNG');
    mkdirSync(join(out,'source-fit'),{recursive:true});writeFileSync(join(out,'source-fit',id+'.png'),bytes);
-   result[id]={file:id+'.png',sha256:sha(bytes),family:recipe.family,sourceType:'original-named-sprite-fit',fidelity:'approximate'};
+   result[id]={file:id+'.png',sha256:sha(bytes),family:recipe.family,sourceType:'original-named-sprite-fit',fidelity:'approximate',nearestPaletteDistance:distance};
+   generated++;
   }
-  console.log('HKIA_SOURCE_FIT '+JSON.stringify({family:recipe.family,anchors:recipe.anchors.length,variants:members.length,meanMae:mean,worstMae:worst}));
+  if(generated!==recipe.expectedPreviews)throw Error('SOURCE_FIT_PREVIEW_COUNT '+recipe.family+' '+generated);
+  console.log('HKIA_SOURCE_FIT '+JSON.stringify({family:recipe.family,anchors:recipe.anchors.length,variants:members.length,generated,excluded:families[recipe.family].excludedIds.length,meanMae:mean,worstMae:worst}));
  }
  return {schema:'HKIA.SourceSpriteFit.1',fidelity:'approximate',families,records:result};
 }
