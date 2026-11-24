@@ -269,3 +269,19 @@ No external Wiki images or simulated 3D outputs have been registered.
 Reacquired the original Steam 3.0.1 definitions and atlas bundles and matched both existing SHA-256 fingerprints. The definitions CAB is the previously unresolved Archer skin Material dependency. Its exact Material pathID 6824069125264728142 is ordinary Lit with no bound BaseMap, NOT a dye material. The other Archer renderer CAB remains unresolved. The definitions bundle also contains the exact CustomLitCharacter Shader (pathID 477622052401609204), its four map properties and five palette colors. Fifty local Materials reference this Shader, including 24 with PatternMap, and all 174 non-null map PPtrs resolve to local Texture2D objects. Its three compressed program segments contain 12 vertex and 32 pixel DXBC containers. No shader execution, channel semantics or native icon pose/render is verified yet.
 
 Reproduce the source metadata locally: `python3 scripts/audit-native-character-shader.py /path/to/definitions`. The tool emits metadata and hashes only, never shader program bytes. The pinned SHA prevents applying this layout to unverified versions. See `data/unityfs-audit/definitions-character-shader.v3.0.1.json` for observed source evidence. Existing original icon images remain unchanged.
+
+## Original native albedo operation (2026-11-24)
+
+Thirty of the 32 verified pixel programs contain the same initial dye calculation, in two register-allocation variants (15 each). The original name table and texture bindings identify BaseMap t0, BumpMap t1, ComboMap t2, PatternMap t3; the palette colors occupy five consecutive material constant registers. With samples already in shader space, the exact initial color operation is:
+
+```
+q = lerp(PaletteColor1, PaletteColor2, PatternMap.r)
+q = lerp(q, PaletteColor3, PatternMap.g)
+q = lerp(q, PaletteColor4, PatternMap.b)
+q = lerp(PaletteColor5, q, PatternMap.a)
+albedo = lerp(BaseMap.rgb, BaseMap.rgb * q, BaseMap.a)
+```
+
+Importantly, BaseMap alpha is the dye strength, NOT ComboMap alpha. ComboMap is sampled but is used by other operations. The restricted token evaluator and mathematical port agreed exactly for 3,000 randomized normalized samples across all 30 original programs, and for 512 samples from decoded real Plaid Dress textures. This validates the isolated arithmetic in host precision, not GPU floating-point rounding, sRGB sampling, the lighting pass, pose, or final icon appearance. The fifth palette slot of the source red plaid variant is absent and must retain the verified Material default, not an invented color.
+
+Reproduce: `python3 scripts/verify-native-dye-albedo.py /path/to/definitions`. With Pillow installed, add `--plaid-preview /tmp/plaid-diagnostic.png` for a 512x512 **UV-space** material preview. This raw-normalized texture diagnostic is not a final icon. It must not be put into the public icon index. Source fingerprints and observed test results are in `data/unityfs-audit/native-dye-albedo.v3.0.1.json`. No game binaries, shader programs or full textures are committed.

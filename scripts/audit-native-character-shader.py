@@ -91,7 +91,7 @@ def containers(blob):
         pos = start + size
     return result
 
-def shader_segments(obj):
+def shader_segments(obj, decoded=None):
     require(sha(obj) == OBJECT_SHA, "unsupported Shader object")
     r = Reader(obj, 16176)
     require(r.string() == NAME, "Shader name mismatch")
@@ -112,6 +112,8 @@ def shader_segments(obj):
     for offset, compressed, length in zip(offsets[0], sizes[0], expanded[0]):
         require(offset == cursor and 0 < compressed <= len(blob)-offset and 0 < length <= 2_000_000, "Shader segment bounds")
         data = auditor.decompress(blob[offset:offset+compressed], length, 2)
+        if decoded is not None:
+            decoded.append(data)
         segments.append({"offset": offset, "compressedBytes": compressed, "bytes": length,
                          "sha256": sha(data), "programs": containers(data)})
         cursor += compressed
