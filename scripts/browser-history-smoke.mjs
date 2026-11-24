@@ -30,8 +30,9 @@ function createSyntheticSlot({childCompleted=null,artInventory=false}={}){
  const counter=doc(17,arr([1],hash(1,0,0,2),arr(f32(2),[0xc0],[0x90])));
  const inventory=doc(1,arr([4],u32(315822),[0],u32(6),[0xc0]));
  const originalArtItem=doc(1,arr([5],u32(1286846063),[0],u32(3),[0xc0]));
+ const sourceFitItem=doc(1,arr([6],u32(54272482),[0],u32(2),[0xc0]));
  const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
-  ...(artInventory?[originalArtItem]:[])));
+  ...(artInventory?[originalArtItem,sourceFitItem]:[])));
  const prefix=Uint8Array.from('135b4aa4f702a45d1cc562aeb5a386ed5d17e1fd588f424dcfc59d2e140cf597'.match(/../g).map(x=>parseInt(x,16)));
  const magic=Uint8Array.from('a1a2f8333c66ec455baa2dfc6325c2437a779c9906eecff0c022e5f6b6ca73b8'.match(/../g).map(x=>parseInt(x,16)));
  const lit=[0xf0];let remain=model.length-15;
@@ -216,6 +217,12 @@ async function inventoryOriginalArtSmoke(){
   await chooseTab(page,'inventory');
   await page.locator('.inventory-controls input[type="search"]').fill('1286846063');
   await page.locator('.inventory-card .inventory-item-art .item-sprite').first().waitFor();
+  await page.locator('.inventory-controls input[type="search"]').fill('54272482');
+  const fitted=page.locator('.inventory-card .inventory-item-art .item-sprite[data-dye-source="source-fit"]');
+  await fitted.waitFor({timeout:30_000});
+  assert.equal(await fitted.getAttribute('data-icon-fidelity'),'approximate');
+  assert.ok((await fitted.evaluate(el=>getComputedStyle(el).backgroundImage))
+   .includes('/native-colorways/source-fit/54272482.png?v='));
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM INVENTORY GAME ICON PASS: source-mapped Item ID, shared dye image, retained tab cache');
  }finally{await context.close();}
