@@ -23,7 +23,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false,editableFlower=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -39,6 +39,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const flower=(id,color,pattern,accent)=>doc(1,arr([id],u32(43114910),u32(id),u32(1),arr([7],arr([6],u32(color),u32(pattern),u32(accent)))));
  const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
+  ...(editableFlower?[flower(8,1,0,0)]:[]),
   ...(flowerInventory?[flower(8,1,0,0),flower(9,9,0,0),flower(10,1,10,16),flower(11,1,3,0),flower(12,1,9999,0)]:[])));
  const prefix=Uint8Array.from('135b4aa4f702a45d1cc562aeb5a386ed5d17e1fd588f424dcfc59d2e140cf597'.match(/../g).map(x=>parseInt(x,16)));
  const magic=Uint8Array.from('a1a2f8333c66ec455baa2dfc6325c2437a779c9906eecff0c022e5f6b6ca73b8'.match(/../g).map(x=>parseInt(x,16)));
@@ -258,6 +259,75 @@ async function inventoryDynamicFlowerArtSmoke(){
   assert.notDeepEqual(images[0].rgb,images[1].rgb);assert.notDeepEqual(images[0].rgb,images[2].rgb);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM DYNAMIC FLOWER PASS: original source sampling, distinct same-ID appearances, native effect-mask fallback, unknown pattern refusal, local blob generation');
+ }finally{await context.close();}
+}
+async function inventoryFlowerVariantEditSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-flower-edit.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({editableFlower:true}))
+  });
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  const button=page.locator('.inventory-card .inventory-unique-edit-button');
+  await button.waitFor({timeout:30_000});
+  await button.click();
+  const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');
+  await dialog.waitFor();
+  const select=dialog.locator('select');
+  const firstPattern=select.locator('optgroup').nth(1).locator('option').first();
+  const value=await firstPattern.getAttribute('value');
+  assert.ok(value!==null);
+  await select.selectOption(value);
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.waitFor({state:'hidden'});
+  await page.locator('.state-dot.changed').waitFor();
+  await page.waitForFunction(()=>!document.querySelector('.inventory-unique-edit-button')?.disabled);
+  const patch=await page.evaluate(()=>new Promise((resolve,reject)=>{
+   const open=indexedDB.open('hkia-editor-local-session',1);
+   open.onerror=()=>reject(open.error);
+   open.onsuccess=()=>{
+    const db=open.result;
+    const request=db.transaction('unsaved-changes','readonly').objectStore('unsaved-changes').get('current');
+    request.onsuccess=()=>{db.close();resolve(request.result?.inventoryPatches??[])};
+    request.onerror=()=>{db.close();reject(request.error)};
+   };
+  }));
+  assert.equal(patch.length,1);
+  assert.equal(patch[0].kind,'flower-variant');
+  assert.equal(patch[0].documentId,8);
+  assert.deepEqual(patch[0].before,[6,1,0,0]);
+  assert.equal(patch[0].after[0],6);
+  assert.equal(patch[0].after[1],1);
+  assert.ok(patch[0].after[2]>0);
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  await page.locator('.inventory-card img[src$="pattern-'+patch[0].after[2]+'.webp"]').waitFor();
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([
+   page.waitForEvent('download',{timeout:30_000}),
+   page.locator('.file-menu .menu-popover > button').nth(2).click()
+  ]);
+  const output=readFileSync(await download.path());
+  const wasm=readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm');
+  const {instance}=await WebAssembly.instantiate(wasm,{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);
+  new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);
+  assert.equal(e.hkia_inventory_flowers_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(v.getUint32(0,true),1);
+  assert.equal(v.getUint32(4,true),8);
+  assert.deepEqual(Array.from({length:4},(_,i)=>v.getInt32(8+i*4,true)),patch[0].after);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM FLOWER VARIANT EDIT PASS: native choices, CAS, local draft and exported payload reparse');
  }finally{await context.close();}
 }
 async function inventoryOriginalArtSmoke(){
@@ -1007,6 +1077,7 @@ async function run(){
  await inventoryEditExportSmoke();
  await inventoryOriginalArtSmoke();
  await inventoryDynamicFlowerArtSmoke();
+ await inventoryFlowerVariantEditSmoke();
  await achievementDstFoldExportSmoke();
  await achievementAtlasRetrySmoke();
 }
