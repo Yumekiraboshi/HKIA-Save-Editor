@@ -26,6 +26,28 @@ pub(crate) fn allocate_ids(index:&NativeIndex,count:usize)->Result<Vec<u32>,Erro
  if index.document_spans.iter().any(|doc|(first as u32..=last as u32).contains(&doc.key.1)){return Err(Error::Duplicate)}
  Ok((first as u32..=last as u32).collect())
 }
+/// Native Inventory hydration uses signed Max(saved UniqueId), seeded with
+/// zero. AddItems allocates a new UID by incrementing largestUniqueId for
+/// a non-null unmatched payload. This counter is not DbRoot.NextId.
+/// Reject unknown identities and reference collisions instead of skipping
+/// numbers or assuming a missing referenced row is free.
+pub(crate) fn allocate_inventory_unique_ids(index:&NativeIndex,version:Version,count:usize)->Result<Vec<i32>,Error>{
+ if version!=Version::V301||index.inventory_item_refs_incomplete||index.inventory_payload_refs_incomplete{return Err(Error::Schema)}
+ if count==0||count>MAX_DOCUMENTS{return Err(Error::Budget)}
+ let mut used=HashSet::new();let mut largest=0i32;
+ for row in &index.inventory{
+  if row.item_id.is_none_or(|id|id<=0)||row.unique_is_nil.is_none()||row.quantity.is_none_or(|q|q<0)||!row.fields.iter().all(Option::is_some){return Err(Error::Schema)}
+  let uid=row.unique_id.ok_or(Error::Schema)?;
+  if uid<0||uid==0&&row.unique_is_nil!=Some(true)||uid>0&&row.unique_is_nil!=Some(false){return Err(Error::Schema)}
+  if uid>0&&!used.insert(uid){return Err(Error::Duplicate)}
+  largest=largest.max(uid);
+ }
+ let first=largest.checked_add(1).ok_or(Error::Overflow)?;
+ let last=largest.checked_add(i32::try_from(count).map_err(|_|Error::Overflow)?).ok_or(Error::Overflow)?;
+ if index.inventory_item_refs.iter().any(|&(_,uid)|(first..=last).contains(&uid))||
+  index.inventory_legacy_uid_refs.iter().any(|uid|(first..=last).contains(uid)){return Err(Error::Duplicate)}
+ Ok((first..=last).collect())
+}
 /// The caller must authorize every domain edit and construct every new
 /// record in Rust. Only complete previously schema-walked document spans
 /// can be removed; insertion is at an exact existing identity boundary.
@@ -123,6 +145,25 @@ mod tests{
   ];
   for i in 0..n{rows.push(item((i+4) as u32,315822+i as u32,6))}
   let mut root=vec![0x93,0,20];array_header(rows.len(),&mut root).unwrap();for row in rows{root.extend(row)}root
+ }
+ #[test]
+ fn unique_inventory_allocator_uses_native_hydrated_max_and_rejects_collisions(){
+  let raw=payload(2);let mut index=index_native(&raw,Version::V301).unwrap();
+  assert_eq!(allocate_inventory_unique_ids(&index,Version::V301,2).unwrap(),vec![1,2]);
+  index.inventory[0].unique_id=Some(41);index.inventory[0].unique_is_nil=Some(false);
+  assert_eq!(allocate_inventory_unique_ids(&index,Version::V301,2).unwrap(),vec![42,43]);
+  index.inventory_item_refs.insert((315822,43));
+  assert_eq!(allocate_inventory_unique_ids(&index,Version::V301,2),Err(Error::Duplicate));
+  index.inventory_item_refs.clear();index.inventory_legacy_uid_refs.insert(42);
+  assert_eq!(allocate_inventory_unique_ids(&index,Version::V301,1),Err(Error::Duplicate));
+  index.inventory_legacy_uid_refs.clear();index.inventory_payload_refs_incomplete=true;
+  assert_eq!(allocate_inventory_unique_ids(&index,Version::V301,1),Err(Error::Schema));
+  index.inventory_payload_refs_incomplete=false;
+  index.inventory[1].unique_id=Some(41);index.inventory[1].unique_is_nil=Some(false);
+  assert_eq!(allocate_inventory_unique_ids(&index,Version::V301,1),Err(Error::Duplicate));
+  index.inventory[1].unique_id=Some(i32::MAX);
+  assert_eq!(allocate_inventory_unique_ids(&index,Version::V301,1),Err(Error::Overflow));
+  assert_eq!(allocate_inventory_unique_ids(&index,Version::V300,1),Err(Error::Schema));
  }
  #[test]
  fn root_membership_preserves_exact_records_and_crosses_array_header_boundary(){

@@ -1514,6 +1514,42 @@ fn chef_appearance_is_read_only_and_preserves_full_original_payload(){
 }
 
 #[test]
+fn create_flower_variants_allocates_distinct_native_uids_and_keeps_source(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ for zipped in [false,true]{
+  let mut payload=synthetic_payload("3.0.1");payload[2]=5;payload[3]=0x97;
+  payload.extend(doc(1,arr(vec![u(4),u(1331175279),u(41),u(2),plain_flower(6)])));
+  payload.extend(doc(1,arr(vec![u(5),u(315822),u(0),u(6),vec![0xc0]])));
+  let raw=slot_from_payload("3.0.1",payload);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  let before=[6,6,0,0];let first=[6,9,0,0];let second=[6,16,10,17];
+  assert!(e.create_inventory_flower_variant(4,before,before,1).is_err());
+  assert!(e.create_inventory_flower_variant(4,before,[7,9,0,0],1).is_err());
+  assert!(e.create_inventory_flower_variant(4,before,first,0).is_err());
+  let a=e.create_inventory_flower_variant(4,before,first,3).unwrap();
+  let b=e.create_inventory_flower_variant(4,before,second,4).unwrap();
+  assert_ne!(a,b);assert!(a>i32::MAX as u32&&b>i32::MAX as u32);
+  assert!(e.create_inventory_flower_variant(4,before,first,1).is_err());
+  assert!(e.change_inventory_flower_variant(4,before,first).is_err());
+  e.change_inventory_quantity(a,3,5).unwrap();
+  assert!(e.change_inventory_quantity(a,5,0).is_err());
+  assert_eq!(e.inventory().len(),4);
+  let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();recovered.restore_history(&cp).unwrap();
+  assert_eq!(recovered.inventory(),e.inventory());
+  assert!(recovered.undo_scope(Inventory));assert!(recovered.undo_scope(Inventory));assert!(recovered.undo_scope(Inventory));
+  assert_eq!(recovered.inventory(),original);
+  assert!(recovered.redo_scope(Inventory));assert!(recovered.redo_scope(Inventory));assert!(recovered.redo_scope(Inventory));
+  let reopened=Editor::open(recovered.export().unwrap()).unwrap();
+  let rows=reopened.inventory();assert_eq!(rows.len(),4);
+  assert_eq!(rows.iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![2,6,5,4]);
+  assert_eq!(reopened.inventory_original_unique_payload(4),e.inventory_original_unique_payload(4));
+  assert_eq!(reopened.inventory_unique_data(6),e.inventory_unique_data(a));
+  assert_eq!(reopened.inventory_unique_data(7),e.inventory_unique_data(b));
+  let uid:Vec<_>=reopened.inventory_unique_rows().map(|r|r.1).collect();
+  assert_eq!(uid,vec![Some(41),Some(0),Some(42),Some(43)]);
+ }
+}
+#[test]
 fn palette_and_chef_quantity_preserves_entire_original_payload(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let palette=arr(vec![vec![6],arr(vec![arr(vec![f(0.25),f(0.5),f(-0.0),f(1.0)]);3])]);
