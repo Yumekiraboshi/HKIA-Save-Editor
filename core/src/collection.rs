@@ -209,7 +209,7 @@ impl Editor {
   let Some(colors)=self.flower_source_colors(row)else{return Vec::new()};
   colors.iter().copied().filter(|color|{
    !self.slot.index.inventory.iter().any(|other|other.id!=id&&other.item_id==row.item_id&&
-    self.effective_unique(other)==Some(InventoryUniqueData::Flower{grow_state:6,base_color:*color,pattern:0,pattern_color:0}))
+    (self.effective_unique(other)==Some(InventoryUniqueData::Flower{grow_state:6,base_color:*color,pattern:0,pattern_color:0})||other.unique_data==Some(InventoryUniqueData::Flower{grow_state:6,base_color:*color,pattern:0,pattern_color:0})))
   }).collect()
  }
  /// CAS only a source-defined plain plucked flower color. No change to identity,
