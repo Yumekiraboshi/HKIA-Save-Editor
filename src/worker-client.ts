@@ -5,11 +5,11 @@ export type AchievementEntry={guid:[number,number,number,number];value:Achieveme
 export type AchievementPatch={guid:[number,number,number,number];before:AchievementValue;after:AchievementValue};
 export type AchievementDraftPatch={guid:[number,number,number,number];before:AchievementValue|null;after:AchievementValue};
 export type CounterEntry={guid:[number,number,number,number];current:number;countedValues:number|null;countedGuids:number};
-import type {FlowerVariant,InventoryUniqueInfo} from './inventory-unique';
+import type {FlowerVariant,FurnitureVariant,InventoryUniqueInfo} from './inventory-unique';
 import type {InventoryFlower} from './inventory-flower-display';
 import type {InventoryPalette} from './inventory-palette-display';
 export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean;flower?:InventoryFlower;palette?:InventoryPalette;unique?:InventoryUniqueInfo};
-export type InventoryPatch={documentId:number;before:number;after:number;kind?:undefined}|{documentId:number;before:FlowerVariant;after:FlowerVariant;kind:'flower-variant'};
+export type InventoryPatch={documentId:number;before:number;after:number;kind?:undefined}|{documentId:number;before:FlowerVariant;after:FlowerVariant;kind:'flower-variant'}|{documentId:number;before:FurnitureVariant;after:FurnitureVariant;kind:'furniture-variant'};
 export type HistoryScope='collections'|'achievements'|'inventory';
 export type HistoryRecord={
  scope:HistoryScope;applied:boolean;paired:boolean;
@@ -35,7 +35,7 @@ export type SaveSnapshot={
  inventory:InventoryEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'inventory-change'|'flower-variant-change'|'flower-variants'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'inventory-change'|'flower-variant-change'|'flower-variants'|'furniture-variants'|'furniture-variant-change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -148,6 +148,13 @@ export function applyDraft(patches:ChangeRequest[],achievementPatches:Achievemen
  return rpc('batch',{
   patches:patches.map(workerCollectionPatch),
   achievementPatches:achievementPatches.map(workerAchievementDraftPatch),
-  inventoryPatches:inventoryPatches.map(p=>p.kind==='flower-variant'?{documentId:p.documentId,kind:p.kind,before:[...p.before],after:[...p.after]}:{documentId:p.documentId,before:p.before,after:p.after})
+  inventoryPatches:inventoryPatches.map(p=>p.kind!==undefined?{documentId:p.documentId,kind:p.kind,before:[...p.before],after:[...p.after]}:{documentId:p.documentId,before:p.before,after:p.after})
  }) as Promise<SaveSnapshot>;
+}
+
+export function requestFurnitureVariants(documentId:number):Promise<FurnitureVariant[]>{
+ return rpc('furniture-variants',{documentId}) as Promise<FurnitureVariant[]>;
+}
+export function changeInventoryFurnitureVariant(documentId:number,beforeFurnitureVariant:FurnitureVariant,nextFurnitureVariant:FurnitureVariant):Promise<SaveSnapshot>{
+ return rpc('furniture-variant-change',{documentId,beforeFurnitureVariant:[...beforeFurnitureVariant],nextFurnitureVariant:[...nextFurnitureVariant]}) as Promise<SaveSnapshot>;
 }
