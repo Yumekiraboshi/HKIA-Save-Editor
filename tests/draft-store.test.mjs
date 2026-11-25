@@ -71,3 +71,11 @@ test('local native history checkpoints are cloned losslessly and invalid payload
  assert.match(source,/safeHistoryCheckpoint\(state\?\.historyCheckpoint\)/);
  assert.match(source,/if\(historyCheckpoint!==null&&!savedHistory\)throw Error\('HISTORY_CHECKPOINT_INVALID'\)/);
 });
+
+test('staged unique flower patches preserve identity, appearance and quantity only as recovery comparison',()=>{
+ const row={documentId:2147483649,itemId:43114910,quantity:7,unique:{uniqueId:null,tag:7},flower:{growState:6,baseColor:9,pattern:0,patternColor:0}};
+ const patches=store.diffInventory([], [row]);
+ assert.deepEqual(patches,[{documentId:2147483649,itemId:43114910,variant:[6,9,0,0],quantity:7,kind:'flower-create'}]);
+ assert.deepEqual(store.safeInventoryPatches(patches),patches);
+ for(const bad of [{...patches[0],documentId:8},{...patches[0],quantity:0},{...patches[0],variant:[6,9,0]},{...patches[0],itemId:0}])assert.throws(()=>store.safeInventoryPatches([bad]));
+});

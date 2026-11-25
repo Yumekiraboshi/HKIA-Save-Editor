@@ -1526,7 +1526,9 @@ fn create_flower_variants_allocates_distinct_native_uids_and_keeps_source(){
   assert!(e.create_inventory_flower_variant(4,before,before,1).is_err());
   assert!(e.create_inventory_flower_variant(4,before,[7,9,0,0],1).is_err());
   assert!(e.create_inventory_flower_variant(4,before,first,0).is_err());
+  assert!(e.inventory_flower_creation_variants(4).contains(&first));
   let a=e.create_inventory_flower_variant(4,before,first,3).unwrap();
+  assert!(!e.inventory_flower_creation_variants(4).contains(&first));
   let b=e.create_inventory_flower_variant(4,before,second,4).unwrap();
   assert_ne!(a,b);assert!(a>i32::MAX as u32&&b>i32::MAX as u32);
   assert!(e.create_inventory_flower_variant(4,before,first,1).is_err());

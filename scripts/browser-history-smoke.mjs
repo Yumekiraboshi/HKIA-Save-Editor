@@ -43,7 +43,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const chef=(id,item,unique)=>doc(1,arr([id],u32(item),u32(id),u32(1),unique));
  const cafe=colors=>arr([3],arr(arr(u32(99)),arr(...colors.map(u32))));
  const boba=color=>arr([4],arr(u32(color),u32(6),u32(11),u32(19),u32(99)));
- const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
+ const model=arr([0],editableFlower?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
@@ -640,6 +640,60 @@ async function inventoryFlowerVariantEditSmoke(){
   assert.equal(iv.getUint32(0,true),2);assert.equal(iv.getUint32(20,true),8);assert.equal(iv.getInt32(28,true),25);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM FLOWER VARIANT EDIT PASS: native choices, CAS, local draft and exported payload reparse');
+ }finally{await context.close();}
+}
+async function inventoryFlowerCreationSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-flower-add.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({editableFlower:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('43114910');
+  const cards=page.locator('.inventory-card');
+  const edit=cards.first().locator('.inventory-unique-edit-button');
+  await edit.waitFor({timeout:30_000});await edit.click();
+  const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');
+  await dialog.waitFor();
+  const select=dialog.locator('select');
+  const value=await select.locator('optgroup').first().locator('option').first().getAttribute('value');
+  assert.ok(value!==null);await select.selectOption(value);
+  await dialog.locator('.inventory-create-flower:not([disabled])').click();
+  await dialog.waitFor({state:'hidden'});
+  const added=cards.nth(1).locator('input[name="quantity"]');
+  await added.waitFor();assert.equal(await added.inputValue(),'1');
+  assert.equal(await cards.first().locator('input[name="quantity"]').inputValue(),'1');
+  await added.fill('7');await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]').click();
+  await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('43114910');
+  await added.waitFor();assert.equal(await added.inputValue(),'7');
+  const undo=page.locator('.bar-actions button[title="Undo"]:not([disabled])');
+  const redo=page.locator('.bar-actions button[title="Redo"]:not([disabled])');
+  await undo.click();await page.waitForFunction(()=>document.querySelectorAll('.inventory-card input[name="quantity"]')[1]?.value==='1');
+  await undo.click();await cards.nth(1).waitFor({state:'detached'});
+  await redo.click();await added.waitFor();assert.equal(await added.inputValue(),'1');
+  await redo.click();await page.waitForFunction(()=>document.querySelectorAll('.inventory-card input[name="quantity"]')[1]?.value==='7');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const wasm=readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm');
+  const {instance}=await WebAssembly.instantiate(wasm,{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_flowers_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(v.getUint32(0,true),2);assert.equal(v.getUint32(4,true),8);assert.equal(v.getUint32(24,true),9);
+  assert.deepEqual(Array.from({length:4},(_,i)=>v.getInt32(8+i*4,true)),[6,1,0,0]);
+  assert.notDeepEqual(Array.from({length:4},(_,i)=>v.getInt32(28+i*4,true)),[6,1,0,0]);
+  assert.equal(e.hkia_inventory_snapshot(),0);
+  const iv=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(iv.getUint32(0,true),3);assert.equal(iv.getUint32(36,true),9);assert.equal(iv.getInt32(44,true),7);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM FLOWER CREATION PASS: distinct native identity, source preserved, quantity, draft recovery, Undo/Redo, exported reparse');
  }finally{await context.close();}
 }
 async function inventoryFurnitureVariantEditSmoke(){
@@ -1496,6 +1550,7 @@ async function run(){
  await inventoryDynamicFlowerArtSmoke();
  await flowerRuntimeCoverage(browser,origin,base);
  await inventoryFlowerVariantEditSmoke();
+ await inventoryFlowerCreationSmoke();
  await inventoryFurnitureVariantEditSmoke();
  await achievementDstFoldExportSmoke();
  await achievementAtlasRetrySmoke();
