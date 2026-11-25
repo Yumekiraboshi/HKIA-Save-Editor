@@ -27,22 +27,25 @@ export function diffInventory(before:readonly InventoryEntry[],after:readonly In
  const result:InventoryPatch[]=[];
  for(const row of after){
   const source=original.get(row.documentId);
-  if(source&&source.itemId===row.itemId&&source.quantity!==row.quantity)
-   result.push({documentId:row.documentId,before:source.quantity,after:row.quantity});
+  if(source&&source.itemId===row.itemId){
+   if(source.quantity!==row.quantity)result.push({documentId:row.documentId,before:source.quantity,after:row.quantity});
+   if(source.flower&&row.flower&&source.flower.baseColor!==row.flower.baseColor)
+    result.push({documentId:row.documentId,before:source.flower.baseColor,after:row.flower.baseColor,kind:'flower-color'});
+  }
  }
  return result.sort((a,b)=>a.documentId-b.documentId);
 }
 export function safeInventoryPatches(value:unknown):InventoryPatch[]{
  if(!Array.isArray(value)||value.length>20000)throw Error('DRAFT_INVALID');
- const ids=new Set<number>();
+ const ids=new Set<string>();
  for(const p of value){
   if(!p||typeof p!=='object'||!Number.isInteger(p.documentId)||p.documentId<=0||
    p.documentId>2147483647||!Number.isInteger(p.before)||p.before<=0||
    p.before>2147483647||!Number.isInteger(p.after)||p.after<=0||
-   p.after>2147483647||p.after===p.before||ids.has(p.documentId))throw Error('DRAFT_INVALID');
-  ids.add(p.documentId);
+   p.after>2147483647||p.after===p.before||(p.kind!==undefined&&p.kind!=='flower-color')||ids.has(p.documentId+':'+(p.kind??'quantity')))throw Error('DRAFT_INVALID');
+  ids.add(p.documentId+':'+(p.kind??'quantity'));
  }
- return (value as InventoryPatch[]).map(p=>({documentId:p.documentId,before:p.before,after:p.after}));
+ return (value as InventoryPatch[]).map(p=>({documentId:p.documentId,before:p.before,after:p.after,...(p.kind?{kind:p.kind}:{})}));
 }
 function openDatabase():Promise<IDBDatabase>{
  return new Promise((resolve,reject)=>{
