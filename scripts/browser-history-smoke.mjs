@@ -13,6 +13,7 @@ import {readFileSync} from 'node:fs';
 import {chromium} from 'playwright-core';
 import {chefRuntimeSmoke} from './chef-runtime-smoke.mjs';
 import {wandRuntimeSmoke} from './wand-runtime-smoke.mjs';
+import {flowerRuntimeCoverage} from './flower-runtime-coverage.mjs';
 
 const append=(...arrays)=>Uint8Array.from(arrays.flatMap(x=>Array.from(x)));
 const u32=n=>append([0xce],Array.from({length:4},(_,i)=>n>>>(24-8*i)&255));
@@ -1468,6 +1469,7 @@ async function run(){
  await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
  await inventoryDynamicFlowerArtSmoke();
+ await flowerRuntimeCoverage(browser,origin,base);
  await inventoryFlowerVariantEditSmoke();
  await inventoryFurnitureVariantEditSmoke();
  await achievementDstFoldExportSmoke();
