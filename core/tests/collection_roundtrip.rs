@@ -1473,9 +1473,9 @@ fn flower_clothing_uses_native_species_and_processor_pattern_rules(){
   assert!(e.inventory_flower_variants(6).iter().all(|v|v[2]==0&&v[3]==0)); // HK-style
   assert!(e.inventory_flower_variants(7).is_empty()); // DLC Sunburst
   assert!(e.inventory_flower_variants(8).is_empty()); // event-year floral dress
-  assert!(e.inventory_flower_variants(9).iter().all(|v|v[2]!=14)); // Heavy Nettle
+  assert!(e.inventory_flower_variants(9).iter().all(|v|v[2]!=1)); // Heavy Nettle
   assert!(e.change_inventory_flower_variant(6,base,[6,6,1,16]).is_err());
-  assert!(e.change_inventory_flower_variant(9,base,[6,6,14,16]).is_err());
+  assert!(e.change_inventory_flower_variant(9,base,[6,6,1,16]).is_err());
   e.change_inventory_flower_variant(4,base,[6,9,12,16]).unwrap();
   e.change_inventory_flower_variant(5,base,[6,9,14,16]).unwrap();
   e.change_inventory_flower_variant(6,base,[6,16,0,0]).unwrap();
