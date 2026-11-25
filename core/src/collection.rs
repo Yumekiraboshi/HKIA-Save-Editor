@@ -1,11 +1,40 @@
 use crate::{archive::{ZipIndex,SLOT,ACCOUNT,MAX_ARCHIVE,crc32},envelope::Version,read_slot,ReadSlot,Error,MAX_INPUT,MAX_DECODED,MAX_BLOCK,MAX_BLOCKS,decode_block};
 use crate::wire::{Cursor,Token};
 use crate::achievement::{self,AchievementValue,AchievementEntry};
-use crate::native::ModelState;
+use crate::native::{ModelState,InventoryUniqueData};
 use std::{collections::{HashMap,HashSet},ops::Range};
 
 const MAX_TICKS:i64=3_155_378_975_999_999_999;
 const MAX_UNDO:usize=256;
+// Steam v3.0.1 definitions: default color indices, not arbitrary enum values.
+// No pattern or DLC grants are implied by these source-defined choices.
+const FLOWER_DEFAULT_COLORS:&[(i32,&[i32])]=&[
+ (43114910,&[2,5,10]),
+ (183701770,&[13]),
+ (203856820,&[3]),
+ (228573412,&[10,29]),
+ (252458237,&[7,21,29]),
+ (261557677,&[12]),
+ (274491259,&[1,4,11]),
+ (275816250,&[4,8,12]),
+ (312661096,&[3]),
+ (462608550,&[1,4,16]),
+ (668399845,&[5,13]),
+ (1223758923,&[11]),
+ (1299466625,&[22,24,26,28]),
+ (1331175279,&[6,8,16]),
+ (1386186941,&[17,23,27]),
+ (1466319046,&[20]),
+ (1554283135,&[1,4,16,29]),
+ (1561432864,&[1,16]),
+ (1583118562,&[25]),
+ (1669522060,&[4,12]),
+ (1695731578,&[16]),
+ (1804880447,&[2,18,19,20]),
+ (1934826268,&[8,16]),
+ (1968535430,&[4,9,16]),
+ (2105820233,&[3]),
+];
 
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub struct Entry {pub id:i32,pub ticks:i64}
@@ -17,6 +46,7 @@ pub struct InventoryEntry {pub document_id:u32,pub item_id:i32,pub quantity:i32,
 enum Change {
  Collection{id:i32,before:Option<Option<i64>>,after:Option<Option<i64>>},
  Inventory{document_id:u32,before:Option<i32>,after:Option<i32>},
+ FlowerColor{document_id:u32,before:Option<i32>,after:Option<i32>},
  Achievement{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
  AchievementCreated{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
  AchievementCreatedPair{guid:[u32;4],value:AchievementValue,parent:([u32;4],Option<AchievementValue>,Option<AchievementValue>)},
@@ -38,12 +68,12 @@ pub struct HistoryRecord {
 }
 impl Change {
  fn scope(&self)->HistoryScope{
-  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
+  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}|Self::FlowerColor{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
  }
  fn history_record(&self,applied:bool)->HistoryRecord{
   let (item_id,guid,paired)=match self {
    Self::Collection{id,..}=>(*id,[0;4],false),
-   Self::Inventory{document_id,..}=>(*document_id as i32,[0;4],false),
+   Self::Inventory{document_id,..}|Self::FlowerColor{document_id,..}=>(*document_id as i32,[0;4],false),
    Self::Achievement{guid,..}|Self::AchievementCreated{guid,..}=>(0,*guid,false),
    Self::AchievementCreatedPair{guid,..}|Self::AchievementParentNew{child:(guid,..),..}=>(0,*guid,true),
    Self::AchievementPair{first:(guid,..),..}=>(0,*guid,true),
@@ -61,6 +91,7 @@ pub struct Editor {
  entries:Vec<Entry>,
  changes:HashMap<i32,Option<i64>>,
  inventory_changes:HashMap<u32,i32>,
+ flower_color_changes:HashMap<u32,i32>,
  achievement_changes:HashMap<[u32;4],AchievementValue>,
  achievement_created:HashMap<[u32;4],AchievementValue>,
  undo:Vec<Change>,
@@ -87,7 +118,7 @@ impl Editor {
    if base.insert(row.id,row.ticks).is_some(){return Err(Error::Duplicate)}
    entries.push(Entry{id:row.id,ticks:row.ticks});
   }
-  Ok(Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0})
+  Ok(Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),flower_color_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0})
  }
  fn compatible(slot:&ReadSlot)->bool{
   let n=slot.index.collection_version.as_ref().map(|v|v.number);
@@ -138,13 +169,70 @@ impl Editor {
  }
  /// Read-only lookup by document identity, never by Item ID alone.
  pub fn inventory_unique_data(&self,id:u32)->Option<crate::native::InventoryUniqueData>{
-  self.slot.index.inventory.iter().find(|row|row.id==id)?.unique_data
+  let row=self.slot.index.inventory.iter().find(|row|row.id==id)?;
+  self.effective_unique(row)
+ }
+ /// Original, complete schema-validated payload; no caller-supplied parsing or mutation.
+ /// Includes historical, nested wand, layout and kit types without flattening.
+ pub fn inventory_original_unique_payload(&self,id:u32)->Option<&[u8]>{
+  let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+  self.slot.envelope.decoded.get(row.fields[3].clone()?)
+ }
+ fn effective_unique(&self,row:&crate::native::InventoryRow)->Option<InventoryUniqueData>{
+  match row.unique_data?{
+   InventoryUniqueData::Flower{grow_state,base_color,pattern,pattern_color}=>Some(InventoryUniqueData::Flower{
+    grow_state,base_color:self.flower_color_changes.get(&row.id).copied().unwrap_or(base_color),pattern,pattern_color}),
+   other=>Some(other)
+  }
+ }
+ pub fn inventory_unique_rows(&self)->impl Iterator<Item=(u32,Option<i32>,Option<InventoryUniqueData>,usize)>+'_{
+  self.slot.index.inventory.iter().filter(|r|r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,self.effective_unique(r),r.unique_fields.len()))
+ }
+ fn flower_source_colors(&self,row:&crate::native::InventoryRow)->Option<&'static [i32]>{
+  if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<=0||
+   row.unique_is_nil!=Some(false)||row.unique_fields.len()!=4||self.slot.index.inventory_item_refs_incomplete{return None}
+  let item=row.item_id?;let uid=row.unique_id?;
+  if uid<=0||self.slot.index.inventory_item_refs.contains(&(item,uid)){return None}
+  let InventoryUniqueData::Flower{grow_state:6,base_color,pattern:0,pattern_color:0}=row.unique_data? else{return None};
+  let colors=FLOWER_DEFAULT_COLORS.iter().find(|(id,_)|*id==item)?.1;
+  if !colors.contains(&base_color){return None}
+  // Existing UID is retained, never minted or reused. Reject ambiguous identity
+  // and incomplete or deprecated records of the same species.
+  for other in &self.slot.index.inventory {
+   if other.id==row.id||other.item_id!=Some(item){continue}
+   if other.unique_id==Some(uid)||!matches!(other.unique_data,Some(InventoryUniqueData::Flower{..})){return None}
+  }
+  Some(colors)
+ }
+ pub fn inventory_flower_color_options(&self,id:u32)->Vec<i32>{
+  let Some(row)=self.slot.index.inventory.iter().find(|r|r.id==id)else{return Vec::new()};
+  let Some(colors)=self.flower_source_colors(row)else{return Vec::new()};
+  colors.iter().copied().filter(|color|{
+   !self.slot.index.inventory.iter().any(|other|other.id!=id&&other.item_id==row.item_id&&
+    self.effective_unique(other)==Some(InventoryUniqueData::Flower{grow_state:6,base_color:*color,pattern:0,pattern_color:0}))
+  }).collect()
+ }
+ /// CAS only a source-defined plain plucked flower color. No change to identity,
+ /// grow state, pattern, quantity, placement or rights. The original field span
+ /// is the only token written on export.
+ pub fn change_inventory_flower_color(&mut self,id:u32,expected:i32,next:i32)->Result<(),Error>{
+  let row=self.slot.index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
+  let Some(InventoryUniqueData::Flower{base_color:original,..})=row.unique_data else{return Err(Error::Schema)};
+  if self.effective_unique(row)!=Some(InventoryUniqueData::Flower{grow_state:6,base_color:expected,pattern:0,pattern_color:0})||
+   expected==next||!self.inventory_flower_color_options(id).contains(&expected)||!self.inventory_flower_color_options(id).contains(&next){return Err(Error::Schema)}
+  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let before=self.flower_color_changes.get(&id).copied();
+  let after=if original==next{None}else{Some(next)};
+  match after{Some(v)=>{self.flower_color_changes.insert(id,v);},None=>{self.flower_color_changes.remove(&id);}}
+  self.undo.push(Change::FlowerColor{document_id:id,before,after});
+  if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
+  self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);self.revision=revision;Ok(())
  }
  /// Display-only v3.0.1 flower rows, keyed by native document identity.
  pub fn inventory_flowers(&self)->impl Iterator<Item=(u32,u8,i32,i32,i32)>+'_{
   self.slot.index.inventory.iter().filter_map(move |row|{
    if self.slot.envelope.version!=Version::V301||row.item_id.is_none()||row.quantity.is_none(){return None}
-   match row.unique_data{
+   match self.effective_unique(row){
     Some(crate::native::InventoryUniqueData::Flower{grow_state,base_color,pattern,pattern_color})=>Some((row.id,grow_state,base_color,pattern,pattern_color)),
     _=>None
    }
@@ -186,7 +274,7 @@ impl Editor {
   self.achievement_created.get(&guid).copied().or_else(||self.achievement_changes.get(&guid).copied())
    .or_else(||self.slot.index.achievements.iter().find(|m|m.guid==guid).and_then(|m|achievement::value(m).ok()))
  }
- pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.inventory_changes.is_empty()||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
+ pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.inventory_changes.is_empty()||!self.flower_color_changes.is_empty()||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
  pub fn can_undo(&self)->bool {!self.undo.is_empty()}
  pub fn can_redo(&self)->bool {!self.redo.is_empty()}
  pub fn history(&self)->Vec<HistoryRecord>{
@@ -511,6 +599,12 @@ impl Editor {
      None=>{self.inventory_changes.remove(&document_id);}
     }
    }
+   Change::FlowerColor{document_id,before,after}=>{
+    match if reverse{before}else{after}{
+     Some(v)=>{self.flower_color_changes.insert(document_id,v);},
+     None=>{self.flower_color_changes.remove(&document_id);}
+    }
+   }
    Change::Achievement{guid,before,after}=>{
     match if reverse{before}else{after}{
      Some(v)=>{self.achievement_changes.insert(guid,v);},None=>{self.achievement_changes.remove(&guid);}
@@ -554,7 +648,7 @@ impl Editor {
   self.restore_change(&change,false);self.undo.push(change);
   self.revision=self.revision.wrapping_add(1);true
  }
- pub fn reset(&mut self){self.changes.clear();self.inventory_changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
+ pub fn reset(&mut self){self.changes.clear();self.inventory_changes.clear();self.flower_color_changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
  pub fn export(&self)->Result<Vec<u8>,Error>{
   if !self.dirty(){return Err(Error::Schema)}
   let original_payload=&self.slot.envelope.decoded;
@@ -570,6 +664,14 @@ impl Editor {
    if let Some(v)=self.inventory_changes.get(&row.id){
     if !self.inventory_can_edit(row){return Err(Error::Schema)}
     let span=row.fields[2].clone().ok_or(Error::Schema)?;
+    let mut encoded=vec![0xd2];encoded.extend(v.to_be_bytes());
+    patches.push((span,encoded));
+   }
+  }
+  for row in &self.slot.index.inventory {
+   if let Some(v)=self.flower_color_changes.get(&row.id){
+    if !self.inventory_flower_color_options(row.id).contains(v){return Err(Error::Schema)}
+    let span=row.unique_fields.get(1).cloned().ok_or(Error::Schema)?;
     let mut encoded=vec![0xd2];encoded.extend(v.to_be_bytes());
     patches.push((span,encoded));
    }
@@ -624,11 +726,15 @@ impl Editor {
    a.id!=b.id||a.item_id!=b.item_id||a.unique_id!=b.unique_id||
    a.unique_is_nil!=b.unique_is_nil||
    a.quantity!=self.inventory_changes.get(&b.id).copied().or(b.quantity)||
-   match (&a.fields[3],&b.fields[3]){
+   a.unique_data!=self.effective_unique(b)||
+   if self.flower_color_changes.contains_key(&b.id){
+    a.unique_fields.len()!=4||b.unique_fields.len()!=4||
+    [0,2,3].iter().any(|&i|reread.envelope.decoded[a.unique_fields[i].clone()]!=original_payload[b.unique_fields[i].clone()])
+   }else{match (&a.fields[3],&b.fields[3]){
     (Some(a_span),Some(b_span))=>reread.envelope.decoded[a_span.clone()]!=
      self.slot.envelope.decoded[b_span.clone()],
     (None,None)=>false,_=>true
-   }
+   }}
   }){return Err(Error::Schema)}
   let expected_achievements=self.achievements();
   if reread.index.achievements.len()!=expected_achievements.len() ||
@@ -1007,6 +1113,11 @@ impl Editor {
      out.extend(before.unwrap_or(original).to_le_bytes());
      out.extend(after.unwrap_or(original).to_le_bytes());
     }
+    Change::FlowerColor{document_id,before,after}=>{
+     out.push(7);out.extend(document_id.to_le_bytes());
+     let Some(InventoryUniqueData::Flower{base_color:original,..})=self.slot.index.inventory.iter().find(|r|r.id==document_id).and_then(|r|r.unique_data)else{return Err(Error::Schema)};
+     out.extend(before.unwrap_or(original).to_le_bytes());out.extend(after.unwrap_or(original).to_le_bytes());
+    }
     Change::Achievement{guid,before,after}=>{
      out.push(1);history_write_guid(&mut out,guid);
      history_write_value(&mut out,self.history_effective_achievement(guid,false,before)?);
@@ -1072,6 +1183,11 @@ impl Editor {
     6=>{
      let id=r.u32()?;let before=r.i32()?;let after=r.i32()?;
      candidate.change_inventory_quantity(id,before,after)?;
+     scopes.push(HistoryScope::Inventory);
+    }
+    7=>{
+     let id=r.u32()?;let before=r.i32()?;let after=r.i32()?;
+     candidate.change_inventory_flower_color(id,before,after)?;
      scopes.push(HistoryScope::Inventory);
     }
     1=>{
