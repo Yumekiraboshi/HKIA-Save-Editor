@@ -1190,7 +1190,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <article class="inventory-card" class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture}>
       <div class="inventory-card-heading">
        <span class="inventory-item-art" class:flower-variant={!!flower} aria-hidden="true">
-        {#if wand&&wand.sourceItemId===0&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+        {#if wand&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite}/>
          {:else if chef&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicChefSprite itemId={item.itemId} appearance={chef} fallback={nativeSprite??sprite}/>

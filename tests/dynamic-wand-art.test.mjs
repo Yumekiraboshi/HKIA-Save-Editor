@@ -62,3 +62,20 @@ test('native magic icon source map and all nine item transforms use exact origin
  assert.deepEqual(sourceOver([0,0,1,1],[1,0,0,.5]),[.5,0,.5,1]);
  assert.deepEqual(sourceOver([0,0,0,0],[1,0,0,.5]),[1,0,0,.5]);
 });
+
+test('item-derived overlays bind exact source definition and Sprite identities, without nested recoloring',()=>{
+ const bytes=read('wand-item-subicon-source-v3.0.1.json'),source=JSON.parse(bytes);
+ assert.equal(sha(bytes),'c5dce47482496e6ddda8b82bebfa845b519a37449228c4a88e894bad2c65e5f3');
+ assert.equal(source.rows.length,25);
+ assert.equal(new Set(source.rows.map(r=>r.itemId)).size,25);
+ assert.equal(source.rows.filter(r=>r.spriteName.startsWith('icon_item_critter_')).length,24);
+ assert.equal(source.rows.find(r=>r.itemId===1185152302).spriteName,'icon_item_gen_stick');
+ for(const row of source.rows){
+  assert.match(row.definitionPathId,/^-?\d+$/);assert.match(row.spritePathId,/^-?\d+$/);
+  const a=source.textures[row.pack];assert.ok(a);
+  const [l,t,r,b]=row.sampleClamp,[x,y,w,h]=row.sampleRect;
+  assert.ok(x>=l-.5&&y>=t-.5&&x+w<=r+.5&&y+h<=b+.5);
+  assert.ok(r<a.width&&b<source.alphaOffsetY);
+ }
+ for(const a of source.textures){const data=read(a.file);assert.equal(data.length,a.bytes);assert.equal(sha(data),a.sha256);}
+});

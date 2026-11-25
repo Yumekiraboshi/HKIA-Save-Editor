@@ -13,15 +13,31 @@ export const WAND_SUBICON_MANIFEST_SHA='e69a97ec439e0574a024aaf9ec4379cb83d6946a
 type SubRow={characteristicId:number;spritePathId:string;sampleRect:Rect;trimTopLeft:Rect;guardRect:Rect;logicalSize:number};
 type WandTransform={itemId:number;scale:number;offsetPercent:[number,number];rotation:number;wandType:number};
 type SubSource={texture:TextureAsset;alphaOffsetY:number;magic:SubRow[];wands:WandTransform[];schema:string;version:string};
-let subLoading:Promise<{source:SubSource;texture:PixelBuffer}>|undefined;
+let subLoading:Promise<SubSource>|undefined;
 function subSources(){
  if(!subLoading)subLoading=(async()=>{
   const raw=await loadVerifiedArtAsset(ROOT,'wand-subicon-source-v3.0.1.json',WAND_SUBICON_MANIFEST_SHA,32768);
   const source=JSON.parse(new TextDecoder().decode(raw)) as SubSource;
   if(source.schema!=='HKIA.WandSubIconSource.1'||source.version!=='3.0.1'||source.magic.length!==13||new Set(source.magic.map(x=>x.characteristicId)).size!==13||source.wands.length!==9||new Set(source.wands.map(x=>x.itemId)).size!==9||source.alphaOffsetY*2!==source.texture.height)throw Error('WAND_SUBICON_BINDING');
-  return {source,texture:await loadOpaqueArtTexture(ROOT,source.texture)};
+  return source;
  })().catch(e=>{subLoading=undefined;throw e;});
  return subLoading;
+}
+export const WAND_ITEM_SUBICON_SHA='c5dce47482496e6ddda8b82bebfa845b519a37449228c4a88e894bad2c65e5f3';
+type ItemSubRow={itemId:number;definitionPathId:string;spritePathId:string;pack:number;sampleRect:Rect;trimTopLeft:Rect;sampleClamp:Rect;logicalSize:number};
+type ItemSubSource={schema:string;version:string;textures:TextureAsset[];alphaOffsetY:number;rows:ItemSubRow[]};
+let itemSubLoading:Promise<ItemSubSource>|undefined;
+function itemSubSources(){
+ if(!itemSubLoading)itemSubLoading=(async()=>{
+  const raw=await loadVerifiedArtAsset(ROOT,'wand-item-subicon-source-v3.0.1.json',WAND_ITEM_SUBICON_SHA,65536);
+  const source=JSON.parse(new TextDecoder().decode(raw)) as ItemSubSource;
+  if(source.schema!=='HKIA.WandItemSubIconSource.1'||source.version!=='3.0.1'||source.rows.length!==25||
+    new Set(source.rows.map(r=>r.itemId)).size!==25||source.textures.length!==2||
+    source.textures.some(t=>t.height!==source.alphaOffsetY*2)||
+    source.rows.some(r=>!Number.isInteger(r.pack)||!source.textures[r.pack]))throw Error('WAND_ITEM_SUBICON_BINDING');
+  return source;
+ })().catch(e=>{itemSubLoading=undefined;throw e;});
+ return itemSubLoading;
 }
 function sources():Promise<Source>{
  if(!loading)loading=(async()=>{
@@ -50,28 +66,41 @@ export async function renderWandBaseArt(itemId:number,appearance:WandBaseAppeara
  }catch{return null;}
 }
 
-/** SourceItemId==0 selects the MagicDisplay.Icon, not a missing item.
- * Nonzero source IDs use native GetUiIcon, never an inferred dynamic tint.
- * This candidate reproduces source geometry in the normalized editor canvas;
- * original prefab blend/anchor capture parity is still to be verified. */
-export async function renderWandMagicArt(itemId:number,appearance:WandBaseAppearance&{sourceItemId:number}):Promise<Blob|null>{
- if(appearance.sourceItemId!==0)return null;
+/** SourceItemId==0 selects MagicDisplay.Icon. Otherwise select the exact
+ * original definition UiIcon; nested unique-data colors are intentionally
+ * not used by native TryGetSubIcon. Unknown/unextracted IDs remain withheld.
+ * Normalized editor geometry; actual prefab/framebuffer parity is pending. */
+export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&{sourceItemId:number}):Promise<Blob|null>{
  try{
   const [s,sub]=await Promise.all([sources(),subSources()]);
-  const row=s.rows.get(itemId),transform=sub.source.wands.find(x=>x.itemId===itemId);
-  const index=sub.source.magic.findIndex(x=>x.characteristicId===appearance.magicCharacteristicId);
-  if(!row||!transform||index<0)return null;
-  const icon=sub.source.magic[index],tints=resolveWandBaseTints(appearance,s.magic,s.flecks);if(!tints)return null;
-  // Each source crop has its own guard. Clamp the diamond's source atlas
-  // edge to its own texel center rather than reading the adjacent packed cell.
-  const x=index%4*258,y=Math.floor(index/4)*258;
-  const overlay:SpriteOverlay={texture:sub.texture,sampleRect:icon.sampleRect,trim:icon.trimTopLeft,
-   alphaOffsetY:sub.source.alphaOffsetY,logicalWidth:icon.logicalSize,logicalHeight:icon.logicalSize,
-   scale:transform.scale,offsetPercent:transform.offsetPercent,rotation:transform.rotation,
-   sampleClamp:[x+.5,y+.5,x+icon.guardRect[2]-.5,y+icon.guardRect[3]-.5]};
-  return await renderCachedDynamicArt(JSON.stringify(['3.0.1','wand-magic-composite-1',WAND_MANIFEST_SHA,WAND_SUBICON_MANIFEST_SHA,itemId,tints,icon.spritePathId]),{
+  const row=s.rows.get(itemId),transform=sub.wands.find(x=>x.itemId===itemId);
+  const tints=resolveWandBaseTints(appearance,s.magic,s.flecks);
+  if(!row||!transform||!tints)return null;
+  let spritePathId:string,sourceHash:string,overlay:SpriteOverlay;
+  if(appearance.sourceItemId===0){
+   const index=sub.magic.findIndex(x=>x.characteristicId===appearance.magicCharacteristicId);
+   if(index<0)return null;
+   const icon=sub.magic[index],x=index%4*258,y=Math.floor(index/4)*258;
+   spritePathId=icon.spritePathId;sourceHash=WAND_SUBICON_MANIFEST_SHA;
+   overlay={texture:await loadOpaqueArtTexture(ROOT,sub.texture),sampleRect:icon.sampleRect,trim:icon.trimTopLeft,
+    alphaOffsetY:sub.alphaOffsetY,logicalWidth:icon.logicalSize,logicalHeight:icon.logicalSize,
+    scale:transform.scale,offsetPercent:transform.offsetPercent,rotation:transform.rotation,
+    sampleClamp:[x+.5,y+.5,x+icon.guardRect[2]-.5,y+icon.guardRect[3]-.5]};
+  }else{
+   const itemSource=await itemSubSources();
+   const icon=itemSource.rows.find(x=>x.itemId===appearance.sourceItemId);
+   if(!icon)return null;
+   spritePathId=icon.spritePathId;sourceHash=WAND_ITEM_SUBICON_SHA;
+   overlay={texture:await loadOpaqueArtTexture(ROOT,itemSource.textures[icon.pack]),sampleRect:icon.sampleRect,trim:icon.trimTopLeft,
+    alphaOffsetY:itemSource.alphaOffsetY,logicalWidth:icon.logicalSize,logicalHeight:icon.logicalSize,
+    scale:transform.scale,offsetPercent:transform.offsetPercent,rotation:transform.rotation,sampleClamp:icon.sampleClamp};
+  }
+  return await renderCachedDynamicArt(JSON.stringify(['3.0.1','wand-composite-2',WAND_MANIFEST_SHA,WAND_SUBICON_MANIFEST_SHA,sourceHash,itemId,tints,spritePathId]),{
    base:s.base,mask:s.mask,baseRect:row.base.sampleRect,maskRect:row.mask.sampleRect,trim:row.base.trimTopLeft,
    alphaOffsetY:s.manifest.alphaOffsetY,logicalSize:row.base.logicalSize,tints,maskColorSpace:'linear',overlay
   });
  }catch{return null;}
+}
+export async function renderWandMagicArt(itemId:number,appearance:WandBaseAppearance&{sourceItemId:number}):Promise<Blob|null>{
+ return appearance.sourceItemId===0?renderWandArt(itemId,appearance):null;
 }
