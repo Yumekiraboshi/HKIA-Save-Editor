@@ -21,15 +21,17 @@ export function watchDynamicArtVisibility(node:HTMLElement,onVisibility:Visibili
 }
 /** A completed old request must never replace a newer appearance or create
  * an object URL after the card leaves the viewport or is destroyed. */
-export function startDynamicArtRequest(render:()=>Promise<Blob|null>,show:(url:string|null)=>void):()=>void{
+export function startDynamicArtRequest(render:()=>Promise<Blob|null>,show:(url:string|null,partial?:boolean)=>void,renderPartial?:()=>Promise<Blob|null>):()=>void{
  let canceled=false,created:string|null=null;
  show(null);
  void (async()=>{
   try{
-   const blob=await render();
+   let blob=await render(),partial=false;
+   if(canceled)return;
+   if(!blob&&renderPartial){blob=await renderPartial();partial=true;}
    if(canceled||!blob)return;
    created=URL.createObjectURL(blob);
-   show(created);
+   show(created,partial);
   }catch{/* An unavailable asset retains the explicitly marked fallback. */}
  })();
  return ()=>{
