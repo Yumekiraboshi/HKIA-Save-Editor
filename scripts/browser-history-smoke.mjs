@@ -25,7 +25,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,quantityBounds=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,quantityBounds=false,emptyMaterialInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -46,6 +46,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
+  ...(emptyMaterialInventory?[doc(1,arr([9],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([10],u32(627013240),[0],u32(0),[0xc0]))]:[]),
   ...(editableFlower?[flower(8,1,0,0)]:[]),
   ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
   ...(editableFurniture?[doc(1,arr([8],u32(61381969),u32(11),u32(93),arr([8],arr(u32(13),u32(2),u32(0)))))]:[]),
@@ -363,6 +364,75 @@ async function inventoryQuantityBoundsSmoke(){
   assert.equal(await batch.evaluate(el=>el.validity.rangeOverflow),true);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM INVENTORY BOUNDS PASS: native single and mixed batch maximum');
+ }finally{await context.close()}
+}
+async function inventoryEmptyMaterialSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-empty-material.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({emptyMaterialInventory:true}))
+  });
+  const openItems=async()=>{
+   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+   await chooseTab(page,'inventory');
+   await page.locator('[data-inventory-group="items"]').click();
+  };
+  const inputFor=async id=>{
+   await page.locator('.inventory-controls input[type="search"]').fill(String(id));
+   const input=page.locator('.inventory-card input[name="quantity"]');
+   await input.waitFor({timeout:30_000});
+   return input;
+  };
+  const apply=()=>page.locator('.inventory-card button[type="submit"]').click();
+  await openItems();
+  let input=await inputFor(1877756618);
+  assert.equal(await input.getAttribute('min'),'0');
+  await input.fill('0');
+  page.once('dialog',d=>d.dismiss());
+  await apply();
+  assert.equal(await page.locator('.state-dot.changed').count(),0);
+  page.once('dialog',d=>d.accept());
+  await apply();
+  await page.locator('.state-dot.changed').waitFor();
+  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  input=await inputFor(627013240);
+  assert.equal(await input.inputValue(),'0');
+  await input.fill('5');
+  await apply();
+  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  await page.reload({waitUntil:'networkidle'});
+  await openItems();
+  assert.equal(await (await inputFor(1877756618)).inputValue(),'0');
+  assert.equal(await (await inputFor(627013240)).inputValue(),'5');
+  await page.locator('button[title="Undo"]').click();
+  await page.locator('button[title="Redo"]:not([disabled])').waitFor();
+  assert.equal(await (await inputFor(627013240)).inputValue(),'0');
+  await page.locator('button[title="Redo"]').click();
+  await page.locator('button[title="Redo"]:disabled').waitFor();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  assert.equal(await (await inputFor(627013240)).inputValue(),'5');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([
+   page.waitForEvent('download',{timeout:30_000}),
+   page.locator('.file-menu .menu-popover > button').nth(2).click()
+  ]);
+  const output=readFileSync(await download.path());
+  const wasm=readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm');
+  const {instance}=await WebAssembly.instantiate(wasm,{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);
+  new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_snapshot(),0);
+  const iv=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(iv.getUint32(0,true),3);
+  const rows=[];
+  for(let i=0;i<3;i++){const p=4+i*16;rows.push([iv.getUint32(p,true),iv.getInt32(p+4,true),iv.getInt32(p+8,true)])}
+  assert.deepEqual(rows,[[4,315822,6],[9,1877756618,0],[10,627013240,5]]);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM INVENTORY EMPTY PASS: confirmation, empty/refill, reload, undo/redo and preserved native records');
  }finally{await context.close()}
 }
 async function inventoryDynamicFlowerArtSmoke(){
@@ -1302,6 +1372,7 @@ async function run(){
  await inventoryEditExportSmoke();
  await inventoryBatchQuantitySmoke();
  await inventoryQuantityBoundsSmoke();
+ await inventoryEmptyMaterialSmoke();
  await inventoryOriginalArtSmoke();
  await inventoryDynamicFlowerArtSmoke();
  await inventoryFlowerVariantEditSmoke();
