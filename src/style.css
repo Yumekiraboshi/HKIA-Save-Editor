@@ -319,3 +319,10 @@
 .inventory-flower-color,.inventory-flower-pattern{display:block;width:15px;height:15px;box-sizing:border-box;border:1px solid #fff;border-radius:3px;box-shadow:0 0 0 1px #8885}
 .inventory-flower-pattern{object-fit:contain;background:#151515}
 .inventory-flower-variant-name{font-size:10px;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.inventory-unique-edit{position:relative;min-width:0}
+.inventory-unique-edit summary{display:flex;align-items:center;justify-content:space-between;min-height:30px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-size:13px;font-variant-numeric:tabular-nums}
+.inventory-unique-edit summary::-webkit-details-marker{display:none}
+.inventory-unique-edit summary svg{width:16px;height:16px}
+.inventory-unique-edit form{margin-top:4px}
+.inventory-unique-edit select{width:100%;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;font-size:12px;min-height:30px}
