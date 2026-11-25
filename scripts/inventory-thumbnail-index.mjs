@@ -3,8 +3,9 @@
  * The preferred collection group wins; a missing route is repaired only
  * when there is a single alternative original pack entry.
  */
-import {readFileSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {readFileSync} from 'node:fs';
+import {join,resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {gunzipSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 import {collectNativeSprites,sourceIconGroups} from './original-icon-packs.mjs';
@@ -15,9 +16,10 @@ export function selectCollectionRoute(preferred,groups){
  if(groups.includes(preferred))return preferred;
  return groups.length===1?groups[0]:null;
 }
-export function buildInventoryThumbnailIndex(root,{write=true}={}){
+export function buildInventoryThumbnailIndex(root){
  const native=read(root,'public/inventory-native-categories.json'),catalog=read(root,'public/catalog.json');
  const extra=read(root,'public/inventory-art/index.json'),original=read(root,'public/source-colorways/index.json');
+ const names=read(root,'public/inventory-names/en.json').names;
  const dynamic=read(root,'public/dynamic-colorways/index.json'),dyes=read(root,'public/native-dye-palettes.json');
  const flags=read(root,'data/unityfs-audit/dynamic-uiicons.v3.0.1.json');
  const furniture=read(root,'public/inventory-ui/furniture-customization-v3.0.1.json');
@@ -72,7 +74,13 @@ export function buildInventoryThumbnailIndex(root,{write=true}={}){
  const unresolved=rows.filter(row=>['missing-pack','ambiguous-pack','source-placeholder','dynamic-color'].includes(row.source));
  const report={version:'3.0.1',definitions:all.size,counts,appearanceCounts,byCategory,alternateRoutes:Object.keys(routes).length,
   unresolved:unresolved.map(row=>({id:row.id,source:row.source,appearance:row.appearance,category:row.category,groups:row.groups}))};
- if(write)writeFileSync(join(root,'public/inventory-art/collection-routes.json'),JSON.stringify({schema:'HKIA.InventoryCollectionRoutes.1',version:'3.0.1',routes}));
- console.log('HKIA_INVENTORY_THUMBNAIL_CENSUS '+JSON.stringify(report));
+ report.unresolved=report.unresolved.map(row=>({...row,name:names[row.id]??byId.get(row.id)?.[5]??null}));
+ report.otherUnique=rows.filter(row=>row.appearance==='other-unique-data').map(row=>({id:row.id,key:byId.get(row.id)?.[1]??null,name:names[row.id]??byId.get(row.id)?.[5]??null,source:row.source,category:row.category}));
+
  return {routes,rows,report};
+}
+
+if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+ const {report}=buildInventoryThumbnailIndex(fileURLToPath(new URL('..',import.meta.url)));
+ console.log(JSON.stringify(report,null,2));
 }
