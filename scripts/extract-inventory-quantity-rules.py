@@ -52,7 +52,7 @@ def extract(source):
         types.append((cls,tt))
     require(types[3][0]==114,'item type mismatch')
     tt=types[3][1]
-    require(tt[231][2]=='ItemProperties','unexpected item tree')
+    require(tt[124][2]=='ItemProperties' and tt[133][2]=='CelebrationPeriodicity' and tt[227][2]=='CollectionEventYear' and tt[231][2]=='Year','unexpected item tree')
     end=[]
     for i,t in enumerate(tt):
         j=i+1

@@ -1308,7 +1308,7 @@ fn inventory_quantity_batch_is_atomic_and_recovers_one_history_step(){
   let mut e=Editor::open(input.clone()).unwrap();
   let original=e.inventory();
   for request in [vec![(4,6,20),(5,8,20)],vec![(4,6,20),(6,2,20)],
-    vec![(4,6,20),(4,6,21)],vec![(4,6,20),(5,9,0)],vec![(4,6,20),(99,1,20)]]{
+    vec![(4,6,20),(4,6,21)],vec![(4,6,0),(5,9,20)],vec![(4,6,20),(5,9,-1)],vec![(4,6,20),(99,1,20)]]{
    assert!(e.change_inventory_quantities(&request).is_err());
    assert_eq!(e.inventory(),original);
    assert_eq!(e.revision(),0);
