@@ -147,6 +147,8 @@ pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
     Some(U::Flower{grow_state,base_color,pattern,pattern_color})=>(7,vec![u32::from(grow_state),base_color as u32,pattern as u32,pattern_color as u32]),
     Some(U::Furniture{materials})=>(8,materials.into_iter().map(|v|v as u32).collect()),
     Some(U::Palette{rgba_bits})=>(6,rgba_bits.into_iter().flatten().collect()),
+    Some(U::CafeAppearance{count,colors})=>{let mut words=vec![u32::from(count)];words.extend(colors.into_iter().take(count as usize).map(|v|v as u32));(3,words)},
+    Some(U::BobaAppearance{color_id})=>(4,vec![color_id as u32]),
     Some(U::Opaque{tag})=>(tag,Vec::new()),
     None=>(if nil==Some(true){-1}else{-2},Vec::new())
    };

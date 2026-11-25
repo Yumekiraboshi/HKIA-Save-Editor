@@ -25,7 +25,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -39,10 +39,14 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const sourceFitItem=paletteInventory?palette(6,[color(0,0,1),color(1,0,0),color(0,1,0)]):doc(1,arr([6],u32(54272482),[0],u32(2),[0xc0]));
  const nonCollectionItem=doc(1,arr([7],u32(427689),[0],u32(5),[0xc0]));
  const flower=(id,color,pattern,accent)=>doc(1,arr([id],u32(43114910),u32(id),u32(1),arr([7],arr([6],u32(color),u32(pattern),u32(accent)))));
+ const chef=(id,item,unique)=>doc(1,arr([id],u32(item),u32(id),u32(1),unique));
+ const cafe=colors=>arr([3],arr(arr(u32(99)),arr(...colors.map(u32))));
+ const boba=color=>arr([4],arr(u32(color),u32(6),u32(11),u32(19),u32(99)));
  const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
   ...(editableFlower?[flower(8,1,0,0)]:[]),
+  ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
   ...(editableFurniture?[doc(1,arr([8],u32(61381969),u32(11),u32(93),arr([8],arr(u32(13),u32(2),u32(0)))))]:[]),
   ...(flowerInventory?[flower(8,1,0,0),flower(9,9,0,0),flower(10,1,10,16),flower(11,1,3,0),flower(12,1,9999,0)]:[])));
  const prefix=Uint8Array.from('135b4aa4f702a45d1cc562aeb5a386ed5d17e1fd588f424dcfc59d2e140cf597'.match(/../g).map(x=>parseInt(x,16)));
@@ -156,6 +160,33 @@ async function inventoryDynamicPaletteArtSmoke(){
   assert.deepEqual(images[0].alpha,images[1].alpha);assert.notDeepEqual(images[0].rgb,images[1].rgb);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM DYNAMIC PALETTE PASS: native unique Color1/2/3, original source sampling, local generation');
+ }finally{await context.close();}
+}
+async function inventoryChefArtSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-chef.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({chefInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  for(const id of ['203331651','1798633565']){
+   await page.locator('.inventory-controls input[type="search"]').fill(id);
+   const sprites=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-chef"]');
+   await sprites.nth(1).waitFor({timeout:30_000});
+   assert.equal(await sprites.count(),2);
+   const images=await sprites.evaluateAll(async els=>Promise.all(els.map(async el=>{
+    const url=getComputedStyle(el).backgroundImage.slice(5,-2);
+    if(!url.startsWith('blob:'))throw Error('expected local chef artwork');
+    const im=await createImageBitmap(await (await fetch(url)).blob());
+    const c=document.createElement('canvas');c.width=im.width;c.height=im.height;
+    const ctx=c.getContext('2d');ctx.drawImage(im,0,0);im.close();
+    return Array.from(ctx.getImageData(0,0,c.width,c.height).data);
+   })));
+   assert.notDeepEqual(images[0],images[1]);
+  }
+  assert.deepEqual(errors,[]);
  }finally{await context.close();}
 }
 async function inventoryEditExportSmoke(){
@@ -1227,6 +1258,7 @@ async function run(){
  await achievementExportReopenRoundtrip();
  await inventoryDynamicPaletteArtSmoke();
  await chefRuntimeSmoke(browser,origin,base);
+ await inventoryChefArtSmoke();
  await wandRuntimeSmoke(browser,origin,base);
  await inventoryEditExportSmoke();
  await inventoryBatchQuantitySmoke();
