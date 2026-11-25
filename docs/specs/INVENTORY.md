@@ -31,6 +31,10 @@ Tags 1 and 2 are deprecated furniture/flower types using Hash128, not interchang
 
 Implementation reference: `core/src/schema.rs`, `core/src/native.rs`, `core/src/collection.rs`. Reuse the current native index and session, not the historical JS research reader.
 
+### Variant-aware search
+
+The existing inventory search and native category match counts reuse each displayed localized flower color/pattern title, keyed by the Rust document identity. Whitespace-separated terms can combine the item name and appearance labels; unknown labels are not invented. This is presentation-only and applies to existing flower and flower-crafted clothing payloads, not new item creation.
+
 ### Native inventory UI assets (v3.0.1)
 
 `public/inventory-ui/index.json` records original source references and exact decoded-pixel verification of all thirteen category sprites and sixteen flower pattern/effect sprites. The original category sprites are retained as source assets, not the default navigation artwork. The flower color and pattern definitions and all 16 locale label maps derive from native assets. Rust/WASM snapshots are keyed by document identity. The unique-data snapshot exposes UID, tag, field count, and lossless typed values for tags 6–8; other tags retain original payloads in Rust. Variant choices are issued on demand by Rust and use native localized color and pattern labels. Flower variant edits use the existing atomic transaction, inventory history and recovery path. Game acceptance of the edited save still requires verification.
