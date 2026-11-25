@@ -70,6 +70,25 @@ pub extern "C" fn hkia_inventory_change(document_id:u32,before:i32,after:i32)->u
   }
  })
 }
+/// The batch transport uses the same local staging buffer as history replay.
+#[no_mangle]
+pub extern "C" fn hkia_inventory_batch_limit()->u32{
+ hkia_save_core::collection::MAX_INVENTORY_BATCH as u32
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_batch_change()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  let bytes=std::mem::take(&mut a.stage);
+  if bytes.is_empty()||bytes.len()%12!=0||bytes.len()/12>hkia_save_core::collection::MAX_INVENTORY_BATCH{return 1}
+  let requests=bytes.chunks_exact(12).map(|row|(
+   u32::from_le_bytes(row[0..4].try_into().unwrap()),
+   i32::from_le_bytes(row[4..8].try_into().unwrap()),
+   i32::from_le_bytes(row[8..12].try_into().unwrap())
+  )).collect::<Vec<_>>();
+  match a.editor.as_mut().map(|e|e.change_inventory_quantities(&requests)){Some(Ok(()))=>0,_=>1}
+ })
+}
 /// 4-byte count + N rows of (document id u32, item id i32, quantity i32,
 /// editable u32). Display-only; no inventory records are ever synthesized.
 #[no_mangle]
@@ -114,7 +133,6 @@ pub extern "C" fn hkia_inventory_flowers_snapshot()->u32{
 /// tag (-2 absent, -1 nil), field count, typed word count, words, edit hint.
 #[no_mangle]
 pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
- use hkia_save_core::native::InventoryUniqueData as U;
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();
   let Some(editor)=a.editor.as_ref()else{return 1};
@@ -125,10 +143,7 @@ pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
    if count>=1_000_000||out.len()>32*1024*1024{return 1}
    count+=1;
    let (tag,words):(i32,Vec<u32>)=match data{
-    Some(U::Flower{grow_state,base_color,pattern,pattern_color})=>(7,vec![u32::from(grow_state),base_color as u32,pattern as u32,pattern_color as u32]),
-    Some(U::Furniture{materials})=>(8,materials.into_iter().map(|v|v as u32).collect()),
-    Some(U::Palette{rgba_bits})=>(6,rgba_bits.into_iter().flatten().collect()),
-    Some(U::Opaque{tag})=>(tag,Vec::new()),
+    Some(data)=>data.display_words(),
     None=>(if nil==Some(true){-1}else{-2},Vec::new())
    };
    out.extend(id.to_le_bytes());out.extend(u32::from(uid.is_some()).to_le_bytes());

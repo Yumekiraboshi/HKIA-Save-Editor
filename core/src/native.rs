@@ -6,6 +6,7 @@ const MAX_DEPTH:usize=80;
 const DOC:&str="Sunblink.UserData.IDocument";
 const INVENTORY_UNIQUE:&str="Sunblink.Game.InventoryUniqueData";
 const INVENTORY_UNIQUE_CAPTURE:&str="inventory-unique-capture";
+const WAND_SOURCE_CAPTURE:&str="wand-source-unique-capture";
 const ROOT:&str="MessagePackCollectionProvider.DbRoot";
 const TRAIT:&str="Sunblink.UserData.TraitModel";
 const SHOP:&str="ShopManagerTraitModel.ShopItemKey";
@@ -39,7 +40,28 @@ pub enum InventoryUniqueData {
  Flower {grow_state:u8,base_color:i32,pattern:i32,pattern_color:i32},
  Furniture {materials:[i32;3]},
  Palette {rgba_bits:[[u32;4];3]},
+ CafeAppearance {count:u8,colors:[i32;3]},
+ BobaAppearance {color_id:i32},
+ /// A one-level display snapshot. The complete original nested payload is
+ /// retained in the source span; no recursive expansion or edit authority.
+ WandAppearance {source_item_id:i32,magic:i32,fleck:i32,style:i32,source_tag:i32,source_count:u8,source_words:[u32;12]},
  Opaque {tag:i32},
+}
+impl InventoryUniqueData {
+ /// A single wire projection for the top-level snapshot and nested source.
+ /// Native identifiers are transported as their exact 32-bit words.
+ pub fn display_words(self)->(i32,Vec<u32>){match self{
+  Self::Flower{grow_state,base_color,pattern,pattern_color}=>(7,vec![u32::from(grow_state),base_color as u32,pattern as u32,pattern_color as u32]),
+  Self::Furniture{materials}=>(8,materials.into_iter().map(|v|v as u32).collect()),
+  Self::Palette{rgba_bits}=>(6,rgba_bits.into_iter().flatten().collect()),
+  Self::CafeAppearance{count,colors}=>{let mut words=vec![u32::from(count)];words.extend(colors.into_iter().take(count as usize).map(|v|v as u32));(3,words)},
+  Self::BobaAppearance{color_id}=>(4,vec![color_id as u32]),
+  Self::WandAppearance{source_item_id,magic,fleck,style,source_tag,source_count,source_words}=>{
+   let mut words=vec![source_item_id as u32,magic as u32,fleck as u32,style as u32,source_tag as u32,u32::from(source_count)];
+   words.extend(source_words.into_iter().take(source_count as usize));(9,words)
+  },
+  Self::Opaque{tag}=>(tag,Vec::new()),
+ }}
 }
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub struct CollectionVersion {pub id:u32,pub number:i32,pub span:Range<usize>}
@@ -140,7 +162,7 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 enum Key<'a>{Int(i128),Str(&'a str),Guid([u32;4]),Shop([u32;4],[u32;4],i128)}
 #[derive(Clone,Debug)]
-enum Value<'a>{DocumentId(i128),Other,Nil,Bool(bool),Float(f32),Color([u32;4]),InventoryUnique(InventoryUniqueData,Vec<Range<usize>>),Time(i64,u32),Int(i128),Str(&'a str),Guid([u32;4]),Count(usize),Fields(Vec<(Value<'a>,Range<usize>)>),Key(Key<'a>),CabinApartmentPairs(Vec<CabinApartmentSourcePair>)}
+enum Value<'a>{DocumentId(i128),Other,Nil,Bool(bool),Float(f32),Color([u32;4]),ChefColors{count:u8,colors:[i32;3]},InventoryUnique(InventoryUniqueData,Vec<Range<usize>>),Time(i64,u32),Int(i128),Str(&'a str),Guid([u32;4]),Count(usize),Fields(Vec<(Value<'a>,Range<usize>)>),Key(Key<'a>),CabinApartmentPairs(Vec<CabinApartmentSourcePair>)}
 impl<'a> Value<'a>{
  fn int(&self)->Result<i128,Error>{if let Self::Int(v)=self{Ok(*v)}else{Err(Error::Schema)}}
  fn guid(&self)->Result<[u32;4],Error>{if let Self::Guid(v)=self{Ok(*v)}else{Err(Error::Schema)}}
@@ -171,7 +193,12 @@ impl<'a> Walk<'a>{
   match s{
    Spec::Primitive(s)=>self.primitive(s,depth),
    Spec::Nullable(inner)=>{if self.c.peek()?==0xc0{self.c.token()?;Ok(Value::Nil)}else{self.read(*inner,depth+1,ctx,collection)}},
-   Spec::Seq(inner)=>{if self.c.peek()?==0xc0{self.c.token()?;return Ok(Value::Nil)}let n=self.c.array()?;for _ in 0..n{self.read(*inner,depth+1,None,false)?;}Ok(Value::Count(n))},
+   Spec::Seq(inner)=>{if self.c.peek()?==0xc0{self.c.token()?;return Ok(Value::Nil)}let n=self.c.array()?;
+    if ctx==Some(("chef-colors",0)){
+     let mut colors=[0;3];
+     for i in 0..n{let v=self.read(*inner,depth+1,None,false)?;if i<3{colors[i]=i32::try_from(v.int()?).map_err(|_|Error::Schema)?;}}
+     Ok(Value::ChefColors{count:n.min(3) as u8,colors})
+    }else{for _ in 0..n{self.read(*inner,depth+1,None,false)?;}Ok(Value::Count(n))}},
    Spec::Dict(k,v)=>{
     if self.c.peek()?==0xc0{self.c.token()?;return Ok(Value::Nil)}let start=self.c.pos;let n=self.c.map()?;self.index.dictionary_entries=self.index.dictionary_entries.checked_add(n).ok_or(Error::Overflow)?;
     let deprecated=ctx==Some(("collection-key0",0));
@@ -237,11 +264,32 @@ impl<'a> Walk<'a>{
      Shape::Enum(_)=>unreachable!(),
      Shape::Union(branches)=>{let union_start=self.c.pos;if self.c.array()?!=2{return Err(Error::Schema)}self.budget(depth+1)?;let tag=self.c.int(i32::MIN as i128,i32::MAX as i128)? as i32;let branch=branches.iter().find(|(t,_)|*t==tag).ok_or(Error::Schema)?.1;
       let capture_unique=name==INVENTORY_UNIQUE&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,0));
-      let value=self.read(branch,depth+1,Some((if capture_unique{INVENTORY_UNIQUE_CAPTURE}else{name},tag)),false)?;
-      if capture_unique {
+      let capture_source=name==INVENTORY_UNIQUE&&ctx==Some((WAND_SOURCE_CAPTURE,0));
+      let value=self.read(branch,depth+1,Some((if capture_unique{INVENTORY_UNIQUE_CAPTURE}else if capture_source{WAND_SOURCE_CAPTURE}else{name},tag)),false)?;
+      if capture_unique||capture_source {
        let unique_fields=match &value{Value::Fields(a)=>a.iter().map(|(_,span)|span.clone()).collect(),_=>Vec::new()};
        let data=match (&value,tag){
-        (Value::Fields(a),7) if a.len()==4=>InventoryUniqueData::Flower{
+        (Value::Fields(a),3) if a.len()==2=>match &a[1].0{
+          Value::ChefColors{count,colors}=>InventoryUniqueData::CafeAppearance{count:*count,colors:*colors},
+          _=>InventoryUniqueData::Opaque{tag},
+         },
+         (Value::Fields(a),4) if a.len()==5=>InventoryUniqueData::BobaAppearance{color_id:i32::try_from(a[0].0.int()?).map_err(|_|Error::Schema)?},
+         (Value::Fields(a),9) if capture_unique&&a.len()==5=>{
+          let (source_tag,words)=match &a[1].0{
+           Value::Nil=>(-1,Vec::new()),
+           Value::InventoryUnique(data,_)=>data.display_words(),
+           _=>return Err(Error::Schema),
+          };
+          if words.len()>12{return Err(Error::Schema)}
+          let mut source_words=[0;12];source_words[..words.len()].copy_from_slice(&words);
+          InventoryUniqueData::WandAppearance{
+           source_item_id:i32::try_from(a[0].0.int()?).map_err(|_|Error::Schema)?,
+           magic:i32::try_from(a[2].0.int()?).map_err(|_|Error::Schema)?,
+           fleck:i32::try_from(a[3].0.int()?).map_err(|_|Error::Schema)?,
+           style:i32::try_from(a[4].0.int()?).map_err(|_|Error::Schema)?,
+           source_tag,source_count:words.len() as u8,source_words}
+         },
+         (Value::Fields(a),7) if a.len()==4=>InventoryUniqueData::Flower{
          grow_state:u8::try_from(a[0].0.int()?).map_err(|_|Error::Schema)?,
          base_color:i32::try_from(a[1].0.int()?).map_err(|_|Error::Schema)?,
          pattern:i32::try_from(a[2].0.int()?).map_err(|_|Error::Schema)?,
@@ -276,9 +324,9 @@ impl<'a> Walk<'a>{
       // copied UI representation or a caller-supplied digest.
       let source_start=self.c.pos;
       let n=self.c.array()?;if n>specs.len(){return Err(Error::Schema)}
-      let short=name.rsplit('.').next().unwrap_or(name);let is_doc=matches!(ctx,Some((DOC,_)));let capture_all=matches!(short,"AchievementData"|"GameCounterData"|"GameCollectionsTraitModel"|"CollectionVersion"|"AchievementModel"|"GameCounterModel")||name==ROOT||name==SHOP||name==CELEBRATION||(short=="InventoryItem"&&ctx==Some((DOC,1)))||name==HOME||name==CABIN||name==VISITOR_MANAGER||matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,_)))||name=="Sunblink.UserData.UniqueItemIdModel"||name=="Sunblink.UserData.HomeObjectModelDeprecatedV71"||name=="Sunblink.Game.OwnedRemoteCabinHomeObjectClientModelDeprecatedV71";
+      let short=name.rsplit('.').next().unwrap_or(name);let is_doc=matches!(ctx,Some((DOC,_)));let capture_all=matches!(short,"AchievementData"|"GameCounterData"|"GameCollectionsTraitModel"|"CollectionVersion"|"AchievementModel"|"GameCounterModel")||name==ROOT||name==SHOP||name==CELEBRATION||(short=="InventoryItem"&&ctx==Some((DOC,1)))||name==HOME||name==CABIN||name==VISITOR_MANAGER||matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,_))|Some((WAND_SOURCE_CAPTURE,_)))||name=="Sunblink.UserData.UniqueItemIdModel"||name=="Sunblink.UserData.HomeObjectModelDeprecatedV71"||name=="Sunblink.Game.OwnedRemoteCabinHomeObjectClientModelDeprecatedV71";
       let mut fields=Vec::new();let mut document_id=None;
-      for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
+      for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else if short=="CafeCreationUniqueData"&&matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,3))|Some((WAND_SOURCE_CAPTURE,3)))&&i==1{Some(("chef-colors",0))}else if short=="WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&i==1{Some((WAND_SOURCE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
        if capture_all{fields.push((value,at..self.c.pos));}
        else if is_doc&&i==0{document_id=Some(value);}
       }

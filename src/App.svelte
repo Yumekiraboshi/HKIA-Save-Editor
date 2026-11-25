@@ -1,11 +1,11 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,requestFlowerVariants,changeInventoryFlowerVariant,requestFurnitureVariants,changeInventoryFurnitureVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,changeInventoryFlowerVariant,requestFurnitureVariants,changeInventoryFurnitureVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
- import {inventoryCopy} from './inventory-copy';
+ import {inventoryCopy,inventoryBatchCopy} from './inventory-copy';
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,type FurnitureDisplay} from './inventory-furniture-display';
@@ -38,6 +38,10 @@ import {searchAchievementRows} from './achievement-search';
  import DyeSprite from './DyeSprite.svelte';
  import DynamicFlowerSprite from './DynamicFlowerSprite.svelte';
  import DynamicPaletteSprite from './DynamicPaletteSprite.svelte';
+ import DynamicChefSprite from './DynamicChefSprite.svelte';
+ import DynamicWandSprite from './DynamicWandSprite.svelte';
+ import {inventoryWandAppearance} from './inventory-wand-display';
+ import {inventoryChefAppearance} from './inventory-chef-display';
  import {CUSTOM_PALETTE_ITEM_ID} from './inventory-palette-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {toAchievementDateTimeValue,fromAchievementDateTimeValue} from './achievement-date';
@@ -73,6 +77,11 @@ import {verifiedFloorplanName} from './floorplan-names';
  let furnitureSelection=$state(-1);
  let inventoryNativeArt:InventoryNativeArt|null=$state(null);
  let inventoryEditableOnly=$state(false);
+ let inventoryBatchMode=$state(false);
+ let inventoryBatchSelected=$state<Set<number>>(new Set());
+ let inventoryBatchQuantity=$state<number|undefined>(undefined);
+ function clearInventoryBatch(){inventoryBatchMode=false;inventoryBatchSelected=new Set();inventoryBatchQuantity=undefined}
+ $effect(()=>{if(activeTool!=='inventory')clearInventoryBatch()});
  let inventoryLimit=$state(BATCH_SIZE);
  let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
  let inventoryBaseline:InventoryEntry[]=[];
@@ -157,6 +166,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const removalCopy=$derived(removalConfirmationCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
  const iCopy=$derived(inventoryCopy(locale));
+ const iBatchCopy=$derived(inventoryBatchCopy(locale));
  const flowerCopy=$derived(flowerEditorCopy(locale));
  const furnitureCopy=$derived(furnitureEditorCopy(locale));
  const hCopy=$derived(historyCopy(locale));
@@ -423,6 +433,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   }
  }
  function openInventoryTab(){
+  clearInventoryBatch();
   activeTool='inventory';inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;
   inventoryLimit=BATCH_SIZE;editingAchievement=null;error='';
   // Retry transient failures only when the user reopens Inventory.
@@ -508,10 +519,12 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
  function historyEntryChange(i:number):string{
-  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerVariantName,v=>v.map(n=>materialLabel(furnitureDisplay,n,furnitureCopy.defaultMaterial)).join(' / '))||
+  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerVariantName,v=>v.map(n=>materialLabel(furnitureDisplay,n,furnitureCopy.defaultMaterial)).join(' / '),id=>inventoryName(inventoryHistoryItems.get(id)??0))||
    (tabHistory[i]?.paired?hCopy.paired:'');
  }
- function historyEntryLabel(entry:HistoryRecord):string{
+ function historyEntryLabel(entry:HistoryRecord,i:number):string{
+  const detail=tabHistoryDetails[i];
+  if(detail?.scope==='inventory'&&'batch' in detail)return iBatchCopy+' ('+detail.batch.length.toLocaleString(locale)+')';
   if(entry.scope==='collections'){
    const item=historyItems.get(entry.itemId??0);
    return item?nameFor(item):'#'+String(entry.itemId);
@@ -613,6 +626,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(file.size>60*1024*1024||file.size===0)throw Error(copy.typeIssue);
    await draftWrites.catch(()=>{});
    const session=await openSave(file);
+   clearInventoryBatch();
    original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;inventoryBaseline=session.inventory;update(session);
    selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';collectionSearchDrilldown=false;filter='all';
    iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;
@@ -707,9 +721,33 @@ import {verifiedFloorplanName} from './floorplan-names';
   }catch(e){error=describeError(e)}
   finally{busy=false}
  }
+ function toggleInventoryBatch(row:InventoryEntry){
+  if(!snapshot||busy||!inventoryBatchMode||!row.editable)return;
+  const next=new Set(inventoryBatchSelected);
+  if(next.has(row.documentId))next.delete(row.documentId);
+  else if(next.size<snapshot.inventoryBatchLimit)next.add(row.documentId);
+  inventoryBatchSelected=next;
+ }
+ async function applyInventoryBatch(event:SubmitEvent){
+  event.preventDefault();
+  if(!snapshot||busy||!inventoryBatchMode||!inventoryBatchSelected.size)return;
+  const next=inventoryBatchQuantity;
+  if(next===undefined||!Number.isSafeInteger(next)||next<1||next>2147483647)return;
+  const rows=snapshot.inventory.filter(row=>inventoryBatchSelected.has(row.documentId));
+  if(rows.length!==inventoryBatchSelected.size||rows.some(row=>!row.editable))return;
+  if(rows.every(row=>row.quantity===next)){clearInventoryBatch();return}
+  const requests:InventoryQuantityRequest[]=rows.map(row=>[row.documentId,row.quantity,next]);
+  busy=true;error='';
+  try{
+   update(await changeInventoryQuantities(requests));
+   clearInventoryBatch();
+   await persistDraft();
+  }catch(e){error=describeError(e)}
+  finally{busy=false}
+ }
  async function applyInventoryQuantity(row:InventoryEntry,event:SubmitEvent){
   event.preventDefault();
-  if(!snapshot||busy||!row.editable)return;
+  if(!snapshot||busy||inventoryBatchMode||!row.editable)return;
   const value=new FormData(event.currentTarget as HTMLFormElement).get('quantity');
   if(typeof value!=='string'||!/^[1-9][0-9]*$/.test(value)){
    error=copy.fileError;return;
@@ -939,7 +977,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          </button>
          {#each tabHistory as entry,i (i)}
           <button type="button" class:active={tabHistoryCursor===i+1} disabled={busy} title={hCopy.step} onclick={()=>void goToHistory(i+1)}>
-           <span class="history-step">{i+1}</span><span class="history-text"><span class="history-item-name">{historyEntryLabel(entry)}</span>{#if historyEntryChange(i)}<span class="history-change">{historyEntryChange(i)}</span>{/if}</span>
+           <span class="history-step">{i+1}</span><span class="history-text"><span class="history-item-name">{historyEntryLabel(entry,i)}</span>{#if historyEntryChange(i)}<span class="history-change">{historyEntryChange(i)}</span>{/if}</span>
            {#if tabHistoryCursor===i+1}<span class="history-current" aria-label={hCopy.current}>✓</span>{/if}
           </button>
          {/each}
@@ -1136,7 +1174,21 @@ import {verifiedFloorplanName} from './floorplan-names';
      onclick={()=>{inventoryEditableOnly=!inventoryEditableOnly;inventoryLimit=BATCH_SIZE}}>
      {iCopy.editableOnly}
     </button>
-    <span class="inventory-total">{iCopy.count}: {inventoryRows.length.toLocaleString(locale)}</span>
+    <button type="button" class="inventory-editable-filter inventory-batch-toggle" class:active={inventoryBatchMode}
+     aria-pressed={inventoryBatchMode} disabled={busy||snapshot.inventoryBatchLimit<1}
+     onclick={()=>{if(inventoryBatchMode)clearInventoryBatch();else inventoryBatchMode=true}}>
+     {iBatchCopy}
+    </button>
+    {#if inventoryBatchMode}
+     <form class="inventory-batch-form" onsubmit={e=>void applyInventoryBatch(e)}>
+      <span class="inventory-total" aria-live="polite">{inventoryBatchSelected.size.toLocaleString(locale)} / {snapshot.inventoryBatchLimit.toLocaleString(locale)}</span>
+      <input type="number" min="1" max="2147483647" step="1" required bind:value={inventoryBatchQuantity} placeholder={iCopy.quantity} aria-label={iCopy.quantity} disabled={busy}/>
+      <button type="submit" class="primary" disabled={busy||!inventoryBatchSelected.size||inventoryBatchQuantity===undefined}>{iCopy.apply}</button>
+      <button type="button" class="inventory-editable-filter" disabled={busy} onclick={clearInventoryBatch}>{copy.cancel}</button>
+     </form>
+    {:else}
+     <span class="inventory-total">{iCopy.count}: {inventoryRows.length.toLocaleString(locale)}</span>
+    {/if}
    </div>
    {#if inventoryVisibleGroups.length>0||(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)>0}
     
@@ -1179,12 +1231,22 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const nativeSprite=inventoryNativeArt?.entries.get(item.itemId)}
      {@const sprite=definition&&!inventoryNativeArt?.withheld.has(item.itemId)?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
      {@const flower=flowerDisplay(item.flower,flowerDefinitions,flowerLabels[locale]??{})}
+     {@const chef=inventoryChefAppearance(item.itemId,item.unique)}
+     {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
      {@const canFlower=!!item.flower&&!!item.unique?.flowerEditable&&!!flowerDefinitions&&!!flowerLabels[locale]}
      {@const canFurniture=!!item.unique?.furnitureEditable}
-      <article class="inventory-card" class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture}>
+      <article class="inventory-card" class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
+      {#if inventoryBatchMode&&item.editable}
+       <input class="inventory-batch-checkbox" type="checkbox" checked={inventoryBatchSelected.has(item.documentId)} aria-label={iBatchCopy+': '+inventoryName(item.itemId)}
+        disabled={busy||(!inventoryBatchSelected.has(item.documentId)&&inventoryBatchSelected.size>=snapshot.inventoryBatchLimit)} onchange={()=>toggleInventoryBatch(item)}/>
+      {/if}
       <div class="inventory-card-heading">
        <span class="inventory-item-art" class:flower-variant={!!flower} aria-hidden="true">
-        {#if item.palette&&item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+        {#if wand&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+          <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite}/>
+         {:else if chef&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+          <DynamicChefSprite itemId={item.itemId} appearance={chef} fallback={nativeSprite??sprite}/>
+         {:else if item.palette&&item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicPaletteSprite itemId={item.itemId} palette={item.palette}/>
         {:else if item.flower&&flowerDefinitions&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicFlowerSprite itemId={item.itemId} flower={item.flower} definitions={flowerDefinitions} fallback={nativeSprite??sprite}/>
@@ -1216,19 +1278,19 @@ import {verifiedFloorplanName} from './floorplan-names';
         <label>
          <span class="visually-hidden">{iCopy.quantity}</span>
          <input type="number" name="quantity" min="1" max="2147483647" step="1"
-          value={item.quantity} disabled={busy} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
+          value={item.quantity} disabled={busy||inventoryBatchMode} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
         </label>
-        <button type="submit" class="primary" disabled={busy} title={iCopy.apply} aria-label={iCopy.apply}>
+        <button type="submit" class="primary" disabled={busy||inventoryBatchMode} title={iCopy.apply} aria-label={iCopy.apply}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
         </button>
        </form>
       {:else if canFurniture}
-       <button class="inventory-unique-edit-button" type="button" disabled={busy} title={furnitureCopy.title} aria-label={furnitureCopy.title+': '+inventoryName(item.itemId)} onclick={()=>void openFurnitureEditor(item)}>
+       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} title={furnitureCopy.title} aria-label={furnitureCopy.title+': '+inventoryName(item.itemId)} onclick={()=>void openFurnitureEditor(item)}>
         <span>{item.quantity}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg>
        </button>
       {:else if canFlower}
-       <button class="inventory-unique-edit-button" type="button" disabled={busy}
+       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode}
         title={flowerCopy.title} aria-label={flowerCopy.title+': '+inventoryName(item.itemId)} onclick={()=>void openFlowerEditor(item)}>
         <span>{item.quantity}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg>

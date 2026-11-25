@@ -167,3 +167,18 @@ test('combined progress and date corrections and parent-only dates are reported'
  assert.equal(text.match(/日時:/g)?.length,2);
  assert.doesNotMatch(text,/未達成 → 達成済み/);
 });
+
+test('inventory batch is one native history step with every stack change retained',()=>{
+ const batch=bytes([u8(10),u32(2),u32(4),i32(6),i32(20),u32(8),i32(9),i32(20)]);
+ const records=[meta('inventory',4,null)];
+ const [detail]=decodeHistoryDetails(log([batch],1),records);
+ assert.deepEqual(detail,{scope:'inventory',documentId:4,batch:[{documentId:4,before:6,after:20},{documentId:8,before:9,after:20}]});
+ assert.equal(formatHistoryChange(detail,'en',historyDetailCopy('en'),'','Quantity',undefined,undefined,id=>'Item '+id),'Item 4: 6 → 20 · Item 8: 9 → 20');
+ for(const invalid of [
+  bytes([u8(10),u32(0)]),bytes([u8(10),u32(41)]),
+  bytes([u8(10),u32(2),u32(4),i32(6),i32(20),u32(4),i32(9),i32(20)]),
+  bytes([u8(10),u32(1),u32(4),i32(6),i32(0)]),
+  bytes([u8(10),u32(1),u32(4),i32(6),i32(6)]),
+  batch.slice(0,-1)
+ ])assert.deepEqual(decodeHistoryDetails(log([invalid],1),records),[]);
+});

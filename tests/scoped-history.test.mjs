@@ -35,7 +35,7 @@ test('active-tab timeline jumps keep other tabs unchanged and are accessible fro
  assert.match(app,/update\(await jumpHistory\(scope,target\)\)/);
  assert.match(app,/return goToHistory\(tabHistoryCursor\+\(which==='undo'\?-1:1\)\)/);
  assert.match(app,/\{#each tabHistory as entry,i \(i\)\}/);
- assert.match(app,/\{historyEntryLabel\(entry\)\}/);
+ assert.match(app,/\{historyEntryLabel\(entry,i\)\}/);
  assert.doesNotMatch(app,/\(which==='undo'\?undo\(\):redo\(\)\)/);
  assert.match(translations,/ja:\{title:'編集履歴'/);
  assert.match(translations,/export function historyCopy\(locale:Locale\)/);

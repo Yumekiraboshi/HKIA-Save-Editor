@@ -61,3 +61,35 @@ test('furniture variant draft carries native tuple independently of quantity',()
  assert.throws(()=>safeInventoryPatches([{...expected[0],after:[2147483648,2,0]}]));
  assert.throws(()=>safeInventoryPatches([...expected,...expected]));
 });
+
+test('chef wire snapshot carries ordered tint IDs, not flavors or fabricated colors',async()=>{
+ const {inventoryChefAppearance}=await load('../src/inventory-chef-display.ts');
+ const rows=decodeInventoryUnique(wire([3,1,1,1,3,2,4,3,6,14,11,0,2,1,2,4,5,1,14,0,3,1,3,3,2,1,0,0]),new Set([1,2,3]));
+ assert.deepEqual(inventoryChefAppearance(203331651,rows.get(1)),{kind:'cafe',colors:[6,14,11]});
+ assert.deepEqual(inventoryChefAppearance(1798633565,rows.get(2)),{kind:'boba',colorId:14});
+ assert.deepEqual(inventoryChefAppearance(203331651,rows.get(3)),{kind:'cafe',colors:[]});
+ assert.equal(inventoryChefAppearance(1798633565,rows.get(1)),null);
+ assert.equal(inventoryChefAppearance(315822,rows.get(1)),null);
+ assert.throws(()=>decodeInventoryUnique(wire([1,1,1,1,3,2,2,3,6,0]),new Set([1])));
+});
+
+test('wand snapshot separates native source identity from its nested appearance',async()=>{
+ const {inventoryWandAppearance}=await load('../src/inventory-wand-display.ts');
+ const rows=decodeInventoryUnique(wire([3,
+  1,1,1,9,5,6,315822,104,125,1,-1,0,0,
+  2,1,2,9,5,10,1331175279,104,125,1,7,4,6,6,0,0,0,
+  3,1,3,9,5,6,39246601,104,125,1,9,0,0
+ ]),new Set([1,2,3]));
+ assert.deepEqual(inventoryWandAppearance(39246601,rows.get(1)),{sourceItemId:315822,magicCharacteristicId:104,fleckCharacteristicId:125,styleCharacteristicId:1,sourceUnique:null});
+ assert.deepEqual(inventoryWandAppearance(39246601,rows.get(2)).sourceUnique,{tag:7,words:[6,6,0,0]});
+ assert.deepEqual(inventoryWandAppearance(39246601,rows.get(3)).sourceUnique,{tag:9,words:[]});
+ assert.equal(inventoryWandAppearance(315822,rows.get(1)),null);
+ assert.throws(()=>decodeInventoryUnique(wire([1,1,1,1,9,5,7,315822,104,125,1,9,1,0,0]),new Set([1])));
+ assert.throws(()=>decodeInventoryUnique(wire([1,1,1,1,9,5,6,315822,104,125,1,7,4,0]),new Set([1])));
+});
+
+test('zero source Item ID is the native magic Sprite selector, not absent',async()=>{
+ const {inventoryWandAppearance}=await load('../src/inventory-wand-display.ts');
+ const row=decodeInventoryUnique(wire([1,1,1,1,9,5,6,0,104,125,1,-1,0,0]),new Set([1])).get(1);
+ assert.equal(inventoryWandAppearance(39246601,row).sourceItemId,0);
+});

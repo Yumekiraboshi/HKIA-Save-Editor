@@ -9,6 +9,7 @@ import type {FlowerVariant,FurnitureVariant,InventoryUniqueInfo} from './invento
 import type {InventoryFlower} from './inventory-flower-display';
 import type {InventoryPalette} from './inventory-palette-display';
 export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean;flower?:InventoryFlower;palette?:InventoryPalette;unique?:InventoryUniqueInfo};
+export type InventoryQuantityRequest=[documentId:number,before:number,after:number];
 export type InventoryPatch={documentId:number;before:number;after:number;kind?:undefined}|{documentId:number;before:FlowerVariant;after:FlowerVariant;kind:'flower-variant'}|{documentId:number;before:FurnitureVariant;after:FurnitureVariant;kind:'furniture-variant'};
 export type HistoryScope='collections'|'achievements'|'inventory';
 export type HistoryRecord={
@@ -16,6 +17,7 @@ export type HistoryRecord={
  itemId:number|null;guid:[number,number,number,number]|null
 };
 export type SaveSnapshot={
+ inventoryBatchLimit:number;
  history:HistoryRecord[];
  historyCheckpoint:Uint8Array|null;
  /** Sorted source-verified IDs currently absent and safe to record in this session. */
@@ -35,7 +37,7 @@ export type SaveSnapshot={
  inventory:InventoryEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'inventory-change'|'flower-variant-change'|'flower-variants'|'furniture-variants'|'furniture-variant-change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'furniture-variants'|'furniture-variant-change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -66,6 +68,9 @@ export function changeCollection(itemId:number,expected:bigint|null,next:bigint|
 /** Existing ordinary stack only. Rust enforces structural eligibility and CAS. */
 export function changeInventoryQuantity(documentId:number,beforeQuantity:number,nextQuantity:number):Promise<SaveSnapshot>{
  return rpc('inventory-change',{documentId,beforeQuantity,nextQuantity}) as Promise<SaveSnapshot>;
+}
+export function changeInventoryQuantities(rows:readonly InventoryQuantityRequest[]):Promise<SaveSnapshot>{
+ return rpc('inventory-batch-change',{quantityBatch:rows.map(row=>[...row])}) as Promise<SaveSnapshot>;
 }
 export function requestFlowerVariants(documentId:number):Promise<FlowerVariant[]>{
  return rpc('flower-variants',{documentId}) as Promise<FlowerVariant[]>;
