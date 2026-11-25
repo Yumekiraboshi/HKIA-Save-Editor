@@ -2,9 +2,9 @@
 
 ## Current source policy (supersedes the historical renderer work below)
 
-All 5,383 Steam v3.0.1 dye Item IDs now have a completed game-original image. Display the original by Item ID first, independently of shared UiIcon packs and dye palettes; a verified reconstruction is only a fallback if no original can be displayed. The prior rendering prototypes, fits and 2D recolors are historical diagnostics/fallbacks, not the current production source. See [native-uiicon-colorways.md](native-uiicon-colorways.md). Do not delete the remaining legacy fallback assets until the published original images are verified.
+All 5,383 Steam v3.0.1 dye Item IDs now have a completed game-original image. Display the original by Item ID first, independently of shared UiIcon packs and dye palettes; For appearances with no completed source image, the production target is on-demand local browser rendering from the verified native assets and actual game rendering rules, not pre-rendered variant files. See PRODUCT_SPEC §7 (Owner decision 2026-11-25). The prior rendering prototypes, fits and 2D recolors are historical diagnostics/fallbacks, not the current production source. See [native-uiicon-colorways.md](native-uiicon-colorways.md). Do not delete the remaining legacy fallback assets until the published original images are verified.
 
-## Historical source policy
+## Historical source policy (superseded; offline output is diagnostic only)
 
 **Only original-game assets may be used to produce final variant images.**
 The editor must not import or hotlink wiki pictures or other third-party images.
