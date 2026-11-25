@@ -7,6 +7,8 @@ use std::{collections::{HashMap,HashSet},ops::Range};
 
 const MAX_TICKS:i64=3_155_378_975_999_999_999;
 const MAX_UNDO:usize=256;
+// A group journal record is at most 485 bytes, keeping all 256 entries within the existing 128 KiB checkpoint budget.
+pub const MAX_INVENTORY_BATCH:usize=40;
 // Steam 3.0.1 FlowerSettings.AvailableColors (30 entries) minus the
 // two event-restricted entries in FlowerColorToEventMap (Black, Gray).
 // Native pattern choices: species default + CrosstypePatterns, excluding
@@ -86,9 +88,12 @@ pub struct CounterEntry {pub guid:[u32;4],pub current:f32,pub counted_values:Opt
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub struct InventoryEntry {pub document_id:u32,pub item_id:i32,pub quantity:i32,pub editable:bool}
 #[derive(Clone,Copy,Debug)]
+struct InventoryQuantityDelta{document_id:u32,before:Option<i32>,after:Option<i32>}
+#[derive(Clone,Debug)]
 enum Change {
  Collection{id:i32,before:Option<Option<i64>>,after:Option<Option<i64>>},
  Inventory{document_id:u32,before:Option<i32>,after:Option<i32>},
+ InventoryBatch{deltas:Vec<InventoryQuantityDelta>},
  FlowerVariant{document_id:u32,before:Option<FlowerVariant>,after:Option<FlowerVariant>},
  FurnitureVariant{document_id:u32,before:Option<FurnitureVariant>,after:Option<FurnitureVariant>},
  Achievement{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
@@ -112,12 +117,13 @@ pub struct HistoryRecord {
 }
 impl Change {
  fn scope(&self)->HistoryScope{
-  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}|Self::FlowerVariant{..}|Self::FurnitureVariant{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
+  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}|Self::InventoryBatch{..}|Self::FlowerVariant{..}|Self::FurnitureVariant{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
  }
  fn history_record(&self,applied:bool)->HistoryRecord{
   let (item_id,guid,paired)=match self {
    Self::Collection{id,..}=>(*id,[0;4],false),
    Self::Inventory{document_id,..}|Self::FlowerVariant{document_id,..}|Self::FurnitureVariant{document_id,..}=>(*document_id as i32,[0;4],false),
+   Self::InventoryBatch{deltas}=>(deltas[0].document_id as i32,[0;4],false),
    Self::Achievement{guid,..}|Self::AchievementCreated{guid,..}=>(0,*guid,false),
    Self::AchievementCreatedPair{guid,..}|Self::AchievementParentNew{child:(guid,..),..}=>(0,*guid,true),
    Self::AchievementPair{first:(guid,..),..}=>(0,*guid,true),
@@ -413,18 +419,44 @@ impl Editor {
    r.item_id.is_some_and(|id|id>0)&&r.quantity.is_some_and(|v|v>0)&&
    r.unique_is_nil==Some(true)&&r.fields[2].is_some()
  }
- /// CAS updates only existing ordinary stack quantities, never IDs or unique payloads.
- pub fn change_inventory_quantity(&mut self,id:u32,expected:i32,next:i32)->Result<(),Error>{
+ fn plan_inventory_quantity(&self,id:u32,expected:i32,next:i32)->Result<InventoryQuantityDelta,Error>{
   let row=self.slot.index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
-  if !self.inventory_can_edit(row)||next<1||expected==next||
+  if !self.inventory_can_edit(row)||next<1||
    self.inventory_changes.get(&id).copied().or(row.quantity)!=Some(expected){return Err(Error::Schema)}
-  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   let before=self.inventory_changes.get(&id).copied();
   let after=if row.quantity==Some(next){None}else{Some(next)};
-  match after{Some(v)=>{self.inventory_changes.insert(id,v);},None=>{self.inventory_changes.remove(&id);}}
-  self.undo.push(Change::Inventory{document_id:id,before,after});
+  Ok(InventoryQuantityDelta{document_id:id,before,after})
+ }
+ /// CAS updates only existing ordinary stack quantities, never IDs or unique payloads.
+ pub fn change_inventory_quantity(&mut self,id:u32,expected:i32,next:i32)->Result<(),Error>{
+  if expected==next{return Err(Error::Schema)}
+  let InventoryQuantityDelta{document_id,before,after}=self.plan_inventory_quantity(id,expected,next)?;
+  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let change=Change::Inventory{document_id,before,after};
+  self.restore_change(&change,false);
+  self.undo.push(change);
   if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
   self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);self.revision=revision;Ok(())
+ }
+ /// Validate every existing ordinary stack against the current revision before
+ /// changing anything. One native history step covers all selected rows.
+ pub fn change_inventory_quantities(&mut self,requests:&[(u32,i32,i32)])->Result<(),Error>{
+  if requests.is_empty()||requests.len()>MAX_INVENTORY_BATCH{return Err(Error::Budget)}
+  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let mut seen=HashSet::new();
+  let mut deltas=Vec::with_capacity(requests.len());
+  for &(id,expected,next) in requests{
+   if !seen.insert(id){return Err(Error::Duplicate)}
+   let delta=self.plan_inventory_quantity(id,expected,next)?;
+   if expected!=next{deltas.push(delta);}
+  }
+  if deltas.is_empty(){return Err(Error::Schema)}
+  let change=Change::InventoryBatch{deltas};
+  self.restore_change(&change,false);
+  self.undo.push(change);
+  if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
+  self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);
+  self.revision=revision;Ok(())
  }
  pub fn counters(&self)->Vec<CounterEntry>{
   self.slot.index.counters.iter().filter_map(|model|match &model.state{
@@ -767,6 +799,14 @@ impl Editor {
     match if reverse{before}else{after}{
      Some(v)=>{self.inventory_changes.insert(document_id,v);},
      None=>{self.inventory_changes.remove(&document_id);}
+    }
+   }
+   Change::InventoryBatch{ref deltas}=>{
+    for &InventoryQuantityDelta{document_id,before,after} in deltas{
+     match if reverse{before}else{after}{
+      Some(v)=>{self.inventory_changes.insert(document_id,v);},
+      None=>{self.inventory_changes.remove(&document_id);}
+     }
     }
    }
    Change::FlowerVariant{document_id,before,after}=>{
@@ -1315,6 +1355,16 @@ impl Editor {
      out.extend(before.unwrap_or(original).to_le_bytes());
      out.extend(after.unwrap_or(original).to_le_bytes());
     }
+    Change::InventoryBatch{ref deltas}=>{
+     out.push(10);out.extend((deltas.len() as u32).to_le_bytes());
+     for &InventoryQuantityDelta{document_id,before,after} in deltas{
+      let original=self.slot.index.inventory.iter().find(|r|r.id==document_id)
+       .and_then(|r|r.quantity).ok_or(Error::Schema)?;
+      out.extend(document_id.to_le_bytes());
+      out.extend(before.unwrap_or(original).to_le_bytes());
+      out.extend(after.unwrap_or(original).to_le_bytes());
+     }
+    }
     Change::FlowerVariant{document_id,before,after}=>{
      out.push(8);out.extend(document_id.to_le_bytes());
      let original=self.slot.index.inventory.iter().find(|r|r.id==document_id).and_then(|r|r.unique_data).and_then(flower_variant).ok_or(Error::Schema)?;
@@ -1392,6 +1442,14 @@ impl Editor {
     6=>{
      let id=r.u32()?;let before=r.i32()?;let after=r.i32()?;
      candidate.change_inventory_quantity(id,before,after)?;
+     scopes.push(HistoryScope::Inventory);
+    }
+    10=>{
+     let n=r.u32()? as usize;
+     if n==0||n>MAX_INVENTORY_BATCH{return Err(Error::Budget)}
+     let mut requests=Vec::with_capacity(n);
+     for _ in 0..n{requests.push((r.u32()?,r.i32()?,r.i32()?));}
+     candidate.change_inventory_quantities(&requests)?;
      scopes.push(HistoryScope::Inventory);
     }
     8=>{
