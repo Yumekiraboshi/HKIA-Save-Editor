@@ -12,6 +12,7 @@ import {spawn,execFileSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {chromium} from 'playwright-core';
 import {chefRuntimeSmoke} from './chef-runtime-smoke.mjs';
+import {wandRuntimeSmoke} from './wand-runtime-smoke.mjs';
 
 const append=(...arrays)=>Uint8Array.from(arrays.flatMap(x=>Array.from(x)));
 const u32=n=>append([0xce],Array.from({length:4},(_,i)=>n>>>(24-8*i)&255));
@@ -1006,6 +1007,7 @@ async function run(){
  await achievementExportReopenRoundtrip();
  await inventoryDynamicPaletteArtSmoke();
  await chefRuntimeSmoke(browser,origin,base);
+ await wandRuntimeSmoke(browser,origin,base);
  await inventoryEditExportSmoke();
  await inventoryOriginalArtSmoke();
  await inventoryDynamicFlowerArtSmoke();
