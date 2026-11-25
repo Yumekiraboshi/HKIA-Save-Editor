@@ -34,3 +34,30 @@ test('native options transport is bounded and preserves all four fields',async()
  assert.throws(()=>decodeFlowerVariants(wire([1,6,8,10])));
  assert.throws(()=>decodeFlowerVariants(wire([101])));
 });
+
+test('furniture snapshot and choices preserve three signed material indices and native edit hint',async()=>{
+ const {decodeFurnitureVariants,furnitureVariantOf}=await load('../src/inventory-unique.ts');
+ const b=wire([1,8,1,11,8,3,3,13,2,0,2]);
+ const info=decodeInventoryUnique(b,new Set([8])).get(8);
+ assert.equal(info.furnitureEditable,true);
+ assert.equal(info.flowerEditable,false);
+ assert.equal(info.uniqueId,11);
+ assert.deepEqual(furnitureVariantOf(info),[13,2,0]);
+ assert.deepEqual(decodeFurnitureVariants(wire([2,502,2,0,13,3,0])),[[502,2,0],[13,3,0]]);
+ assert.throws(()=>decodeFurnitureVariants(wire([2635])));
+ assert.throws(()=>decodeFurnitureVariants(wire([1,13,2])));
+ assert.throws(()=>decodeInventoryUnique(wire([1,8,1,11,8,3,3,13,2,0,1]),new Set([8])));
+ assert.throws(()=>decodeInventoryUnique(wire([1,8,1,11,7,4,4,6,1,0,0,2]),new Set([8])));
+});
+test('furniture variant draft carries native tuple independently of quantity',()=>{
+ const a={documentId:8,itemId:61381969,quantity:93,editable:false,unique:{uniqueId:11,tag:8,fieldCount:3,words:[13,2,0],flowerEditable:false,furnitureEditable:true}};
+ const b={...a,unique:{...a.unique,words:[502,2,0]}};
+ const expected=[{documentId:8,before:[13,2,0],after:[502,2,0],kind:'furniture-variant'}];
+ assert.deepEqual(diffInventory([a],[b]),expected);
+ assert.deepEqual(safeInventoryPatches(expected),expected);
+ assert.deepEqual(diffInventory([a],[a]),[]);
+ assert.throws(()=>safeInventoryPatches([{...expected[0],after:[13,2,0]}]));
+ assert.throws(()=>safeInventoryPatches([{...expected[0],after:[502,2]}]));
+ assert.throws(()=>safeInventoryPatches([{...expected[0],after:[2147483648,2,0]}]));
+ assert.throws(()=>safeInventoryPatches([...expected,...expected]));
+});
