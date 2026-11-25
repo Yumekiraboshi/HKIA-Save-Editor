@@ -9,6 +9,8 @@ const MAX_TICKS:i64=3_155_378_975_999_999_999;
 const MAX_UNDO:usize=256;
 // A group journal record is at most 485 bytes, keeping all 256 entries within the existing 128 KiB checkpoint budget.
 pub const MAX_INVENTORY_BATCH:usize=40;
+// Session-only handle for an absent ordinary ingredient. Never a saved document ID.
+const PENDING_ITEM:u32=1<<31;
 // Steam 3.0.1 FlowerSettings.AvailableColors (30 entries) minus the
 // two event-restricted entries in FlowerColorToEventMap (Black, Gray).
 // Native pattern choices: species default + CrosstypePatterns, excluding
@@ -218,13 +220,14 @@ impl Editor {
  /// Original native inventory records; positive ordinary stack quantity bounds
  /// are source-defined and never inferred from a display category.
  pub fn inventory(&self)->Vec<InventoryEntry>{
-  self.slot.index.inventory.iter().filter_map(|r|{
+  let mut rows:Vec<_>=self.slot.index.inventory.iter().filter_map(|r|{
    let quantity_limit=self.inventory_quantity_limit(r);
    let quantity_minimum=if self.inventory_can_empty(r){0}else{1};
    Some(InventoryEntry{document_id:r.id,item_id:r.item_id?,quantity:
     self.inventory_changes.get(&r.id).copied().or(r.quantity)?,
     editable:quantity_limit.is_some(),quantity_limit,quantity_minimum})
-  }).collect()
+  }).collect();
+  rows.extend(self.pending_inventory_rows());rows
  }
  /// Read-only lookup by document identity, never by Item ID alone.
  pub fn inventory_unique_data(&self,id:u32)->Option<crate::native::InventoryUniqueData>{
@@ -243,6 +246,7 @@ impl Editor {
  }
  pub fn inventory_unique_rows(&self)->impl Iterator<Item=(u32,Option<i32>,Option<bool>,Option<InventoryUniqueData>,usize)>+'_{
   self.slot.index.inventory.iter().filter(|r|r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,r.unique_is_nil,self.effective_unique(r),r.unique_fields.len()))
+   .chain(self.pending_inventory_rows().into_iter().map(|r|(r.document_id,Some(0),Some(true),None,0)))
  }
  fn unique_row_source(&self,row:&crate::native::InventoryRow,fields:usize)->Option<i32>{
   if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<=0||
@@ -445,7 +449,66 @@ impl Editor {
   if cap<i32::MAX&&self.inventory_item_rows.get(&item_id)!=Some(&1){return None}
   Some(cap)
  }
+ fn can_create_inventory_item(&self,item_id:i32)->bool{
+  self.slot.envelope.version==Version::V301&&crate::inventory_source::ordinary_ingredient(item_id)&&
+   !self.inventory_item_rows.contains_key(&item_id)&&
+   !self.slot.index.inventory_item_refs_incomplete&&
+   self.slot.index.inventory.iter().all(|r|r.item_id.is_some()&&r.id<PENDING_ITEM)&&
+   !self.slot.index.inventory_item_refs.iter().any(|&(item,_)|item==item_id)
+ }
+ fn pending_inventory_rows(&self)->Vec<InventoryEntry>{
+  let mut rows:Vec<_>=self.inventory_changes.iter().filter(|(&id,_)|id&PENDING_ITEM!=0)
+   .map(|(&document_id,&quantity)|InventoryEntry{document_id,item_id:(document_id&!PENDING_ITEM) as i32,
+    quantity,editable:true,quantity_limit:Some(i32::MAX),quantity_minimum:0}).collect();
+  rows.sort_by_key(|r|r.item_id);rows
+ }
+ // Include the other scope's redo future in the shared native ID reservation.
+ fn reserved_inventory_count(&self)->usize{
+  let mut handles:HashSet<u32>=self.inventory_changes.keys().filter(|&&id|id&PENDING_ITEM!=0).copied().collect();
+  for change in &self.redo{
+   match change{
+    Change::Inventory{document_id,after:Some(_),..} if document_id&PENDING_ITEM!=0=>{handles.insert(*document_id);}
+    Change::InventoryBatch{deltas}=>for d in deltas{if d.document_id&PENDING_ITEM!=0&&d.after.is_some(){handles.insert(d.document_id);}},
+    _=>{}
+   }
+  }
+  handles.len()
+ }
+ fn reserved_achievement_count(&self)->usize{
+  self.achievement_created.len()+self.redo.iter().map(|change|match change{
+   Change::AchievementCreated{before:None,after:Some(_),..}|Change::AchievementCreatedPair{..}=>1,
+   Change::AchievementParentNew{child,..}=>1+usize::from(child.1&&child.2.is_none()),
+   _=>0
+  }).sum::<usize>()
+ }
+ fn preflight_inventory_membership(&self,deltas:&[InventoryQuantityDelta])->Result<(),Error>{
+  if !deltas.iter().any(|d|d.document_id&PENDING_ITEM!=0){return Ok(())}
+  let mut handles:HashSet<u32>=self.inventory_changes.keys().filter(|&&id|id&PENDING_ITEM!=0).copied().collect();
+  for d in deltas{
+   if d.document_id&PENDING_ITEM!=0{
+    if d.after.is_some(){handles.insert(d.document_id);}else{handles.remove(&d.document_id);}
+   }
+  }
+  let count=handles.len()+self.reserved_achievement_count();
+  if count>0{crate::document_membership::allocate_ids(&self.slot.index,count)?;}
+  Ok(())
+ }
+ /// Candidate rows are source-checked and absent, not persisted inventory records.
+ pub fn inventory_creatable(&self)->Vec<InventoryEntry>{
+  if crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
+  crate::inventory_source::ordinary_ingredient_ids().filter_map(|item_id|{
+   let document_id=PENDING_ITEM|item_id as u32;
+   if !self.can_create_inventory_item(item_id)||self.inventory_changes.contains_key(&document_id){return None}
+   Some(InventoryEntry{document_id,item_id,quantity:0,editable:true,quantity_limit:Some(i32::MAX),quantity_minimum:1})
+  }).collect()
+ }
  fn plan_inventory_quantity(&self,id:u32,expected:i32,next:i32)->Result<InventoryQuantityDelta,Error>{
+  if id&PENDING_ITEM!=0{
+   let item_id=(id&!PENDING_ITEM) as i32;
+   let before=self.inventory_changes.get(&id).copied();
+   if !self.can_create_inventory_item(item_id)||next<0||before.unwrap_or(0)!=expected{return Err(Error::Schema)}
+   return Ok(InventoryQuantityDelta{document_id:id,before,after:(next>0).then_some(next)})
+  }
   let row=self.slot.index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
   let cap=self.inventory_quantity_limit(row).ok_or(Error::Schema)?;
   let minimum=if self.inventory_can_empty(row){0}else{1};
@@ -455,10 +518,13 @@ impl Editor {
   let after=if row.quantity==Some(next){None}else{Some(next)};
   Ok(InventoryQuantityDelta{document_id:id,before,after})
  }
- /// CAS updates only existing ordinary stack quantities, never IDs or unique payloads.
+ /// CAS changes ordinary quantities or stages a source-verified absent ingredient.
+ /// Persisted document IDs are assigned only by the shared export allocator.
  pub fn change_inventory_quantity(&mut self,id:u32,expected:i32,next:i32)->Result<(),Error>{
   if expected==next{return Err(Error::Schema)}
-  let InventoryQuantityDelta{document_id,before,after}=self.plan_inventory_quantity(id,expected,next)?;
+  let delta=self.plan_inventory_quantity(id,expected,next)?;
+  self.preflight_inventory_membership(&[delta])?;
+  let InventoryQuantityDelta{document_id,before,after}=delta;
   let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   let change=Change::Inventory{document_id,before,after};
   self.restore_change(&change,false);
@@ -479,6 +545,7 @@ impl Editor {
    if expected!=next{deltas.push(delta);}
   }
   if deltas.is_empty(){return Err(Error::Schema)}
+  self.preflight_inventory_membership(&deltas)?;
   let change=Change::InventoryBatch{deltas};
   self.restore_change(&change,false);
   self.undo.push(change);
@@ -577,7 +644,7 @@ impl Editor {
    !crate::achievement_keys::known_v301(guid)||!achievement::valid(value)||
    self.achievement_value(guid).is_some()||value.complete!=value.completed.is_some()||
    self.slot.index.documents+self.achievement_created.len()>=1_000_000{return Err(Error::Schema)}
-  crate::document_membership::allocate_ids(&self.slot.index,self.achievement_created.len()+1)?;
+  crate::document_membership::allocate_ids(&self.slot.index,self.achievement_created.len()+self.reserved_inventory_count()+1)?;
   let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   self.achievement_created.insert(guid,value);
   self.undo.push(Change::AchievementCreated{guid,before:None,after:Some(value)});
@@ -595,7 +662,7 @@ impl Editor {
    !achievement::valid(expected)||!achievement::valid(next)||expected==next||
    self.achievement_value(parent)!=Some(expected)||
    self.slot.index.documents+self.achievement_created.len()>=1_000_000{return Err(Error::Schema)}
-  crate::document_membership::allocate_ids(&self.slot.index,self.achievement_created.len()+1)?;
+  crate::document_membership::allocate_ids(&self.slot.index,self.achievement_created.len()+self.reserved_inventory_count()+1)?;
   let model=self.slot.index.achievements.iter().find(|m|m.guid==parent).ok_or(Error::Schema)?;
   let original=achievement::value(model)?;
   let before=self.achievement_changes.get(&parent).copied();
@@ -621,7 +688,7 @@ impl Editor {
    !achievement::valid(parent_next)||!parent_next.complete||
    self.slot.index.documents+self.achievement_created.len()+usize::from(expected.is_none())+1>1_000_000
    {return Err(Error::Schema)}
-  crate::document_membership::allocate_ids(&self.slot.index,self.achievement_created.len()+usize::from(expected.is_none())+1)?;
+  crate::document_membership::allocate_ids(&self.slot.index,self.achievement_created.len()+self.reserved_inventory_count()+usize::from(expected.is_none())+1)?;
   let total=crate::achievement_keys::parent_size_v301(parent).ok_or(Error::Schema)?;
   if parent_next.current!=total as f32{return Err(Error::Schema)}
   let mut seen=0usize;
@@ -969,6 +1036,22 @@ impl Editor {
     &intermediate,self.slot.envelope.version,&index,&[],Some(((16,last),&records)))?;
    (result,first.min(created_at))
   };
+  let pending=self.pending_inventory_rows();
+  let mut new_inventory=Vec::with_capacity(pending.len());
+  let (next_payload,first)=if pending.is_empty(){(next_payload,first)}else{
+   let index=crate::native::index_native(&next_payload,self.slot.envelope.version)?;
+   let anchor=index.document_spans.last().ok_or(Error::Schema)?.key;
+   let ids=crate::document_membership::allocate_ids(&index,pending.len())?;
+   let mut records=Vec::with_capacity(pending.len());
+   for (row,id) in pending.iter().zip(ids){
+    if !self.can_create_inventory_item(row.item_id)||row.quantity<=0{return Err(Error::Schema)}
+    let mut bytes=vec![0x92,1,0x95];mp_u32(id,&mut bytes);mp_u32(row.item_id as u32,&mut bytes);
+    bytes.push(0);mp_u32(row.quantity as u32,&mut bytes);bytes.push(0xc0);
+    records.push(((1,id),bytes));new_inventory.push((id,row.item_id,row.quantity));
+   }
+   let (result,created_at)=crate::document_membership::rewrite(&next_payload,self.slot.envelope.version,&index,&[],Some((anchor,&records)))?;
+   (result,first.min(created_at))
+  };
   if next_payload==*original_payload{return Err(Error::Schema)}
   let new_slot=encode_slot(&self.slot_raw,&self.slot,&next_payload,first)?;
   let reread=read_slot(&new_slot)?;
@@ -976,7 +1059,11 @@ impl Editor {
   let expected=self.entries();
   if reread.index.collections.len()!=expected.len() ||
    !reread.index.collections.iter().zip(&expected).all(|(r,e)|r.id==e.id&&r.ticks==e.ticks) {return Err(Error::Schema)}
-  if reread.index.inventory.len()!=self.slot.index.inventory.len(){return Err(Error::Schema)}
+  if reread.index.inventory.len()!=self.slot.index.inventory.len()+new_inventory.len(){return Err(Error::Schema)}
+  for (row,&(id,item,qty)) in reread.index.inventory.iter().skip(self.slot.index.inventory.len()).zip(&new_inventory){
+   if row.id!=id||row.item_id!=Some(item)||row.unique_id!=Some(0)||row.quantity!=Some(qty)||
+    row.unique_is_nil!=Some(true)||row.unique_data.is_some()||!row.fields.iter().all(Option::is_some){return Err(Error::Schema)}
+  }
   if reread.index.inventory.iter().zip(&self.slot.index.inventory).any(|(a,b)|{
    a.id!=b.id||a.item_id!=b.item_id||a.unique_id!=b.unique_id||
    a.unique_is_nil!=b.unique_is_nil||
@@ -1364,16 +1451,16 @@ impl Editor {
     }
     Change::Inventory{document_id,before,after}=>{
      out.push(6);out.extend(document_id.to_le_bytes());
-     let original=self.slot.index.inventory.iter().find(|r|r.id==document_id)
-      .and_then(|r|r.quantity).ok_or(Error::Schema)?;
+     let original=if document_id&PENDING_ITEM!=0{0}else{self.slot.index.inventory.iter().find(|r|r.id==document_id)
+      .and_then(|r|r.quantity).ok_or(Error::Schema)?};
      out.extend(before.unwrap_or(original).to_le_bytes());
      out.extend(after.unwrap_or(original).to_le_bytes());
     }
     Change::InventoryBatch{ref deltas}=>{
      out.push(10);out.extend((deltas.len() as u32).to_le_bytes());
      for &InventoryQuantityDelta{document_id,before,after} in deltas{
-      let original=self.slot.index.inventory.iter().find(|r|r.id==document_id)
-       .and_then(|r|r.quantity).ok_or(Error::Schema)?;
+      let original=if document_id&PENDING_ITEM!=0{0}else{self.slot.index.inventory.iter().find(|r|r.id==document_id)
+       .and_then(|r|r.quantity).ok_or(Error::Schema)?};
       out.extend(document_id.to_le_bytes());
       out.extend(before.unwrap_or(original).to_le_bytes());
       out.extend(after.unwrap_or(original).to_le_bytes());
