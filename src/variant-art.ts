@@ -98,7 +98,7 @@ export function parseSourceColorwayIndex(value:unknown,base:string):Record<strin
  return urls;
 }
 export async function loadSourceColorwayIndex(base:string):Promise<Record<string,string>>{
- const response=await fetch(base+'source-colorways/index.json',{cache:'force-cache'});
+ const response=await fetch(base+'source-colorways/index.json',{cache:'no-cache'});
  if(!response.ok)throw Error('SOURCE_COLORWAY_INDEX_FETCH');
  return parseSourceColorwayIndex(await response.json(),base);
 }
@@ -122,26 +122,27 @@ export function parseDynamicColorwayIndex(value:unknown,base:string):Record<stri
  return result;
 }
 export async function loadDynamicColorwayIndex(base:string):Promise<Record<string,string>>{
- const response=await fetch(base+'dynamic-colorways/index.json',{cache:'force-cache'});
+ const response=await fetch(base+'dynamic-colorways/index.json',{cache:'no-cache'});
  if(!response.ok)throw Error('DYNAMIC_COLORWAY_INDEX_FETCH');
  return parseDynamicColorwayIndex(await response.json(),base);
 }
-export async function loadVariantArtSources(base:string):Promise<{primary:Record<string,string>;originals:Record<string,string>}>{
+export async function loadVariantArtSources(base:string):Promise<{primary:Record<string,string>;originals:Record<string,string>;reconstructions:Record<string,string>}>{
  const [original,dynamic,verified]=await Promise.allSettled([
   loadSourceColorwayIndex(base),
   loadDynamicColorwayIndex(base),
   (async()=>{
-   const response=await fetch(base+'variant-art/index.json',{cache:'force-cache'});
+   const response=await fetch(base+'variant-art/index.json',{cache:'no-cache'});
    if(!response.ok)throw Error('VARIANT_ART_INDEX_FETCH');
    return parseVariantArtIndex(await response.json(),base);
   })()
  ]);
  if(original.status==='rejected'&&dynamic.status==='rejected'&&verified.status==='rejected')throw verified.reason;
- // A verified runtime render outranks a named source sprite. A failed
+ // A finished original source sprite outranks a reconstruction. A failed
  // optional index must not hide valid artwork from the other index.
  const originals={...(dynamic.status==='fulfilled'?dynamic.value:{}),
   ...(original.status==='fulfilled'?original.value:{})};
- return {originals,primary:{...originals,...(verified.status==='fulfilled'?verified.value:{})}};
+ const reconstructions=verified.status==='fulfilled'?verified.value:{};
+ return {originals,reconstructions,primary:{...reconstructions,...originals}};
 }
 export async function loadVariantArtIndex(base:string):Promise<Record<string,string>>{
  return (await loadVariantArtSources(base)).primary;

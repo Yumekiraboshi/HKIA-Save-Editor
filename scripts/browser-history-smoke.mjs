@@ -862,9 +862,9 @@ async function run(){
  await page.locator('.removal-confirm-action').click();
  await page.locator('.achievement-item-grid button.achievement-toggle[aria-pressed="false"]').first().waitFor();
 
- // Exact, same-origin 8x8 red capture must outrank approximation. Supply
- // a synthetic capture via a browser route without shipping false game art.
- // A missing second capture must fall back to local source-dye rendering.
+ // An original image must outrank a registered reconstruction. Supply
+ // a synthetic reconstruction without shipping false game art, and block
+ // the old atlas/palette to exercise the independent Item ID source path.
  const fakePng=Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAFklEQVR4nGP8JWfznwEPYMInOXwUAABpGAJjJPuaSQAAAABJRU5ErkJggg==',
   'base64'
@@ -885,25 +885,36 @@ async function run(){
   status:200,contentType:'image/png',body:fakePng
  }));
  await page.route('**/variant-art/585726126.png',route=>route.fulfill({status:404,body:'missing'}));
+ await page.route('**/item-packs/**',route=>route.fulfill({status:404,body:'missing'}));
+ await page.route('**/native-dye-palettes.json',route=>route.fulfill({status:404,body:'missing'}));
  await page.reload({waitUntil:'networkidle'});
  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
  await chooseTab(page,'collections');
  const finalSearch=page.locator('.collection-controls input[type="search"]');
  await finalSearch.fill('Ice Cream Archer Hat');
  await page.locator('.collection-search-result').first().click();
- const captured=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-render"]');
- await captured.waitFor({timeout:30_000});
- assert.equal(await captured.evaluate(el=>getComputedStyle(el).backgroundSize),'contain',
-  'verified colorway assets preserve their natural aspect ratio');
- assert.ok((await captured.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/704486536.png'),
-  'verified image uses direct static item-specific pixels rather than a recolored Blob');
+ const originalFirst=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-source-sprite"]');
+ await originalFirst.waitFor({timeout:30_000});
+ await sampledSprite(originalFirst);
  await finalSearch.fill('Orange Archer Hat');
  await page.locator('.collection-search-result').first().click();
  const originalFallback=page.locator('#collection-item-585726126 .item-sprite[data-dye-source="game-source-sprite"]');
  await originalFallback.waitFor({timeout:30_000});
  assert.equal(await originalFallback.getAttribute('data-icon-fidelity'),'game-original');
  assert.ok((await originalFallback.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/dynamic-colorways/585726126.webp?v='),
-  'a missing verified override must display the actual item-specific original, not an approximation');
+  'original artwork must display even when shared packs and palettes are unavailable');
+ // When the original itself cannot decode, the separately registered
+ // reconstruction remains a fallback, with its fidelity marked accordingly.
+ await page.route(/\/(?:source-colorways|dynamic-colorways)\/704486536\.webp(?:\?.*)?$/,route=>route.fulfill({status:404,body:'missing'}));
+ await page.reload({waitUntil:'networkidle'});
+ await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+ await chooseTab(page,'collections');
+ await page.locator('.collection-controls input[type="search"]').fill('Ice Cream Archer Hat');
+ await page.locator('.collection-search-result').first().click();
+ const captured=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-render"]');
+ await captured.waitFor({timeout:30_000});
+ assert.equal(await captured.getAttribute('data-icon-fidelity'),'verified-reconstruction');
+ assert.equal(await captured.evaluate(el=>getComputedStyle(el).backgroundSize),'contain');
 
  assert.deepEqual(errors,[],'no console exceptions or 5xx during browser replay');
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');

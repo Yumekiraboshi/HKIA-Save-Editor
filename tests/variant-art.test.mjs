@@ -26,7 +26,7 @@ const example={
 };
 const wrap=(records)=>({schema:'HKIA.DyeVariantArt.1',version:'3.0.1',records});
 
-test('only explicit same-origin per-Item-ID artwork can override source sprites',()=>{
+test('only explicit same-origin per-Item-ID reconstructed artwork can be registered',()=>{
  assert.deepEqual(parseVariantArtIndex(manifest,'/HKIA-Save-Editor/'),{});
  const r=parseVariantArtIndex(wrap({'704486536':example}),'/HKIA-Save-Editor/');
  assert.equal(r['704486536'],'/HKIA-Save-Editor/variant-art/704486536.png');
@@ -66,11 +66,11 @@ test('loader reads verified index through local deployment base only',async()=>{
    return {ok:true,json:async()=>url.endsWith('/source-colorways/index.json')?sources:url.endsWith('/dynamic-colorways/index.json')?dynamic:wrap({'704486536':example})};
   };
   const record=await loadVariantArtIndex('/HKIA-Save-Editor/');
-  assert.equal(record['704486536'],'/HKIA-Save-Editor/variant-art/704486536.png');
+  assert.equal(record['704486536'],parseDynamicColorwayIndex(dynamic,'/HKIA-Save-Editor/')['704486536']??parseSourceColorwayIndex(sources,'/HKIA-Save-Editor/')['704486536']);
   assert.equal(record['379863484'],'/HKIA-Save-Editor/source-colorways/379863484.webp');
   assert.equal(requests.length,3);
   assert.deepEqual(requests.map(r=>r.url).sort(),['/HKIA-Save-Editor/dynamic-colorways/index.json','/HKIA-Save-Editor/source-colorways/index.json','/HKIA-Save-Editor/variant-art/index.json']);
-  assert.ok(requests.every(r=>r.options.cache==='force-cache'));
+  assert.ok(requests.every(r=>r.options.cache==='no-cache'));
  }finally{
   globalThis.fetch=previous;
  }
@@ -104,8 +104,10 @@ test('Collection and Inventory select source-registered exact images before appr
  assert.match(app,/exactArtUrl=\{exactVariantArt\[String\(representative\)\]\}/);
  assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,5);
  assert.match(app,/originalArtUrl=\{originalVariantArt\[String\(representative\)\]\}/);
- assert.match(sprite,/if\(exact\)showExact\(exact,showOriginal\)/);
- assert.match(sprite,/showExact\(original,showNativeIcon\)/);
+ assert.match(sprite,/if\(original\)showExact\(original,showReconstruction\)/);
+ assert.match(sprite,/showExact\(exact,showNativeIcon\)/);
+ assert.match(sprite,/sprite\?:SpriteCell;palette\?:NativeDyePalette/);
+ assert.match(sprite,/if\(canceled\|\|!cell\|\|!colors\)return/);
  assert.match(app,/exactVariantArt\[String\(item\.itemId\)\]/);
  assert.match(app,/exactVariantArt\[String\(sub\.previewId\)\]/);
  assert.match(app,/exactVariantArt\[String\(item\[0\]\)\]/);
@@ -165,7 +167,7 @@ test('source sprite loader refuses wrong item source names, paths, and runtime-f
  assert.throws(()=>parseSourceColorwayIndex({...sources,runtimeUiIconReferenceMatches:true},'/'),/SOURCE_COLORWAY_INDEX_INVALID/);
 });
 
-test('original source art survives an absent exact-render index and verified renders take precedence',async()=>{
+test('original source art survives an absent exact-render index and takes precedence over reconstruction',async()=>{
  const prev=globalThis.fetch;
  try{
   globalThis.fetch=async url=>url.includes('/source-colorways/')?
@@ -173,7 +175,8 @@ test('original source art survives an absent exact-render index and verified ren
   assert.equal((await loadVariantArtIndex('/'))['379863484'],'/source-colorways/379863484.webp');
   globalThis.fetch=async url=>({ok:true,json:async()=>url.includes('/source-colorways/')?
    sources:wrap({'379863484':{...example,file:'379863484.png'}})});
-  assert.equal((await loadVariantArtIndex('/'))['379863484'],'/variant-art/379863484.png');
+  assert.equal((await loadVariantArtIndex('/'))['379863484'],'/source-colorways/379863484.webp');
+  assert.equal((await loadVariantArtSources('/')).reconstructions['379863484'],'/variant-art/379863484.png');
  }finally{globalThis.fetch=prev;}
 });
 
@@ -202,12 +205,13 @@ test('all 5383 native dye IDs resolve to one genuine original sprite with a veri
  assert.throws(()=>parseDynamicColorwayIndex({...dynamic,records:{}},'/'),/DYNAMIC_COLORWAY_INDEX_INVALID/);
 });
 
-test('verified overrides retain the original source URL for decode failure',async()=>{
+test('original source remains primary and verified reconstruction is retained as a separate fallback',async()=>{
  const prev=globalThis.fetch;
  try{
   globalThis.fetch=async url=>({ok:true,json:async()=>url.includes('/source-colorways/')?sources:url.includes('/dynamic-colorways/')?dynamic:wrap({'585726126':{...example,file:'585726126.png'}})});
-  const {primary,originals}=await loadVariantArtSources('/');
-  assert.equal(primary['585726126'],'/variant-art/585726126.png');
+  const {primary,originals,reconstructions}=await loadVariantArtSources('/');
+  assert.equal(reconstructions['585726126'],'/variant-art/585726126.png');
+  assert.equal(primary['585726126'],originals['585726126']);
   assert.equal(originals['585726126'],'/dynamic-colorways/585726126.webp?v='+dynamic.records['585726126']);
   assert.equal(Object.keys(originals).length,5383);
  }finally{globalThis.fetch=prev;}
