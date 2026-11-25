@@ -125,3 +125,6 @@ pub fn read_slot(raw:&[u8])->Result<ReadSlot,Error>{
  let index=native::index_native(&envelope.decoded,envelope.version)?;
  Ok(ReadSlot{envelope,index})
 }
+
+/// Source-verified furniture material choices, independent of save edits.
+pub mod furniture_source;
