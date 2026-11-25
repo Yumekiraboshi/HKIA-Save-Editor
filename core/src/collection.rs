@@ -44,6 +44,39 @@ const FLOWER_SPECIES:&[(i32,&[i32])]=&[
  (1968535430,&[2,3,4,5,7,8,9,10,11,12,13,14,16]),
  (2105820233,&[2,3,4,5,7,8,9,10,11,12,14,16]),
 ];
+// Steam v3.0.1 item_instruction_clothing_flowercrown (2140092170)
+// FlowerToCrownDictionary: exact PPtr key/value pairing, restricted to the
+// 23 output + source definitions without DLC/event-year gates.
+const FLOWER_CROWN_SPECIES:&[(i32,i32)]=&[
+ (108363489,2105820233),
+ (475585922,1695731578),
+ (638410399,1804880447),
+ (644209106,668399845),
+ (790136191,462608550),
+ (810330134,252458237),
+ (833950358,1331175279),
+ (881399767,261557677),
+ (894396852,1561432864),
+ (897617923,1554283135),
+ (1001954252,275816250),
+ (1021906725,203856820),
+ (1048380205,183701770),
+ (1101281143,1299466625),
+ (1120342995,43114910),
+ (1177909060,1386186941),
+ (1423101683,1669522060),
+ (1560032168,1223758923),
+ (1607110454,1583118562),
+ (1693955310,1934826268),
+ (1783185900,228573412),
+ (1861587997,1968535430),
+ (1876646873,274491259),
+];
+// Original generic processors accept any flower; the HK-style bow explicitly
+// clears both pattern fields (IgnorePatternOnOutputItem=true).
+const FLOWER_CLOTHING_GENERIC:&[i32]=&[105502901,1110255162,1227385139];
+const FLOWER_CLOTHING_NO_PATTERN:i32=1482119840;
+const ALL_UNRESTRICTED_FLOWER_PATTERNS:&[i32]=&[1,2,3,4,5,7,8,9,10,11,12,13,14,16];
 pub type FurnitureVariant=[i32;3];
 fn furniture_variant(data:InventoryUniqueData)->Option<FurnitureVariant>{
  if let InventoryUniqueData::Furniture{materials}=data{Some(materials)}else{None}
@@ -257,8 +290,22 @@ impl Editor {
  }
  fn flower_source(&self,row:&crate::native::InventoryRow)->Option<&'static [i32]>{
   let item=self.unique_row_source(row,4)?;
-  let patterns=FLOWER_SPECIES.iter().find(|(id,_)|*id==item)?.1;
-  if !valid_flower_variant(patterns,flower_variant(row.unique_data?)?){return None}
+  let original=flower_variant(row.unique_data?)?;
+  let patterns=if let Some((_,patterns))=FLOWER_SPECIES.iter().find(|(id,_)|*id==item){
+   *patterns
+  }else{
+   // The actual creation processors reuse a flower payload. Do not edit
+   // an equipped, preset, reserved, placed or unresolved legacy reference.
+   if original[0]!=6||self.slot.index.inventory_payload_refs_incomplete||
+    self.slot.index.inventory_payload_item_refs.contains(&item){return None}
+   if let Ok(i)=FLOWER_CROWN_SPECIES.binary_search_by_key(&item,|&(id,_)|id){
+    let species=FLOWER_CROWN_SPECIES[i].1;
+    FLOWER_SPECIES.iter().find(|(id,_)|*id==species)?.1
+   }else if FLOWER_CLOTHING_GENERIC.contains(&item){ALL_UNRESTRICTED_FLOWER_PATTERNS}
+   else if item==FLOWER_CLOTHING_NO_PATTERN{&[]}
+   else{return None}
+  };
+  if !valid_flower_variant(patterns,original){return None}
   Some(patterns)
  }
  fn furniture_source(&self,row:&crate::native::InventoryRow)->Option<&'static FurnitureItemSource>{
