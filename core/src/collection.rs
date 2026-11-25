@@ -218,8 +218,8 @@ impl Editor {
  }
  /// Cheap presentation hint. Actual source/collision check happens on demand,
  /// never an O(inventory squared) scan in the complete inventory snapshot.
- pub fn inventory_flower_edit_hint(&self,id:u32)->bool{
-  self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|self.flower_source(r)).is_some()
+ pub fn inventory_flower_edit_hints(&self)->impl Iterator<Item=u32>+'_ {
+  self.slot.index.inventory.iter().filter_map(|r|self.flower_source(r).map(|_|r.id))
  }
  fn flower_context(&self,id:u32)->Option<(&'static [i32],FlowerVariant,HashSet<FlowerVariant>)>{
   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
@@ -234,7 +234,9 @@ impl Editor {
    // A legacy or incomplete payload might be semantically equal.
    let before=flower_variant(other.unique_data?)?;
    let after=flower_variant(self.effective_unique(other)?)?;
-   if !valid_flower_variant(patterns,before)||!valid_flower_variant(patterns,after){return None}
+   // Restricted but known saved colors/patterns still participate in equality;
+   // only unresolved indices might alias through native null GUID fallback.
+   for v in [before,after]{if !(0..=7).contains(&v[0])||!(1..=30).contains(&v[1])||!(0..=16).contains(&v[2])||!(0..=30).contains(&v[3]){return None}}
    reserved.insert(before);reserved.insert(after);
   }
   if reserved.contains(&current)||reserved.contains(&original){return None}
