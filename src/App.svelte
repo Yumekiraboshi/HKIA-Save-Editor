@@ -66,7 +66,6 @@ import {verifiedFloorplanName} from './floorplan-names';
  let flowerDialogEl:HTMLDialogElement|undefined=$state();
  let flowerEdit=$state<{documentId:number;itemId:number;revision:number;before:FlowerVariant;options:FlowerVariant[]}|null>(null);
  let flowerSelection=$state(-1);
- const flowerCopy=$derived(flowerEditorCopy(locale));
  let inventoryNativeArt:InventoryNativeArt|null=$state(null);
  let inventoryEditableOnly=$state(false);
  let inventoryLimit=$state(BATCH_SIZE);
@@ -153,6 +152,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const removalCopy=$derived(removalConfirmationCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
  const iCopy=$derived(inventoryCopy(locale));
+ const flowerCopy=$derived(flowerEditorCopy(locale));
  const hCopy=$derived(historyCopy(locale));
  const hDetailCopy=$derived(historyDetailCopy(locale));
  const compactCopy=$derived(compactAchievementCopy(locale));
@@ -1349,30 +1349,31 @@ import {verifiedFloorplanName} from './floorplan-names';
  <dialog class="date-dialog" bind:this={flowerDialogEl} aria-labelledby="flower-editor-title"
   onclose={()=>{flowerEdit=null;flowerSelection=-1}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if flowerEdit}
+   {@const edit=flowerEdit}
    <form class="date-dialog-inner" onsubmit={e=>void applyInventoryFlowerVariant(e)}>
     <div class="date-dialog-heading">
-     <h2 id="flower-editor-title">{inventoryName(flowerEdit.itemId)}</h2>
+     <h2 id="flower-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFlowerEditor}>×</button>
     </div>
     <div class="date-dialog-item">
      <span class="date-dialog-art" aria-hidden="true">
       {#if flowerDefinitions}
-       {@const current=flowerEdit.options[flowerSelection]??flowerEdit.before}
-       <DynamicFlowerSprite itemId={flowerEdit.itemId} flower={{growState:current[0],baseColor:current[1],pattern:current[2],patternColor:current[3]}} definitions={flowerDefinitions} fallback={inventoryNativeArt?.entries.get(flowerEdit.itemId)}/>
+       {@const current=edit.options[flowerSelection]??edit.before}
+       <DynamicFlowerSprite itemId={edit.itemId} flower={{growState:current[0],baseColor:current[1],pattern:current[2],patternColor:current[3]}} definitions={flowerDefinitions} fallback={inventoryNativeArt?.entries.get(edit.itemId)}/>
       {/if}
      </span>
-     <div class="date-dialog-detail"><strong>{flowerVariantName(flowerEdit.before)}</strong></div>
+     <div class="date-dialog-detail"><strong>{flowerVariantName(edit.before)}</strong></div>
     </div>
-    {#if flowerEdit.options.length}
+    {#if edit.options.length}
      <label class="date-dialog-field">
       <span>{flowerCopy.title}</span>
       <select bind:value={flowerSelection} disabled={busy} required>
-       <option value={-1} disabled>{flowerVariantName(flowerEdit.before)}</option>
+       <option value={-1} disabled>{flowerVariantName(edit.before)}</option>
        {#each [flowerCopy.color,flowerCopy.pattern,flowerCopy.accent] as group, g}
-        {#if flowerEdit.options.some(v=>flowerOptionGroup(flowerEdit!.before,v)===g)}
+        {#if edit.options.some(v=>flowerOptionGroup(edit.before,v)===g)}
          <optgroup label={group}>
-          {#each flowerEdit.options as v,i}
-           {#if flowerOptionGroup(flowerEdit.before,v)===g}
+          {#each edit.options as v,i}
+           {#if flowerOptionGroup(edit.before,v)===g}
             <option value={i}>{flowerVariantName(v)}</option>
            {/if}
           {/each}
