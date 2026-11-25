@@ -69,3 +69,12 @@ const addLabels:Record<Locale,string>={
  ar:'إضافة عناصر',de:'Gegenstände hinzufügen',en:'Add items','en-GB':'Add items',es:'Añadir objetos',fr:'Ajouter des objets','fr-CA':'Ajouter des objets',it:'Aggiungi oggetti',ja:'アイテム追加',ko:'아이템 추가',nl:'Items toevoegen','pt-BR':'Adicionar itens',ru:'Добавить предметы',tr:'Eşya ekle','zh-Hans':'添加物品','zh-Hant':'新增物品'
 };
 export function inventoryAddCopy(locale:Locale):string{return addLabels[locale]}
+
+/** Select displayed quantity-editable rows within the current native batch limit. */
+const selectVisibleLabels:Record<Locale,string>={
+ ar:'تحديد العناصر الظاهرة حتى الحد الأقصى',de:'Sichtbare Gegenstände bis zum Limit auswählen',en:'Select visible items up to the limit','en-GB':'Select visible items up to the limit',
+ es:'Seleccionar objetos visibles hasta el límite',fr:'Sélectionner les objets visibles dans la limite autorisée','fr-CA':'Sélectionner les objets visibles dans la limite autorisée',
+ it:'Seleziona gli oggetti visibili fino al limite',ja:'表示中のアイテムを上限まで選択',ko:'표시된 아이템을 한도까지 선택',nl:'Zichtbare items tot de limiet selecteren',
+ 'pt-BR':'Selecionar itens visíveis até o limite',ru:'Выбрать видимые предметы до лимита',tr:'Görünen eşyaları sınıra kadar seç','zh-Hans':'选择当前显示的物品（不超过上限）','zh-Hant':'選取目前顯示的物品（不超過上限）'
+};
+export function inventorySelectVisibleCopy(locale:Locale):string{return selectVisibleLabels[locale]}
