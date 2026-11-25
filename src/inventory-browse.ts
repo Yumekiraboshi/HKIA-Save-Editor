@@ -72,19 +72,19 @@ export function defaultInventoryGroup(counts:ReadonlyMap<InventoryGroupKey,numbe
 
 /** Shared presentation predicate for browsing and per-category search counts. */
 function matchesInventorySearch(row:InventoryEntry,q:string,editableOnly:boolean,
- localizedNames:Readonly<Record<string,string>>,sourceItems:ReadonlyMap<number,CollectionItem>):boolean{
+ localizedNames:Readonly<Record<string,string>>,sourceItems:ReadonlyMap<number,CollectionItem>,variantName?:(row:InventoryEntry)=>string):boolean{
  if(editableOnly&&!row.editable&&!row.unique?.flowerEditable&&!row.unique?.furnitureEditable)return false;
  if(!q)return true;
  const source=sourceItems.get(row.itemId);
- return String(row.itemId).includes(q)||
-  (localizedNames[String(row.itemId)]??'').toLocaleLowerCase().includes(q)||
-  (source?.[5]??'').toLocaleLowerCase().includes(q)||
-  (source?.[6]??'').toLocaleLowerCase().includes(q);
+ const fields=[String(row.itemId),localizedNames[String(row.itemId)]??'',source?.[5]??'',source?.[6]??'',variantName?.(row)??''].map(v=>v.toLocaleLowerCase());
+ // Preserve single-field substring matches; allow a flower name, color and
+ // pattern to be combined as whitespace-separated terms across fields.
+ return fields.some(v=>v.includes(q))||q.split(/\s+/u).every(term=>fields.some(v=>v.includes(term)));
 }
 export function inventorySearchGroupCounts(rows:readonly InventoryEntry[],term:string,editableOnly:boolean,
- localizedNames:Readonly<Record<string,string>>,sourceItems:ReadonlyMap<number,CollectionItem>,index:NativeInventoryIndex):Map<InventoryGroupKey,number>{
+ localizedNames:Readonly<Record<string,string>>,sourceItems:ReadonlyMap<number,CollectionItem>,index:NativeInventoryIndex,variantName?:(row:InventoryEntry)=>string):Map<InventoryGroupKey,number>{
  const q=term.trim().toLocaleLowerCase();
- return inventoryGroupCounts(rows.filter(row=>matchesInventorySearch(row,q,editableOnly,localizedNames,sourceItems)),index);
+ return inventoryGroupCounts(rows.filter(row=>matchesInventorySearch(row,q,editableOnly,localizedNames,sourceItems,variantName)),index);
 }
 /** Retain the selected native category when it contains a match; otherwise
  * reveal the first matching category. Do not switch on edits or snapshot refresh. */
@@ -95,11 +95,11 @@ export function inventorySearchTarget(current:InventoryGroupKey,counts:ReadonlyM
 export function browseInventory(
  rows:readonly InventoryEntry[],term:string,selectedGroup:InventoryGroupKey,
  editableOnly:boolean,localizedNames:Readonly<Record<string,string>>,
- sourceItems:ReadonlyMap<number,CollectionItem>,index:NativeInventoryIndex,locale:string
+ sourceItems:ReadonlyMap<number,CollectionItem>,index:NativeInventoryIndex,locale:string,variantName?:(row:InventoryEntry)=>string
 ):InventoryEntry[]{
  const q=term.trim().toLocaleLowerCase();
  return rows.filter(row=>nativeInventoryGroups(row.itemId,index).includes(selectedGroup)&&
-  matchesInventorySearch(row,q,editableOnly,localizedNames,sourceItems)).sort((a,b)=>{
+  matchesInventorySearch(row,q,editableOnly,localizedNames,sourceItems,variantName)).sort((a,b)=>{
   const an=localizedNames[String(a.itemId)]??sourceItems.get(a.itemId)?.[5]??String(a.itemId);
   const bn=localizedNames[String(b.itemId)]??sourceItems.get(b.itemId)?.[5]??String(b.itemId);
   return an.localeCompare(bn,locale)||a.itemId-b.itemId||a.documentId-b.documentId;

@@ -210,12 +210,12 @@ import {verifiedFloorplanName} from './floorplan-names';
   sourceOrderedAchievementRows);
  const inventoryBrowseRows:InventoryEntry[]=$derived((inventoryAddMode?(snapshot as SaveSnapshot|null)?.inventoryCreatable:(snapshot as SaveSnapshot|null)?.inventory)??[]);
  const inventoryGroupTotals=$derived(inventoryGroupCounts(inventoryBrowseRows,nativeInventoryIndex));
- const inventoryMatchTotals=$derived(inventorySearchGroupCounts(inventoryBrowseRows,inventoryQuery,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex));
+ const inventoryMatchTotals=$derived(inventorySearchGroupCounts(inventoryBrowseRows,inventoryQuery,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName));
  const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
  const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
  const inventoryRows=$derived(browseInventory(
   inventoryBrowseRows,inventoryQuery,activeInventoryGroup,
-  inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale));
+  inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale,inventoryVariantSearchName));
  const achievementRows=$derived(searchAchievementRows(achievementQuery,sourceOrderedAchievementRows,
   groupScopedAchievementRows,achievementName,guid=>achievementIndex.get(guid)?.key??''));
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
@@ -423,6 +423,9 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function setTheme(v:ThemePref){
   themePref=v;try{localStorage.setItem('hkia-display-theme',v)}catch{}
+ }
+ function inventoryVariantSearchName(row:InventoryEntry):string{
+  return flowerDisplay(row.flower,flowerDefinitions,flowerLabels[locale]??{})?.title??'';
  }
  function flowerVariantName(v:FlowerVariant):string{
   return flowerDisplay({growState:v[0],baseColor:v[1],pattern:v[2],patternColor:v[3]},flowerDefinitions,flowerLabels[locale]??{})?.title||'—';
@@ -740,7 +743,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const next=(event.currentTarget as HTMLInputElement).value;
   inventoryLimit=BATCH_SIZE;
   if(!next.trim())return;
-  const counts=inventorySearchGroupCounts(inventoryBrowseRows,next,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex);
+  const counts=inventorySearchGroupCounts(inventoryBrowseRows,next,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
   inventoryGroup=inventorySearchTarget(activeInventoryGroup,counts);
  }
  function toggleInventoryBatch(row:InventoryEntry){
