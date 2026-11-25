@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryFlowerColor,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -385,6 +385,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  function setTheme(v:ThemePref){
   themePref=v;try{localStorage.setItem('hkia-display-theme',v)}catch{}
  }
+ function flowerColorName(id:number):string{
+  const label=flowerDefinitions?.colors[String(id)]?.labelId;
+  return label?flowerLabels[locale]?.[label]??'—':'—';
+ }
  function inventoryName(itemId:number):string{
   return sourceNames[String(itemId)]??'#'+String(itemId);
  }
@@ -488,7 +492,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
  function historyEntryChange(i:number):string{
-  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity)||
+  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerColorName)||
    (tabHistory[i]?.paired?hCopy.paired:'');
  }
  function historyEntryLabel(entry:HistoryRecord):string{
@@ -631,6 +635,20 @@ import {verifiedFloorplanName} from './floorplan-names';
    }
    error=reason;
   }
+  finally{busy=false}
+ }
+ async function applyInventoryFlowerColor(row:InventoryEntry,event:SubmitEvent){
+  event.preventDefault();
+  if(!snapshot||busy||!row.flower)return;
+  const raw=new FormData(event.currentTarget as HTMLFormElement).get('flowerColor');
+  if(typeof raw!=='string'||!/^\d+$/.test(raw))return;
+  const next=Number(raw);
+  if(next===row.flower.baseColor)return;
+  busy=true;error='';
+  try{
+   update(await changeInventoryFlowerColor(row.documentId,row.flower.baseColor,next));
+   await persistDraft();
+  }catch(e){error=describeError(e)}
   finally{busy=false}
  }
  async function applyInventoryQuantity(row:InventoryEntry,event:SubmitEvent){
@@ -1105,7 +1123,8 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const nativeSprite=inventoryNativeArt?.entries.get(item.itemId)}
      {@const sprite=definition&&!inventoryNativeArt?.withheld.has(item.itemId)?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
      {@const flower=flowerDisplay(item.flower,flowerDefinitions,flowerLabels[locale]??{})}
-     <article class="inventory-card" class:inventory-readonly={!item.editable}>
+     {@const canColor=!!item.flower&&!!item.unique&&item.unique.flowerColors.length>1&&item.unique.flowerColors.every(id=>flowerColorName(id)!=='—')}
+     <article class="inventory-card" class:inventory-readonly={!item.editable&&!canColor}>
       <div class="inventory-card-heading">
        <span class="inventory-item-art" class:flower-variant={!!flower} aria-hidden="true">
         {#if item.flower&&flowerDefinitions&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
@@ -1144,6 +1163,23 @@ import {verifiedFloorplanName} from './floorplan-names';
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
         </button>
        </form>
+      {:else if canColor&&item.flower&&item.unique}
+       <details class="inventory-unique-edit">
+        <summary aria-label={iCopy.apply+': '+inventoryName(item.itemId)} title={iCopy.apply}>
+         <span>{item.quantity}</span>
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg>
+        </summary>
+        <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryFlowerColor(item,e)}>
+         <select name="flowerColor" value={item.flower.baseColor} disabled={busy} aria-label={inventoryName(item.itemId)}>
+          {#each item.unique.flowerColors as color (color)}
+           <option value={color}>{flowerColorName(color)}</option>
+          {/each}
+         </select>
+         <button type="submit" class="primary" disabled={busy} title={iCopy.apply} aria-label={iCopy.apply}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+         </button>
+        </form>
+       </details>
       {:else}
        <span class="inventory-readonly-quantity" title={iCopy.readonly}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
