@@ -16,7 +16,18 @@ function canvas2d(width:number,height:number){
 }
 /** Opaque source planes retain RGB at original alpha=0. Verify the
  * exact decoded texels, not only the compressed WebP bytes. */
-export async function loadOpaqueArtTexture(root:string,asset:TextureAsset):Promise<PixelBuffer>{
+const textures=new Map<string,Promise<PixelBuffer>>();
+export function loadOpaqueArtTexture(root:string,asset:TextureAsset):Promise<PixelBuffer>{
+ // Identical verified texture bytes are shared by all runtime art families.
+ const key=JSON.stringify([root,asset.file,asset.sha256,asset.rgbSha256,asset.width,asset.height,asset.bytes]);
+ const cached=textures.get(key);if(cached)return cached;
+ const task=decodeOpaqueArtTexture(root,asset).catch(error=>{if(textures.get(key)===task)textures.delete(key);throw error;});
+ textures.set(key,task);
+ // Source packs are few and version-pinned. Bound the reference cache.
+ if(textures.size>8)textures.delete(textures.keys().next().value!);
+ return task;
+}
+async function decodeOpaqueArtTexture(root:string,asset:TextureAsset):Promise<PixelBuffer>{
  const bytes=await loadVerifiedArtAsset(root,asset.file,asset.sha256,1024*1024,asset.bytes);
  const image=await createImageBitmap(new Blob([bytes],{type:'image/webp'}),{premultiplyAlpha:'none',colorSpaceConversion:'none'});
  try{
