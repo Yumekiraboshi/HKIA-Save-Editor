@@ -1153,7 +1153,9 @@ fn plain_flower_color_cas_history_and_export_preserve_identity(){
  for zipped in [false,true]{
   let source=flower_color_slot("3.0.1",None);let input=if zipped{zip(&source)}else{source};
   let mut e=Editor::open(input.clone()).unwrap();
-  assert_eq!(e.inventory_flower_color_options(4),vec![6,8,16]);
+  assert_eq!(e.inventory_flower_color_options(4).len(),28);
+  assert!(!e.inventory_flower_color_options(4).contains(&14));
+  assert!(!e.inventory_flower_color_options(4).contains(&15));
   assert_eq!(e.inventory_original_unique_payload(4),Some(plain_flower(6).as_slice()));
   assert!(e.change_inventory_flower_color(4,8,16).is_err());
   assert!(e.change_inventory_flower_color(4,6,30).is_err());
@@ -1172,7 +1174,8 @@ fn plain_flower_color_cas_history_and_export_preserve_identity(){
  let mut old=Editor::open(flower_color_slot("3.0.0",None)).unwrap();
  assert!(old.inventory_flower_color_options(4).is_empty());assert!(old.change_inventory_flower_color(4,6,8).is_err());
  let mut collision=Editor::open(flower_color_slot("3.0.1",Some(8))).unwrap();
- assert_eq!(collision.inventory_flower_color_options(4),vec![6,16]);
+ assert_eq!(collision.inventory_flower_color_options(4).len(),27);
+ assert!(!collision.inventory_flower_color_options(4).contains(&8));
  assert!(collision.change_inventory_flower_color(4,6,8).is_err());
  assert!(!collision.dirty());
 }
@@ -1199,4 +1202,38 @@ fn exact_unique_payloads_retain_all_native_union_branches(){
  for(i,p)in payloads.iter().enumerate(){assert_eq!(e.inventory_original_unique_payload(100+i as u32),Some(p.as_slice()));}
  let expected=[1,3,4,2,5,5,3,4,3,5,1,2];
  for (i,(_,_,_,_,n)) in e.inventory_unique_rows().enumerate(){assert_eq!(n,expected[i]);}
+}
+
+#[test]
+fn flower_variants_are_source_bounded_atomic_and_recoverable(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let input=flower_color_slot("3.0.1",None);
+ let mut e=Editor::open(input.clone()).unwrap();
+ let before=[6,6,0,0];
+ let options=e.inventory_flower_variants(4);
+ assert!(options.contains(&[6,30,0,0]),"cross-color Brown is a native available color");
+ assert!(options.contains(&[6,6,10,16]),"ombre uses native default White accent");
+ assert!(options.contains(&[6,6,3,0]),"effect uses null accent");
+ assert!(options.iter().all(|v|v[0]==6&&![14,15].contains(&v[1])&&![6,15].contains(&v[2])));
+ for invalid in [[6,14,0,0],[6,15,0,0],[6,8,6,0],[6,8,15,0],[6,8,10,8],[6,8,3,16],[7,8,0,0],[6,8,0,16]]{
+  assert!(e.change_inventory_flower_variant(4,before,invalid).is_err(),"{invalid:?}");
+ }
+ let patterned=[6,6,10,16];
+ e.change_inventory_flower_variant(4,before,patterned).unwrap();
+ let options=e.inventory_flower_variants(4);
+ assert!(options.contains(&[6,6,10,30]));
+ assert!(options.contains(&[6,16,10,17]),"white base uses WarmPink when it would equal the accent");
+ let changed=[6,16,10,17];
+ e.change_inventory_flower_variant(4,patterned,changed).unwrap();
+ assert_eq!(e.inventory_unique_data(4),Some(U::Flower{grow_state:6,base_color:16,pattern:10,pattern_color:17}));
+ let cp=e.history_checkpoint().unwrap();
+ let mut recovered=Editor::open(input.clone()).unwrap();recovered.restore_history(&cp).unwrap();
+ assert_eq!(recovered.inventory_unique_data(4),e.inventory_unique_data(4));
+ assert_eq!(recovered.history_checkpoint().unwrap(),cp);
+ assert!(e.undo_scope(Inventory));assert_eq!(e.inventory_unique_data(4),Some(U::Flower{grow_state:6,base_color:6,pattern:10,pattern_color:16}));
+ assert!(e.redo_scope(Inventory));
+ let out=Editor::open(e.export().unwrap()).unwrap();
+ assert_eq!(out.inventory_unique_data(4),e.inventory_unique_data(4));
+ assert_eq!(out.inventory()[0].quantity,93);
+ assert!(e.undo_scope(Inventory));assert!(e.undo_scope(Inventory));assert!(!e.dirty());
 }
