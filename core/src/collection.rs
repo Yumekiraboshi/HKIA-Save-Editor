@@ -177,6 +177,7 @@ pub struct Editor {
  changes:HashMap<i32,Option<i64>>,
  inventory_changes:HashMap<u32,i32>,
  inventory_item_rows:HashMap<i32,usize>,
+ flower_quantity_ids:HashSet<u32>,
  flower_variant_changes:HashMap<u32,FlowerVariant>,
  furniture_variant_changes:HashMap<u32,FurnitureVariant>,
  achievement_changes:HashMap<[u32;4],AchievementValue>,
@@ -209,7 +210,9 @@ impl Editor {
   for row in &slot.index.inventory{
    if let Some(id)=row.item_id{*inventory_item_rows.entry(id).or_insert(0usize)+=1;}
   }
-  Ok(Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),inventory_item_rows,flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0})
+  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),inventory_item_rows,flower_quantity_ids:HashSet::new(),flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
+  editor.flower_quantity_ids=editor.index_flower_quantity_ids();
+  Ok(editor)
  }
  fn compatible(slot:&ReadSlot)->bool{
   let n=slot.index.collection_version.as_ref().map(|v|v.number);
@@ -485,7 +488,47 @@ impl Editor {
    !self.slot.index.inventory_item_refs_incomplete&&
    !self.slot.index.inventory_item_refs.contains(&(item_id,0))
  }
+ // Index the original flower identities once, rather than scanning all
+ // peers per visible row or per complete Worker snapshot. Variant changes
+ // already reserve original and effective peer identities in flower_context.
+ fn is_flower_quantity_definition(item:i32)->bool{
+  FLOWER_SPECIES.iter().any(|(id,_)|*id==item)||
+   FLOWER_CROWN_SPECIES.binary_search_by_key(&item,|&(id,_)|id).is_ok()||
+   FLOWER_CLOTHING_GENERIC.contains(&item)||item==FLOWER_CLOTHING_NO_PATTERN
+ }
+ fn index_flower_quantity_ids(&self)->HashSet<u32>{
+  if self.slot.envelope.version!=Version::V301||self.slot.index.inventory_payload_refs_incomplete{return HashSet::new()}
+  let mut uid_counts=HashMap::<i32,usize>::new();
+  let mut variant_counts=HashMap::<(i32,FlowerVariant),usize>::new();
+  let mut ambiguous=HashSet::new();
+  for row in &self.slot.index.inventory{
+   if let Some(uid)=row.unique_id{*uid_counts.entry(uid).or_default()+=1}
+   let Some(item)=row.item_id else{return HashSet::new()};
+   if !Self::is_flower_quantity_definition(item){continue}
+   let Some(v)=row.unique_data.and_then(flower_variant)else{ambiguous.insert(item);continue};
+   if !(0..=7).contains(&v[0])||!(1..=30).contains(&v[1])||!(0..=16).contains(&v[2])||!(0..=30).contains(&v[3]){
+    ambiguous.insert(item);continue
+   }
+   *variant_counts.entry((item,v)).or_default()+=1;
+  }
+  self.slot.index.inventory.iter().filter_map(|row|{
+   let item=row.item_id?;let uid=row.unique_id?;
+   if !Self::is_flower_quantity_definition(item)||
+    !crate::inventory_source::is_uncapped_required_unique_stack(item)||
+    ambiguous.contains(&item)||uid_counts.get(&uid)!=Some(&1)||
+    self.slot.index.inventory_payload_item_refs.contains(&item)||
+    !row.fields.iter().all(Option::is_some){return None}
+   self.flower_source(row)?;
+   let v=flower_variant(row.unique_data?)?;
+   // flower_source already validates state 0/6/7 for species, and
+   // state 6 only for the source-verified crafted clothing outputs.
+   if variant_counts.get(&(item,v))!=Some(&1){return None}
+   Some(row.id)
+  }).collect()
+ }
  fn inventory_quantity_limit(&self,r:&crate::native::InventoryRow)->Option<i32>{
+  // Existing source-verified flower/flower-clothing variants, never creation or zero.
+  if self.flower_quantity_ids.contains(&r.id){return Some(i32::MAX)}
   if self.slot.envelope.version!=Version::V301||r.id==0||r.id>i32::MAX as u32||
    r.quantity?<0||r.unique_is_nil!=Some(true)||r.fields[2].is_none()||
    (r.quantity==Some(0)&&!self.inventory_can_empty(r)){return None}

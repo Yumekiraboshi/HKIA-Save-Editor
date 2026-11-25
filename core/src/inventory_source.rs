@@ -11,6 +11,11 @@ pub(crate) fn ordinary_quantity_limit(item_id:i32)->Option<i32>{
  if flags&4==0{return Some(i32::MAX)}
  CUSTOM_CAPS.binary_search_by_key(&item_id,|row|row.0).ok().map(|i|CUSTOM_CAPS[i].1).filter(|&cap|cap>0)
 }
+/// Original MaxCount uses Stackable and HasCustomMaxCount independently
+/// of unique payload requirements. Only the typed flower gate uses this.
+pub(crate) fn is_uncapped_required_unique_stack(item_id:i32)->bool{
+ RULES.binary_search_by_key(&item_id,|row|row.0).ok().is_some_and(|i|RULES[i].1==3)
+}
 /// Source-bounded ordinary ingredients, fish, critters, food and bait. Definition
 /// evidence only: the editor separately validates version, identity and references.
 pub(crate) fn ordinary_membership_item(item_id:i32)->bool{
