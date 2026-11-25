@@ -233,6 +233,12 @@ impl Editor {
  }
  pub fn version(&self)->String {self.slot.envelope.version.as_str()}
  pub fn source_bytes(&self)->usize {self.original.len()}
+ fn next_edit_revision(&self)->Result<u32,Error>{
+  // A staged unique creation must remain replayable. Never evict its
+  // creation record or prerequisites from the bounded native journal.
+  if (!self.pending_flowers.is_empty()||self.redo.iter().any(|c|matches!(c,Change::FlowerCreated{..})))&&self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
+  self.revision.checked_add(1).ok_or(Error::Overflow)
+ }
  pub fn revision(&self)->u32 {self.revision}
  pub fn is_zip(&self)->bool {self.zip.is_some()}
  pub fn entries(&self)->Vec<Entry>{
@@ -386,7 +392,7 @@ impl Editor {
   let (source,original,current,reserved)=self.furniture_context(id).ok_or(Error::Schema)?;
   if current!=expected||current==next||!Self::valid_furniture_target(source,original,next)||
    reserved.contains(&furniture_key(source,next).ok_or(Error::Schema)?){return Err(Error::Schema)}
-  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let revision=self.next_edit_revision()?;
   let before=self.furniture_variant_changes.get(&id).copied();
   let after=if original==next{None}else{Some(next)};
   match after{Some(v)=>{self.furniture_variant_changes.insert(id,v);},None=>{self.furniture_variant_changes.remove(&id);}}
@@ -443,6 +449,18 @@ impl Editor {
   }
   out
  }
+ /// On-demand creation choices. Rust alone checks the source species,
+ /// allocation budget, identity/reference guards, and original tuple.
+ pub fn inventory_flower_creation_variants(&self,id:u32)->Vec<FlowerVariant>{
+  if !self.inventory_creation_source_valid()||!self.unique_quantity_ids.contains(&id)||self.undo.len()+self.redo.len()>=MAX_UNDO||
+   crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_flowers.len()+1).is_err()||
+   crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
+  let Some(row)=self.slot.index.inventory.iter().find(|r|r.id==id)else{return Vec::new()};
+  let Some(item)=row.item_id else{return Vec::new()};
+  if !FLOWER_SPECIES.iter().any(|&(id,_)|id==item)||self.slot.index.inventory_payload_item_refs.contains(&item){return Vec::new()}
+  let Some(original)=row.unique_data.and_then(flower_variant)else{return Vec::new()};
+  self.inventory_flower_variants(id).into_iter().filter(|&v|v!=original).collect()
+ }
  /// Stage an explicitly chosen, different native flower tuple from an
  /// existing validated species row. No persisted UID is assigned until
  /// export. Multiple variants of one species use independent handles.
@@ -455,7 +473,7 @@ impl Editor {
   let (patterns,current,reserved)=self.flower_context(source_id).ok_or(Error::Schema)?;
   let original=flower_variant(row.unique_data.ok_or(Error::Schema)?).ok_or(Error::Schema)?;
   if expected!=current||next==current||next==original||next[0]!=current[0]||!valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
-  if self.undo.len()>=MAX_UNDO{return Err(Error::Budget)}
+  if self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
   crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_flowers.len()+1)?;
   crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1)?;
   // The high-bit ordinary handles encode their Item ID. Skip every
@@ -463,7 +481,7 @@ impl Editor {
   let document_id=(1..=MAX_UNDO as u32+4096).map(|n|PENDING_ITEM|n).find(|id|
    !self.inventory_changes.contains_key(id)&&!self.pending_flowers.contains_key(id)&&
    !crate::inventory_source::ordinary_creation_item((id&!PENDING_ITEM) as i32)).ok_or(Error::Budget)?;
-  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let revision=self.next_edit_revision()?;
   let change=Change::FlowerCreated{document_id,source_id,expected,flower:PendingFlower{item_id,variant:next},quantity};
   self.restore_change(&change,false);self.undo.push(change);
   self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);self.revision=revision;Ok(document_id)
@@ -481,7 +499,7 @@ impl Editor {
   if current!=expected||current==next||current[0]!=next[0]||!valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
   let row=self.slot.index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
   let original=flower_variant(row.unique_data.ok_or(Error::Schema)?).ok_or(Error::Schema)?;
-  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let revision=self.next_edit_revision()?;
   let before=self.flower_variant_changes.get(&id).copied();
   let after=if original==next{None}else{Some(next)};
   match after{Some(v)=>{self.flower_variant_changes.insert(id,v);},None=>{self.flower_variant_changes.remove(&id);}}
@@ -737,7 +755,7 @@ impl Editor {
   let delta=self.plan_inventory_quantity(id,expected,next)?;
   self.preflight_inventory_membership(&[delta])?;
   let InventoryQuantityDelta{document_id,before,after}=delta;
-  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let revision=self.next_edit_revision()?;
   let change=Change::Inventory{document_id,before,after};
   self.restore_change(&change,false);
   self.undo.push(change);
@@ -748,7 +766,7 @@ impl Editor {
  /// changing anything. One native history step covers all selected rows.
  pub fn change_inventory_quantities(&mut self,requests:&[(u32,i32,i32)])->Result<(),Error>{
   if requests.is_empty()||requests.len()>MAX_INVENTORY_BATCH{return Err(Error::Budget)}
-  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let revision=self.next_edit_revision()?;
   let mut seen=HashSet::new();
   let mut deltas=Vec::with_capacity(requests.len());
   for &(id,expected,next) in requests{
@@ -841,7 +859,7 @@ impl Editor {
   if let Some(t)=next {if !(1..=MAX_TICKS).contains(&t){return Err(Error::Schema)}}
   if expected.is_none() && self.entries.len()+self.changes.len()>=1_000_000 {return Err(Error::Budget)}
   // Finish every fallible precondition before changing native data or history.
-  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let revision=self.next_edit_revision()?;
   let before=self.changes.get(&id).copied();
   let after=if self.base.get(&id).copied()==next {None}else{Some(next)};
   match after {Some(t)=>{self.changes.insert(id,t);},None=>{self.changes.remove(&id);}}
@@ -857,7 +875,7 @@ impl Editor {
    self.achievement_value(guid).is_some()||value.complete!=value.completed.is_some()||
    self.slot.index.documents+self.achievement_created.len()>=1_000_000{return Err(Error::Schema)}
   crate::document_membership::allocate_ids(&self.slot.index,self.achievement_created.len()+self.reserved_inventory_count()+1)?;
-  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let revision=self.next_edit_revision()?;
   self.achievement_created.insert(guid,value);
   self.undo.push(Change::AchievementCreated{guid,before:None,after:Some(value)});
   if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
@@ -879,7 +897,7 @@ impl Editor {
   let original=achievement::value(model)?;
   let before=self.achievement_changes.get(&parent).copied();
   let after=if next==original{None}else{Some(next)};
-  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let revision=self.next_edit_revision()?;
   self.achievement_created.insert(guid,value);
   match after{Some(v)=>{self.achievement_changes.insert(parent,v);},None=>{self.achievement_changes.remove(&parent);}}
   self.undo.push(Change::AchievementCreatedPair{guid,value,parent:(parent,before,after)});
@@ -930,7 +948,7 @@ impl Editor {
    let original=achievement::value(self.slot.index.achievements.iter().find(|m|m.guid==child).ok_or(Error::Schema)?)?;
    (self.achievement_changes.get(&child).copied(),if next==original{None}else{Some(next)})
   };
-  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let revision=self.next_edit_revision()?;
   let values=if created{&mut self.achievement_created}else{&mut self.achievement_changes};
   match after{Some(v)=>{values.insert(child,v);},None=>{values.remove(&child);}}
   self.achievement_created.insert(parent,parent_next);
@@ -960,7 +978,7 @@ impl Editor {
    };
    replacements[i]=(guid,created,before,after);
   }
-  let next_revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let next_revision=self.next_edit_revision()?;
   for (guid,created,_,after) in replacements{
    let values=if created{&mut self.achievement_created}else{&mut self.achievement_changes};
    match after{
@@ -1079,7 +1097,7 @@ impl Editor {
  pub fn change_achievement(&mut self,guid:[u32;4],expected:AchievementValue,next:AchievementValue)->Result<(),Error>{
   if !achievement::valid(next) || expected==next || self.achievement_value(guid)!=Some(expected){return Err(Error::Schema)}
   if let Some(&before)=self.achievement_created.get(&guid){
-   let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+   let revision=self.next_edit_revision()?;
    self.achievement_created.insert(guid,next);
    self.undo.push(Change::AchievementCreated{guid,before:Some(before),after:Some(next)});
    if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
@@ -1089,7 +1107,7 @@ impl Editor {
   let model=self.slot.index.achievements.iter().find(|m|m.guid==guid).ok_or(Error::Schema)?;
   let original=achievement::value(model)?;
   // Revision exhaustion must not leave a partially applied CAS transaction.
-  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let revision=self.next_edit_revision()?;
   let before=self.achievement_changes.get(&guid).copied();
   let after=if next==original{None}else{Some(next)};
   match after {Some(v)=>{self.achievement_changes.insert(guid,v);},None=>{self.achievement_changes.remove(&guid);}}

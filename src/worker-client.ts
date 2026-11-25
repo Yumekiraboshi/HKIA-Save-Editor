@@ -10,7 +10,7 @@ import type {InventoryFlower} from './inventory-flower-display';
 import type {InventoryPalette} from './inventory-palette-display';
 export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;quantityMinimum:number;flower?:InventoryFlower;palette?:InventoryPalette;unique?:InventoryUniqueInfo};
 export type InventoryQuantityRequest=[documentId:number,before:number,after:number];
-export type InventoryPatch={documentId:number;before:number;after:number;kind?:undefined}|{documentId:number;before:FlowerVariant;after:FlowerVariant;kind:'flower-variant'}|{documentId:number;before:FurnitureVariant;after:FurnitureVariant;kind:'furniture-variant'};
+export type InventoryPatch={documentId:number;before:number;after:number;kind?:undefined}|{documentId:number;before:FlowerVariant;after:FlowerVariant;kind:'flower-variant'}|{documentId:number;before:FurnitureVariant;after:FurnitureVariant;kind:'furniture-variant'}|{documentId:number;itemId:number;variant:FlowerVariant;quantity:number;kind:'flower-create'};
 export type HistoryScope='collections'|'achievements'|'inventory';
 export type HistoryRecord={
  scope:HistoryScope;applied:boolean;paired:boolean;
@@ -38,7 +38,7 @@ export type SaveSnapshot={
  inventoryCreatable:InventoryEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'furniture-variants'|'furniture-variant-change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'flower-create'|'flower-create-variants'|'furniture-variants'|'furniture-variant-change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -75,6 +75,12 @@ export function changeInventoryQuantities(rows:readonly InventoryQuantityRequest
 }
 export function requestFlowerVariants(documentId:number):Promise<FlowerVariant[]>{
  return rpc('flower-variants',{documentId}) as Promise<FlowerVariant[]>;
+}
+export function requestFlowerCreationVariants(documentId:number):Promise<FlowerVariant[]>{
+ return rpc('flower-create-variants',{documentId}) as Promise<FlowerVariant[]>;
+}
+export function createInventoryFlowerVariant(documentId:number,beforeVariant:FlowerVariant,nextVariant:FlowerVariant,nextQuantity:number):Promise<SaveSnapshot>{
+ return rpc('flower-create',{documentId,beforeVariant:[...beforeVariant],nextVariant:[...nextVariant],nextQuantity}) as Promise<SaveSnapshot>;
 }
 export function changeInventoryFlowerVariant(documentId:number,beforeVariant:FlowerVariant,nextVariant:FlowerVariant):Promise<SaveSnapshot>{
  return rpc('flower-variant-change',{documentId,beforeVariant:[...beforeVariant],nextVariant:[...nextVariant]}) as Promise<SaveSnapshot>;
@@ -154,7 +160,7 @@ export function applyDraft(patches:ChangeRequest[],achievementPatches:Achievemen
  return rpc('batch',{
   patches:patches.map(workerCollectionPatch),
   achievementPatches:achievementPatches.map(workerAchievementDraftPatch),
-  inventoryPatches:inventoryPatches.map(p=>p.kind!==undefined?{documentId:p.documentId,kind:p.kind,before:[...p.before],after:[...p.after]}:{documentId:p.documentId,before:p.before,after:p.after})
+  inventoryPatches:inventoryPatches.map(p=>p.kind==='flower-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind!==undefined?{documentId:p.documentId,kind:p.kind,before:[...p.before],after:[...p.after]}:{documentId:p.documentId,before:p.before,after:p.after})
  }) as Promise<SaveSnapshot>;
 }
 
