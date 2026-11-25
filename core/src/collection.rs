@@ -86,7 +86,7 @@ pub struct Entry {pub id:i32,pub ticks:i64}
 #[derive(Clone,Copy,Debug,PartialEq)]
 pub struct CounterEntry {pub guid:[u32;4],pub current:f32,pub counted_values:Option<usize>,pub counted_guids:usize}
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
-pub struct InventoryEntry {pub document_id:u32,pub item_id:i32,pub quantity:i32,pub editable:bool}
+pub struct InventoryEntry {pub document_id:u32,pub item_id:i32,pub quantity:i32,pub editable:bool,pub quantity_limit:Option<i32>}
 #[derive(Clone,Copy,Debug)]
 struct InventoryQuantityDelta{document_id:u32,before:Option<i32>,after:Option<i32>}
 #[derive(Clone,Debug)]
@@ -141,6 +141,7 @@ pub struct Editor {
  entries:Vec<Entry>,
  changes:HashMap<i32,Option<i64>>,
  inventory_changes:HashMap<u32,i32>,
+ inventory_item_rows:HashMap<i32,usize>,
  flower_variant_changes:HashMap<u32,FlowerVariant>,
  furniture_variant_changes:HashMap<u32,FurnitureVariant>,
  achievement_changes:HashMap<[u32;4],AchievementValue>,
@@ -169,7 +170,11 @@ impl Editor {
    if base.insert(row.id,row.ticks).is_some(){return Err(Error::Duplicate)}
    entries.push(Entry{id:row.id,ticks:row.ticks});
   }
-  Ok(Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0})
+  let mut inventory_item_rows=HashMap::new();
+  for row in &slot.index.inventory{
+   if let Some(id)=row.item_id{*inventory_item_rows.entry(id).or_insert(0usize)+=1;}
+  }
+  Ok(Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),inventory_item_rows,flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0})
  }
  fn compatible(slot:&ReadSlot)->bool{
   let n=slot.index.collection_version.as_ref().map(|v|v.number);
@@ -210,12 +215,14 @@ impl Editor {
   added.sort_by_key(|r|r.guid);
   rows.extend(added);rows
  }
- /// Original native inventory records only. Unique items are read-only.
+ /// Original native inventory records; positive ordinary stack quantity bounds
+ /// are source-defined and never inferred from a display category.
  pub fn inventory(&self)->Vec<InventoryEntry>{
   self.slot.index.inventory.iter().filter_map(|r|{
+   let quantity_limit=self.inventory_quantity_limit(r);
    Some(InventoryEntry{document_id:r.id,item_id:r.item_id?,quantity:
     self.inventory_changes.get(&r.id).copied().or(r.quantity)?,
-    editable:self.inventory_can_edit(r)})
+    editable:quantity_limit.is_some(),quantity_limit})
   }).collect()
  }
  /// Read-only lookup by document identity, never by Item ID alone.
@@ -414,14 +421,20 @@ impl Editor {
    }
   })
  }
- fn inventory_can_edit(&self,r:&crate::native::InventoryRow)->bool{
-  self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
-   r.item_id.is_some_and(|id|id>0)&&r.quantity.is_some_and(|v|v>0)&&
-   r.unique_is_nil==Some(true)&&r.fields[2].is_some()
+ fn inventory_quantity_limit(&self,r:&crate::native::InventoryRow)->Option<i32>{
+  if self.slot.envelope.version!=Version::V301||r.id==0||r.id>i32::MAX as u32||
+   r.quantity?<=0||r.unique_is_nil!=Some(true)||r.fields[2].is_none(){return None}
+  let item_id=r.item_id?;
+  let cap=crate::inventory_source::ordinary_quantity_limit(item_id)?;
+  // A finite definition limit must not be treated as an independent cap for
+  // every ambiguous saved row with the same item identity. Preserve those rows.
+  if cap<i32::MAX&&self.inventory_item_rows.get(&item_id)!=Some(&1){return None}
+  Some(cap)
  }
  fn plan_inventory_quantity(&self,id:u32,expected:i32,next:i32)->Result<InventoryQuantityDelta,Error>{
   let row=self.slot.index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
-  if !self.inventory_can_edit(row)||next<1||
+  let cap=self.inventory_quantity_limit(row).ok_or(Error::Schema)?;
+  if next<1||next>cap||
    self.inventory_changes.get(&id).copied().or(row.quantity)!=Some(expected){return Err(Error::Schema)}
   let before=self.inventory_changes.get(&id).copied();
   let after=if row.quantity==Some(next){None}else{Some(next)};
@@ -549,6 +562,7 @@ impl Editor {
    !crate::achievement_keys::known_v301(guid)||!achievement::valid(value)||
    self.achievement_value(guid).is_some()||value.complete!=value.completed.is_some()||
    self.slot.index.documents+self.achievement_created.len()>=1_000_000{return Err(Error::Schema)}
+  crate::document_membership::allocate_ids(&self.slot.index,self.achievement_created.len()+1)?;
   let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   self.achievement_created.insert(guid,value);
   self.undo.push(Change::AchievementCreated{guid,before:None,after:Some(value)});
@@ -566,6 +580,7 @@ impl Editor {
    !achievement::valid(expected)||!achievement::valid(next)||expected==next||
    self.achievement_value(parent)!=Some(expected)||
    self.slot.index.documents+self.achievement_created.len()>=1_000_000{return Err(Error::Schema)}
+  crate::document_membership::allocate_ids(&self.slot.index,self.achievement_created.len()+1)?;
   let model=self.slot.index.achievements.iter().find(|m|m.guid==parent).ok_or(Error::Schema)?;
   let original=achievement::value(model)?;
   let before=self.achievement_changes.get(&parent).copied();
@@ -591,6 +606,7 @@ impl Editor {
    !achievement::valid(parent_next)||!parent_next.complete||
    self.slot.index.documents+self.achievement_created.len()+usize::from(expected.is_none())+1>1_000_000
    {return Err(Error::Schema)}
+  crate::document_membership::allocate_ids(&self.slot.index,self.achievement_created.len()+usize::from(expected.is_none())+1)?;
   let total=crate::achievement_keys::parent_size_v301(parent).ok_or(Error::Schema)?;
   if parent_next.current!=total as f32{return Err(Error::Schema)}
   let mut seen=0usize;
@@ -878,7 +894,7 @@ impl Editor {
   }
   for row in &self.slot.index.inventory {
    if let Some(v)=self.inventory_changes.get(&row.id){
-    if !self.inventory_can_edit(row){return Err(Error::Schema)}
+    if self.inventory_quantity_limit(row).is_none_or(|cap|*v<1||*v>cap){return Err(Error::Schema)}
     let span=row.fields[2].clone().ok_or(Error::Schema)?;
     let mut encoded=vec![0xd2];encoded.extend(v.to_be_bytes());
     patches.push((span,encoded));
@@ -925,27 +941,16 @@ impl Editor {
    (intermediate,first)
   }else{
    let index=crate::native::index_native(&intermediate,self.slot.envelope.version)?;
-   let span=index.root_documents_span.clone().ok_or(Error::Schema)?;
-   let mut cursor=Cursor::new(&intermediate[span.clone()]);
-   let count=cursor.array()?;
-   if count!=index.documents||count+self.achievement_created.len()>1_000_000{return Err(Error::Schema)}
-   let insertion=index.achievements.last().ok_or(Error::Schema)?.fields[2].bytes.end;
-   let head_end=span.start+cursor.pos;
-   if insertion<head_end||insertion>span.end{return Err(Error::Schema)}
+   let last=index.achievements.last().ok_or(Error::Schema)?.id;
    let mut added:Vec<_>=self.achievement_created.iter().collect();
    added.sort_by_key(|(&guid,_)|guid);
-   let max_id=index.achievements.iter().map(|x|x.id).max().ok_or(Error::Schema)?;
-   let max_new=max_id.checked_add(u32::try_from(added.len()).map_err(|_|Error::Overflow)?).ok_or(Error::Overflow)?;
-   if max_new>i32::MAX as u32{return Err(Error::Schema)}
-   let mut replacement=Vec::new();
-   mp_array_header(count+added.len(),&mut replacement)?;
-   replacement.extend_from_slice(&intermediate[head_end..insertion]);
-   for (i,(&guid,&value)) in added.into_iter().enumerate(){
-    let id=max_id+(i as u32)+1;
-    replacement.extend(encode_achievement_document(id,guid,value)?);
+   let ids=crate::document_membership::allocate_ids(&index,added.len())?;
+   let mut records=Vec::with_capacity(added.len());
+   for ((&guid,&value),id) in added.into_iter().zip(ids){
+    records.push(((16,id),encode_achievement_document(id,guid,value)?));
    }
-   replacement.extend_from_slice(&intermediate[insertion..span.end]);
-   let (result,created_at)=achievement::splice(&intermediate,vec![(span,replacement)])?;
+   let (result,created_at)=crate::document_membership::rewrite(
+    &intermediate,self.slot.envelope.version,&index,&[],Some(((16,last),&records)))?;
    (result,first.min(created_at))
   };
   if next_payload==*original_payload{return Err(Error::Schema)}
@@ -1003,13 +1008,6 @@ impl Editor {
 
 }
 
-fn mp_array_header(n:usize,out:&mut Vec<u8>)->Result<(),Error>{
- if n>1_000_000{return Err(Error::Budget)}
- if n<16{out.push(0x90|n as u8)}
- else if n<=u16::MAX as usize{out.push(0xdc);out.extend((n as u16).to_be_bytes());}
- else{out.push(0xdd);out.extend((n as u32).to_be_bytes());}
- Ok(())
-}
 fn mp_u32(n:u32,out:&mut Vec<u8>){out.push(0xce);out.extend(n.to_be_bytes());}
 fn encode_achievement_document(id:u32,guid:[u32;4],value:AchievementValue)->Result<Vec<u8>,Error>{
  if id>i32::MAX as u32||!achievement::valid(value){return Err(Error::Schema)}

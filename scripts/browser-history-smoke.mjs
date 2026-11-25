@@ -25,7 +25,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,quantityBounds=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -45,6 +45,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
+  ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
   ...(editableFlower?[flower(8,1,0,0)]:[]),
   ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
   ...(editableFurniture?[doc(1,arr([8],u32(61381969),u32(11),u32(93),arr([8],arr(u32(13),u32(2),u32(0)))))]:[]),
@@ -324,6 +325,44 @@ async function inventoryBatchQuantitySmoke(){
   assert.deepEqual(rows,[[4,315822,20],[8,517031,20]]);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM INVENTORY BATCH PASS: explicit selection, atomic CAS, reload, grouped undo/redo and WASM reparse');
+ }finally{await context.close()}
+}
+async function inventoryQuantityBoundsSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-quantity-bounds.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({quantityBounds:true}))
+  });
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await page.locator('[data-inventory-group="items"]').click();
+  await search.fill('413462588');
+  const input=page.locator('.inventory-card input[name="quantity"]');
+  await input.waitFor({timeout:30_000});
+  assert.equal(await input.getAttribute('max'),'3');
+  await input.fill('4');
+  assert.equal(await input.evaluate(el=>el.validity.rangeOverflow),true);
+  await input.fill('3');
+  await page.locator('.inventory-card button[type="submit"]').click();
+  await page.locator('.state-dot.changed').waitFor();
+  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  assert.equal(await input.inputValue(),'3');
+  await page.locator('.inventory-batch-toggle').click();
+  await page.locator('.inventory-batch-checkbox').check();
+  await page.locator('[data-inventory-group="clothes"]').click();
+  await search.fill('315822');
+  await page.locator('.inventory-batch-checkbox').check();
+  const batch=page.locator('.inventory-batch-form input[type="number"]');
+  assert.equal(await batch.getAttribute('max'),'3');
+  await batch.fill('4');
+  assert.equal(await batch.evaluate(el=>el.validity.rangeOverflow),true);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM INVENTORY BOUNDS PASS: native single and mixed batch maximum');
  }finally{await context.close()}
 }
 async function inventoryDynamicFlowerArtSmoke(){
@@ -1262,6 +1301,7 @@ async function run(){
  await wandRuntimeSmoke(browser,origin,base);
  await inventoryEditExportSmoke();
  await inventoryBatchQuantitySmoke();
+ await inventoryQuantityBoundsSmoke();
  await inventoryOriginalArtSmoke();
  await inventoryDynamicFlowerArtSmoke();
  await inventoryFlowerVariantEditSmoke();

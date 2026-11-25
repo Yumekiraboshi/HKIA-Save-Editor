@@ -318,7 +318,8 @@ fn verified_new_achievement_creation_v301_raw_and_zip_roundtrips_without_other_c
   let src=read_slot(&decoded).unwrap();
   assert_eq!(src.index.documents,6);
   assert_eq!(src.index.achievements.len(),3);
-  assert_eq!(src.index.achievements[2].id,3); // max previous tag16 ID 2 + 1
+  assert_eq!(src.index.achievements[2].id,5); // original DbRoot.NextId 4 + 1
+   assert_eq!(src.index.root_next_id.as_ref().unwrap().0,5);
   assert_eq!(src.index.achievements[2].guid,guid);
   assert!(editor.undo());assert!(editor.achievement_value(guid).is_none());assert!(!editor.dirty());
   assert!(editor.redo());assert_eq!(editor.achievement_value(guid),Some(done));
@@ -1388,4 +1389,30 @@ fn wand_source_appearance_preserves_nested_identity_and_bytes(){
   assert_eq!(reopened.inventory_original_unique_payload(id),Some(p.as_slice()));
   assert_eq!(reopened.inventory_unique_data(id),e.inventory_unique_data(id));
  }
+}
+
+#[test]
+fn inventory_quantity_limits_are_native_and_cas_atomic(){
+ let mut payload=synthetic_payload("3.0.1");payload[3]=0x99;
+ for (id,item,quantity) in [(4,315822,6),(5,413462588,2),(6,1900000001,1),(7,2147483646,1)]{
+  payload.extend(doc(1,arr(vec![u(id),u(item),u(0),u(quantity),vec![0xc0]])));
+ }
+ let input=slot_from_payload("3.0.1",payload);
+ let mut editor=Editor::open(input.clone()).unwrap();
+ let rows=editor.inventory();
+ assert_eq!(rows.iter().map(|r|r.quantity_limit).collect::<Vec<_>>(),vec![Some(i32::MAX),Some(3),None,None]);
+ assert!(editor.change_inventory_quantity(5,2,4).is_err());
+ assert!(editor.change_inventory_quantity(6,1,2).is_err());
+ assert!(editor.change_inventory_quantity(7,1,2).is_err());
+ assert!(editor.change_inventory_quantities(&[(4,6,20),(5,2,4)]).is_err());
+ assert_eq!(editor.inventory(),rows);assert_eq!(editor.revision(),0);
+ editor.change_inventory_quantities(&[(4,6,20),(5,2,3)]).unwrap();
+ assert_eq!(editor.history().len(),1);
+ let checkpoint=editor.history_checkpoint().unwrap();
+ let reopened=Editor::open(editor.export().unwrap()).unwrap();
+ assert_eq!(reopened.inventory()[0].quantity,20);assert_eq!(reopened.inventory()[1].quantity,3);
+ assert_eq!(reopened.inventory()[2],rows[2]);assert_eq!(reopened.inventory()[3],rows[3]);
+ let mut recovered=Editor::open(input).unwrap();recovered.restore_history(&checkpoint).unwrap();
+ assert_eq!(recovered.inventory(),editor.inventory());
+ assert!(editor.undo());assert_eq!(editor.inventory(),rows);assert!(editor.redo());
 }

@@ -129,8 +129,15 @@ pub struct VisitorManagerScopedSourceLink{
  pub apartment:u8,
  pub home_hash128:[u32;4],
 }
+/// Exact original top-level IDocument union bytes. The key is per tag,
+/// not a globally unique ID and not a player-item identity.
+#[derive(Debug,Clone,PartialEq,Eq)]
+pub(crate) struct DocumentSpan{pub key:(i32,u32),pub bytes:Range<usize>}
 #[derive(Debug,Default)]
 pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievements:Vec<Model>,pub counters:Vec<Model>,pub collections:Vec<CollectionEntry>,pub deprecated_count:usize,pub dictionary_entries:usize,pub collection_map:Option<Range<usize>>,pub root_documents_span:Option<Range<usize>>,pub celebrations:Vec<CelebrationSpan>,pub inventory:Vec<InventoryRow>,pub inventory_item_refs:HashSet<(i32,i32)>,pub inventory_legacy_uid_refs:HashSet<i32>,pub inventory_item_refs_incomplete:bool,pub deprecated:Vec<DeprecatedEntry>,pub deprecated_map:Option<Range<usize>>,pub collection_version:Option<CollectionVersion>,
+ pub(crate) document_spans:Vec<DocumentSpan>,
+ /// DbRoot.Key(1), native shared document allocation counter and exact token span.
+ pub root_next_id:Option<(i32,Range<usize>)>,
  /// Source rows are derived only inside this existing NativeIndex Walk;
  /// completeness means just 15 schema fields, NEVER ownership or local rights.
  pub home_sources:Vec<HomeSourceRow>,
@@ -316,7 +323,9 @@ impl<'a> Walk<'a>{
        if tag==1{let a=a.as_ref().ok_or(Error::Schema)?;let int=|k:usize|->Result<Option<i32>,Error>{a.get(k).map(|v|i32::try_from(v.0.int()?).map_err(|_|Error::Schema)).transpose()};let fields=std::array::from_fn(|i|a.get(i+1).map(|v|v.1.clone()));let unique_is_nil=a.get(4).map(|v|matches!(&v.0,Value::Nil));let unique_data=a.get(4).and_then(|v|match &v.0{Value::InventoryUnique(data,_)=>Some(*data),_=>None});let unique_fields=a.get(4).and_then(|v|match &v.0{Value::InventoryUnique(_,fields)=>Some(fields.clone()),_=>None}).unwrap_or_default();self.index.inventory.push(InventoryRow{id,item_id:int(1)?,unique_id:int(2)?,quantity:int(3)?,fields,unique_is_nil,unique_data,unique_fields});}
        if tag==8{let a=a.as_ref().ok_or(Error::Schema)?;if a.len()!=2{return Err(Error::Schema)}let guid_count=match &a[1].0{Value::Count(n)=>*n,_=>return Err(Error::Schema)};self.index.celebrations.push(CelebrationSpan{id,bytes:union_start..self.c.pos,guid_count});}
        // The schema already checked tag membership. Store each u32 only once in its tag bucket.
-       if !self.ids.entry(tag).or_default().insert(id){return Err(Error::Duplicate)}self.index.documents+=1;}
+       if !self.ids.entry(tag).or_default().insert(id){return Err(Error::Duplicate)}
+       self.index.document_spans.push(DocumentSpan{key:(tag,id),bytes:union_start..self.c.pos});
+       self.index.documents+=1;}
       Ok(Value::Other)
      },
      Shape::Fields(specs)=>{
@@ -402,7 +411,7 @@ impl<'a> Walk<'a>{
         });
        }
       }
-      if name==ROOT{if n!=3||!matches!(&fields[2].0,Value::Count(x) if *x>0 && *x==self.index.documents){return Err(Error::Schema)}self.index.root_documents_span=Some(fields[2].1.clone());}
+      if name==ROOT{if n!=3||!matches!(&fields[2].0,Value::Count(x) if *x>0 && *x==self.index.documents){return Err(Error::Schema)}self.index.root_next_id=Some((i32::try_from(fields[1].0.int()?).map_err(|_|Error::Schema)?,fields[1].1.clone()));self.index.root_documents_span=Some(fields[2].1.clone());}
       if name==SHOP{if n!=3{return Err(Error::Schema)}return Ok(Value::Key(Key::Shop(fields[0].0.guid()?,fields[1].0.guid()?,fields[2].0.int()?)))}
       if short=="CollectionVersion"{if ctx!=Some((DOC,18))||n!=3||self.version_seen{return Err(Error::Schema)}if !matches!(&fields[2].0,Value::Str(v) if *v==self.version.as_str()){return Err(Error::Version)}self.version_seen=true;self.index.collection_version=Some(CollectionVersion{id:u32::try_from(fields[0].0.int()?).map_err(|_|Error::Schema)?,number:i32::try_from(fields[1].0.int()?).map_err(|_|Error::Schema)?,span:fields[1].1.clone()});}
       if short=="GameCollectionsTraitModel"{if ctx!=Some((TRAIT,39))||n!=2||self.collection_seen{return Err(Error::Schema)}self.collection_seen=true;self.index.deprecated_count=match &fields[0].0{Value::Count(x)=>*x,_=>return Err(Error::Schema)};if !matches!(&fields[1].0,Value::Count(_)){return Err(Error::Schema)}}
