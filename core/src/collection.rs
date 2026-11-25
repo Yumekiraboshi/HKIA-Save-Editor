@@ -885,27 +885,19 @@ impl Editor {
    (intermediate,first)
   }else{
    let index=crate::native::index_native(&intermediate,self.slot.envelope.version)?;
-   let span=index.root_documents_span.clone().ok_or(Error::Schema)?;
-   let mut cursor=Cursor::new(&intermediate[span.clone()]);
-   let count=cursor.array()?;
-   if count!=index.documents||count+self.achievement_created.len()>1_000_000{return Err(Error::Schema)}
-   let insertion=index.achievements.last().ok_or(Error::Schema)?.fields[2].bytes.end;
-   let head_end=span.start+cursor.pos;
-   if insertion<head_end||insertion>span.end{return Err(Error::Schema)}
+   let last=index.achievements.last().ok_or(Error::Schema)?.id;
    let mut added:Vec<_>=self.achievement_created.iter().collect();
    added.sort_by_key(|(&guid,_)|guid);
    let max_id=index.achievements.iter().map(|x|x.id).max().ok_or(Error::Schema)?;
    let max_new=max_id.checked_add(u32::try_from(added.len()).map_err(|_|Error::Overflow)?).ok_or(Error::Overflow)?;
    if max_new>i32::MAX as u32{return Err(Error::Schema)}
-   let mut replacement=Vec::new();
-   mp_array_header(count+added.len(),&mut replacement)?;
-   replacement.extend_from_slice(&intermediate[head_end..insertion]);
+   let mut records=Vec::with_capacity(added.len());
    for (i,(&guid,&value)) in added.into_iter().enumerate(){
     let id=max_id+(i as u32)+1;
-    replacement.extend(encode_achievement_document(id,guid,value)?);
+    records.push(((16,id),encode_achievement_document(id,guid,value)?));
    }
-   replacement.extend_from_slice(&intermediate[insertion..span.end]);
-   let (result,created_at)=achievement::splice(&intermediate,vec![(span,replacement)])?;
+   let (result,created_at)=crate::document_membership::rewrite(
+    &intermediate,self.slot.envelope.version,&index,&[],Some(((16,last),&records)))?;
    (result,first.min(created_at))
   };
   if next_payload==*original_payload{return Err(Error::Schema)}
@@ -963,13 +955,6 @@ impl Editor {
 
 }
 
-fn mp_array_header(n:usize,out:&mut Vec<u8>)->Result<(),Error>{
- if n>1_000_000{return Err(Error::Budget)}
- if n<16{out.push(0x90|n as u8)}
- else if n<=u16::MAX as usize{out.push(0xdc);out.extend((n as u16).to_be_bytes());}
- else{out.push(0xdd);out.extend((n as u32).to_be_bytes());}
- Ok(())
-}
 fn mp_u32(n:u32,out:&mut Vec<u8>){out.push(0xce);out.extend(n.to_be_bytes());}
 fn encode_achievement_document(id:u32,guid:[u32;4],value:AchievementValue)->Result<Vec<u8>,Error>{
  if id>i32::MAX as u32||!achievement::valid(value){return Err(Error::Schema)}

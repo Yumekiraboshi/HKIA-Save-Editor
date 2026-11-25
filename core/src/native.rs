@@ -107,8 +107,13 @@ pub struct VisitorManagerScopedSourceLink{
  pub apartment:u8,
  pub home_hash128:[u32;4],
 }
+/// Exact original top-level IDocument union bytes. The key is per tag,
+/// not a globally unique ID and not a player-item identity.
+#[derive(Debug,Clone,PartialEq,Eq)]
+pub(crate) struct DocumentSpan{pub key:(i32,u32),pub bytes:Range<usize>}
 #[derive(Debug,Default)]
 pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievements:Vec<Model>,pub counters:Vec<Model>,pub collections:Vec<CollectionEntry>,pub deprecated_count:usize,pub dictionary_entries:usize,pub collection_map:Option<Range<usize>>,pub root_documents_span:Option<Range<usize>>,pub celebrations:Vec<CelebrationSpan>,pub inventory:Vec<InventoryRow>,pub inventory_item_refs:HashSet<(i32,i32)>,pub inventory_legacy_uid_refs:HashSet<i32>,pub inventory_item_refs_incomplete:bool,pub deprecated:Vec<DeprecatedEntry>,pub deprecated_map:Option<Range<usize>>,pub collection_version:Option<CollectionVersion>,
+ pub(crate) document_spans:Vec<DocumentSpan>,
  /// Source rows are derived only inside this existing NativeIndex Walk;
  /// completeness means just 15 schema fields, NEVER ownership or local rights.
  pub home_sources:Vec<HomeSourceRow>,
@@ -268,7 +273,9 @@ impl<'a> Walk<'a>{
        if tag==1{let a=a.as_ref().ok_or(Error::Schema)?;let int=|k:usize|->Result<Option<i32>,Error>{a.get(k).map(|v|i32::try_from(v.0.int()?).map_err(|_|Error::Schema)).transpose()};let fields=std::array::from_fn(|i|a.get(i+1).map(|v|v.1.clone()));let unique_is_nil=a.get(4).map(|v|matches!(&v.0,Value::Nil));let unique_data=a.get(4).and_then(|v|match &v.0{Value::InventoryUnique(data,_)=>Some(*data),_=>None});let unique_fields=a.get(4).and_then(|v|match &v.0{Value::InventoryUnique(_,fields)=>Some(fields.clone()),_=>None}).unwrap_or_default();self.index.inventory.push(InventoryRow{id,item_id:int(1)?,unique_id:int(2)?,quantity:int(3)?,fields,unique_is_nil,unique_data,unique_fields});}
        if tag==8{let a=a.as_ref().ok_or(Error::Schema)?;if a.len()!=2{return Err(Error::Schema)}let guid_count=match &a[1].0{Value::Count(n)=>*n,_=>return Err(Error::Schema)};self.index.celebrations.push(CelebrationSpan{id,bytes:union_start..self.c.pos,guid_count});}
        // The schema already checked tag membership. Store each u32 only once in its tag bucket.
-       if !self.ids.entry(tag).or_default().insert(id){return Err(Error::Duplicate)}self.index.documents+=1;}
+       if !self.ids.entry(tag).or_default().insert(id){return Err(Error::Duplicate)}
+       self.index.document_spans.push(DocumentSpan{key:(tag,id),bytes:union_start..self.c.pos});
+       self.index.documents+=1;}
       Ok(Value::Other)
      },
      Shape::Fields(specs)=>{
