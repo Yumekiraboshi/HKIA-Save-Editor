@@ -56,3 +56,20 @@ test('old asynchronous render cannot replace current appearance; URLs are revoke
   assert.equal(seen.at(-1),null);
  }finally{URL.createObjectURL=create;URL.revokeObjectURL=revoke;}
 });
+
+test('partial artwork is used only when complete artwork is missing, never after cancellation',async()=>{
+ const full=new Blob(['full']),part=new Blob(['part']);
+ const seen=[];let partialCalls=0;
+ const partial=async()=>{partialCalls++;return part};
+ const result=await new Promise(resolve=>{
+  const stop=startDynamicArtRequest(async()=>full,(url,isPartial)=>{if(url){seen.push(isPartial);resolve(stop);}},partial);
+ });result();
+ assert.equal(partialCalls,0);
+ const fallback=await new Promise(resolve=>{
+  const stop=startDynamicArtRequest(async()=>null,(url,isPartial)=>{if(url){seen.push(isPartial);resolve(stop);}},partial);
+ });fallback();
+ assert.equal(partialCalls,1);assert.deepEqual(seen,[false,true]);
+ let release;const pending=new Promise(resolve=>{release=resolve});
+ const canceled=startDynamicArtRequest(()=>pending,()=>{},partial);canceled();release(null);await pending;await Promise.resolve();
+ assert.equal(partialCalls,1);
+});
