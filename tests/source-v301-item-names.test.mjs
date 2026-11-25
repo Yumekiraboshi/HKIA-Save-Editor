@@ -75,7 +75,7 @@ test('additional native inventory names cover all 12,163 original IDs in all 16 
   const extra=decodeInventoryAdditionalNames(raw,locale,base);
   assert.equal(Object.keys(extra).length,1901);
   assert.deepEqual(new Set([...Object.keys(base),...Object.keys(extra)]),ids,locale);
-  assert.throws(()=>decodeInventoryAdditionalNames({...raw,locale:'ar'},locale,base));
+  assert.throws(()=>decodeInventoryAdditionalNames({...raw,locale:locale==='ar'?'en':'ar'},locale,base));
   assert.throws(()=>decodeInventoryAdditionalNames(raw,locale,{...base,[Object.keys(extra)[0]]:'collision'}));
  }
  const ar=JSON.parse(readFileSync(new URL('../public/inventory-names/ar.json',import.meta.url))).names;
