@@ -1514,6 +1514,52 @@ fn chef_appearance_is_read_only_and_preserves_full_original_payload(){
 }
 
 #[test]
+fn palette_and_chef_quantity_preserves_entire_original_payload(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let palette=arr(vec![vec![6],arr(vec![arr(vec![f(0.25),f(0.5),f(-0.0),f(1.0)]);3])]);
+ let cafe=arr(vec![vec![3],arr(vec![arr(vec![u(99),u(98)]),arr(vec![u(6),u(14),u(11),u(19)])])]);
+ let boba=arr(vec![vec![4],arr(vec![u(14),u(6),u(11),u(19),u(99)])]);
+ let make=|version:&str,rows:Vec<(u32,u32,u32,Vec<u8>)>|{
+  let mut payload=synthetic_payload(version);payload[3]=0x95+rows.len() as u8;
+  for (id,item,uid,p) in rows{payload.extend(doc(1,arr(vec![u(id),u(item),u(uid),u(2),p])));}
+  slot_from_payload(version,payload)
+ };
+ for zipped in [false,true]{
+  let raw=make("3.0.1",vec![(4,1835273963,21,palette.clone()),(5,203331651,22,cafe.clone()),(6,1798633565,23,boba.clone())]);
+  let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==1&&r.quantity_limit==Some(i32::MAX)));
+  assert!(e.change_inventory_quantities(&[(4,2,10),(5,2,0)]).is_err());assert!(!e.dirty());
+  e.change_inventory_quantities(&[(4,2,10),(5,2,20),(6,2,30)]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();
+  recovered.restore_history(&cp).unwrap();assert_eq!(recovered.inventory(),e.inventory());
+  assert!(recovered.undo_scope(Inventory));assert_eq!(recovered.inventory(),original);
+  assert!(recovered.redo_scope(Inventory));
+  let reopened=Editor::open(recovered.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory().iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![10,20,30]);
+  for (id,p) in [(4,&palette),(5,&cafe),(6,&boba)]{assert_eq!(reopened.inventory_original_unique_payload(id),Some(p.as_slice()));}
+ }
+ let unknown_color=arr(vec![vec![3],arr(vec![arr(vec![u(99)]),arr(vec![u(6),u(14),u(11),u(999)])])]);
+ let bad_palette=arr(vec![vec![6],arr(vec![arr(vec![f(1.5),f(0.5),f(0.0),f(1.0)]);3])]);
+ for (version,rows) in [
+  ("3.0.1",vec![(4,1835273963,21,palette.clone()),(5,1835273963,22,palette.clone())]),
+  ("3.0.1",vec![(4,1835273963,21,palette.clone()),(5,203331651,21,cafe.clone())]),
+  ("3.0.1",vec![(4,1835273963,21,bad_palette)]),
+  ("3.0.1",vec![(4,203331651,21,unknown_color)]),
+  ("3.0.1",vec![(4,1835273963,0,palette.clone())]),
+  ("3.0.0",vec![(4,1835273963,21,palette.clone())]),
+ ]{
+  let mut e=Editor::open(make(version,rows)).unwrap();
+  assert!(!e.inventory()[0].editable);assert!(e.change_inventory_quantity(4,2,10).is_err());assert!(!e.dirty());
+ }
+ // All nine exact chef definitions share the source flags and tag.
+ for item in [203331651,406277059,905853141,973085470,1053426049,1061947263,1237708874,1338995084,1932639321]{
+  let mut e=Editor::open(make("3.0.1",vec![(4,item,21,cafe.clone())])).unwrap();
+  e.change_inventory_quantity(4,2,15).unwrap();
+  assert_eq!(Editor::open(e.export().unwrap()).unwrap().inventory_original_unique_payload(4),Some(cafe.as_slice()));
+ }
+}
+#[test]
 fn wand_source_appearance_preserves_nested_identity_and_bytes(){
  use hkia_save_core::native::InventoryUniqueData as U;
  let mut payload=synthetic_payload("3.0.1");payload[3]=0x9a;
