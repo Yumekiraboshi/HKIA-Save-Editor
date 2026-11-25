@@ -1,6 +1,6 @@
 /** Source-bound flower display inputs. This is not a save rule planner.
- * Only the known plucked-state branch and explicitly mapped masks are
- * resolved here. Unsupported inputs retain the existing UI fallback.
+ * The native plucked-state branch chooses a pattern-specific mask, then
+ * the original null-pattern mask. Unknown inputs remain unsupported.
  */
 import type {InventoryFlower,FlowerDisplayDefinitions} from './inventory-flower-display';
 import type {Rgba,TintSet} from './dynamic-sprite-color';
@@ -18,7 +18,9 @@ export function resolveFlowerAppearance(itemId:number,flower:InventoryFlower,def
  // Null native pattern has index zero in the mask manifest. An unrecognized
  // nonzero pattern is not silently treated as null.
  if(flower.pattern!==0&&!Object.hasOwn(defs.patterns,String(flower.pattern)))return null;
- const chosen=item.patterns.find(p=>p.patternIndex===flower.pattern);
+ // Native Refresh searches the resolved pattern first, then the null/default pattern.
+ // This changes only artwork selection, not flower validity or edit eligibility.
+ const chosen=item.patterns.find(p=>p.patternIndex===flower.pattern)??item.patterns.find(p=>p.patternIndex===0);
  if(!chosen||!Object.hasOwn(index.masks,chosen.maskGuid))return null;
  const secondary=flower.pattern===0?primary:(defs.colors[String(flower.patternColor)]?.rgba??(flower.patternColor===0?WHITE:undefined));
  if(!valid(secondary))return null;

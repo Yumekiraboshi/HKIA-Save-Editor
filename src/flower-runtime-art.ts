@@ -59,7 +59,7 @@ const CACHE_LIMIT=192;
 /** Shared display-only compositor; save fields are consumed from the
  * Rust/WASM snapshot. No output is written to disk or sent to a service. */
 export async function renderFlowerArt(itemId:number,flower:InventoryFlower,defs:FlowerDisplayDefinitions):Promise<Blob|null>{
- if(flower.growState!==6||(flower.pattern!==0&&(!defs.patterns[String(flower.pattern)]||defs.patterns[String(flower.pattern)].effect)))return null;
+ if(flower.growState!==6||(flower.pattern!==0&&!Object.hasOwn(defs.patterns,String(flower.pattern))))return null;
  try{
   const source=await sources();
   const appearance=resolveFlowerAppearance(itemId,flower,defs,source.index);
