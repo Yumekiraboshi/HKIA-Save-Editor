@@ -118,6 +118,8 @@ pub mod collection;
 pub mod achievement;
 mod document_membership;
 mod catalog;
+mod inventory_source;
+mod inventory_source_data;
 mod achievement_keys;
 #[derive(Debug)]
 pub struct ReadSlot { pub envelope: envelope::Envelope, pub index: native::NativeIndex }

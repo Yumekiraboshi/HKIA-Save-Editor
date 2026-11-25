@@ -80,6 +80,14 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryBatchMode=$state(false);
  let inventoryBatchSelected=$state<Set<number>>(new Set());
  let inventoryBatchQuantity=$state<number|undefined>(undefined);
+ // Presentation only: the tightest bound returned by Rust for selected rows.
+ const inventoryBatchMaximum=$derived.by(()=>{
+  let cap=2147483647;
+  if(snapshot)for(const row of snapshot.inventory){
+   if(inventoryBatchSelected.has(row.documentId))cap=Math.min(cap,row.quantityLimit??0);
+  }
+  return Math.max(1,cap);
+ });
  function clearInventoryBatch(){inventoryBatchMode=false;inventoryBatchSelected=new Set();inventoryBatchQuantity=undefined}
  $effect(()=>{if(activeTool!=='inventory')clearInventoryBatch()});
  let inventoryLimit=$state(BATCH_SIZE);
@@ -732,7 +740,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   event.preventDefault();
   if(!snapshot||busy||!inventoryBatchMode||!inventoryBatchSelected.size)return;
   const next=inventoryBatchQuantity;
-  if(next===undefined||!Number.isSafeInteger(next)||next<1||next>2147483647)return;
+  if(next===undefined||!Number.isSafeInteger(next)||next<1||next>inventoryBatchMaximum)return;
   const rows=snapshot.inventory.filter(row=>inventoryBatchSelected.has(row.documentId));
   if(rows.length!==inventoryBatchSelected.size||rows.some(row=>!row.editable))return;
   if(rows.every(row=>row.quantity===next)){clearInventoryBatch();return}
@@ -753,7 +761,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    error=copy.fileError;return;
   }
   const next=Number(value);
-  if(!Number.isSafeInteger(next)||next>2147483647){error=copy.fileError;return}
+  if(!Number.isSafeInteger(next)||row.quantityLimit===null||next>row.quantityLimit){error=copy.fileError;return}
   if(next===row.quantity)return;
   busy=true;error='';
   try{
@@ -1182,7 +1190,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#if inventoryBatchMode}
      <form class="inventory-batch-form" onsubmit={e=>void applyInventoryBatch(e)}>
       <span class="inventory-total" aria-live="polite">{inventoryBatchSelected.size.toLocaleString(locale)} / {snapshot.inventoryBatchLimit.toLocaleString(locale)}</span>
-      <input type="number" min="1" max="2147483647" step="1" required bind:value={inventoryBatchQuantity} placeholder={iCopy.quantity} aria-label={iCopy.quantity} disabled={busy}/>
+      <input type="number" min="1" max={inventoryBatchMaximum} step="1" required bind:value={inventoryBatchQuantity} placeholder={iCopy.quantity} aria-label={iCopy.quantity} disabled={busy}/>
       <button type="submit" class="primary" disabled={busy||!inventoryBatchSelected.size||inventoryBatchQuantity===undefined}>{iCopy.apply}</button>
       <button type="button" class="inventory-editable-filter" disabled={busy} onclick={clearInventoryBatch}>{copy.cancel}</button>
      </form>
@@ -1277,7 +1285,7 @@ import {verifiedFloorplanName} from './floorplan-names';
        <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>
         <label>
          <span class="visually-hidden">{iCopy.quantity}</span>
-         <input type="number" name="quantity" min="1" max="2147483647" step="1"
+         <input type="number" name="quantity" min="1" max={item.quantityLimit??1} step="1"
           value={item.quantity} disabled={busy||inventoryBatchMode} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
         </label>
         <button type="submit" class="primary" disabled={busy||inventoryBatchMode} title={iCopy.apply} aria-label={iCopy.apply}>

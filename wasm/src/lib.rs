@@ -110,6 +110,26 @@ pub extern "C" fn hkia_inventory_snapshot()->u32{
  })
 }
 
+/// Existing inventory quantity bounds, separate from the stable 16-byte
+/// inventory row ABI: count + (document id u32, positive maximum i32).
+#[no_mangle]
+pub extern "C" fn hkia_inventory_quantity_bounds()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let rows=editor.inventory();
+  if rows.len()>1_000_000{return 1}
+  let mut b=vec![0;4];let mut count=0u32;
+  for row in rows{
+   if let Some(cap)=row.quantity_limit{
+    count+=1;b.extend(row.document_id.to_le_bytes());b.extend(cap.to_le_bytes());
+   }
+  }
+  b[..4].copy_from_slice(&count.to_le_bytes());
+  a.reply=b;0
+ })
+}
+
 /// Read-only flower display payload: count + rows (u32 document ID, u32 grow
 /// state, i32 base color, i32 pattern, i32 pattern color). No edit authority.
 #[no_mangle]
