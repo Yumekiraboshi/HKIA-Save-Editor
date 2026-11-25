@@ -135,6 +135,10 @@ pub struct VisitorManagerScopedSourceLink{
 pub(crate) struct DocumentSpan{pub key:(i32,u32),pub bytes:Range<usize>}
 #[derive(Debug,Default)]
 pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievements:Vec<Model>,pub counters:Vec<Model>,pub collections:Vec<CollectionEntry>,pub deprecated_count:usize,pub dictionary_entries:usize,pub collection_map:Option<Range<usize>>,pub root_documents_span:Option<Range<usize>>,pub celebrations:Vec<CelebrationSpan>,pub inventory:Vec<InventoryRow>,pub inventory_item_refs:HashSet<(i32,i32)>,pub inventory_legacy_uid_refs:HashSet<i32>,pub inventory_item_refs_incomplete:bool,pub deprecated:Vec<DeprecatedEntry>,pub deprecated_map:Option<Range<usize>>,pub collection_version:Option<CollectionVersion>,
+ /// ItemId-based references with a copied unique payload (outfits, stands,
+ /// presets, placed items, mail and wand sources), separate from UID refs.
+ pub inventory_payload_item_refs:HashSet<i32>,
+ pub inventory_payload_refs_incomplete:bool,
  pub(crate) document_spans:Vec<DocumentSpan>,
  /// DbRoot.Key(1), native shared document allocation counter and exact token span.
  pub root_next_id:Option<(i32,Range<usize>)>,
@@ -334,8 +338,38 @@ impl<'a> Walk<'a>{
       let source_start=self.c.pos;
       let n=self.c.array()?;if n>specs.len(){return Err(Error::Schema)}
       let short=name.rsplit('.').next().unwrap_or(name);let is_doc=matches!(ctx,Some((DOC,_)));let capture_all=matches!(short,"AchievementData"|"GameCounterData"|"GameCollectionsTraitModel"|"CollectionVersion"|"AchievementModel"|"GameCounterModel")||name==ROOT||name==SHOP||name==CELEBRATION||(short=="InventoryItem"&&ctx==Some((DOC,1)))||name==HOME||name==CABIN||name==VISITOR_MANAGER||matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,_))|Some((WAND_SOURCE_CAPTURE,_)))||name=="Sunblink.UserData.UniqueItemIdModel"||name=="Sunblink.UserData.HomeObjectModelDeprecatedV71"||name=="Sunblink.Game.OwnedRemoteCabinHomeObjectClientModelDeprecatedV71";
+      // Capture the typed ItemId fields even where the original unique
+      // payload is copied instead of referenced by UID. Never scan arbitrary bytes.
+      let payload_ref_keys:&[usize]=match name{
+       "Sunblink.UserData.UniqueItemModel"|"Sunblink.UserData.HomeWallpaperModel"|"Sunblink.UserData.HomeFloorModel"|
+       "Sunblink.Game.TableTraitModel"|"Sunblink.UserData.Types.CharacterMailboxSlotModel"|"Sunblink.Game.WandUniqueData"=>&[0],
+       "Sunblink.UserData.OutfitPresetPieceModel"=>&[1],
+       "Sunblink.UserData.HomeObjectModel"|"Sunblink.Game.OwnedRemoteCabinHomeObjectClientModel"=>&[0,1],
+       "Sunblink.UserData.HomeObjectModelDeprecatedV71"=>&[2,6],
+       "Sunblink.Game.OwnedRemoteCabinHomeObjectClientModelDeprecatedV71"=>&[1,2,3],
+       _=>&[],
+      };
+      if payload_ref_keys.iter().any(|&key|key>=n){self.index.inventory_payload_refs_incomplete=true;}
+      // Historical GUID-based flower outfit/wand payloads cannot safely
+      // be joined by integer ID here; fail closed for that domain.
+      let opaque_flower_ref=match name{
+       "Sunblink.UserData.MermaidifierOutfitModel"=>Some(2),
+       "Sunblink.Game.WandUniqueDataDeprecatedV75"=>Some(1),
+       _=>None,
+      };
+      if opaque_flower_ref.is_some_and(|key|key>=n){self.index.inventory_payload_refs_incomplete=true;}
       let mut fields=Vec::new();let mut document_id=None;
       for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else if short=="CafeCreationUniqueData"&&matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,3))|Some((WAND_SOURCE_CAPTURE,3)))&&i==1{Some(("chef-colors",0))}else if short=="WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&i==1{Some((WAND_SOURCE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
+       if payload_ref_keys.contains(&i){
+        let item=i32::try_from(value.int()?).map_err(|_|Error::Schema)?;
+        if item>0{self.index.inventory_payload_item_refs.insert(item);}
+       }
+       if opaque_flower_ref==Some(i)&&!matches!(&value,Value::Nil){
+        let mut c=Cursor::new(&self.c.bytes[at..self.c.pos]);
+        if c.array()?!=2{return Err(Error::Schema)}
+        let tag=c.int(i32::MIN as i128,i32::MAX as i128)?;
+        if matches!(tag,2|7|9){self.index.inventory_payload_refs_incomplete=true;}
+       }
        if capture_all{fields.push((value,at..self.c.pos));}
        else if is_doc&&i==0{document_id=Some(value);}
       }
