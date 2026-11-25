@@ -9,7 +9,7 @@
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,type FurnitureDisplay} from './inventory-furniture-display';
- import {inventoryCategoryRepresentative,browseInventory,inventoryGroupCounts,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {inventoryCategoryRepresentative,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
@@ -210,6 +210,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   sourceOrderedAchievementRows);
  const inventoryBrowseRows:InventoryEntry[]=$derived((inventoryAddMode?(snapshot as SaveSnapshot|null)?.inventoryCreatable:(snapshot as SaveSnapshot|null)?.inventory)??[]);
  const inventoryGroupTotals=$derived(inventoryGroupCounts(inventoryBrowseRows,nativeInventoryIndex));
+ const inventoryMatchTotals=$derived(inventorySearchGroupCounts(inventoryBrowseRows,inventoryQuery,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex));
  const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
  const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
  const inventoryRows=$derived(browseInventory(
@@ -735,6 +736,13 @@ import {verifiedFloorplanName} from './floorplan-names';
   }catch(e){error=describeError(e)}
   finally{busy=false}
  }
+ function onInventorySearch(event:Event){
+  const next=(event.currentTarget as HTMLInputElement).value;
+  inventoryLimit=BATCH_SIZE;
+  if(!next.trim())return;
+  const counts=inventorySearchGroupCounts(inventoryBrowseRows,next,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex);
+  inventoryGroup=inventorySearchTarget(activeInventoryGroup,counts);
+ }
  function toggleInventoryBatch(row:InventoryEntry){
   if(!snapshot||busy||!inventoryBatchMode||!row.editable)return;
   const next=new Set(inventoryBatchSelected);
@@ -1196,7 +1204,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    <div class="collection-controls inventory-controls">
     <label class="search-field">
      <svg class="search-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.75" cy="10.75" r="6.75"/><path d="m16 16 5 5"/></svg>
-     <input type="search" bind:value={inventoryQuery} oninput={()=>inventoryLimit=BATCH_SIZE} placeholder={iCopy.search} aria-label={iCopy.search}/>
+     <input type="search" bind:value={inventoryQuery} oninput={onInventorySearch} placeholder={iCopy.search} aria-label={iCopy.search}/>
     </label>
     <button type="button" class="inventory-editable-filter" class:active={inventoryEditableOnly}
      aria-pressed={inventoryEditableOnly}
@@ -1250,14 +1258,14 @@ import {verifiedFloorplanName} from './floorplan-names';
        {:else if t.art}
         <img src={ICONS+t.art} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>
        {/if}
-       <span>{inventoryGroupLabel(locale,t.key)}</span><small>{(inventoryGroupTotals.get(t.key)??0).toLocaleString(locale)}</small>
+       <span>{inventoryGroupLabel(locale,t.key)}</span><small>{(inventoryMatchTotals.get(t.key)??0).toLocaleString(locale)}</small>
       </button>
      {/each}
      {#if (inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)>0}
       <button type="button" class="inventory-group-option" class:active={activeInventoryGroup===OTHER_INVENTORY_GROUP}
        aria-pressed={activeInventoryGroup===OTHER_INVENTORY_GROUP}
        onclick={()=>{inventoryGroup=OTHER_INVENTORY_GROUP;inventoryLimit=BATCH_SIZE}}>
-       <span>{iCopy.other}</span><small>{inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)?.toLocaleString(locale)}</small>
+       <span>{iCopy.other}</span><small>{(inventoryMatchTotals.get(OTHER_INVENTORY_GROUP)??0).toLocaleString(locale)}</small>
       </button>
      {/if}
     </nav>

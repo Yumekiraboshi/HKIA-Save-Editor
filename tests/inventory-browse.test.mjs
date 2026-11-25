@@ -13,7 +13,7 @@ const buildSource=async file=>{
 };
 const {decodeNativeInventoryIndex}=await buildSource('../src/inventory-native-data.ts');
 const {FLOWER_CREATION_SOURCE_IDS}=await buildSource('../src/inventory-native-crafting.ts');
-const {nativeInventoryGroups,inventoryGroupCounts,browseInventory,defaultInventoryGroup,NATIVE_INVENTORY_TABS,inventoryCategoryRepresentative,INVENTORY_CATEGORY_REPRESENTATIVES}=await buildSource('../src/inventory-browse.ts');
+const {nativeInventoryGroups,inventoryGroupCounts,browseInventory,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,NATIVE_INVENTORY_TABS,inventoryCategoryRepresentative,INVENTORY_CATEGORY_REPRESENTATIVES}=await buildSource('../src/inventory-browse.ts');
 const catalog=JSON.parse(readFileSync(new URL('../public/catalog.json',import.meta.url)));
 const items=new Map(catalog.items.map(x=>[x[0],x]));
 const packed=JSON.parse(readFileSync(new URL('../public/inventory-native-categories.json',import.meta.url)));
@@ -70,6 +70,22 @@ test('native categories never confuse Collection GUID categories with the Invent
  assert.equal(rows[0].quantity,4,'read-only classification never edits a save');
 });
 
+test('search finds native categories across the owned or absent inventory view without mutating selection or records',()=>{
+ const counts=(q,editable=false)=>inventorySearchGroupCounts(rows,q,editable,names,items,index);
+ assert.deepEqual([...counts('ミント')],[['clothes',2]]);
+ assert.equal(inventorySearchTarget('food',counts('ミント')),'clothes');
+ assert.equal(inventorySearchTarget('clothes',counts('サクラ')),'food');
+ assert.equal(inventorySearchTarget('clothes',counts('315822')),'clothes');
+ assert.equal(inventorySearchTarget('food',counts('no such item')),'food');
+ assert.equal(counts('Blue',true).size,0);
+ assert.equal(counts('',true).get('clothes'),2);
+ assert.equal(counts('',true).has('other'),false);
+ assert.equal(counts('0').get('other'),1);
+ assert.equal(rows[0].quantity,4);
+ const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
+ assert.match(app,/oninput=\{onInventorySearch\}/);
+ assert.match(app,/inventoryMatchTotals\.get\(t\.key\)/);
+});
 test('native specialized station filters use original crafting sources and raw chef category',()=>{
  assert.equal(FLOWER_CREATION_SOURCE_IDS.size,181);
  assert.equal(createHash('sha256').update([...FLOWER_CREATION_SOURCE_IDS].join(',')).digest('hex'),'422f19613ff4f3accfcb3810a4b1c806da5060fe008f58469d676e0026af1620');

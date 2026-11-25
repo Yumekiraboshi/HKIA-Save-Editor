@@ -1395,7 +1395,7 @@ fn customized_furniture_quantity_uses_normalized_identity_and_native_limits(){
 fn ordinary_default_furniture_can_be_added_alongside_verified_customized_variants(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let item=61381969i32;let handle=(1u32<<31)|item as u32;
- let default=[503,1,0];let original=[13,2,0];
+ let default=[503i32,1,0];let original=[13i32,2,0];
  let make=|variants:Vec<(u32,u32,Vec<u8>)>|{
   let mut payload=synthetic_payload("3.0.1");
   payload[3]=0x95+variants.len() as u8;
@@ -1403,7 +1403,7 @@ fn ordinary_default_furniture_can_be_added_alongside_verified_customized_variant
   slot_from_payload("3.0.1",payload)
  };
  for zipped in [false,true]{
-  let raw=make(vec![(4,11,furniture_payload(original)),(5,12,furniture_payload([502,2,0]))]);
+  let raw=make(vec![(4,11,furniture_payload(original.map(|n|n as u32))),(5,12,furniture_payload([502,2,0]))]);
   let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();
   assert!(e.inventory_creatable().iter().any(|r|r.document_id==handle));
@@ -1426,17 +1426,17 @@ fn ordinary_default_furniture_can_be_added_alongside_verified_customized_variant
   assert!(!reopened.inventory_creatable().iter().any(|r|r.item_id==item));
  }
  for variants in [
-  vec![(4,11,furniture_payload(default))],
-  vec![(4,11,furniture_payload(original)),(5,0,vec![0xc0])],
-  vec![(4,11,furniture_payload(original)),(5,12,furniture_payload(original))],
-  vec![(4,11,furniture_payload(original)),(5,11,furniture_payload([502,2,0]))],
-  vec![(4,11,furniture_payload(original)),(5,12,arr(vec![vec![1],arr(vec![guid([1,2,3,4]),guid([0;4]),guid([0;4])])]))],
+  vec![(4,11,furniture_payload(default.map(|n|n as u32)))],
+  vec![(4,11,furniture_payload(original.map(|n|n as u32))),(5,0,vec![0xc0])],
+  vec![(4,11,furniture_payload(original.map(|n|n as u32))),(5,12,furniture_payload(original.map(|n|n as u32)))],
+  vec![(4,11,furniture_payload(original.map(|n|n as u32))),(5,11,furniture_payload([502,2,0]))],
+  vec![(4,11,furniture_payload(original.map(|n|n as u32))),(5,12,arr(vec![vec![1],arr(vec![guid([1,2,3,4]),guid([0;4]),guid([0;4])])]))],
  ]{
   let mut e=Editor::open(make(variants)).unwrap();
   assert!(!e.inventory_creatable().iter().any(|r|r.document_id==handle));
   assert!(e.change_inventory_quantity(handle,0,1).is_err());assert!(!e.dirty());
  }
- let mut e=Editor::open(make(vec![(4,11,furniture_payload(original))])).unwrap();
+ let mut e=Editor::open(make(vec![(4,11,furniture_payload(original.map(|n|n as u32)))])).unwrap();
  e.change_inventory_furniture_variant(4,original,default).unwrap();
  assert!(!e.inventory_creatable().iter().any(|r|r.document_id==handle));
  assert!(e.change_inventory_quantity(handle,0,1).is_err());
