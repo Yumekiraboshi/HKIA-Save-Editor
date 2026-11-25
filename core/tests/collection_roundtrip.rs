@@ -1292,3 +1292,46 @@ fn furniture_variant_source_bounded_cas_history_and_export(){
  let opaque=Editor::open(furniture_edit_slot(Some(legacy))).unwrap();
  assert!(opaque.inventory_furniture_variants(4).is_empty());
 }
+
+#[test]
+fn inventory_quantity_batch_is_atomic_and_recovers_one_history_step(){
+ use hkia_save_core::collection::HistoryScope::{Inventory,Collections};
+ for zipped in [false,true]{
+  let mut payload=synthetic_payload("3.0.1");payload[3]=0x98;
+  for (id,item,qty) in [(4,315822,6),(5,567052,9)]{
+   payload.extend(doc(1,arr(vec![u(id),u(item),u(0),u(qty),vec![0xc0]])));
+  }
+  payload.extend(doc(1,arr(vec![u(6),u(1331175279),u(11),u(2),plain_flower(6)])));
+  let raw=slot_from_payload("3.0.1",payload);
+  let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let original=e.inventory();
+  for request in [vec![(4,6,20),(5,8,20)],vec![(4,6,20),(6,2,20)],
+    vec![(4,6,20),(4,6,21)],vec![(4,6,20),(5,9,0)],vec![(4,6,20),(99,1,20)]]{
+   assert!(e.change_inventory_quantities(&request).is_err());
+   assert_eq!(e.inventory(),original);
+   assert_eq!(e.revision(),0);
+   assert!(e.history().is_empty());
+  }
+  e.change_inventory_quantities(&[(4,6,20),(5,9,20)]).unwrap();
+  assert_eq!(e.revision(),1);assert_eq!(e.history().len(),1);
+  let edited=e.inventory();assert_eq!(edited[0].quantity,20);assert_eq!(edited[1].quantity,20);
+  assert_eq!(edited[2],original[2]);
+  let checkpoint=e.history_checkpoint().unwrap();
+  let mut restored=Editor::open(input.clone()).unwrap();
+  restored.restore_history(&checkpoint).unwrap();assert_eq!(restored.inventory(),edited);
+  assert_eq!(restored.history_checkpoint().unwrap(),checkpoint);
+  e.change(2,Some(638000000000000001),Some(638000000000000101)).unwrap();
+  assert!(e.undo_scope(Inventory));assert_eq!(e.inventory(),original);
+  assert_eq!(e.value(2),Some(638000000000000101));
+  assert!(!e.undo_scope(Inventory));assert!(e.redo_scope(Inventory));
+  assert_eq!(e.inventory(),edited);assert_eq!(e.history().len(),2);
+  let reopened=Editor::open(e.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory(),edited);assert_eq!(reopened.inventory_unique_data(6),e.inventory_unique_data(6));
+  assert!(e.undo_scope(Collections));
+  let before=e.history_checkpoint().unwrap();let revision=e.revision();
+  assert!(e.change_inventory_quantities(&[(4,20,30),(5,19,30)]).is_err());
+  assert_eq!(e.history_checkpoint().unwrap(),before);assert_eq!(e.revision(),revision);
+  assert!(e.redo_scope(Collections));
+ }
+}
