@@ -1398,6 +1398,9 @@ fn ordinary_default_furniture_can_be_added_alongside_verified_customized_variant
  let default=[503i32,1,0];let original=[13i32,2,0];
  let make=|variants:Vec<(u32,u32,Vec<u8>)>|{
   let mut payload=synthetic_payload("3.0.1");
+  // Match the native allocator's persisted high-water mark. Synthetic
+  // fixtures with added document IDs must advance DbRoot.NextId as well.
+  payload[2]=variants.iter().map(|v|v.0).max().unwrap_or(4).max(4) as u8;
   payload[3]=0x95+variants.len() as u8;
   for (id,uid,p) in variants{payload.extend(doc(1,arr(vec![u(id),u(item as u32),u(uid),u(2),p])));}
   slot_from_payload("3.0.1",payload)
