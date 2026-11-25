@@ -1587,6 +1587,38 @@ fn ordinary_furniture_and_clothing_creation_preserves_other_data_and_defers_last
 }
 
 #[test]
+fn absent_cosmetics_respect_copied_outfit_references_and_legacy_ambiguity(){
+ let make=|settings:Vec<u8>|{
+  let mut payload=synthetic_payload("3.0.1");payload[3]=0x96;
+  payload.extend(doc(22,settings));slot_from_payload("3.0.1",payload)
+ };
+ let clothing=315822i32;
+ let furniture=286009791i32;
+ let material=1877756618i32;
+ let pending=|id:i32| (1u32<<31)|id as u32;
+ let equipped=arr(vec![u(4),arr(vec![]),arr(vec![arr(vec![u(clothing as u32),vec![0xc0]])])]);
+ let preset=arr(vec![u(4),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],
+  arr(vec![arr(vec![guid([1,2,3,4]),arr(vec![arr(vec![u(0),u(clothing as u32),vec![0xc0]])])])])]);
+ for settings in [equipped,preset]{
+  let mut e=Editor::open(make(settings)).unwrap();
+  let candidates=e.inventory_creatable();
+  assert!(!candidates.iter().any(|r|r.item_id==clothing));
+  assert!(candidates.iter().any(|r|r.item_id==furniture));
+  assert!(candidates.iter().any(|r|r.item_id==material));
+  assert!(e.change_inventory_quantity(pending(clothing),0,1).is_err());
+  assert!(e.change_inventory_quantities(&[(pending(furniture),0,2),(pending(clothing),0,1)]).is_err());
+  assert!(!e.dirty());assert!(e.inventory().is_empty());
+  e.change_inventory_quantity(pending(furniture),0,2).unwrap();
+  assert_eq!(Editor::open(e.export().unwrap()).unwrap().inventory()[0].item_id,furniture);
+ }
+ let legacy=arr(vec![u(4),arr(vec![arr(vec![u(0),guid([1,2,3,4]),plain_flower(6)])]),arr(vec![])]);
+ let mut e=Editor::open(make(legacy)).unwrap();
+ assert!(e.inventory_creatable().iter().all(|r|r.item_id!=clothing&&r.item_id!=furniture));
+ assert!(e.change_inventory_quantity(pending(furniture),0,1).is_err());
+ e.change_inventory_quantity(pending(material),0,2).unwrap();
+}
+
+#[test]
 fn flower_clothing_uses_native_species_and_processor_pattern_rules(){
  use hkia_save_core::native::InventoryUniqueData as U;
  for zipped in [false,true]{

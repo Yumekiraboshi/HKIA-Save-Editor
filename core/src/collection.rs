@@ -500,9 +500,16 @@ impl Editor {
   self.slot.envelope.version==Version::V301&&!self.slot.index.inventory_item_refs_incomplete&&
    self.slot.index.inventory.iter().all(|r|r.item_id.is_some()&&r.id<PENDING_ITEM)
  }
+ // Ordinary cosmetic definitions can also occur as copied outfit or placement
+ // payloads without a UID reference. An absent row is not proof of absence.
+ fn inventory_creation_payload_safe(&self,item_id:i32)->bool{
+  crate::inventory_source::ordinary_membership_item(item_id)||
+   (!self.slot.index.inventory_payload_refs_incomplete&&
+    !self.slot.index.inventory_payload_item_refs.contains(&item_id))
+ }
  fn can_create_inventory_item(&self,item_id:i32)->bool{
   self.inventory_creation_source_valid()&&crate::inventory_source::ordinary_creation_item(item_id)&&
-   !self.inventory_item_rows.contains_key(&item_id)&&
+   !self.inventory_item_rows.contains_key(&item_id)&&self.inventory_creation_payload_safe(item_id)&&
    !self.slot.index.inventory_item_refs.iter().any(|&(item,_)|item==item_id)
  }
  fn pending_inventory_rows(&self)->Vec<InventoryEntry>{
@@ -548,7 +555,7 @@ impl Editor {
   let referenced:HashSet<i32>=self.slot.index.inventory_item_refs.iter().map(|&(item,_)|item).collect();
   crate::inventory_source::ordinary_creation_ids().filter_map(|item_id|{
    let document_id=PENDING_ITEM|item_id as u32;
-   if self.inventory_item_rows.contains_key(&item_id)||referenced.contains(&item_id)||self.inventory_changes.contains_key(&document_id){return None}
+   if self.inventory_item_rows.contains_key(&item_id)||referenced.contains(&item_id)||self.inventory_changes.contains_key(&document_id)||!self.inventory_creation_payload_safe(item_id){return None}
    Some(InventoryEntry{document_id,item_id,quantity:0,editable:true,quantity_limit:Some(i32::MAX),quantity_minimum:1})
   }).collect()
  }

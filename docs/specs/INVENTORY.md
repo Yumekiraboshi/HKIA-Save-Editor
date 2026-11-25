@@ -77,7 +77,7 @@ The ordinary membership slice also includes 178 source-defined foods and 58 fish
 
 #### Ordinary furniture and clothing creation
 
-The absent-stack addition flow extends to 1,114 ordinary furniture and 2,435 ordinary clothing definitions. The source-verified 4,046 creation candidates remain independent from existing-stack zero-quantity eligibility (497 ordinary materials, fish, critters, food and bait). Staged additions can be cancelled, but deleting the last persisted furniture/clothing copy requires verified equip/placement reference closure. The same Rust source gate, native allocator, history, local draft, UI and export/reparse are used. See [inventory-quantity-source.md](../inventory-quantity-source.md).
+The absent-stack addition flow extends to 1,114 ordinary furniture and 2,435 ordinary clothing definitions. The source-verified 4,046 creation candidates remain independent from existing-stack zero-quantity eligibility (497 ordinary materials, fish, critters, food and bait). Staged additions can be cancelled, but deleting the last persisted furniture/clothing copy requires verified equip/placement reference closure. Absent cosmetic candidates are also rejected when the existing typed copied-payload index contains their Item ID or reports unresolved legacy payload references; Rust applies this check in candidate listing, CAS, batch CAS, recovery and export. Ordinary material/gathered/food/bait creation retains its separate source gate. The same Rust source gate, native allocator, history, local draft, UI and export/reparse are used. See [inventory-quantity-source.md](../inventory-quantity-source.md).
 
 #### Flower-crafted clothing variants
 
