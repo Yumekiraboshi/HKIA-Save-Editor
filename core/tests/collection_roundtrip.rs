@@ -1456,3 +1456,58 @@ fn native_currency_rarity_does_not_authorize_membership_edits(){
  assert_eq!(editor.inventory()[0].quantity_minimum,1);
  assert!(editor.change_inventory_quantity(4,6,0).is_err());assert!(!editor.dirty());
 }
+
+#[test]
+fn flower_clothing_uses_native_species_and_processor_pattern_rules(){
+ use hkia_save_core::native::InventoryUniqueData as U;
+ for zipped in [false,true]{
+  let mut payload=synthetic_payload("3.0.1");payload[3]=0x9b;
+  for (docid,item,uid) in [(4,897617923,21),(5,105502901,22),(6,1482119840,23),(7,1095918548,24),(8,41105179,25),(9,108363489,26)]{
+   payload.extend(doc(1,arr(vec![u(docid),u(item),u(uid),u(5),plain_flower(6)])));
+  }
+  let raw=slot_from_payload("3.0.1",payload);let input=if zipped{zip(&raw)}else{raw.clone()};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let original=e.inventory();let base=[6,6,0,0];
+  assert!(e.inventory_flower_variants(4).iter().any(|v|v[2]==12)); // Rose
+  assert!(e.inventory_flower_variants(5).iter().any(|v|v[2]==14)); // generic
+  assert!(e.inventory_flower_variants(6).iter().all(|v|v[2]==0&&v[3]==0)); // HK-style
+  assert!(e.inventory_flower_variants(7).is_empty()); // DLC Sunburst
+  assert!(e.inventory_flower_variants(8).is_empty()); // event-year floral dress
+  assert!(e.inventory_flower_variants(9).iter().all(|v|v[2]!=1)); // Heavy Nettle
+  assert!(e.change_inventory_flower_variant(6,base,[6,6,1,16]).is_err());
+  assert!(e.change_inventory_flower_variant(9,base,[6,6,1,16]).is_err());
+  e.change_inventory_flower_variant(4,base,[6,9,12,16]).unwrap();
+  e.change_inventory_flower_variant(5,base,[6,9,14,16]).unwrap();
+  e.change_inventory_flower_variant(6,base,[6,16,0,0]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert_eq!(restored.inventory_unique_data(4),Some(U::Flower{grow_state:6,base_color:9,pattern:12,pattern_color:16}));
+  assert_eq!(restored.inventory_unique_data(5),e.inventory_unique_data(5));
+  assert!(restored.undo());assert!(restored.redo());
+  let reopened=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory(),original);
+  for id in 4..=9{assert_eq!(reopened.inventory_unique_data(id),e.inventory_unique_data(id))}
+ }
+}
+#[test]
+fn flower_clothing_refuses_saved_outfit_and_preset_references(){
+ let make=|settings:Vec<u8>|{
+  let mut payload=synthetic_payload("3.0.1");payload[3]=0x98;
+  for (docid,item,uid) in [(4,897617923,21),(5,105502901,22)]{
+   payload.extend(doc(1,arr(vec![u(docid),u(item),u(uid),u(5),plain_flower(6)])));
+  }
+  payload.extend(doc(22,settings));slot_from_payload("3.0.1",payload)
+ };
+ let equipped=arr(vec![u(6),arr(vec![]),arr(vec![arr(vec![u(897617923),plain_flower(6)])])]);
+ let preset=arr(vec![u(6),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],
+  arr(vec![arr(vec![guid([1,2,3,4]),arr(vec![arr(vec![u(0),u(897617923),plain_flower(6)])])])])]);
+ for settings in [equipped,preset]{
+  let mut e=Editor::open(make(settings)).unwrap();
+  assert!(e.inventory_flower_variants(4).is_empty());
+  assert!(e.change_inventory_flower_variant(4,[6,6,0,0],[6,9,0,0]).is_err());
+  assert!(!e.dirty());
+  assert!(!e.inventory_flower_variants(5).is_empty());
+ }
+ let mermaid=arr(vec![u(6),arr(vec![arr(vec![u(0),guid([1,2,3,4]),plain_flower(6)])]),arr(vec![])]);
+ let e=Editor::open(make(mermaid)).unwrap();
+ assert!(e.inventory_flower_variants(4).is_empty());assert!(e.inventory_flower_variants(5).is_empty());
+}
