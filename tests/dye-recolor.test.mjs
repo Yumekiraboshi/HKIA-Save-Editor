@@ -83,8 +83,10 @@ test('5,383 source-color variants are wired into Collection and Inventory artwor
  assert.equal(Object.keys(raw.records).length,5383);
  assert.match(app,/loadNativeDyePalettes\(import\.meta\.env\.BASE_URL\)/);
  assert.match(app,/import DyeSprite from '\.\/DyeSprite\.svelte'/);
- assert.equal((app.match(/<DyeSprite /g)||[]).length,4);
- assert.equal((app.match(/sourceKey=\{/g)||[]).length,4);
+ assert.equal((app.match(/<DyeSprite /g)||[]).length,5);
+ assert.equal((app.match(/sourceKey=\{/g)||[]).length,5);
+ assert.match(app,/palette=\{nativeDyePalettes\[String\(representative\)\]\}/);
+ assert.match(app,/sourceKey=\{representativeSource\?\.\[1\]\?\?''\}/);
  assert.match(app,/palette=\{nativeDyePalettes\[String\(item\[0\]\)\]\}/);
  assert.match(app,/palette=\{nativeDyePalettes\[String\(item\.itemId\)\]\}/);
  assert.match(app,/palette=\{nativeDyePalettes\[String\(sub\.previewId\)\]\}/);

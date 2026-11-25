@@ -4,22 +4,22 @@
  import {renderDyeSprite} from './dye-recolor';
  import {displayedDyeIconFidelity,isSourceColorwayUrl,isSourceFitUrl} from './item-icon-art';
 
- let {sprite,palette,sourceKey='',exactArtUrl,previewUrl}:{
-  sprite:SpriteCell;palette:NativeDyePalette;sourceKey?:string;
-  exactArtUrl?:string;previewUrl?:string;
+ let {sprite,palette,sourceKey='',exactArtUrl,originalArtUrl,previewUrl}:{
+  sprite?:SpriteCell;palette?:NativeDyePalette;sourceKey?:string;
+  exactArtUrl?:string;originalArtUrl?:string;previewUrl?:string;
  }=$props();
  let displayedUrl=$state<string|null>(null);
  let imageSource=$state<'original'|'approximation'|'native-icon'|'game-render'|'game-source-sprite'|'source-fit'>('original');
 
  $effect(()=>{
-  const cell=sprite,colors=palette,key=sourceKey,exact=exactArtUrl,preview=previewUrl;
+  const cell=sprite,colors=palette,key=sourceKey,exact=exactArtUrl,original=originalArtUrl,preview=previewUrl;
   let canceled=false;
   let createdUrl:string|null=null;
   displayedUrl=null;
   imageSource='original';
 
   const renderApproximation=()=>{
-   if(canceled)return;
+   if(canceled||!cell||!colors)return;
    void renderDyeSprite(cell,colors,key).then(blob=>{
     if(canceled||!blob)return;
     createdUrl=URL.createObjectURL(blob);
@@ -39,18 +39,24 @@
     else imageSource='native-icon';
    }).catch(renderApproximation);
   };
-  if(exact){
-   // A source-validated item icon may outrank an approximate 2D recolor.
-   // An alternate 3D pose is not a replacement for the game's UiIcon.
+  const showExact=(url:string,onFailure:()=>void)=>{
+   if(canceled)return;
    const picture=new Image();
-   picture.src=exact;
+   picture.src=url;
    void picture.decode().then(()=>{
     if(canceled)return;
-    displayedUrl=exact;
-    if(isSourceColorwayUrl(exact))imageSource='game-source-sprite';
+    displayedUrl=url;
+    if(isSourceColorwayUrl(url))imageSource='game-source-sprite';
     else imageSource='game-render';
-   }).catch(showNativeIcon);
-  }else showNativeIcon();
+   }).catch(()=>{if(!canceled)onFailure();});
+  };
+  // A finished source sprite always outranks a reconstructed image.
+  const showReconstruction=()=>{
+   if(exact&&exact!==original)showExact(exact,showNativeIcon);
+   else showNativeIcon();
+  };
+  if(original)showExact(original,showReconstruction);
+  else showReconstruction();
 
   return ()=>{
    canceled=true;
@@ -61,11 +67,16 @@
 
 <!-- Original named colorway sprites outrank approximate recolors. They are
      not classified as verified runtime renders. -->
+{#if displayedUrl||sprite}
 <span class="item-sprite"
  data-dye-rendered={displayedUrl!==null?'true':'false'}
  data-dye-source={imageSource}
  data-icon-fidelity={displayedDyeIconFidelity(imageSource)}
- style:background-image={'url("'+(displayedUrl??sprite.url)+'")'}
- style:background-position={imageSource==='game-render'||imageSource==='game-source-sprite'||imageSource==='native-icon'||imageSource==='source-fit'?'center':displayedUrl?'0px 0px':'-'+sprite.x+'px -'+sprite.y+'px'}
+ style:background-image={'url("'+(displayedUrl??sprite?.url??'')+'")'}
+ style:background-position={imageSource==='game-render'||imageSource==='game-source-sprite'||imageSource==='native-icon'||imageSource==='source-fit'?'center':displayedUrl?'0px 0px':sprite?'-'+sprite.x+'px -'+sprite.y+'px':undefined}
  style:background-size={imageSource==='game-render'?'contain':displayedUrl?'96px 96px':undefined}
  style:background-repeat={imageSource==='game-render'||imageSource==='game-source-sprite'||imageSource==='native-icon'||imageSource==='source-fit'?'no-repeat':undefined}></span>
+
+{:else}
+ <span class="item-art-empty">✧</span>
+{/if}

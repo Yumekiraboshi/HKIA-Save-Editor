@@ -3,12 +3,16 @@
  * Uses a synthetic source-shaped HKIA save (never a real user's save).
  * Run after npm run build:
  *   node scripts/browser-history-smoke.mjs
+ * To verify the actually published Pages build instead of local Vite:
+ *   node scripts/browser-history-smoke.mjs --pages
  * Requires CI's locally installed Chrome and playwright-core.
  */
 import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {chromium} from 'playwright-core';
+import {chefRuntimeSmoke} from './chef-runtime-smoke.mjs';
+import {wandRuntimeSmoke} from './wand-runtime-smoke.mjs';
 
 const append=(...arrays)=>Uint8Array.from(arrays.flatMap(x=>Array.from(x)));
 const u32=n=>append([0xce],Array.from({length:4},(_,i)=>n>>>(24-8*i)&255));
@@ -21,7 +25,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false,editableFlower=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -29,10 +33,16 @@ function createSyntheticSlot({childCompleted=null,artInventory=false}={}){
  const parent=doc(16,arr([2],hash(2,0,0,1),arr([0xc2],f32(2),[0xc0])));
  const counter=doc(17,arr([1],hash(1,0,0,2),arr(f32(2),[0xc0],[0x90])));
  const inventory=doc(1,arr([4],u32(315822),[0],u32(6),[0xc0]));
- const originalArtItem=doc(1,arr([5],u32(1286846063),[0],u32(3),[0xc0]));
- const sourceFitItem=doc(1,arr([6],u32(54272482),[0],u32(2),[0xc0]));
+ const color=(r,g,b)=>arr(f32(r),f32(g),f32(b),f32(1));
+ const palette=(id,colors)=>doc(1,arr([id],u32(1835273963),u32(id),u32(1),arr([6],arr(...colors))));
+ const originalArtItem=paletteInventory?palette(5,[color(1,0,0),color(0,1,0),color(0,0,1)]):doc(1,arr([5],u32(1286846063),[0],u32(3),[0xc0]));
+ const sourceFitItem=paletteInventory?palette(6,[color(0,0,1),color(1,0,0),color(0,1,0)]):doc(1,arr([6],u32(54272482),[0],u32(2),[0xc0]));
+ const nonCollectionItem=doc(1,arr([7],u32(427689),[0],u32(5),[0xc0]));
+ const flower=(id,color,pattern,accent)=>doc(1,arr([id],u32(43114910),u32(id),u32(1),arr([7],arr([6],u32(color),u32(pattern),u32(accent)))));
  const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
-  ...(artInventory?[originalArtItem,sourceFitItem]:[])));
+  ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
+  ...(editableFlower?[flower(8,1,0,0)]:[]),
+  ...(flowerInventory?[flower(8,1,0,0),flower(9,9,0,0),flower(10,1,10,16),flower(11,1,3,0),flower(12,1,9999,0)]:[])));
  const prefix=Uint8Array.from('135b4aa4f702a45d1cc562aeb5a386ed5d17e1fd588f424dcfc59d2e140cf597'.match(/../g).map(x=>parseInt(x,16)));
  const magic=Uint8Array.from('a1a2f8333c66ec455baa2dfc6325c2437a779c9906eecff0c022e5f6b6ca73b8'.match(/../g).map(x=>parseInt(x,16)));
  const lit=[0xf0];let remain=model.length-15;
@@ -52,17 +62,24 @@ function installedChrome(){
  }
  throw Error('CHROME_NOT_INSTALLED');
 }
-const origin='http://127.0.0.1:4173';
-const base=process.env.GITHUB_ACTIONS==='true'?'/HKIA-Save-Editor/':'/';
-const service=spawn(process.execPath,['node_modules/vite/bin/vite.js','preview','--host','127.0.0.1','--port','4173','--strictPort'],{
+const livePages=process.argv.includes('--pages');
+const origin=livePages?'https://yumekiraboshi.github.io':'http://127.0.0.1:4173';
+const base=livePages||process.env.GITHUB_ACTIONS==='true'?'/HKIA-Save-Editor/':'/';
+const service=livePages?null:spawn(process.execPath,['node_modules/vite/bin/vite.js','preview','--host','127.0.0.1','--port','4173','--strictPort'],{
  env:process.env,stdio:['ignore','pipe','pipe']
 });
 let serviceLog='';
-for(const stream of [service.stdout,service.stderr])
+for(const stream of service?[service.stdout,service.stderr]:[])
  stream.on('data',chunk=>serviceLog+=String(chunk).slice(-2000));
 let browser;
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function waitForServer(){
+ if(livePages){
+  const response=await fetch(origin+base,{cache:'no-store',signal:AbortSignal.timeout(15000)});
+  if(!response.ok)throw Error('LIVE_PAGES_HTTP_'+response.status);
+  console.log('Testing actual published Pages URL: '+origin+base);
+  return;
+ }
  for(let i=0;i<80;i++){
   if(service.exitCode!==null)throw Error('Vite exited: '+serviceLog);
   try{const r=await fetch(origin+base);if(r.ok)return}catch{}
@@ -108,6 +125,37 @@ async function localDraft(page){
 
 /** Actual user path: search an existing item, change its count, recover the
  * draft after refresh, export, and independently reparse Rust/WASM bytes. */
+async function inventoryDynamicPaletteArtSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-palette-appearances.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({artInventory:true,paletteInventory:true}))
+  });
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
+  const sprites=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-palette"]');
+  await sprites.nth(1).waitFor({timeout:30_000});
+  assert.equal(await sprites.count(),2);
+  const images=await sprites.evaluateAll(async els=>Promise.all(els.map(async el=>{
+   const url=getComputedStyle(el).backgroundImage.slice(5,-2);
+   if(!url.startsWith('blob:'))throw Error('expected local generated blob');
+   const im=await createImageBitmap(await (await fetch(url)).blob());
+   const c=document.createElement('canvas');c.width=im.width;c.height=im.height;
+   const ctx=c.getContext('2d');ctx.drawImage(im,0,0);im.close();
+   const bytes=ctx.getImageData(0,0,c.width,c.height).data;
+   return {width:c.width,height:c.height,alpha:Array.from(bytes.filter((_,i)=>i%4===3)),rgb:Array.from(bytes.filter((_,i)=>i%4!==3))};
+  })));
+  for(const im of images){assert.equal(im.width,96);assert.equal(im.height,96);assert.ok(im.alpha.some(a=>a>200));}
+  assert.deepEqual(images[0].alpha,images[1].alpha);assert.notDeepEqual(images[0].rgb,images[1].rgb);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM DYNAMIC PALETTE PASS: native unique Color1/2/3, original source sampling, local generation');
+ }finally{await context.close();}
+}
 async function inventoryEditExportSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -181,6 +229,109 @@ async function inventoryEditExportSmoke(){
  * Colorway fidelity is inherited from the same shared Collection pipeline:
  * an approximate render is NEVER asserted to be an exact game shader image.
  */
+async function inventoryDynamicFlowerArtSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-flower-appearances.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({flowerInventory:true}))
+  });
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  const sprites=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"]');
+  await sprites.nth(3).waitFor({timeout:30_000});
+  assert.equal(await sprites.count(),4);
+  await page.locator('.inventory-card .item-sprite[data-icon-fidelity="species-fallback"]').waitFor({timeout:30_000});
+  await page.locator('.inventory-card img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
+  const images=await sprites.evaluateAll(async els=>Promise.all(els.map(async el=>{
+   const url=getComputedStyle(el).backgroundImage.slice(5,-2);
+   if(!url.startsWith('blob:'))throw Error('expected local generated blob');
+   const im=await createImageBitmap(await (await fetch(url)).blob());
+   const c=document.createElement('canvas');c.width=im.width;c.height=im.height;
+   const ctx=c.getContext('2d');ctx.drawImage(im,0,0);im.close();
+   const bytes=ctx.getImageData(0,0,c.width,c.height).data;
+   return {width:c.width,height:c.height,alpha:Array.from(bytes.filter((_,i)=>i%4===3)),rgb:Array.from(bytes.filter((_,i)=>i%4!==3))};
+  })));
+  for(const im of images){assert.equal(im.width,96);assert.equal(im.height,96);assert.ok(im.alpha.some(a=>a>200));assert.equal(im.alpha[0],0);}
+  assert.deepEqual(images[0].alpha,images[1].alpha);assert.deepEqual(images[0].alpha,images[2].alpha);assert.deepEqual(images[0].alpha,images[3].alpha);
+  assert.notDeepEqual(images[0].rgb,images[1].rgb);assert.notDeepEqual(images[0].rgb,images[2].rgb);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM DYNAMIC FLOWER PASS: original source sampling, distinct same-ID appearances, native effect-mask fallback, unknown pattern refusal, local blob generation');
+ }finally{await context.close();}
+}
+async function inventoryFlowerVariantEditSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-flower-edit.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({editableFlower:true}))
+  });
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  const button=page.locator('.inventory-card .inventory-unique-edit-button');
+  await button.waitFor({timeout:30_000});
+  await button.click();
+  const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');
+  await dialog.waitFor();
+  const select=dialog.locator('select');
+  const firstPattern=select.locator('optgroup').nth(1).locator('option').first();
+  const value=await firstPattern.getAttribute('value');
+  assert.ok(value!==null);
+  await select.selectOption(value);
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.waitFor({state:'hidden'});
+  await page.locator('.state-dot.changed').waitFor();
+  await page.waitForFunction(()=>!document.querySelector('.inventory-unique-edit-button')?.disabled);
+  const patch=await page.evaluate(()=>new Promise((resolve,reject)=>{
+   const open=indexedDB.open('hkia-editor-local-session',1);
+   open.onerror=()=>reject(open.error);
+   open.onsuccess=()=>{
+    const db=open.result;
+    const request=db.transaction('unsaved-changes','readonly').objectStore('unsaved-changes').get('current');
+    request.onsuccess=()=>{db.close();resolve(request.result?.inventoryPatches??[])};
+    request.onerror=()=>{db.close();reject(request.error)};
+   };
+  }));
+  assert.equal(patch.length,1);
+  assert.equal(patch[0].kind,'flower-variant');
+  assert.equal(patch[0].documentId,8);
+  assert.deepEqual(patch[0].before,[6,1,0,0]);
+  assert.equal(patch[0].after[0],6);
+  assert.equal(patch[0].after[1],1);
+  assert.ok(patch[0].after[2]>0);
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  await page.locator('.inventory-card img[src$="pattern-'+patch[0].after[2]+'.webp"]').waitFor();
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([
+   page.waitForEvent('download',{timeout:30_000}),
+   page.locator('.file-menu .menu-popover > button').nth(2).click()
+  ]);
+  const output=readFileSync(await download.path());
+  const wasm=readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm');
+  const {instance}=await WebAssembly.instantiate(wasm,{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);
+  new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);
+  assert.equal(e.hkia_inventory_flowers_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(v.getUint32(0,true),1);
+  assert.equal(v.getUint32(4,true),8);
+  assert.deepEqual(Array.from({length:4},(_,i)=>v.getInt32(8+i*4,true)),patch[0].after);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM FLOWER VARIANT EDIT PASS: native choices, CAS, local draft and exported payload reparse');
+ }finally{await context.close();}
+}
 async function inventoryOriginalArtSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -196,35 +347,59 @@ async function inventoryOriginalArtSmoke(){
   await page.locator('.inventory-controls input[type="search"]').fill('1286846063');
   const card=page.locator('.inventory-card').first();
   await card.waitFor();
-  await card.locator('.inventory-item-art .item-sprite').first().waitFor({timeout:30_000});
-  const original=card.locator('.inventory-item-art .item-sprite').first();
-  // The original atlas is a blob URL; build-time source-icon colorway PNGs
-  // use an immutable same-origin URL instead. Both are valid, and neither
-  // silently claims a verified game-shader-exact patterned texture.
-  await page.waitForFunction(()=>{
-   const image=document.querySelector('.inventory-card .inventory-item-art .item-sprite');
-   if(!image)return false;
-   const bg=getComputedStyle(image).backgroundImage;
-   return bg.includes('blob:')||
-    bg.includes('/native-colorways/1286846063.png')||
-    bg.includes('/variant-art/1286846063.');
-  },null,{timeout:30_000});
+  const original=card.locator('.inventory-item-art .item-sprite[data-dye-source="game-source-sprite"]');
+  await original.waitFor({timeout:30_000});
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'3');
-  assert.ok(['native-icon','approximation','original','game-render'].includes(
-   await original.getAttribute('data-dye-source')),
-   'same source-aware icon pipeline as Collection must be used');
+  assert.equal(await original.getAttribute('data-icon-fidelity'),'game-original');
+  const inventoryUrl=await original.evaluate(el=>getComputedStyle(el).backgroundImage);
+  assert.match(inventoryUrl,/\/(?:dynamic-colorways|source-colorways)\/1286846063\.webp/);
   await chooseTab(page,'collections');
+  await page.locator('.collection-controls input[type="search"]').fill('Ice Cream Archer Costume');
+  await page.locator('.collection-search-result').first().click();
+  const collectionArt=page.locator('#collection-item-1286846063 .item-sprite[data-dye-source="game-source-sprite"]');
+  await collectionArt.waitFor({timeout:30_000});
+  assert.equal(await collectionArt.evaluate(el=>getComputedStyle(el).backgroundImage),inventoryUrl,
+   'one Item ID must display the same original image in both tabs');
   await chooseTab(page,'inventory');
   await page.locator('.inventory-controls input[type="search"]').fill('1286846063');
   await page.locator('.inventory-card .inventory-item-art .item-sprite').first().waitFor();
   await page.locator('.inventory-controls input[type="search"]').fill('54272482');
-  const fitted=page.locator('.inventory-card .inventory-item-art .item-sprite[data-dye-source="source-fit"]');
+  const fitted=page.locator('.inventory-card .inventory-item-art .item-sprite[data-dye-source="game-source-sprite"]');
   await fitted.waitFor({timeout:30_000});
-  assert.equal(await fitted.getAttribute('data-icon-fidelity'),'approximate');
+  assert.equal(await fitted.getAttribute('data-icon-fidelity'),'game-original');
   assert.ok((await fitted.evaluate(el=>getComputedStyle(el).backgroundImage))
-   .includes('/native-colorways/source-fit/54272482.png?v='));
+   .includes('/dynamic-colorways/54272482.webp?v='));
+  await page.locator('.inventory-controls input[type="search"]').fill('315822');
+  const pajama=page.locator('.inventory-card .inventory-item-art .item-sprite[data-dye-source="game-source-sprite"]');
+  await pajama.waitFor({timeout:30_000});
+  assert.equal(await pajama.getAttribute('data-icon-fidelity'),'game-original');
+  assert.ok((await pajama.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/source-colorways/315822.webp'));
+  await page.locator('.inventory-group-option[data-inventory-group="furniture"]').click();
+  await page.locator('.inventory-controls input[type="search"]').fill('427689');
+  const extra=page.locator('.inventory-card .item-sprite[data-inventory-art="native"]');
+  await extra.waitFor({timeout:30_000});
+  await page.waitForFunction(()=>document.querySelector('.inventory-card .inventory-name')?.textContent?.trim()==='Nul Rug');
+  assert.ok(await extra.evaluate(async el=>{
+   const bg=getComputedStyle(el).backgroundImage;
+   const url=bg.match(/^url\("(.+)"\)$/)?.[1];
+   if(!url||!url.includes('/inventory-art/sheet-005.webp'))return false;
+   const img=new Image();img.src=url;await img.decode();
+   return img.naturalWidth===1152&&img.naturalHeight===1152;
+  }),'original non-collection item atlas must be loaded');
+  assert.equal(await page.locator('.inventory-card input[name="quantity"]').first().inputValue(),'5');
+  await page.route('**/item-packs/**',route=>route.fulfill({status:404,body:'missing'}));
+  await page.route('**/native-dye-palettes.json',route=>route.fulfill({status:404,body:'missing'}));
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  // Switch from furniture back to clothing using the real game's category
+  // of the previously selected item if needed: a fresh import resets filters.
+  await page.locator('.inventory-controls input[type="search"]').fill('1286846063');
+  const independent=page.locator('.inventory-card .item-sprite[data-dye-source="game-source-sprite"]');
+  await independent.waitFor({timeout:30_000});
+  assert.equal(await independent.evaluate(el=>getComputedStyle(el).backgroundImage),inventoryUrl);
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM INVENTORY GAME ICON PASS: source-mapped Item ID, shared dye image, retained tab cache');
+  console.log('CHROMIUM INVENTORY GAME ICON PASS: same Item ID across tabs, original independent of shared packs and palette');
  }finally{await context.close();}
 }
 
@@ -464,7 +639,10 @@ async function run(){
  // A shared source sprite must become two different image bitmaps, not
  // an unchanged gray icon with a colored border or swatch beneath it.
  async function sampledSprite(locator){
-  return locator.evaluate(async el=>{
+  assert.equal(await locator.getAttribute('data-icon-fidelity'),'game-original');
+  const source=JSON.parse(readFileSync('public/source-colorways/index.json','utf8')).records;
+  const dynamic=JSON.parse(readFileSync('public/dynamic-colorways/index.json','utf8')).records;
+  const result=await locator.evaluate(async el=>{
    const style=getComputedStyle(el).backgroundImage;
    const url=style.startsWith('url(')?style.slice(4,-1).replace(/^['\"]|['\"]$/g,''):null;
    if(!url)throw Error('DYE_IMAGE_STYLE_MISSING');
@@ -485,23 +663,30 @@ async function run(){
     r+=px[i];g+=px[i+1];b+=px[i+2];n++;
    }
    function pixelAt(x,y){const i=(y*96+x)*4;return [px[i],px[i+1],px[i+2]];}
-   return {hash,r:r/n,g:g/n,b:b/n,count:n,strap:pixelAt(47,30),buckle:pixelAt(43,50),neck:pixelAt(40,45),body:pixelAt(47,56)};
+   const id=el.closest('[id^="collection-item-"]')?.id.slice('collection-item-'.length);
+   const response=await fetch(url);
+   if(!response.ok)throw Error('SOURCE_ICON_FETCH');
+   const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await response.arrayBuffer())),x=>x.toString(16).padStart(2,'0')).join('');
+   return {id,url,digest,hash,count:n};
   });
+  const expected=source[result.id]?.sha256??dynamic[result.id];
+  assert.ok(expected,'registered original item ID');
+  assert.ok(result.url.includes('/'+result.id+'.webp'),'same item source URL');
+  assert.equal(result.digest,expected,'actual bytes match the original-source image manifest');
+  assert.ok(result.count>0,'decoded source sprite is not blank');
+  return result;
  }
  await search.fill('Ice Cream Archer Hat');
  await page.locator('.collection-search-result').first().click();
- const iceSprite=page.locator('#collection-item-704486536 .item-sprite[data-dye-rendered="true"]');
+ const iceSprite=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-source-sprite"]');
  await iceSprite.waitFor({timeout:30_000});
  const icePixels=await sampledSprite(iceSprite);
- assert.equal(await iceSprite.getAttribute('data-dye-source'),'native-icon',
-  'original HKIA UiIcon 96px colored PNG is served, not a 3D pose');
- assert.ok(icePixels.count>75&&icePixels.r>icePixels.g+8,'Ice Cream Archer Hat should recolor its gray fabric pink');
+ assert.equal(await iceSprite.getAttribute('data-icon-fidelity'),'game-original');
  await search.fill('Orange Archer Hat');
  await page.locator('.collection-search-result').first().click();
- const orangeSprite=page.locator('#collection-item-585726126 .item-sprite[data-dye-rendered="true"]');
+ const orangeSprite=page.locator('#collection-item-585726126 .item-sprite[data-dye-source="game-source-sprite"]');
  await orangeSprite.waitFor({timeout:30_000});
  const orangePixels=await sampledSprite(orangeSprite);
- assert.ok(orangePixels.g>orangePixels.b+6,'Orange Archer Hat should recolor its gray fabric yellow');
  assert.notEqual(icePixels.hash,orangePixels.hash,'shared native icon must produce separate dyed bitmap pixels');
  assert.equal(await page.locator('.native-dye-swatch,.native-dye-preview,.shared-dyeable-icon-note').count(),0);
  assert.equal(await page.locator('#collection-item-585726126 .item-art').evaluate(el=>
@@ -512,19 +697,15 @@ async function run(){
  // existing golden buckle, in addition to the already working tunic color.
  await search.fill('Ice Cream Archer Costume');
  await page.locator('.collection-search-result').first().click();
- const creamCostume=page.locator('#collection-item-1286846063 .item-sprite[data-dye-rendered="true"]');
+ const creamCostume=page.locator('#collection-item-1286846063 .item-sprite[data-dye-source="game-source-sprite"]');
  await creamCostume.waitFor({timeout:30_000});
  const creamPixels=await sampledSprite(creamCostume);
  await search.fill('Orange Archer Costume');
  await page.locator('.collection-search-result').first().click();
- const orangeCostume=page.locator('#collection-item-935642973 .item-sprite[data-dye-rendered="true"]');
+ const orangeCostume=page.locator('#collection-item-935642973 .item-sprite[data-dye-source="game-source-sprite"]');
  await orangeCostume.waitFor({timeout:30_000});
  const orangeCostumePixels=await sampledSprite(orangeCostume);
  assert.notEqual(creamPixels.hash,orangeCostumePixels.hash);
- assert.ok(creamPixels.strap[2]>creamPixels.strap[0]+15,'source ochre band becomes cyan in Ice Cream');
- assert.ok(orangeCostumePixels.strap[0]>orangeCostumePixels.strap[2]+40,'source band becomes orange in Orange');
- assert.ok(creamPixels.buckle[2]>creamPixels.buckle[0]*.65,'source buckle becomes pale with Ice Cream');
- assert.ok(orangeCostumePixels.buckle[0]>orangeCostumePixels.buckle[2]+50,'source buckle becomes gold with Orange');
 
  // Both School families have same-primary variants whose differing
  // second palette channel must alter pixels of the V-shaped neckline.
@@ -532,19 +713,15 @@ async function run(){
  async function checkSchoolPair(search1,id1,search2,id2){
   await search.fill(search1);
   await page.locator('.collection-search-result').first().click();
-  const first=page.locator('#collection-item-'+id1+' .item-sprite[data-dye-rendered="true"]');
+  const first=page.locator('#collection-item-'+id1+' .item-sprite[data-dye-source="game-source-sprite"]');
   await first.waitFor({timeout:30_000});
   const image1=await sampledSprite(first);
   await search.fill(search2);
   await page.locator('.collection-search-result').first().click();
-  const second=page.locator('#collection-item-'+id2+' .item-sprite[data-dye-rendered="true"]');
+  const second=page.locator('#collection-item-'+id2+' .item-sprite[data-dye-source="game-source-sprite"]');
   await second.waitFor({timeout:30_000});
   const image2=await sampledSprite(second);
   assert.notEqual(image1.hash,image2.hash,'the secondary game dye must change real image pixels');
-  const neckDelta=image1.neck.reduce((sum,c,i)=>sum+Math.abs(c-image2.neck[i]),0);
-  assert.ok(neckDelta>35,'V-neckline must display different secondary source colors: '+neckDelta);
-  const bodyDelta=image1.body.reduce((sum,c,i)=>sum+Math.abs(c-image2.body[i]),0);
-  assert.ok(bodyDelta<35,'main fabric uses identical native primary dye: '+bodyDelta);
  }
  await checkSchoolPair('Gray and Pink School Jacket',237080181,
   'Gray and Yellow School Jacket',556476907);
@@ -556,20 +733,17 @@ async function run(){
  // the original second dye channel defines the named game colorway.
  await search.fill('Blue Crew Medic Outfit');
  await page.locator('.collection-search-result').first().click();
- const blueMedic=page.locator('#collection-item-156787090 .item-sprite[data-dye-source="native-icon"]');
+ const blueMedic=page.locator('#collection-item-156787090 .item-sprite[data-dye-source="game-source-sprite"]');
  await blueMedic.waitFor({timeout:30_000});
  const blueMedicPixels=await sampledSprite(blueMedic);
  await search.fill('Maroon Crew Medic Outfit');
  await page.locator('.collection-search-result').first().click();
- const maroonMedic=page.locator('#collection-item-351352504 .item-sprite[data-dye-source="native-icon"]');
+ const maroonMedic=page.locator('#collection-item-351352504 .item-sprite[data-dye-source="game-source-sprite"]');
  await maroonMedic.waitFor({timeout:30_000});
  const maroonMedicPixels=await sampledSprite(maroonMedic);
  assert.notEqual(blueMedicPixels.hash,maroonMedicPixels.hash,
   'native second channel must distinguish Crew Medic source UiIcon colorways');
- assert.ok(blueMedicPixels.body[2]>blueMedicPixels.body[0]+55,
-  'original blue second palette dye must color the medic outfit source icon');
- assert.ok(maroonMedicPixels.body[0]>maroonMedicPixels.body[2]+25,
-  'original maroon second palette dye must color the medic outfit source icon');
+
 
  // These genuine banded hat colorways have the same first native dye
  // but distinct second dyes. Assert that the displayed original 96px PNG
@@ -583,7 +757,7 @@ async function run(){
     .filter({hasText:new RegExp('^'+name+'$')}).first().click();
    // The original named cyan wireframe hat outranks its old approximation.
    // Other cases still exercise the existing generated-colorway path.
-   const source=id===528999373?'game-source-sprite':'native-icon';
+   const source='game-source-sprite';
    const sprite=page.locator('#collection-item-'+id+' .item-sprite[data-dye-source="'+source+'"]');
    await sprite.waitFor({timeout:30_000});
    if(id===528999373){
@@ -591,6 +765,7 @@ async function run(){
     assert.ok((await sprite.evaluate(el=>getComputedStyle(el).backgroundImage))
      .includes('/source-colorways/528999373.webp'));
    }
+
    return sampledSprite(sprite);
   }
   const firstPixels=await findNativeIcon(name1,id1);
@@ -842,9 +1017,9 @@ async function run(){
  await page.locator('.removal-confirm-action').click();
  await page.locator('.achievement-item-grid button.achievement-toggle[aria-pressed="false"]').first().waitFor();
 
- // Exact, same-origin 8x8 red capture must outrank approximation. Supply
- // a synthetic capture via a browser route without shipping false game art.
- // A missing second capture must fall back to local source-dye rendering.
+ // An original image must outrank a registered reconstruction. Supply
+ // a synthetic reconstruction without shipping false game art, and block
+ // the old atlas/palette to exercise the independent Item ID source path.
  const fakePng=Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAFklEQVR4nGP8JWfznwEPYMInOXwUAABpGAJjJPuaSQAAAABJRU5ErkJggg==',
   'base64'
@@ -865,32 +1040,52 @@ async function run(){
   status:200,contentType:'image/png',body:fakePng
  }));
  await page.route('**/variant-art/585726126.png',route=>route.fulfill({status:404,body:'missing'}));
+ await page.route('**/item-packs/**',route=>route.fulfill({status:404,body:'missing'}));
+ await page.route('**/native-dye-palettes.json',route=>route.fulfill({status:404,body:'missing'}));
  await page.reload({waitUntil:'networkidle'});
  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
  await chooseTab(page,'collections');
  const finalSearch=page.locator('.collection-controls input[type="search"]');
  await finalSearch.fill('Ice Cream Archer Hat');
  await page.locator('.collection-search-result').first().click();
- const captured=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-render"]');
- await captured.waitFor({timeout:30_000});
- assert.equal(await captured.evaluate(el=>getComputedStyle(el).backgroundSize),'contain',
-  'verified colorway assets preserve their natural aspect ratio');
- assert.ok((await captured.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/704486536.png'),
-  'verified image uses direct static item-specific pixels rather than a recolored Blob');
+ const originalFirst=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-source-sprite"]');
+ await originalFirst.waitFor({timeout:30_000});
+ await sampledSprite(originalFirst);
  await finalSearch.fill('Orange Archer Hat');
  await page.locator('.collection-search-result').first().click();
- await page.locator('#collection-item-585726126 .item-sprite[data-dye-source="native-icon"]').waitFor({timeout:30_000});
+ const originalFallback=page.locator('#collection-item-585726126 .item-sprite[data-dye-source="game-source-sprite"]');
+ await originalFallback.waitFor({timeout:30_000});
+ assert.equal(await originalFallback.getAttribute('data-icon-fidelity'),'game-original');
+ assert.ok((await originalFallback.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/dynamic-colorways/585726126.webp?v='),
+  'original artwork must display even when shared packs and palettes are unavailable');
+ // When the original itself cannot decode, the separately registered
+ // reconstruction remains a fallback, with its fidelity marked accordingly.
+ await page.route(/\/(?:source-colorways|dynamic-colorways)\/704486536\.webp(?:\?.*)?$/,route=>route.fulfill({status:404,body:'missing'}));
+ await page.reload({waitUntil:'networkidle'});
+ await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+ await chooseTab(page,'collections');
+ await page.locator('.collection-controls input[type="search"]').fill('Ice Cream Archer Hat');
+ await page.locator('.collection-search-result').first().click();
+ const captured=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-render"]');
+ await captured.waitFor({timeout:30_000});
+ assert.equal(await captured.getAttribute('data-icon-fidelity'),'verified-reconstruction');
+ assert.equal(await captured.evaluate(el=>getComputedStyle(el).backgroundSize),'contain');
 
  assert.deepEqual(errors,[],'no console exceptions or 5xx during browser replay');
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
  await context.close();
  await achievementExportReopenRoundtrip();
+ await inventoryDynamicPaletteArtSmoke();
+ await chefRuntimeSmoke(browser,origin,base);
+ await wandRuntimeSmoke(browser,origin,base);
  await inventoryEditExportSmoke();
  await inventoryOriginalArtSmoke();
+ await inventoryDynamicFlowerArtSmoke();
+ await inventoryFlowerVariantEditSmoke();
  await achievementDstFoldExportSmoke();
  await achievementAtlasRetrySmoke();
 }
 try{await run()}finally{
  await browser?.close();
- service.kill('SIGTERM');
+ service?.kill('SIGTERM');
 }

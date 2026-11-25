@@ -9,7 +9,7 @@ const {outputFiles}=await build({
  entryPoints:[fileURLToPath(new URL('../src/variant-art.ts',import.meta.url))],
  bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'
 });
-const {parseVariantArtIndex,parseSourceColorwayIndex,loadVariantArtIndex}=await import(
+const {parseVariantArtIndex,parseSourceColorwayIndex,parseDynamicColorwayIndex,loadVariantArtIndex,loadVariantArtSources}=await import(
  'data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64')
 );
 const read=(name)=>readFileSync(new URL(name,import.meta.url),'utf8');
@@ -17,6 +17,7 @@ const manifest=JSON.parse(read('../public/variant-art/index.json'));
 const native=JSON.parse(read('../public/native-dye-palettes.json'));
 const sources=JSON.parse(read('../public/source-colorways/index.json'));
 const catalog=JSON.parse(read('../public/catalog.json'));
+const dynamic=JSON.parse(read('../public/dynamic-colorways/index.json'));
 const itemKeys=new Map(catalog.items.map(r=>[String(r[0]),r[1]]));
 const example={
  file:'704486536.png',sha256:'a'.repeat(64),
@@ -25,7 +26,7 @@ const example={
 };
 const wrap=(records)=>({schema:'HKIA.DyeVariantArt.1',version:'3.0.1',records});
 
-test('only explicit same-origin per-Item-ID artwork can override source sprites',()=>{
+test('only explicit same-origin per-Item-ID reconstructed artwork can be registered',()=>{
  assert.deepEqual(parseVariantArtIndex(manifest,'/HKIA-Save-Editor/'),{});
  const r=parseVariantArtIndex(wrap({'704486536':example}),'/HKIA-Save-Editor/');
  assert.equal(r['704486536'],'/HKIA-Save-Editor/variant-art/704486536.png');
@@ -62,14 +63,14 @@ test('loader reads verified index through local deployment base only',async()=>{
  try{
   globalThis.fetch=async (url,options)=>{
    requests.push({url,options});
-   return {ok:true,json:async()=>url.endsWith('/source-colorways/index.json')?sources:wrap({'704486536':example})};
+   return {ok:true,json:async()=>url.endsWith('/source-colorways/index.json')?sources:url.endsWith('/dynamic-colorways/index.json')?dynamic:wrap({'704486536':example})};
   };
   const record=await loadVariantArtIndex('/HKIA-Save-Editor/');
-  assert.equal(record['704486536'],'/HKIA-Save-Editor/variant-art/704486536.png');
+  assert.equal(record['704486536'],parseDynamicColorwayIndex(dynamic,'/HKIA-Save-Editor/')['704486536']??parseSourceColorwayIndex(sources,'/HKIA-Save-Editor/')['704486536']);
   assert.equal(record['379863484'],'/HKIA-Save-Editor/source-colorways/379863484.webp');
-  assert.equal(requests.length,2);
-  assert.deepEqual(requests.map(r=>r.url).sort(),['/HKIA-Save-Editor/source-colorways/index.json','/HKIA-Save-Editor/variant-art/index.json']);
-  assert.ok(requests.every(r=>r.options.cache==='force-cache'));
+  assert.equal(requests.length,3);
+  assert.deepEqual(requests.map(r=>r.url).sort(),['/HKIA-Save-Editor/dynamic-colorways/index.json','/HKIA-Save-Editor/source-colorways/index.json','/HKIA-Save-Editor/variant-art/index.json']);
+  assert.ok(requests.every(r=>r.options.cache==='no-cache'));
  }finally{
   globalThis.fetch=previous;
  }
@@ -98,8 +99,15 @@ test('every registered exact image is an audited, local, unmodified PNG or WebP'
 
 test('Collection and Inventory select source-registered exact images before approximations',()=>{
  const app=read('../src/App.svelte'),sprite=read('../src/DyeSprite.svelte');
- assert.match(app,/loadVariantArtIndex\(import\.meta\.env\.BASE_URL\)/);
- assert.equal((app.match(/exactArtUrl=\{/g)||[]).length,4);
+ assert.match(app,/loadVariantArtSources\(import\.meta\.env\.BASE_URL\)/);
+ assert.equal((app.match(/exactArtUrl=\{/g)||[]).length,5);
+ assert.match(app,/exactArtUrl=\{exactVariantArt\[String\(representative\)\]\}/);
+ assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,5);
+ assert.match(app,/originalArtUrl=\{originalVariantArt\[String\(representative\)\]\}/);
+ assert.match(sprite,/if\(original\)showExact\(original,showReconstruction\)/);
+ assert.match(sprite,/showExact\(exact,showNativeIcon\)/);
+ assert.match(sprite,/sprite\?:SpriteCell;palette\?:NativeDyePalette/);
+ assert.match(sprite,/if\(canceled\|\|!cell\|\|!colors\)return/);
  assert.match(app,/exactVariantArt\[String\(item\.itemId\)\]/);
  assert.match(app,/exactVariantArt\[String\(sub\.previewId\)\]/);
  assert.match(app,/exactVariantArt\[String\(item\[0\]\)\]/);
@@ -115,14 +123,14 @@ test('Collection and Inventory select source-registered exact images before appr
  }
 });
 
-test('all 86 named original colorway sprites match native Item ID, source key and immutable WebP bytes',()=>{
+test('all 362 named original colorway sprites match native Item ID, source key and immutable WebP bytes',()=>{
  const urls=parseSourceColorwayIndex(sources,'/');
  assert.equal(sources.definitionsSha256,native.definitions_sha256);
  assert.equal(sources.runtimeUiIconReferenceMatches,false);
- assert.equal(Object.keys(urls).length,86);
+ assert.equal(Object.keys(urls).length,362);
  const files=readdirSync(new URL('../public/source-colorways/',import.meta.url)).filter(x=>x!=='index.json');
- assert.equal(files.length,86);
- let atlas=0,direct=0;
+ assert.equal(files.length,362);
+ let atlas=0,direct=0,atlasObjects=0;
  for(const [id,r] of Object.entries(sources.records)){
   assert.ok(native.records[id]);
   assert.equal(itemKeys.get(id),r.itemKey);
@@ -138,9 +146,11 @@ test('all 86 named original colorway sprites match native Item ID, source key an
   assert.equal((packed&0x3fff)+1,96);
   assert.equal(((packed>>>14)&0x3fff)+1,96);
   if(r.sourceKind==='atlas'){atlas++;assert.equal(r.sourceSpriteMeshApplied,true);}
-  else{direct++;assert.equal(r.textureName,r.sourceSpriteName);}
+  if(r.sourceSpriteBundle==='atlas_global'){atlasObjects++;assert.match(r.pack,/^atlas-colorways-\d{2}\.zip$/);}
+  if(r.sourceKind==='direct'){direct++;assert.equal(r.textureName,r.sourceSpriteName);}
  }
- assert.equal(direct,39);assert.equal(atlas,47);
+ assert.equal(direct,39);assert.equal(atlas,323);assert.equal(atlasObjects,276);
+ assert.equal(sources.atlasOriginalPacks.reduce((sum,p)=>sum+p.count,0),276);
  assert.equal(sources.nativeUiIconAlphaVerification.alphaPixelsMatchedPerControl,9216);
 });
 
@@ -149,7 +159,7 @@ test('source sprite loader refuses wrong item source names, paths, and runtime-f
  for(const changed of [
   {file:'../379863484.webp'},{file:'1.webp'},{sourceSpriteName:'icon_unrelated'},
   {sourceSpritePathId:original.sharedUiIconPathId},{textureSha256:'invalid'},
-  {sourceKind:'unverified'}
+  {sourceKind:'unverified'},{sourceSpriteBundle:'definitions'},{pack:'../other.zip'}
  ]){
   assert.throws(()=>parseSourceColorwayIndex({...sources,records:{[id]:{...original,...changed}}},'/'),
    /SOURCE_COLORWAY_RECORD_INVALID/);
@@ -157,7 +167,7 @@ test('source sprite loader refuses wrong item source names, paths, and runtime-f
  assert.throws(()=>parseSourceColorwayIndex({...sources,runtimeUiIconReferenceMatches:true},'/'),/SOURCE_COLORWAY_INDEX_INVALID/);
 });
 
-test('original source art survives an absent exact-render index and verified renders take precedence',async()=>{
+test('original source art survives an absent exact-render index and takes precedence over reconstruction',async()=>{
  const prev=globalThis.fetch;
  try{
   globalThis.fetch=async url=>url.includes('/source-colorways/')?
@@ -165,6 +175,44 @@ test('original source art survives an absent exact-render index and verified ren
   assert.equal((await loadVariantArtIndex('/'))['379863484'],'/source-colorways/379863484.webp');
   globalThis.fetch=async url=>({ok:true,json:async()=>url.includes('/source-colorways/')?
    sources:wrap({'379863484':{...example,file:'379863484.png'}})});
-  assert.equal((await loadVariantArtIndex('/'))['379863484'],'/variant-art/379863484.png');
+  assert.equal((await loadVariantArtIndex('/'))['379863484'],'/source-colorways/379863484.webp');
+  assert.equal((await loadVariantArtSources('/')).reconstructions['379863484'],'/variant-art/379863484.png');
+ }finally{globalThis.fetch=prev;}
+});
+
+test('the newly extracted mint striped pajama source sprites are original colored art',()=>{
+ for(const id of ['315822','421906853']){
+  const r=sources.records[id];assert.equal(r.sourceSpriteBundle,'atlas_global');
+  assert.ok(r.itemKey.startsWith('item_c_dyeable_stripedpajama'));
+  assert.equal(parseSourceColorwayIndex(sources,'/')[id],'/source-colorways/'+id+'.webp');
+ }
+});
+
+test('all 5383 native dye IDs resolve to one genuine original sprite with a verified local digest',()=>{
+ const urls=parseDynamicColorwayIndex(dynamic,'/');
+ const originalUrls=parseSourceColorwayIndex(sources,'/');
+ assert.equal(Object.keys(urls).length,5021);
+ assert.equal(Object.keys(originalUrls).length,362);
+ assert.deepEqual(Object.keys({...urls,...originalUrls}).sort(),Object.keys(native.records).sort());
+ assert.equal(readdirSync(new URL('../public/dynamic-colorways/',import.meta.url)).filter(x=>x.endsWith('.webp')).length,5021);
+ for(const [id,hash] of Object.entries(dynamic.records)){
+  assert.ok(!Object.hasOwn(originalUrls,id));
+  const data=readFileSync(new URL('../public/dynamic-colorways/'+id+'.webp',import.meta.url));
+  assert.equal(createHash('sha256').update(data).digest('hex'),hash);
+  assert.equal(urls[id],'/dynamic-colorways/'+id+'.webp?v='+hash);
+ }
+ assert.throws(()=>parseDynamicColorwayIndex({...dynamic,records:{...dynamic.records,1700096245:'invalid'}},'/'),/DYNAMIC_COLORWAY_RECORD_INVALID/);
+ assert.throws(()=>parseDynamicColorwayIndex({...dynamic,records:{}},'/'),/DYNAMIC_COLORWAY_INDEX_INVALID/);
+});
+
+test('original source remains primary and verified reconstruction is retained as a separate fallback',async()=>{
+ const prev=globalThis.fetch;
+ try{
+  globalThis.fetch=async url=>({ok:true,json:async()=>url.includes('/source-colorways/')?sources:url.includes('/dynamic-colorways/')?dynamic:wrap({'585726126':{...example,file:'585726126.png'}})});
+  const {primary,originals,reconstructions}=await loadVariantArtSources('/');
+  assert.equal(reconstructions['585726126'],'/variant-art/585726126.png');
+  assert.equal(primary['585726126'],originals['585726126']);
+  assert.equal(originals['585726126'],'/dynamic-colorways/585726126.webp?v='+dynamic.records['585726126']);
+  assert.equal(Object.keys(originals).length,5383);
  }finally{globalThis.fetch=prev;}
 });

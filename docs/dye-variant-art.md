@@ -1,6 +1,10 @@
 # HKIA game-source colorway image generation (Steam v3.0.1)
 
-## Source policy
+## Current source policy (supersedes the historical renderer work below)
+
+All 5,383 Steam v3.0.1 dye Item IDs now have a completed game-original image. Display the original by Item ID first, independently of shared UiIcon packs and dye palettes; For appearances with no completed source image, the production target is on-demand local browser rendering from the verified native assets and actual game rendering rules, not pre-rendered variant files. See PRODUCT_SPEC §7 (Owner decision 2026-11-25). The prior rendering prototypes, fits and 2D recolors are historical diagnostics/fallbacks, not the current production source. See [native-uiicon-colorways.md](native-uiicon-colorways.md). Do not delete the remaining legacy fallback assets until the published original images are verified.
+
+## Historical source policy (superseded; offline output is diagnostic only)
 
 **Only original-game assets may be used to produce final variant images.**
 The editor must not import or hotlink wiki pictures or other third-party images.
@@ -263,3 +267,40 @@ The source-accurate Unity renderer is still blocked until the remaining
 Material-hosting CAB files are identified, materials and shaders loaded,
 palette-to-surface behavior validated and a real transparent PNG produced.
 No external Wiki images or simulated 3D outputs have been registered.
+
+## Verified native character Shader and definitions dependency (2026-11-24)
+
+Reacquired the original Steam 3.0.1 definitions and atlas bundles and matched both existing SHA-256 fingerprints. The definitions CAB is the previously unresolved Archer skin Material dependency. Its exact Material pathID 6824069125264728142 is ordinary Lit with no bound BaseMap, NOT a dye material. The other Archer renderer CAB remains unresolved. The definitions bundle also contains the exact CustomLitCharacter Shader (pathID 477622052401609204), its four map properties and five palette colors. Fifty local Materials reference this Shader, including 24 with PatternMap, and all 174 non-null map PPtrs resolve to local Texture2D objects. Its three compressed program segments contain 12 vertex and 32 pixel DXBC containers. No shader execution, channel semantics or native icon pose/render is verified yet.
+
+Reproduce the source metadata locally: `python3 scripts/audit-native-character-shader.py /path/to/definitions`. The tool emits metadata and hashes only, never shader program bytes. The pinned SHA prevents applying this layout to unverified versions. See `data/unityfs-audit/definitions-character-shader.v3.0.1.json` for observed source evidence. Existing original icon images remain unchanged.
+
+## Original native albedo operation (2026-11-24)
+
+Thirty of the 32 verified pixel programs contain the same initial dye calculation, in two register-allocation variants (15 each). The original name table and texture bindings identify BaseMap t0, BumpMap t1, ComboMap t2, PatternMap t3; the palette colors occupy five consecutive material constant registers. With samples already in shader space, the exact initial color operation is:
+
+```
+q = lerp(PaletteColor1, PaletteColor2, PatternMap.r)
+q = lerp(q, PaletteColor3, PatternMap.g)
+q = lerp(q, PaletteColor4, PatternMap.b)
+q = lerp(PaletteColor5, q, PatternMap.a)
+albedo = lerp(BaseMap.rgb, BaseMap.rgb * q, BaseMap.a)
+```
+
+Importantly, BaseMap alpha is the dye strength, NOT ComboMap alpha. ComboMap is sampled but is used by other operations. The restricted token evaluator and mathematical port agreed exactly for 3,000 randomized normalized samples across all 30 original programs, and for 512 samples from decoded real Plaid Dress textures. This validates the isolated arithmetic in host precision, not GPU floating-point rounding, sRGB sampling, the lighting pass, pose, or final icon appearance. The fifth palette slot of the source red plaid variant is absent and must retain the verified Material default, not an invented color.
+
+Reproduce: `python3 scripts/verify-native-dye-albedo.py /path/to/definitions`. With Pillow installed, add `--plaid-preview /tmp/plaid-diagnostic.png` for a 512x512 **UV-space** material preview. This raw-normalized texture diagnostic is not a final icon. It must not be put into the public icon index. Source fingerprints and observed test results are in `data/unityfs-audit/native-dye-albedo.v3.0.1.json`. No game binaries, shader programs or full textures are committed.
+
+## Rigid mesh icon projection prototype
+
+The original definitions CAB contains the WitchHat mesh and its actual renderer, Material, BaseMap and PatternMap. Source definition ID 528610065 links to the WitchHat outfit and its shared definition; the renderer and MeshFilter refer to the exact local objects. The original 1,320-vertex, 1,988-triangle mesh uses 36-byte streamed vertex records with float32 positions and float16 UVs. The native dye arithmetic now produces a UV-sampled orthographic raster from the actual triangles. A prototype grid of 360 camera/roll/mirror candidates was compared with the source original icon using normalized alpha and three coarse color-region classes. The best composite candidate measured 83.81% silhouette IoU, not full image equality. Mirroring and camera parameters are diagnostic search parameters, not recovered game settings. Texture color-space conversion, normals/lighting, filtering, icon render setup and pixel-level equality remain unverified. No public icon replacements.
+
+Reproduce locally with Python, NumPy and Pillow: `python3 scripts/render-native-rigid-icon.py /path/to/definitions --out /tmp/hkia-witchhat`. The script produces only local reference/diagnostic PNGs and a comparison report. Source identifiers and prototype results are in `data/unityfs-audit/witchhat-rigid-icon-diagnostic.v3.0.1.json`.
+
+### Lighting diagnostic refinement
+
+The source WitchHat tangent frames and normal map are now used for a fitted diffuse/rim/specular approximation. A 27-candidate local camera refinement improved silhouette IoU from 0.8381 to 0.8871. On 459 held-out, color-region-matched pixels of the same source icon, normalized RGB MAE fell from 0.120185 to 0.086262 (28.2%). This is an intra-icon diagnostic, not cross-variant or cross-family validation. The source normal map is hash-pinned; the normal unpack hypothesis and illumination coefficients have not been recovered from the actual lighting shader. ComboMap has been identified but is not applied. Do not publish this render as a native icon. Reproduce with the rigid-icon tool's optional `--fit-lighting` argument (requires SciPy as well as NumPy and Pillow).
+
+
+## Superseding source-art discovery (2026-11-25)
+
+The original dynamic inventory icon bundles and existing original sprite atlas cover all 5,383 dye Item IDs. Use those completed original sprites, not the earlier 3D camera/lighting fits or neutral image recoloring, for ordinary item icons. The earlier sections are diagnostic history and do not establish runtime rendering fidelity. The source extraction and image display pipeline is documented in [native-uiicon-colorways.md](native-uiicon-colorways.md). Comparison may validate results, never supply fitted generation parameters.

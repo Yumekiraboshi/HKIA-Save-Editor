@@ -25,7 +25,7 @@ test('Archer family points to an audited real serialized GameObject, not a guess
  assert.equal(archer.serialized.hasEmbeddedMaterial,false);
  assert.equal(archer.serialized.hasEmbeddedTexture2D,false);
  assert.equal(f.rendererStatus,'blocked-unresolved-materials');
- assert.deepEqual(f.verifiedMaterialDependencies,[]);
+ assert.deepEqual(f.verifiedMaterialDependencies.map(x=>x.bundle),['definitions']);
  assert.equal(f.verifiedShaderPaletteMask,false);
  assert.equal(recipes.recipes[0].publishable,false);
 });
@@ -158,7 +158,8 @@ test('original Archer Renderers identify two actual external Material CABs by lo
  assert.equal(otherSkin.materials[0].externalCAB,skin.materials[0].externalCAB);
  assert.equal(otherSkin.materials[0].fileId,2,'file IDs are local to each source');
  const known=read('../data/unityfs-audit/archer-cab-resolution.v3.0.1.json');
- assert.deepEqual(known.unresolvedMaterialCABs,[mesh.materials[0].externalCAB,skin.materials[0].externalCAB]);
+ assert.deepEqual(known.unresolvedMaterialCABs,[mesh.materials[0].externalCAB]);
+ assert.equal(known.confirmed.find(x=>x.cab===skin.materials[0].externalCAB).material.isDyeShader,false);
  assert.equal(known.confirmed[0].contains.MonoScript,1546);
  assert.equal(known.confirmed[0].sha256,'2be9445adfb193570f910a22afec50c332a1b02435388b459869377764893de4');
 });

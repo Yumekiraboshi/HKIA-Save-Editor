@@ -5,3 +5,9 @@ public/editor.wasm
 .DS_Store
 .env*
 !.env.example
+
+# Source-original atlas WebPs are materialized from data/source-colorway-packs.
+public/source-colorways/*.webp
+
+# Derived per-item dynamic sprites are validated and materialized at build time.
+public/dynamic-colorways/

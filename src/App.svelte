@@ -1,13 +1,17 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,requestFlowerVariants,changeInventoryFlowerVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
  import {inventoryCopy} from './inventory-copy';
- import {browseInventory,inventoryGroupCounts,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {flowerVariantOf,type FlowerVariant} from './inventory-unique';
+ import {flowerEditorCopy} from './inventory-unique-copy';
+ import {inventoryCategoryRepresentative,browseInventory,inventoryGroupCounts,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
+ import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
  import {inventoryGroupLabel} from './inventory-native-category-copy';
  import {loadSourceItemNames,type SourceItemNames} from './source-names';
  import {decodeHistoryDetails,formatHistoryChange} from './history-details';
@@ -28,9 +32,12 @@ import {searchAchievementRows} from './achievement-search';
  import {loadLocaleIndex,loadGameLabels,EMPTY_LABELS,type GameLabels} from './game-localization';
  import {loadIconPack,type IconPack} from './icon-packs';
  import {loadNativeDyePalettes,type NativeDyePalettes} from './native-dye-palettes';
- import {loadVariantArtIndex} from './variant-art';
+ import {loadVariantArtSources} from './variant-art';
  import {loadNativeColorwayIcons} from './native-colorway-icons';
  import DyeSprite from './DyeSprite.svelte';
+ import DynamicFlowerSprite from './DynamicFlowerSprite.svelte';
+ import DynamicPaletteSprite from './DynamicPaletteSprite.svelte';
+ import {CUSTOM_PALETTE_ITEM_ID} from './inventory-palette-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {toAchievementDateTimeValue,fromAchievementDateTimeValue} from './achievement-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
@@ -48,11 +55,18 @@ import {verifiedFloorplanName} from './floorplan-names';
  const BATCH_SIZE=40;
  const EPOCH=621355968000000000n;
  const ICONS=import.meta.env.BASE_URL+'icons/';
+ const INVENTORY_UI=import.meta.env.BASE_URL+'inventory-ui/';
  let activeTool:Tool=$state('collections');
  let achievementQuery=$state('');
  let inventoryQuery=$state('');
  let inventoryGroup:InventoryGroupKey|null=$state(null);
  let nativeInventoryIndex:NativeInventoryIndex=$state(new Map());
+ let flowerDefinitions:FlowerDisplayDefinitions|null=$state(null);
+ let flowerLabels:FlowerLabels=$state({});
+ let flowerDialogEl:HTMLDialogElement|undefined=$state();
+ let flowerEdit=$state<{documentId:number;itemId:number;revision:number;before:FlowerVariant;options:FlowerVariant[]}|null>(null);
+ let flowerSelection=$state(-1);
+ let inventoryNativeArt:InventoryNativeArt|null=$state(null);
  let inventoryEditableOnly=$state(false);
  let inventoryLimit=$state(BATCH_SIZE);
  let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
@@ -118,6 +132,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let iconPack:IconPack|null=$state(null);
  let nativeDyePalettes:NativeDyePalettes=$state({});
  let exactVariantArt:Record<string,string>=$state({});
+ let originalVariantArt:Record<string,string>=$state({});
  let nativeColorwayIcons:Record<string,string>=$state({});
  let iconEpoch=0;
  let iconError=$state(false);
@@ -137,6 +152,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const removalCopy=$derived(removalConfirmationCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
  const iCopy=$derived(inventoryCopy(locale));
+ const flowerCopy=$derived(flowerEditorCopy(locale));
  const hCopy=$derived(historyCopy(locale));
  const hDetailCopy=$derived(historyDetailCopy(locale));
  const compactCopy=$derived(compactAchievementCopy(locale));
@@ -182,11 +198,14 @@ import {verifiedFloorplanName} from './floorplan-names';
 
  onMount(()=>{
   void loadNativeInventoryIndex(import.meta.env.BASE_URL).then(index=>nativeInventoryIndex=index).catch(()=>{});
+  void loadFlowerDisplayDefinitions(import.meta.env.BASE_URL).then(data=>flowerDefinitions=data).catch(()=>{});
+  void loadFlowerLabels(import.meta.env.BASE_URL).then(data=>flowerLabels=data).catch(()=>{});
+  void loadInventoryNativeArt(import.meta.env.BASE_URL).then(art=>inventoryNativeArt=art).catch(()=>{});
   // Exact game dye palettes, used exclusively for recoloring item image pixels.
   void loadNativeDyePalettes(import.meta.env.BASE_URL)
    .then(palettes=>nativeDyePalettes=palettes).catch(()=>{});
-  void loadVariantArtIndex(import.meta.env.BASE_URL)
-   .then(art=>exactVariantArt=art).catch(()=>{});
+  void loadVariantArtSources(import.meta.env.BASE_URL)
+   .then(art=>{originalVariantArt=art.originals;exactVariantArt=art.reconstructions;}).catch(()=>{});
   void loadNativeColorwayIcons(import.meta.env.BASE_URL)
    .then(icons=>nativeColorwayIcons=icons).catch(()=>{});
   browserLanguage=detectLocale(navigator.languages?.length?navigator.languages:[navigator.language||'en']);
@@ -349,7 +368,15 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(activeTool!=='inventory'||!snapshot||!catalog)return;
   const groups=new Set<string>();
   for(const row of inventoryRows.slice(0,inventoryLimit)){
+   if(inventoryNativeArt?.entries.has(row.itemId)||inventoryNativeArt?.withheld.has(row.itemId))continue;
    const item=inventorySourceItems.get(row.itemId);
+   if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
+  }
+  // The category representatives use the same verified item atlas/cache.
+  for(const tab of NATIVE_INVENTORY_TABS){
+   const id=inventoryCategoryRepresentative(tab.key,nativeInventoryIndex);
+   if(id===undefined||inventoryNativeArt?.entries.has(id))continue;
+   const item=inventorySourceItems.get(id);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
   for(const group of groups){
@@ -365,6 +392,12 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function setTheme(v:ThemePref){
   themePref=v;try{localStorage.setItem('hkia-display-theme',v)}catch{}
+ }
+ function flowerVariantName(v:FlowerVariant):string{
+  return flowerDisplay({growState:v[0],baseColor:v[1],pattern:v[2],patternColor:v[3]},flowerDefinitions,flowerLabels[locale]??{})?.title||'—';
+ }
+ function flowerOptionGroup(before:FlowerVariant,next:FlowerVariant):number{
+  return next[2]!==before[2]?1:next[1]!==before[1]?0:2;
  }
  function inventoryName(itemId:number):string{
   return sourceNames[String(itemId)]??'#'+String(itemId);
@@ -469,7 +502,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
  function historyEntryChange(i:number):string{
-  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity)||
+  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerVariantName)||
    (tabHistory[i]?.paired?hCopy.paired:'');
  }
  function historyEntryLabel(entry:HistoryRecord):string{
@@ -612,6 +645,32 @@ import {verifiedFloorplanName} from './floorplan-names';
    }
    error=reason;
   }
+  finally{busy=false}
+ }
+ async function openFlowerEditor(row:InventoryEntry){
+  if(!snapshot||busy||!row.flower||!row.unique?.flowerEditable)return;
+  const revision=snapshot.revision,before=flowerVariantOf(row.flower);
+  busy=true;error='';
+  try{
+   const options=await requestFlowerVariants(row.documentId);
+   if(!snapshot||snapshot.revision!==revision)return;
+   flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options};
+   flowerSelection=-1;await tick();
+   if(flowerDialogEl&&!flowerDialogEl.open)flowerDialogEl.showModal();
+  }catch(e){error=describeError(e)}
+  finally{busy=false}
+ }
+ function closeFlowerEditor(){if(flowerDialogEl?.open)flowerDialogEl.close()}
+ async function applyInventoryFlowerVariant(event:SubmitEvent){
+  event.preventDefault();
+  const selected=flowerEdit;
+  if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
+  const next=selected.options[flowerSelection];if(!next)return;
+  busy=true;error='';
+  try{
+   update(await changeInventoryFlowerVariant(selected.documentId,selected.before,next));
+   closeFlowerEditor();await persistDraft();
+  }catch(e){error=describeError(e)}
   finally{busy=false}
  }
  async function applyInventoryQuantity(row:InventoryEntry,event:SubmitEvent){
@@ -1049,9 +1108,25 @@ import {verifiedFloorplanName} from './floorplan-names';
     
     <nav class="inventory-group-strip" aria-label={iCopy.tab}>
      {#each inventoryVisibleGroups as t (t.key)}
-      <button type="button" class="inventory-group-option" class:active={activeInventoryGroup===t.key}
+      {@const representative=inventoryCategoryRepresentative(t.key,nativeInventoryIndex)}
+      {@const representativeSource=representative===undefined?undefined:inventorySourceItems.get(representative)}
+      {@const representativeNative=representative===undefined?undefined:inventoryNativeArt?.entries.get(representative)}
+      {@const representativeSprite=representativeNative??(representativeSource&&representative!==undefined?inventoryIconPacks[representativeSource[3]]?.entries[String(representative)]:undefined)}
+      <button type="button" class="inventory-group-option" data-inventory-group={t.key} class:active={activeInventoryGroup===t.key}
        aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;inventoryLimit=BATCH_SIZE}}>
-       {#if t.art}<img src={ICONS+t.art} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>{/if}
+       {#if representative!==undefined&&(representativeSprite||originalVariantArt[String(representative)]||exactVariantArt[String(representative)])}
+        <span class="inventory-category-representative" aria-hidden="true">
+         {#if originalVariantArt[String(representative)]||exactVariantArt[String(representative)]||(!representativeNative&&representativeSprite&&nativeDyePalettes[String(representative)])}
+          <DyeSprite sprite={representativeSprite} palette={nativeDyePalettes[String(representative)]}
+           sourceKey={representativeSource?.[1]??''} exactArtUrl={exactVariantArt[String(representative)]} originalArtUrl={originalVariantArt[String(representative)]}
+           previewUrl={nativeColorwayIcons[String(representative)]}/>
+         {:else if representativeSprite}
+          <span style:background-image={'url("'+representativeSprite.url+'")'} style:background-position={'-'+representativeSprite.x+'px -'+representativeSprite.y+'px'}></span>
+         {/if}
+        </span>
+       {:else if t.art}
+        <img src={ICONS+t.art} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>
+       {/if}
        <span>{inventoryGroupLabel(locale,t.key)}</span><small>{(inventoryGroupTotals.get(t.key)??0).toLocaleString(locale)}</small>
       </button>
      {/each}
@@ -1067,34 +1142,63 @@ import {verifiedFloorplanName} from './floorplan-names';
    <div class="inventory-grid">
     {#each inventoryRows.slice(0,inventoryLimit) as item (item.documentId)}
      {@const definition=inventorySourceItems.get(item.itemId)}
-     {@const sprite=definition?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
-     <article class="inventory-card" class:inventory-readonly={!item.editable}>
+     {@const nativeSprite=inventoryNativeArt?.entries.get(item.itemId)}
+     {@const sprite=definition&&!inventoryNativeArt?.withheld.has(item.itemId)?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
+     {@const flower=flowerDisplay(item.flower,flowerDefinitions,flowerLabels[locale]??{})}
+     {@const canFlower=!!item.flower&&!!item.unique?.flowerEditable&&!!flowerDefinitions&&!!flowerLabels[locale]}
+     <article class="inventory-card" class:inventory-readonly={!item.editable&&!canFlower}>
       <div class="inventory-card-heading">
-       <span class="inventory-item-art" aria-hidden="true">
-        {#if sprite}
-         {#if nativeDyePalettes[String(item.itemId)]}
-          <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item.itemId)]}
-           sourceKey={definition?.[1]??''} exactArtUrl={exactVariantArt[String(item.itemId)]}
-           previewUrl={nativeColorwayIcons[String(item.itemId)]}/>
-         {:else}
-          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'}
-           style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
-         {/if}
+       <span class="inventory-item-art" class:flower-variant={!!flower} aria-hidden="true">
+        {#if item.palette&&item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+         <DynamicPaletteSprite itemId={item.itemId} palette={item.palette}/>
+        {:else if item.flower&&flowerDefinitions&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+         <DynamicFlowerSprite itemId={item.itemId} flower={item.flower} definitions={flowerDefinitions} fallback={nativeSprite??sprite}/>
+        {:else if originalVariantArt[String(item.itemId)]||exactVariantArt[String(item.itemId)]||(!nativeSprite&&sprite&&nativeDyePalettes[String(item.itemId)])}
+         <DyeSprite sprite={nativeSprite??sprite} palette={nativeDyePalettes[String(item.itemId)]}
+          sourceKey={definition?.[1]??''} exactArtUrl={exactVariantArt[String(item.itemId)]} originalArtUrl={originalVariantArt[String(item.itemId)]}
+          previewUrl={nativeColorwayIcons[String(item.itemId)]}/>
+        {:else if nativeSprite}
+         <span class="item-sprite" data-inventory-art="native" style:background-image={'url("'+nativeSprite.url+'")'}
+          style:background-position={'-'+nativeSprite.x+'px -'+nativeSprite.y+'px'}></span>
+        {:else if sprite}
+         <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'}
+          style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
         {:else}
          <span class="item-art-empty">✧</span>
         {/if}
+        {#if flower}
+         <span class="inventory-flower-decorators">
+          {#if flower.color}<span class="inventory-flower-color" style:background-color={flower.color}></span>{/if}
+          {#if flower.patternUrl}<img class="inventory-flower-pattern" src={INVENTORY_UI+flower.patternUrl} alt=""/>{/if}
+         </span>
+        {/if}
        </span>
-       <strong class="inventory-name">{inventoryName(item.itemId)}</strong>
+       <strong class="inventory-name" title={inventoryName(item.itemId)}>{inventoryName(item.itemId)}</strong>
+       {#if flower?.title}<span class="inventory-flower-variant-name" title={flower.title}>{flower.title}</span>{/if}
       </div>
-      <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>
-       <label>
-        <span>{iCopy.quantity}</span>
-        <input type="number" name="quantity" min="1" max="2147483647" step="1"
-         value={item.quantity} disabled={!item.editable||busy} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
-       </label>
-       <button type="submit" class="primary" disabled={!item.editable||busy}>{iCopy.apply}</button>
-      </form>
-      {#if !item.editable}<span class="inventory-warning" title={iCopy.readonly}>{iCopy.readonly}</span>{/if}
+      {#if item.editable}
+       <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>
+        <label>
+         <span class="visually-hidden">{iCopy.quantity}</span>
+         <input type="number" name="quantity" min="1" max="2147483647" step="1"
+          value={item.quantity} disabled={busy} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
+        </label>
+        <button type="submit" class="primary" disabled={busy} title={iCopy.apply} aria-label={iCopy.apply}>
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+        </button>
+       </form>
+      {:else if canFlower}
+       <button class="inventory-unique-edit-button" type="button" disabled={busy}
+        title={flowerCopy.title} aria-label={flowerCopy.title+': '+inventoryName(item.itemId)} onclick={()=>void openFlowerEditor(item)}>
+        <span>{item.quantity}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg>
+       </button>
+      {:else}
+       <span class="inventory-readonly-quantity" title={iCopy.readonly}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        <span class="visually-hidden">{iCopy.readonly} · {iCopy.quantity}: </span>{item.quantity}
+       </span>
+      {/if}
      </article>
     {/each}
    </div>
@@ -1169,12 +1273,10 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const sprite=sub.previewId!==null&&iconPack?.group===selectedGroup?iconPack.entries[String(sub.previewId)]:undefined}
      <button type="button" class="subcategory-card" onclick={()=>selectSubcategory(sub.key)}>
       <span class="subcategory-art" aria-hidden="true">
-       {#if sprite}
-        {#if sub.previewId!==null&&nativeDyePalettes[String(sub.previewId)]}
-         <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(sub.previewId)]} sourceKey={catalog?.items.find(x=>x[0]===sub.previewId)?.[1]??''} exactArtUrl={exactVariantArt[String(sub.previewId)]} previewUrl={nativeColorwayIcons[String(sub.previewId)]}/>
-        {:else}
+       {#if sub.previewId!==null&&(originalVariantArt[String(sub.previewId)]||exactVariantArt[String(sub.previewId)]||(sprite&&nativeDyePalettes[String(sub.previewId)]))}
+        <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(sub.previewId)]} sourceKey={catalog?.items.find(x=>x[0]===sub.previewId)?.[1]??''} exactArtUrl={exactVariantArt[String(sub.previewId)]} originalArtUrl={originalVariantArt[String(sub.previewId)]} previewUrl={nativeColorwayIcons[String(sub.previewId)]}/>
+       {:else if sprite}
         <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
-        {/if}
        {:else}
         <span class="subcategory-art-empty">✧</span>
        {/if}
@@ -1217,12 +1319,10 @@ import {verifiedFloorplanName} from './floorplan-names';
        title={mayToggle?(has?copy.unsetRecorded:copy.setRecorded):!showVariants&&recordIds.length>0?copy.variantsToEdit:copy.unsafe} disabled={busy||!mayToggle}
        onclick={e=>void toggleCollection(item[0],nameFor(item),e.currentTarget)}>
        <span class="item-art" aria-hidden="true">
-        {#if sprite}
-         {#if nativeDyePalettes[String(item[0])]}
-          <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item[0])]} sourceKey={item[1]} exactArtUrl={exactVariantArt[String(item[0])]} previewUrl={nativeColorwayIcons[String(item[0])]}/>
-         {:else}
+        {#if originalVariantArt[String(item[0])]||exactVariantArt[String(item[0])]||(sprite&&nativeDyePalettes[String(item[0])])}
+         <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item[0])]} sourceKey={item[1]} exactArtUrl={exactVariantArt[String(item[0])]} originalArtUrl={originalVariantArt[String(item[0])]} previewUrl={nativeColorwayIcons[String(item[0])]}/>
+        {:else if sprite}
          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
-         {/if}
         {:else}
          <span class="item-art-empty">✧</span>
         {/if}
@@ -1246,6 +1346,52 @@ import {verifiedFloorplanName} from './floorplan-names';
    {/if}
   {/if}
  </main>
+ <dialog class="date-dialog" bind:this={flowerDialogEl} aria-labelledby="flower-editor-title"
+  onclose={()=>{flowerEdit=null;flowerSelection=-1}} oncancel={e=>{if(busy)e.preventDefault()}}>
+  {#if flowerEdit}
+   {@const edit=flowerEdit}
+   <form class="date-dialog-inner" onsubmit={e=>void applyInventoryFlowerVariant(e)}>
+    <div class="date-dialog-heading">
+     <h2 id="flower-editor-title">{inventoryName(edit.itemId)}</h2>
+     <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFlowerEditor}>×</button>
+    </div>
+    <div class="date-dialog-item">
+     <span class="date-dialog-art" aria-hidden="true">
+      {#if flowerDefinitions}
+       {@const current=edit.options[flowerSelection]??edit.before}
+       <DynamicFlowerSprite itemId={edit.itemId} flower={{growState:current[0],baseColor:current[1],pattern:current[2],patternColor:current[3]}} definitions={flowerDefinitions} fallback={inventoryNativeArt?.entries.get(edit.itemId)}/>
+      {/if}
+     </span>
+     <div class="date-dialog-detail"><strong>{flowerVariantName(edit.before)}</strong></div>
+    </div>
+    {#if edit.options.length}
+     <label class="date-dialog-field">
+      <span>{flowerCopy.title}</span>
+      <select bind:value={flowerSelection} disabled={busy} required>
+       <option value={-1} disabled>{flowerVariantName(edit.before)}</option>
+       {#each [flowerCopy.color,flowerCopy.pattern,flowerCopy.accent] as group, g}
+        {#if edit.options.some(v=>flowerOptionGroup(edit.before,v)===g)}
+         <optgroup label={group}>
+          {#each edit.options as v,i}
+           {#if flowerOptionGroup(edit.before,v)===g}
+            <option value={i}>{flowerVariantName(v)}</option>
+           {/if}
+          {/each}
+         </optgroup>
+        {/if}
+       {/each}
+      </select>
+     </label>
+    {:else}
+     <p class="compact-hint">{iCopy.readonly}</p>
+    {/if}
+    <div class="date-dialog-actions">
+     <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFlowerEditor}>{copy.cancel}</button>
+     <button type="submit" class="primary" disabled={busy||flowerSelection<0}>{copy.apply}</button>
+    </div>
+   </form>
+  {/if}
+ </dialog>
  <dialog class="date-dialog" bind:this={dateDialogEl} onclose={onDateDialogClosed} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if dateDialogItem && dateDialogTick!==null}
    {@const sprite=iconPack?.group===selectedGroup?iconPack.entries[String(dateDialogItem[0])]:undefined}
@@ -1256,12 +1402,10 @@ import {verifiedFloorplanName} from './floorplan-names';
     </div>
     <div class="date-dialog-item">
      <span class="date-dialog-art" aria-hidden="true">
-      {#if sprite}
-       {#if nativeDyePalettes[String(dateDialogItem[0])]}
-        <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(dateDialogItem[0])]} sourceKey={dateDialogItem[1]} exactArtUrl={exactVariantArt[String(dateDialogItem[0])]} previewUrl={nativeColorwayIcons[String(dateDialogItem[0])]}/>
-       {:else}
+      {#if originalVariantArt[String(dateDialogItem[0])]||exactVariantArt[String(dateDialogItem[0])]||(sprite&&nativeDyePalettes[String(dateDialogItem[0])])}
+       <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(dateDialogItem[0])]} sourceKey={dateDialogItem[1]} exactArtUrl={exactVariantArt[String(dateDialogItem[0])]} originalArtUrl={originalVariantArt[String(dateDialogItem[0])]} previewUrl={nativeColorwayIcons[String(dateDialogItem[0])]}/>
+      {:else if sprite}
        <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
-       {/if}
       {:else}
        <span class="item-art-empty">✧</span>
       {/if}

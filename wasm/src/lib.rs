@@ -91,6 +91,103 @@ pub extern "C" fn hkia_inventory_snapshot()->u32{
  })
 }
 
+/// Read-only flower display payload: count + rows (u32 document ID, u32 grow
+/// state, i32 base color, i32 pattern, i32 pattern color). No edit authority.
+#[no_mangle]
+pub extern "C" fn hkia_inventory_flowers_snapshot()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let mut b=vec![0;4];let mut count=0u32;
+  for (id,grow,color,pattern,accent) in editor.inventory_flowers(){
+   if count==1_000_000{return 1}
+   count+=1;
+   b.extend(id.to_le_bytes());b.extend(u32::from(grow).to_le_bytes());
+   b.extend(color.to_le_bytes());b.extend(pattern.to_le_bytes());b.extend(accent.to_le_bytes());
+  }
+  b[..4].copy_from_slice(&count.to_le_bytes());a.reply=b;0
+ })
+}
+
+/// Existing inventory unique-data metadata and typed values; exact source
+/// payloads stay in Rust. Wire: count, then document ID, UID presence, UID,
+/// tag (-2 absent, -1 nil), field count, typed word count, words, edit hint.
+#[no_mangle]
+pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
+ use hkia_save_core::native::InventoryUniqueData as U;
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let mut out=vec![0;4];let mut count=0u32;
+  let hints:std::collections::HashSet<_>=editor.inventory_flower_edit_hints().collect();
+  for (id,uid,nil,data,fields) in editor.inventory_unique_rows(){
+   if count>=1_000_000||out.len()>32*1024*1024{return 1}
+   count+=1;
+   let (tag,words):(i32,Vec<u32>)=match data{
+    Some(U::Flower{grow_state,base_color,pattern,pattern_color})=>(7,vec![u32::from(grow_state),base_color as u32,pattern as u32,pattern_color as u32]),
+    Some(U::Furniture{materials})=>(8,materials.into_iter().map(|v|v as u32).collect()),
+    Some(U::Palette{rgba_bits})=>(6,rgba_bits.into_iter().flatten().collect()),
+    Some(U::Opaque{tag})=>(tag,Vec::new()),
+    None=>(if nil==Some(true){-1}else{-2},Vec::new())
+   };
+   out.extend(id.to_le_bytes());out.extend(u32::from(uid.is_some()).to_le_bytes());
+   out.extend(uid.unwrap_or(0).to_le_bytes());out.extend(tag.to_le_bytes());
+   out.extend((fields as u32).to_le_bytes());out.extend((words.len() as u32).to_le_bytes());
+   for word in words{out.extend(word.to_le_bytes());}
+   out.extend(u32::from(hints.contains(&id)).to_le_bytes());
+  }
+  out[..4].copy_from_slice(&count.to_le_bytes());a.reply=out;0
+ })
+}
+/// On-demand native options. No mutation or per-row full inventory scan.
+#[no_mangle]
+pub extern "C" fn hkia_inventory_flower_variants(id:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_flower_variants(id);
+  if rows.len()>100{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*16);
+  out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for n in row{out.extend(n.to_le_bytes());}}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_flower_variant_change(id:u32,b0:i32,b1:i32,b2:i32,b3:i32,a0:i32,a1:i32,a2:i32,a3:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.change_inventory_flower_variant(id,[b0,b1,b2,b3],[a0,a1,a2,a3])){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_flower_color_change(id:u32,before:i32,after:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.change_inventory_flower_color(id,before,after)){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+
+/// Read-only palette payload: count + (document ID, 12 original f32 bit words).
+#[no_mangle]
+pub extern "C" fn hkia_inventory_palettes_snapshot()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let mut b=vec![0;4];let mut count=0u32;
+  for (id,colors) in editor.inventory_palettes(){
+   if count==1_000_000{return 1}
+   count+=1;b.extend(id.to_le_bytes());
+   for color in colors{for bits in color{b.extend(bits.to_le_bytes());}}
+  }
+  b[..4].copy_from_slice(&count.to_le_bytes());a.reply=b;0
+ })
+}
+
 /// Last source-defined child completion + absent parent creation in one
 /// fully validated Rust transaction, including one-step Undo/Redo.
 #[no_mangle]

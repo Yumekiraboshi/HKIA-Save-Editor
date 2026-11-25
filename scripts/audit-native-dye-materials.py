@@ -29,7 +29,7 @@ def aligned(n):
     return (n + 3) & ~3
 
 
-def serialized_objects(blob):
+def serialized_objects(blob, classes=(21, 28)):
     """Bounded Unity 2022 SerializedFile v22 object table; exact i64 PathIDs."""
     if len(blob) < 48 or auditor.integer(blob, 8) != 22:
         raise auditor.InvalidAsset("SerializedFile v22 required")
@@ -74,7 +74,7 @@ def serialized_objects(blob):
         pos += 24
         if index < 0 or index >= len(types) or start < 0 or offset + start + size > len(blob):
             raise auditor.InvalidAsset("invalid serialized object")
-        if types[index] in (21, 28):
+        if types[index] in classes:
             yield types[index], str(path_id), blob[offset+start:offset+start+size], endian
 
 

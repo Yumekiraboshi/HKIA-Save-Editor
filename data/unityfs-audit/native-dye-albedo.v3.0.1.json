@@ -1,0 +1,44 @@
+{
+  "schema": "HKIA.NativeDyeAlbedoEvidence.1",
+  "version": "3.0.1",
+  "sourceSha256": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0",
+  "shaderObjectSha256": "a1078dfbdb6da8c3e2ce40106135fd59c8a0c1749e885dd98c45a4aa094125f3",
+  "textureRegisters": {
+    "_BaseMap": 0,
+    "_BumpMap": 1,
+    "_ComboMap": 2,
+    "_PatternMap": 3
+  },
+  "paletteConstantRegisters": {
+    "_PaletteColor1": 1,
+    "_PaletteColor2": 2,
+    "_PaletteColor3": 3,
+    "_PaletteColor4": 4,
+    "_PaletteColor5": 5
+  },
+  "programBlockSha256": {
+    "3969d0eb0643d80f482bf078254cc20f1ee793f523d928bd0994989f219a1e51": 15,
+    "0950e94c9a9e326ff7ad3f486bb5cfcfb29ae698ed780051d0b4dd02e35706ab": 15
+  },
+  "sampleComparison": {
+    "synthetic": 3000,
+    "maximumAbsoluteError": 0
+  },
+  "plaidDress": {
+    "itemId": 1702010655,
+    "itemKey": "item_c_dyeable_plaiddress_redplaid",
+    "definitionPathId": "-8696523629232536085",
+    "materialPathId": "-8965149479766376611",
+    "textureBaseMipSha256": {
+      "_BaseMap": "055f5dd8993f7f4db4ec5bf9a2e414530fff3b467d189f7be6a0f6be83f7cc05",
+      "_PatternMap": "1c2499e834240ce59e2cdc602e95cabe9074ba2c6dbe008ef8db420e5c3b562a",
+      "_ComboMap": "bd2a0ecd3914f0154f63098a6c551d8fc08bda31052510712b7d1d495f0e97a9"
+    },
+    "sampleComparison": {
+      "decodedTextureSamples": 512,
+      "maximumAbsoluteError": 0
+    },
+    "nativeIconRenderVerified": false
+  },
+  "nativeIconRenderVerified": false
+}

@@ -1,0 +1,18 @@
+# HKIA wand base layer — source-derived dynamic art (v3.0.1)
+
+The nine flagged wand definition mask GUIDs are not in the global or flower atlas. The Steam Addressables binary catalog locates each in a respective `l_shared_wand_*` bundle. The original AssetBundle container entries resolve the precise standalone Sprite PathIDs and the SpriteRenderData texture PPtrs resolve each exact 256×256 DXT5 Texture2D. No names are used to infer texture identity. Sprite render settings 64, non-packed, zero border, no rotation, downscale 1; textureRect is fractional and differs per shape. The native base Sprite comes from definitions/GlobalUIAtlas, using the same guarded, original-texel extraction as the verified flower and chef pipelines. All source object IDs, bundle hashes and source rectangles are recorded in the manifest.
+
+Unlike flower and chef masks, all nine wand mask textures use `TextureColorSpace.Linear=0` (the actual v3.0.1 UnityEngine enum; sRGB=1), FilterMode 2 with one mip, Clamp U/V. Sampling is bilinear with no sRGB decoding of these mask values. The base remains sRGB. The common rasterizer accepts the source mask color space; its existing default sRGB path is preserved. Mask RGB and base RGB/alpha planes are stored in lossless WebP with exact pixel readback. Additional original assets: 232,378 + 64,520 bytes; manifest 22,904 bytes. No completed color combinations are generated or published.
+
+## Native colors
+
+Switch main SHA-256 64bd5fb69239f57eb0578a1897a45a3c6f5e187480903f83df503b46bf827bfb:
+- WandDynamicColorSource.Refresh 0x2744590–0x274499C, SHA-256 3b3bb95623246981a388d3e66f0d047ddcc681e7ee46b537c2341708f46bf4ce. Initializes three white tints, resolves the magic characteristic from WandUniqueData +0x20 and writes Tint0 from WandDisplaySettings.GetColor. Resolves fleck characteristic from +0x24 and writes Tint1 from FleckDisplay.Color. Tint2 remains white. Reads the item definition mask via interface slot 8. No read of StyleCharacteristicId in this method.
+- WandDisplaySettings.GetColor 0x313BFB0–0x313C070, SHA-256 4c662ce19309823f350c7632b2b786a64ac7f3fda5370a3fc3326f905dfb90d7. Looks up MagicDisplay.Color (+0x50), returns white when absent.
+- Steam definitions WandDisplaySettings PathID 8452751165961709451, 6116 bytes. Serialized dictionary contains 13 keys (104–115,132), 13 MagicDisplay records; all record boundaries and eight remaining default AssetReferences walked to exact end. Colors preserve float32 values. CharacteristicsDatabase contains FleckCharacteristicToMaterialReferenceMapping with keys 127,126,125 and exact Material GUIDs and RGBA values. The manifest pins object hashes.
+
+The base layer is implemented in the shared renderer and cache. Tests cover all 39 explicit magic/fleck combinations and render all nine base layers in Chromium. Unknown/unmapped inputs are withheld, rather than treating arbitrary IDs as valid. The native missing-characteristic white fallback is not yet enabled in this conservative display slice.
+
+## Remaining composition boundary
+
+WandUniqueData contains SourceItemId, nested SourceItemUniqueData, MagicCharacteristicId, FleckCharacteristicId, StyleCharacteristicId. It exposes TryGetSubIcon; WandItemDetails exposes SubIconDetails (Scale, OffsetPercent, Rotation). SubIconData.ApplyToRectTransform and ComputeContainSize implement overlay geometry. The original base layer is not necessarily the final icon. Source-item sub-icon selection, exact transform and blend, nested appearance and the typed Rust snapshot still need verification and integration. Do not expose this base-only layer as an exact full inventory icon. No changes to save parsing, writer, eligibility or UI cards in this PR.

@@ -1,6 +1,10 @@
 # Game-native dyeable item icon pipeline
 
-## Correct target
+## Current policy (Owner decision 2026-11-25)
+
+Use a finished original sprite for the exact appearance whenever it exists. Every appearance without a completed original must instead be generated on demand in the browser from verified native assets and rendering rules. No production batch of reconstructed combinations. Source extraction, compression, and offline verification are permitted. The batch exporter and approximation sections below are historical implementation notes, not the target policy. The 5,383 dye Item IDs already have original images; no new clothing reconstruction is required for them.
+
+## Historical target
 
 HKIA Save Editor uses the **original game's item UiIcon**, with the original
 96×96 pixel shape, camera angle, pixels, and transparency. It does **not**
@@ -659,3 +663,10 @@ trim and accessory region segmentation remains a guarded **2D
 approximation**, *not* a recovered Unity material shader mask or
 game-rendered 3D model. The pipeline does not add fake rings, overlays,
 third-party images, invented item IDs or unsupported channel-3 pixels.
+
+
+## Current production source path: dynamic inventory sprites (Steam 3.0.1)
+
+The game includes 11 `dynamicinventory_icons_01` through `11` bundles, containing 5,345 named 256×256 Sprite/Texture2D pairs. 5,344 correspond to dye Item IDs; 39 of the 5,383 dye IDs are outside these bundles and already exist in the named original sprite index. The existing 362 originals overlap 323 dynamic IDs. The 5,021 additional extracted images therefore complete the 5,383-ID original-art coverage. `scripts/extract-dynamic-colorways.py` checks pinned bundle hashes, definition ID, exact sprite name and local texture PPtr, decodes original BC3 data, and performs only the existing 84px resize and 6px transparent padding to produce lossless 96px WebP. No palette fitting, shader simulation, new pose or recoloring is involved. Source paths, CABs, 64-bit PPtrs, source texture and image hashes are recorded in `data/dynamic-colorway-packs/index*.json`; only derived image packs and metadata are committed. The build validates complete non-overlapping Item ID coverage and unpacks the 35 bounded packs into `public/dynamic-colorways/`. Collection, Inventory and timestamp dialogs use the shared original-image loader. A completed original is selected by Item ID before a registered reconstruction, without requiring the shared atlas cell or dye palette to load; mutable indexes are revalidated rather than force-cached. Legacy approximations remain only as fallback if source assets fail to load and as historical build diagnostics. Named source images are not proof of the game's exact runtime lookup or the screen's final sampling. Future missing artwork must be recovered from the original source mechanism, not estimated by fitting to reference images; comparisons are verification only.
+
+To exercise the actual published Pages URL, use the existing Chromium smoke with `node scripts/browser-history-smoke.mjs --pages` after preparing the checkout's original-colorway assets and the usual Playwright/Chrome dependencies. The test uses a synthetic save and compares displayed Item IDs and source hashes against that checkout. It does not upload a save or replace the required deployment checks. Ordinary CI continues to test the local build artifact.
