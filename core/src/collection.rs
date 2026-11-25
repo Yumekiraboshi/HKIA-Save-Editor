@@ -517,6 +517,7 @@ impl Editor {
    !crate::achievement_keys::known_v301(guid)||!achievement::valid(value)||
    self.achievement_value(guid).is_some()||value.complete!=value.completed.is_some()||
    self.slot.index.documents+self.achievement_created.len()>=1_000_000{return Err(Error::Schema)}
+  crate::document_membership::allocate_ids(&self.slot.index,self.achievement_created.len()+1)?;
   let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   self.achievement_created.insert(guid,value);
   self.undo.push(Change::AchievementCreated{guid,before:None,after:Some(value)});
@@ -534,6 +535,7 @@ impl Editor {
    !achievement::valid(expected)||!achievement::valid(next)||expected==next||
    self.achievement_value(parent)!=Some(expected)||
    self.slot.index.documents+self.achievement_created.len()>=1_000_000{return Err(Error::Schema)}
+  crate::document_membership::allocate_ids(&self.slot.index,self.achievement_created.len()+1)?;
   let model=self.slot.index.achievements.iter().find(|m|m.guid==parent).ok_or(Error::Schema)?;
   let original=achievement::value(model)?;
   let before=self.achievement_changes.get(&parent).copied();
@@ -559,6 +561,7 @@ impl Editor {
    !achievement::valid(parent_next)||!parent_next.complete||
    self.slot.index.documents+self.achievement_created.len()+usize::from(expected.is_none())+1>1_000_000
    {return Err(Error::Schema)}
+  crate::document_membership::allocate_ids(&self.slot.index,self.achievement_created.len()+usize::from(expected.is_none())+1)?;
   let total=crate::achievement_keys::parent_size_v301(parent).ok_or(Error::Schema)?;
   if parent_next.current!=total as f32{return Err(Error::Schema)}
   let mut seen=0usize;
@@ -888,12 +891,9 @@ impl Editor {
    let last=index.achievements.last().ok_or(Error::Schema)?.id;
    let mut added:Vec<_>=self.achievement_created.iter().collect();
    added.sort_by_key(|(&guid,_)|guid);
-   let max_id=index.achievements.iter().map(|x|x.id).max().ok_or(Error::Schema)?;
-   let max_new=max_id.checked_add(u32::try_from(added.len()).map_err(|_|Error::Overflow)?).ok_or(Error::Overflow)?;
-   if max_new>i32::MAX as u32{return Err(Error::Schema)}
+   let ids=crate::document_membership::allocate_ids(&index,added.len())?;
    let mut records=Vec::with_capacity(added.len());
-   for (i,(&guid,&value)) in added.into_iter().enumerate(){
-    let id=max_id+(i as u32)+1;
+   for ((&guid,&value),id) in added.into_iter().zip(ids){
     records.push(((16,id),encode_achievement_document(id,guid,value)?));
    }
    let (result,created_at)=crate::document_membership::rewrite(

@@ -116,6 +116,8 @@ pub(crate) struct DocumentSpan{pub key:(i32,u32),pub bytes:Range<usize>}
 #[derive(Debug,Default)]
 pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievements:Vec<Model>,pub counters:Vec<Model>,pub collections:Vec<CollectionEntry>,pub deprecated_count:usize,pub dictionary_entries:usize,pub collection_map:Option<Range<usize>>,pub root_documents_span:Option<Range<usize>>,pub celebrations:Vec<CelebrationSpan>,pub inventory:Vec<InventoryRow>,pub inventory_item_refs:HashSet<(i32,i32)>,pub inventory_legacy_uid_refs:HashSet<i32>,pub inventory_item_refs_incomplete:bool,pub deprecated:Vec<DeprecatedEntry>,pub deprecated_map:Option<Range<usize>>,pub collection_version:Option<CollectionVersion>,
  pub(crate) document_spans:Vec<DocumentSpan>,
+ /// DbRoot.Key(1), native shared document allocation counter and exact token span.
+ pub root_next_id:Option<(i32,Range<usize>)>,
  /// Source rows are derived only inside this existing NativeIndex Walk;
  /// completeness means just 15 schema fields, NEVER ownership or local rights.
  pub home_sources:Vec<HomeSourceRow>,
@@ -373,7 +375,7 @@ impl<'a> Walk<'a>{
         });
        }
       }
-      if name==ROOT{if n!=3||!matches!(&fields[2].0,Value::Count(x) if *x>0 && *x==self.index.documents){return Err(Error::Schema)}self.index.root_documents_span=Some(fields[2].1.clone());}
+      if name==ROOT{if n!=3||!matches!(&fields[2].0,Value::Count(x) if *x>0 && *x==self.index.documents){return Err(Error::Schema)}self.index.root_next_id=Some((i32::try_from(fields[1].0.int()?).map_err(|_|Error::Schema)?,fields[1].1.clone()));self.index.root_documents_span=Some(fields[2].1.clone());}
       if name==SHOP{if n!=3{return Err(Error::Schema)}return Ok(Value::Key(Key::Shop(fields[0].0.guid()?,fields[1].0.guid()?,fields[2].0.int()?)))}
       if short=="CollectionVersion"{if ctx!=Some((DOC,18))||n!=3||self.version_seen{return Err(Error::Schema)}if !matches!(&fields[2].0,Value::Str(v) if *v==self.version.as_str()){return Err(Error::Version)}self.version_seen=true;self.index.collection_version=Some(CollectionVersion{id:u32::try_from(fields[0].0.int()?).map_err(|_|Error::Schema)?,number:i32::try_from(fields[1].0.int()?).map_err(|_|Error::Schema)?,span:fields[1].1.clone()});}
       if short=="GameCollectionsTraitModel"{if ctx!=Some((TRAIT,39))||n!=2||self.collection_seen{return Err(Error::Schema)}self.collection_seen=true;self.index.deprecated_count=match &fields[0].0{Value::Count(x)=>*x,_=>return Err(Error::Schema)};if !matches!(&fields[1].0,Value::Count(_)){return Err(Error::Schema)}}

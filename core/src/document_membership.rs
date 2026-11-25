@@ -13,6 +13,19 @@ fn array_header(n:usize,out:&mut Vec<u8>)->Result<(),Error>{
  else{out.push(0xdd);out.extend((n as u32).to_be_bytes());}
  Ok(())
 }
+/// Switch 3.0.1 Insert<T>/Upsert<T> allocate an Id==0 entity by
+/// preincrementing DbRoot.NextId and assigning the resulting value.
+/// Never guess from the largest ID of one document type. Reject a candidate
+/// collision with any original document rather than advancing by inference.
+pub(crate) fn allocate_ids(index:&NativeIndex,count:usize)->Result<Vec<u32>,Error>{
+ if count==0||index.documents.checked_add(count).is_none_or(|n|n>MAX_DOCUMENTS){return Err(Error::Budget)}
+ let (next_id,_)=index.root_next_id.as_ref().ok_or(Error::Schema)?;
+ if *next_id<0{return Err(Error::Schema)}
+ let last=next_id.checked_add(i32::try_from(count).map_err(|_|Error::Overflow)?).ok_or(Error::Overflow)?;
+ let first=next_id.checked_add(1).ok_or(Error::Overflow)?;
+ if index.document_spans.iter().any(|doc|(first as u32..=last as u32).contains(&doc.key.1)){return Err(Error::Duplicate)}
+ Ok((first as u32..=last as u32).collect())
+}
 /// The caller must authorize every domain edit and construct every new
 /// record in Rust. Only complete previously schema-walked document spans
 /// can be removed; insertion is at an exact existing identity boundary.
@@ -28,6 +41,15 @@ pub(crate) fn rewrite(raw:&[u8],version:Version,index:&NativeIndex,remove:&[Key]
  if removed.is_empty()&&add_count==0{return Err(Error::Schema)}
  if insert.is_some_and(|(anchor,rows)|rows.is_empty()||removed.contains(&anchor)){return Err(Error::Schema)}
  let next_count=count.checked_sub(removed.len()).and_then(|n|n.checked_add(add_count)).ok_or(Error::Budget)?;
+ let (old_next_id,old_next_span)=index.root_next_id.as_ref().ok_or(Error::Schema)?;
+ if old_next_span.end>root.start||old_next_span.start>=old_next_span.end{return Err(Error::Schema)}
+ let mut next_cursor=Cursor::new(raw.get(old_next_span.clone()).ok_or(Error::Schema)?);
+ if next_cursor.int(i32::MIN as i128,i32::MAX as i128)?!=i128::from(*old_next_id)||next_cursor.pos!=old_next_span.len(){return Err(Error::Schema)}
+ let next_id=if let Some((_,rows))=insert{
+  let ids=allocate_ids(index,rows.len())?;
+  if !rows.iter().zip(&ids).all(|(((_,id),_),allocated)|id==allocated){return Err(Error::Schema)}
+  *ids.last().ok_or(Error::Schema)? as i32
+ }else{*old_next_id};
  let mut replacement=Vec::new();array_header(next_count,&mut replacement)?;
  let mut expected=Vec::with_capacity(next_count);
  let mut keys=HashSet::new();
@@ -62,14 +84,24 @@ pub(crate) fn rewrite(raw:&[u8],version:Version,index:&NativeIndex,remove:&[Key]
  // Do not replace a removed record with a different payload under its old
  // identity. Such edits must use the domain CAS writer and exact field spans.
  if let Some((_,rows))=insert{if rows.iter().any(|(key,_)|all_keys.contains(key)){return Err(Error::Duplicate)}}
- let (out,first)=splice(raw,vec![(root.clone(),replacement)])?;
+ let mut patches=vec![(root.clone(),replacement)];
+ if add_count>0{
+  let mut encoded=vec![0xd2];encoded.extend(next_id.to_be_bytes());
+  patches.push((old_next_span.clone(),encoded));
+ }
+ let (out,first)=splice(raw,patches)?;
  let checked=index_native(&out,version)?;
  if checked.documents!=next_count||checked.document_spans.len()!=expected.len(){return Err(Error::Schema)}
  for (actual,(key,bytes)) in checked.document_spans.iter().zip(expected){
   if actual.key!=key||out.get(actual.bytes.clone())!=Some(bytes){return Err(Error::Schema)}
  }
  let new_root=checked.root_documents_span.ok_or(Error::Schema)?;
- if out[..new_root.start]!=raw[..root.start]||out[new_root.end..]!=raw[root.end..]{return Err(Error::Schema)}
+ let (actual_next_id,next_span)=checked.root_next_id.ok_or(Error::Schema)?;
+ if actual_next_id!=next_id||next_span.end>new_root.start||
+  out[..next_span.start]!=raw[..old_next_span.start]||
+  out[next_span.end..new_root.start]!=raw[old_next_span.end..root.start]||
+  out[new_root.end..]!=raw[root.end..]||
+  (add_count==0&&out[next_span]!=raw[old_next_span.clone()]){return Err(Error::Schema)}
  Ok((out,first))
 }
 
@@ -90,20 +122,27 @@ mod tests{
    doc(32,vec![vec![3],guid([0,0,0,3]),vec![0],arr(vec![doc(39,vec![vec![0x80],vec![0x80]])])])
   ];
   for i in 0..n{rows.push(item((i+4) as u32,315822+i as u32,6))}
-  let mut root=vec![0x93,0,4];array_header(rows.len(),&mut root).unwrap();for row in rows{root.extend(row)}root
+  let mut root=vec![0x93,0,20];array_header(rows.len(),&mut root).unwrap();for row in rows{root.extend(row)}root
  }
  #[test]
  fn root_membership_preserves_exact_records_and_crosses_array_header_boundary(){
   let raw=payload(11);let old=index_native(&raw,Version::V301).unwrap();
   assert_eq!(old.documents,15);
-  let add=vec![((1,50),item(50,517031,8))];
+  assert_eq!(allocate_ids(&old,2).unwrap(),vec![21,22]);
+  let add=vec![((1,21),item(21,517031,8))];
   let (next,_)=rewrite(&raw,Version::V301,&old,&[],Some(((1,14),&add))).unwrap();
   let read=index_native(&next,Version::V301).unwrap();
-  assert_eq!(read.documents,16);assert_eq!(next[3],0xdc);
-  assert_eq!(read.inventory.last().unwrap().id,50);
+  assert_eq!(read.documents,16);assert_eq!(next[read.root_documents_span.as_ref().unwrap().start],0xdc);
+  assert_eq!(read.root_next_id.as_ref().unwrap().0,21);
+  assert_eq!(read.inventory.last().unwrap().id,21);
   assert_eq!(read.inventory.last().unwrap().quantity,Some(8));
-  let (restored,_)=rewrite(&next,Version::V301,&read,&[(1,50)],None).unwrap();
-  assert_eq!(restored,raw);
+  let (restored,_)=rewrite(&next,Version::V301,&read,&[(1,21)],None).unwrap();
+  let reread=index_native(&restored,Version::V301).unwrap();
+  assert_eq!(reread.root_next_id.as_ref().unwrap().0,21,"deletion never rewinds allocation counter");
+  let old_span=old.root_documents_span.as_ref().unwrap();
+  let restored_span=reread.root_documents_span.as_ref().unwrap();
+  assert_eq!(&restored[restored_span.clone()],&raw[old_span.clone()]);
+  assert_eq!(allocate_ids(&reread,1).unwrap(),vec![22]);
   // Same numeric ID in a different tag remains untouched.
   let (deleted,_)=rewrite(&raw,Version::V301,&old,&[(1,4)],None).unwrap();
   let checked=index_native(&deleted,Version::V301).unwrap();
@@ -113,7 +152,7 @@ mod tests{
  #[test]
  fn rejects_missing_duplicate_stale_or_mismatched_membership(){
   let raw=payload(2);let index=index_native(&raw,Version::V301).unwrap();
-  let add=vec![((1,9),item(9,517031,8))];
+  let add=vec![((1,21),item(21,517031,8))];
   assert!(rewrite(&raw,Version::V301,&index,&[],None).is_err());
   assert!(rewrite(&raw,Version::V301,&index,&[(1,99)],None).is_err());
   assert!(rewrite(&raw,Version::V301,&index,&[(1,4),(1,4)],None).is_err());
@@ -122,8 +161,14 @@ mod tests{
   let duplicate=vec![((1,4),item(4,517031,8))];
   assert!(rewrite(&raw,Version::V301,&index,&[],Some(((1,5),&duplicate))).is_err());
   assert!(rewrite(&raw,Version::V301,&index,&[(1,4)],Some(((1,5),&duplicate))).is_err());
-  let wrong=vec![((1,10),item(9,517031,8))];
+  let wrong=vec![((1,21),item(22,517031,8))];
   assert!(rewrite(&raw,Version::V301,&index,&[],Some(((1,5),&wrong))).is_err());
   assert!(rewrite(&raw[..raw.len()-1],Version::V301,&index,&[(1,4)],None).is_err());
+  let mut collision=raw.clone();collision[2]=3;
+  let idx=index_native(&collision,Version::V301).unwrap();
+  assert_eq!(allocate_ids(&idx,1),Err(Error::Duplicate));
+  let mut overflow=raw.clone();overflow.splice(2..3,[0xd2,0x7f,0xff,0xff,0xff]);
+  let idx=index_native(&overflow,Version::V301).unwrap();
+  assert_eq!(allocate_ids(&idx,1),Err(Error::Overflow));
  }
 }
