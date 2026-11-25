@@ -1,15 +1,15 @@
 import {resolveNativeRugMaterial,type RugNativeSources} from './furniture-rug-source';
 import {uploadNativeGeometry} from './native-furniture-mesh';
 import {uploadNativeTexture,type Bc1Mode} from './native-texture-upload';
-import {uploadNativeCube,type NativeCubeSource,type NativeCubeOrientation} from './native-cube-upload';
-import {createFurnitureForwardRenderer,type FurnitureForwardScene} from './furniture-forwardlit-gpu';
+import {uploadNativeCube,validateNativeCubeOrientation,type NativeCubeSource,type NativeCubeOrientation} from './native-cube-upload';
+import {createFurnitureForwardRenderer,validateFurnitureForwardInputs,type FurnitureForwardScene} from './furniture-forwardlit-gpu';
 /** Only a diagnostic path until native runtime shader variant, camera/light
  * selection, cube axes, color conversion and postprocessing are established.
  * The caller must supply explicit evaluated scene and cube orientations.
  * No URL, remote request, native save or static icon is produced here. */
 export type RugCubeRequest={source:NativeCubeSource;orientation:NativeCubeOrientation;bc1Mode:Bc1Mode};
 export type RugDrawRequest={
- itemId:number;materialIndex:number;scene:FurnitureForwardScene;
+ itemId:number;materialIndex:number;scene:Omit<FurnitureForwardScene,'reflectionStrength'>;
  patternBc1Mode:Bc1Mode;reflectionPrimary:RugCubeRequest;reflectionSecondary:RugCubeRequest;
 };
 export type RugPayload={kind:'geometry'|'texture'|'cube';sha256:string;bytes:number};
@@ -22,6 +22,9 @@ export async function drawNativeRugDiagnostic(gl:WebGL2RenderingContext,sources:
  const m=selected.geometry.meshes[selected.meshId];
  const required=[0,1,2,4,5];
  if(required.some(i=>!m.channels[i]||!(m.channels[i][3]&15))||Object.keys(selected.geometry.meshes).length!==1)throw Error('RUG_DRAW_MESH_CHANNELS');
+ const scene={...request.scene,reflectionStrength:selected.reflectionStrength};
+ validateFurnitureForwardInputs(scene,selected.material);
+ for(const c of [request.reflectionPrimary,request.reflectionSecondary])validateNativeCubeOrientation(c.source,c.orientation);
  const owned:WebGLTexture[]=[];
  let geometry:Awaited<ReturnType<typeof uploadNativeGeometry>>|undefined;
  let renderer:ReturnType<typeof createFurnitureForwardRenderer>|undefined;
@@ -45,7 +48,7 @@ export async function drawNativeRugDiagnostic(gl:WebGL2RenderingContext,sources:
   const textures={baseMap:await texture('baseMap'),patternMap:await texture('patternMap'),comboMap:await texture('comboMap'),normalMap:await texture('normalMap'),reflectionPrimary:await cube(request.reflectionPrimary),reflectionSecondary:await cube(request.reflectionSecondary)};
   renderer=createFurnitureForwardRenderer(gl);
   const mesh=geometry.meshes.get(selected.meshId);if(!mesh)throw Error('RUG_DRAW_MESH_MISSING');
-  renderer.draw(mesh,textures,request.scene,selected.material);
+  renderer.draw(mesh,textures,scene,selected.material);
   return {itemId:selected.itemId,materialIndex:selected.materialIndex,materialGuid:selected.materialGuid,renderFidelity:'unverified' as const};
  }finally{
   // This is an isolated diagnostic context, not a state-preserving compositor.
