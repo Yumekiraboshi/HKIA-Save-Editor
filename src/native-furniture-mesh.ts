@@ -1,0 +1,79 @@
+/** Original interleaved static mesh transport for display-only WebGL2 previews.
+ * No save rules, substitute UVs, or inferred geometry. */
+export type MeshRange=readonly [offset:number,bytes:number,sha256:string];
+export type NativeMeshSource={vertexCount:number;indexCount:number;stride:number;channels:readonly (readonly number[])[];vertexBytes:MeshRange;indexBytes:MeshRange;bounds:readonly (readonly number[])[]};
+export type NativeGeometrySource={geometryBytes:number;geometrySha256:string;meshes:Readonly<Record<string,NativeMeshSource>>};
+const int=(v:number,a:number,b:number)=>Number.isInteger(v)&&v>=a&&v<=b;
+const hex=/^[a-f0-9]{64}$/;
+const fail=(message:string):never=>{throw Error('NATIVE_MESH_'+message);};
+const hash=async(b:ArrayBuffer)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b)),n=>n.toString(16).padStart(2,'0')).join('');
+export function validateNativeGeometryLayout(source:NativeGeometrySource){
+ if(!int(source.geometryBytes,1,64*1024*1024)||!hex.test(source.geometrySha256))fail('HEADER');
+ const meshes=Object.entries(source.meshes);if(!int(meshes.length,1,512))fail('COUNT');
+ const ranges:MeshRange[]=[];
+ for(const [pid,m] of meshes){
+  if(!/^-?[0-9]+$/.test(pid)||!int(m.vertexCount,1,65536)||!int(m.indexCount,3,6*1024*1024)||m.indexCount%3||!int(m.stride,12,64)||m.stride%4||m.channels.length!==14)fail('LAYOUT');
+  if(m.bounds.length!==1||m.bounds[0].length!==6||!m.bounds[0].every(Number.isFinite)||m.bounds[0].slice(3).some(x=>x<0))fail('BOUNDS');
+  const active:Array<[number,number]>=[];
+  for(const [i,c] of m.channels.entries()){
+   if(c.length!==4||!c.every(x=>int(x,0,255)))fail('CHANNEL');
+   const [stream,offset,format,rawDim]=c,dim=rawDim&15;
+   if(!dim)continue;
+   if(stream!==0||!int(format,0,2)||dim>4||!(rawDim===dim||(i===1&&rawDim===52)))fail('CHANNEL');
+   const size=[4,2,1][format];if(offset%size||offset+dim*size>m.stride)fail('CHANNEL_RANGE');
+   active.push([offset,offset+dim*size]);
+  }
+  if(m.channels[0].join(',')!=='0,0,0,3'||!active.length||Math.max(...active.map(x=>x[1]))!==m.stride)fail('POSITION');
+  active.sort((a,b)=>a[0]-b[0]);for(let i=1;i<active.length;i++)if(active[i-1][1]>active[i][0])fail('CHANNEL_OVERLAP');
+  for(const [r,expected] of [[m.vertexBytes,m.vertexCount*m.stride],[m.indexBytes,m.indexCount*2]] as const){
+   if(r.length!==3||!int(r[0],0,source.geometryBytes)||r[0]%4||r[1]!==expected||r[0]+r[1]>source.geometryBytes||!hex.test(r[2]))fail('RANGE');ranges.push(r);
+  }
+ }
+ ranges.sort((a,b)=>a[0]-b[0]);let end=0;for(const r of ranges){if(r[0]!==Math.ceil(end/4)*4)fail('RANGE_COVERAGE');end=r[0]+r[1];}if(end!==source.geometryBytes)fail('RANGE_COVERAGE');
+}
+/** Validates all original bytes, per-stream hashes, index bounds and every
+ * float/half-float attribute before permitting GPU upload. */
+export async function verifyNativeGeometry(source:NativeGeometrySource,bytes:ArrayBuffer){
+ validateNativeGeometryLayout(source);
+ if(bytes.byteLength!==source.geometryBytes||await hash(bytes)!==source.geometrySha256)fail('HASH');
+ const view=new DataView(bytes);
+ for(const m of Object.values(source.meshes)){
+  for(const [off,len,digest] of [m.vertexBytes,m.indexBytes])if(await hash(bytes.slice(off,off+len))!==digest)fail('STREAM_HASH');
+  for(let i=0;i<m.indexCount;i++)if(view.getUint16(m.indexBytes[0]+2*i,true)>=m.vertexCount)fail('INDEX');
+  for(let i=0;i<m.vertexCount;i++)for(const [,off,fmt,rawDim] of m.channels){
+   const dim=rawDim&15;for(let c=0;c<dim;c++){
+    const p=m.vertexBytes[0]+i*m.stride+off+c*[4,2,1][fmt];
+    if(fmt===0&&!Number.isFinite(view.getFloat32(p,true))||fmt===1&&(view.getUint16(p,true)&0x7c00)===0x7c00)fail('NONFINITE');
+   }
+  }
+ }
+}
+export type MeshAttributeLocations=Readonly<Record<number,number>>;
+export type UploadedNativeMesh={vao:WebGLVertexArrayObject;indexCount:number};
+/** Caller maps verified shader semantic channels to attribute locations.
+ * Missing UV1 etc. must not be silently replaced with UV0. */
+export async function uploadNativeGeometry(gl:WebGL2RenderingContext,source:NativeGeometrySource,bytes:ArrayBuffer,locations:Readonly<Record<string,MeshAttributeLocations>>):Promise<{meshes:ReadonlyMap<string,UploadedNativeMesh>;dispose:()=>void}>{
+ await verifyNativeGeometry(source,bytes);
+ const max=gl.getParameter(gl.MAX_VERTEX_ATTRIBS) as number;
+ if(Object.keys(locations).length!==Object.keys(source.meshes).length)fail('ATTRIBUTES');
+ for(const [pid,m] of Object.entries(source.meshes)){
+  const loc=locations[pid];if(!loc||loc[0]===undefined)fail('ATTRIBUTES');
+  const used=new Set<number>();for(const [channel,location] of Object.entries(loc)){const i=Number(channel);if(!int(i,0,13)||!(m.channels[i][3]&15)||!int(location,0,max-1)||used.has(location))fail('ATTRIBUTES');used.add(location);}
+ }
+ if(gl.getError()!==gl.NO_ERROR)fail('GPU_DIRTY');
+ const oldVAO=gl.getParameter(gl.VERTEX_ARRAY_BINDING) as WebGLVertexArrayObject|null,oldBuffer=gl.getParameter(gl.ARRAY_BUFFER_BINDING) as WebGLBuffer|null;
+ const vaos:WebGLVertexArrayObject[]=[],buffers:WebGLBuffer[]=[];const uploaded=new Map<string,UploadedNativeMesh>();let disposed=false;
+ const dispose=()=>{if(disposed)return;disposed=true;for(const v of vaos)gl.deleteVertexArray(v);for(const b of buffers)gl.deleteBuffer(b);uploaded.clear();};
+ try{
+  for(const [pid,m] of Object.entries(source.meshes)){
+   const vao=gl.createVertexArray();if(!vao)throw Error('NATIVE_MESH_GPU_CREATE');vaos.push(vao);gl.bindVertexArray(vao);
+   for(const [target,r] of [[gl.ARRAY_BUFFER,m.vertexBytes],[gl.ELEMENT_ARRAY_BUFFER,m.indexBytes]] as const){
+    const b=gl.createBuffer();if(!b)throw Error('NATIVE_MESH_GPU_CREATE');buffers.push(b);gl.bindBuffer(target,b);gl.bufferData(target,new Uint8Array(bytes,r[0],r[1]),gl.STATIC_DRAW);
+   }
+   for(const [channel,location] of Object.entries(locations[pid])){const [,off,fmt,rawDim]=m.channels[Number(channel)];gl.enableVertexAttribArray(location);gl.vertexAttribPointer(location,rawDim&15,[gl.FLOAT,gl.HALF_FLOAT,gl.UNSIGNED_BYTE][fmt],fmt===2,m.stride,off);}
+   if(gl.getError()!==gl.NO_ERROR)fail('GPU_UPLOAD');uploaded.set(pid,{vao,indexCount:m.indexCount});
+  }
+  return {meshes:uploaded,dispose};
+ }catch(e){dispose();throw e;}
+ finally{gl.bindVertexArray(oldVAO);gl.bindBuffer(gl.ARRAY_BUFFER,oldBuffer);}
+}
