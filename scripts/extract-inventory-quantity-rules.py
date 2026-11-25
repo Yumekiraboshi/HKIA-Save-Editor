@@ -11,6 +11,7 @@ SOURCE='ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0'
 IDS='8a55e11da2b28b30bb212424159657d3d9e7b47baf6a21ed94fd8615d1ef4702'
 FLAGS='07535a7d093ce3abff44857ecfd9fcb1fed54b365e7524c8a10dff10d8c2cb64'
 GATHERED='8cb0a2929cf109bbc768239f5bcede17ecdd97e913db861f83349a8fd7c7e60d'
+FOOD_BAIT='abaf644ea95b721a2d21109647304fda13366723ba3ac425903cededb1fde39a'
 
 def require(ok,message):
     if not ok: raise ValueError(message)
@@ -51,7 +52,7 @@ def extract(source):
         types.append((cls,tt))
     require(types[3][0]==114,'item type mismatch')
     tt=types[3][1]
-    require(tt[231][2]=='ItemProperties','unexpected item tree')
+    require(tt[124][2]=='ItemProperties' and tt[133][2]=='CelebrationPeriodicity' and tt[227][2]=='CollectionEventYear' and tt[231][2]=='Year','unexpected item tree')
     end=[]
     for i,t in enumerate(tt):
         j=i+1
@@ -79,7 +80,7 @@ def extract(source):
         if flags&0x4000: p=align(p)
         return value,p
     n=s.unpack_from('<I',b,p)[0];p=align(p+4)
-    rows=[];caps=[];gathered=[]
+    rows=[];caps=[];gathered=[];food_bait=[]
     for _ in range(n):
         _,start,size,i=s.unpack_from('<qqIi',b,p);p+=24
         if i!=3: continue
@@ -106,6 +107,13 @@ def extract(source):
             and d['CollectionEventYear']=='0'*32 and d['CelebrationPeriodicity']==0
             and d['Rarity'] in (2,3,4) and cat in (268451840,268435464)):
             gathered.append((id,cat))
+        # FirstTime controls celebration display, not the ownership flag.
+        # Explicit food composite and fishing bait only; exclude Quest rarity.
+        if (d['ItemOwnership']==18 and stack and not unique and not custom
+            and not d['ReleaseVersion'] and d['RequiredDlcContent']=='0'*32
+            and d['CollectionEventYear']=='0'*32 and d['CelebrationPeriodicity']==1
+            and d['Rarity'] in (2,3,4) and cat in (269557760,8192)):
+            food_bait.append((id,cat))
     rows.sort();caps.sort()
     require(len(rows)==12163 and len({i for i,_ in rows})==12163 and rows[0][0]>0,'item IDs')
     require(hashlib.sha256(b''.join(s.pack('<i',i) for i,_ in rows)).hexdigest()==IDS,'ID fingerprint')
@@ -114,7 +122,10 @@ def extract(source):
     gathered.sort()
     require(len(gathered)==224 and sum(cat==268451840 for _,cat in gathered)==168,'gathered category counts')
     require(hashlib.sha256(b''.join(s.pack('<i',id) for id,_ in gathered)).hexdigest()==GATHERED,'gathered fingerprint')
-    return rows,caps,[id for id,_ in gathered]
+    food_bait.sort()
+    require(len(food_bait)==236 and sum(cat==269557760 for _,cat in food_bait)==178,'food/bait category counts')
+    require(hashlib.sha256(b''.join(s.pack('<i',id) for id,_ in food_bait)).hexdigest()==FOOD_BAIT,'food/bait fingerprint')
+    return rows,caps,[id for id,_ in gathered],[id for id,_ in food_bait]
 
 def render(rows,caps):
     header=("// Generated from verified Steam v3.0.1 InventoryItemDefinitionAsset type tree.\n"
@@ -130,15 +141,19 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source',type=Path);parser.add_argument('--check',action='store_true')
     args=parser.parse_args()
-    rows,caps,gathered=extract(args.source)
+    rows,caps,gathered,food_bait=extract(args.source)
     generated=render(rows,caps)
     gathered_source=("// Generated from the pinned original Steam v3.0.1 definitions.\n"
                      "// 168 fish, 56 critters; native ordinary, always-periodic definitions.\n"
                      f"// ID little-endian SHA256 {GATHERED}\n"
                      "pub(super) const GATHERED_IDS:&[i32]=&[\n"
                      +''.join(' '+','.join(str(id) for id in gathered[i:i+8])+',\n' for i in range(0,len(gathered),8))+'];\n')
+    gathered_source+=("\n// 178 food, 58 fishing bait; native ordinary FirstTime celebration definitions.\n"
+                      f"// ID little-endian SHA256 {FOOD_BAIT}\n"
+                      "pub(super) const FOOD_BAIT_IDS:&[i32]=&[\n"
+                      +''.join(' '+','.join(str(id) for id in food_bait[i:i+8])+',\n' for i in range(0,len(food_bait),8))+'];\n')
     for name,content in [('inventory_source_data.rs',generated),('inventory_gathered_data.rs',gathered_source)]:
         target=ROOT/'core/src'/name
         if args.check: require(target.read_text()==content,'checked-in source differs: '+name)
         else: target.write_text(content)
-    print('Verified 12163 item definitions, 13 custom caps and 224 gathered-item candidates')
+    print('Verified 12163 item definitions, 13 custom caps, 224 gathered-item and 236 food/bait candidates')

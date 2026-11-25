@@ -1,6 +1,6 @@
 //! Source-defined v3.0.1 item quantity semantics. No entitlement inference.
 use crate::inventory_source_data::{RULES,CUSTOM_CAPS};
-use crate::inventory_gathered_data::GATHERED_IDS;
+use crate::inventory_gathered_data::{GATHERED_IDS,FOOD_BAIT_IDS};
 /// Maximum from InventoryItemExtensions.MaxCount(IInventoryItemData):
 /// !Stackable -> 1; HasCustomMaxCount -> CustomMaxCount; otherwise Int32.MaxValue.
 /// None means no verified definition or a payload is required for this ID.
@@ -11,14 +11,14 @@ pub(crate) fn ordinary_quantity_limit(item_id:i32)->Option<i32>{
  if flags&4==0{return Some(i32::MAX)}
  CUSTOM_CAPS.binary_search_by_key(&item_id,|row|row.0).ok().map(|i|CUSTOM_CAPS[i].1).filter(|&cap|cap>0)
 }
-/// Source-bounded ordinary ingredients, fish and critters. Definition
+/// Source-bounded ordinary ingredients, fish, critters, food and bait. Definition
 /// evidence only: the editor separately validates version, identity and references.
 pub(crate) fn ordinary_membership_item(item_id:i32)->bool{
  RULES.binary_search_by_key(&item_id,|row|row.0).ok().is_some_and(|i|RULES[i].1&8!=0)
-  ||GATHERED_IDS.binary_search(&item_id).is_ok()
+  ||GATHERED_IDS.binary_search(&item_id).is_ok()||FOOD_BAIT_IDS.binary_search(&item_id).is_ok()
 }
 pub(crate) fn ordinary_membership_ids()->impl Iterator<Item=i32>{
- RULES.iter().filter_map(|&(id,flags)|(flags&8!=0).then_some(id)).chain(GATHERED_IDS.iter().copied())
+ RULES.iter().filter_map(|&(id,flags)|(flags&8!=0).then_some(id)).chain(GATHERED_IDS.iter().copied()).chain(FOOD_BAIT_IDS.iter().copied())
 }
 #[cfg(test)]
 mod tests{
@@ -44,9 +44,19 @@ mod tests{
   assert_eq!(hex(&crate::digest::sha256(&bytes)),"8cb0a2929cf109bbc768239f5bcede17ecdd97e913db861f83349a8fd7c7e60d");
   assert!(GATHERED_IDS.iter().all(|&id|ordinary_quantity_limit(id)==Some(i32::MAX)&&
    RULES.binary_search_by_key(&id,|row|row.0).ok().is_some_and(|i|RULES[i].1==1)));
-  assert_eq!(ordinary_membership_ids().collect::<std::collections::HashSet<_>>().len(),261);
+  assert_eq!(ordinary_membership_ids().collect::<std::collections::HashSet<_>>().len(),497);
   assert!(ordinary_membership_item(29960328)&&ordinary_membership_item(71754032));
   assert!(!ordinary_membership_item(315822));
+ }
+ #[test]fn food_bait_source_fingerprint_and_ordinary_bounds(){
+  assert_eq!(FOOD_BAIT_IDS.len(),236);
+  assert!(FOOD_BAIT_IDS.windows(2).all(|x|x[0]<x[1]));
+  let bytes:Vec<u8>=FOOD_BAIT_IDS.iter().flat_map(|&id|id.to_le_bytes()).collect();
+  assert_eq!(hex(&crate::digest::sha256(&bytes)),"abaf644ea95b721a2d21109647304fda13366723ba3ac425903cededb1fde39a");
+  assert!(FOOD_BAIT_IDS.iter().all(|&id|ordinary_quantity_limit(id)==Some(i32::MAX)&&
+   RULES.binary_search_by_key(&id,|row|row.0).ok().is_some_and(|i|RULES[i].1==1)));
+  assert!(ordinary_membership_item(567052)&&ordinary_membership_item(30258712));
+  assert!(!ordinary_membership_item(1455056332)); // Quest-rarity birthday cake.
  }
  #[test]fn limits_and_required_unique_are_not_guessed(){
   assert_eq!(ordinary_quantity_limit(315822),Some(i32::MAX));
