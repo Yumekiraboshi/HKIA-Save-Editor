@@ -1158,7 +1158,7 @@ fn plain_flower_color_cas_history_and_export_preserve_identity(){
   assert!(!e.inventory_flower_color_options(4).contains(&15));
   assert_eq!(e.inventory_original_unique_payload(4),Some(plain_flower(6).as_slice()));
   assert!(e.change_inventory_flower_color(4,8,16).is_err());
-  assert!(e.change_inventory_flower_color(4,6,30).is_err());
+  assert!(e.change_inventory_flower_color(4,6,14).is_err());
   assert!(!e.dirty());
   e.change_inventory_flower_color(4,6,8).unwrap();
   assert_eq!(e.inventory_unique_data(4),Some(U::Flower{grow_state:6,base_color:8,pattern:0,pattern_color:0}));
