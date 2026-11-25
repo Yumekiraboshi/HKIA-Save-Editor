@@ -29,7 +29,11 @@ test('all 820 source GUIDs are pinned in native source allowlist, including all 
  assert.match(rust,/known_v301\(guid\)/);
  assert.match(rust,/parent_of_v301\(guid\)!=Some\(parent\)/);
  assert.match(rust,/version!=Version::V301/);
- assert.match(rust,/mp_array_header\(count\+added\.len\(\)/);
+ assert.match(rust,/document_membership::rewrite\(/);
+ const membership=read('../core/src/document_membership.rs');
+ assert.match(membership,/array_header\(next_count,&mut replacement\)/);
+ assert.match(membership,/index_native\(&out,version\)/);
+ assert.match(rust,/document_membership::allocate_ids\(&index,added\.len\(\)\)/);
  assert.match(rust,/mp_u32\(id,&mut out\)/);
  assert.match(rust,/for word in guid\{mp_u32\(word,&mut out\);\}/);
  assert.match(rust,/let reread=read_slot\(&new_slot\)\?/);

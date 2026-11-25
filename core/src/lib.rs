@@ -116,6 +116,7 @@ mod deflate;
 pub mod digest;
 pub mod collection;
 pub mod achievement;
+mod document_membership;
 mod catalog;
 mod achievement_keys;
 #[derive(Debug)]

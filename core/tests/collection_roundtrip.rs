@@ -318,7 +318,8 @@ fn verified_new_achievement_creation_v301_raw_and_zip_roundtrips_without_other_c
   let src=read_slot(&decoded).unwrap();
   assert_eq!(src.index.documents,6);
   assert_eq!(src.index.achievements.len(),3);
-  assert_eq!(src.index.achievements[2].id,3); // max previous tag16 ID 2 + 1
+  assert_eq!(src.index.achievements[2].id,5); // original DbRoot.NextId 4 + 1
+   assert_eq!(src.index.root_next_id.as_ref().unwrap().0,5);
   assert_eq!(src.index.achievements[2].guid,guid);
   assert!(editor.undo());assert!(editor.achievement_value(guid).is_none());assert!(!editor.dirty());
   assert!(editor.redo());assert_eq!(editor.achievement_value(guid),Some(done));
