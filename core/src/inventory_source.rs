@@ -33,7 +33,8 @@ mod tests{
   assert_eq!(ordinary_quantity_limit(1375142756),Some(10));
   assert_eq!(ordinary_quantity_limit(1900000001),None);
   assert_eq!(ordinary_quantity_limit(1900000002),None);
-  assert_eq!(ordinary_quantity_limit(i32::MAX),None);
+  assert_eq!(ordinary_quantity_limit(i32::MAX-1),None);
+  assert_eq!(ordinary_quantity_limit(i32::MAX),Some(1)); // Bubble Wand is an actual definition.
   let id=RULES.iter().find(|&&(_,f)|f&3==0).unwrap().0;
   assert_eq!(ordinary_quantity_limit(id),Some(1));
  }

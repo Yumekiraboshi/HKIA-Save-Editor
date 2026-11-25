@@ -1393,7 +1393,7 @@ fn wand_source_appearance_preserves_nested_identity_and_bytes(){
 #[test]
 fn inventory_quantity_limits_are_native_and_cas_atomic(){
  let mut payload=synthetic_payload("3.0.1");payload[3]=0x99;
- for (id,item,quantity) in [(4,315822,6),(5,413462588,2),(6,1900000001,1),(7,2147483647,1)]{
+ for (id,item,quantity) in [(4,315822,6),(5,413462588,2),(6,1900000001,1),(7,2147483646,1)]{
   payload.extend(doc(1,arr(vec![u(id),u(item),u(0),u(quantity),vec![0xc0]])));
  }
  let input=slot_from_payload("3.0.1",payload);
