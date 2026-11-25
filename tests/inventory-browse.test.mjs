@@ -86,6 +86,25 @@ test('search finds native categories across the owned or absent inventory view w
  assert.match(app,/oninput=\{onInventorySearch\}/);
  assert.match(app,/inventoryMatchTotals\.get\(t\.key\)/);
 });
+test('variant-aware search distinguishes same-ID flower records by localized color and pattern',()=>{
+ const id=43114910;
+ const flowers=[{documentId:20,itemId:id,quantity:4,editable:true},{documentId:21,itemId:id,quantity:6,editable:true},{documentId:22,itemId:id,quantity:1,editable:false}];
+ const labels={[String(id)]:'花'};
+ const variants=new Map([[20,'赤 · 白 · グラデーション'],[21,'青'],[22,'赤 · ラメ']]);
+ const variantName=row=>variants.get(row.documentId)??'';
+ const search=(q,editable=false)=>browseInventory(flowers,q,'flowers',editable,labels,items,index,'ja',variantName).map(r=>r.documentId);
+ const counts=(q,editable=false)=>inventorySearchGroupCounts(flowers,q,editable,labels,items,index,variantName);
+ assert.deepEqual(search('花 赤'),[20,22]);
+ assert.deepEqual(search('赤 白 グラデーション'),[20]);
+ assert.deepEqual(search('花 青'),[21]);
+ assert.deepEqual(search('赤 青'),[]);
+ assert.deepEqual(search('赤',true),[20]);
+ assert.equal(counts('赤').get('flowers'),2);
+ assert.equal(counts('赤',true).get('flowers'),1);
+ assert.equal(inventorySearchTarget('food',counts('花 青')),'flowers');
+ assert.deepEqual(search('43114910'),[20,21,22]);
+ assert.equal(flowers[0].quantity,4);
+});
 test('native specialized station filters use original crafting sources and raw chef category',()=>{
  assert.equal(FLOWER_CREATION_SOURCE_IDS.size,181);
  assert.equal(createHash('sha256').update([...FLOWER_CREATION_SOURCE_IDS].join(',')).digest('hex'),'422f19613ff4f3accfcb3810a4b1c806da5060fe008f58469d676e0026af1620');
