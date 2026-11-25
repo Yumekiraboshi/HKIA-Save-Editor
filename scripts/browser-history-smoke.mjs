@@ -547,6 +547,17 @@ async function inventoryDynamicFlowerArtSmoke(){
   assert.deepEqual(images[0].alpha,images[1].alpha);assert.deepEqual(images[0].alpha,images[2].alpha);assert.deepEqual(images[0].alpha,images[3].alpha);
   assert.notDeepEqual(images[0].rgb,images[1].rgb);assert.notDeepEqual(images[0].rgb,images[2].rgb);
   assert.deepEqual(errors,[]);
+  await page.locator('.inventory-flower-variant-name').filter({hasText:'Ombre'}).waitFor({timeout:30_000});
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('43114910 Blue');
+  await page.waitForFunction(()=>document.querySelectorAll('.inventory-card').length===1&&document.querySelector('.inventory-flower-variant-name')?.textContent?.includes('Blue'));
+  await search.fill('Red Ombre');
+  await page.waitForFunction(()=>document.querySelectorAll('.inventory-card').length===1&&document.querySelector('.inventory-flower-variant-name')?.textContent?.includes('Ombre'));
+  await search.fill('43114910 Blue Cosmic');
+  await page.locator('.inventory-card').first().waitFor({state:'detached'});
+  await search.fill('43114910');
+  await page.waitForFunction(()=>document.querySelectorAll('.inventory-card').length===5);
+  assert.deepEqual(errors,[]);
   console.log('CHROMIUM DYNAMIC FLOWER PASS: original source sampling, distinct same-ID appearances, native effect-mask fallback, unknown pattern refusal, local blob generation');
  }finally{await context.close();}
 }
