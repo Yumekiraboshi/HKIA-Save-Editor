@@ -33,6 +33,21 @@ function cube(spec){
  const source=lights.cubemaps[spec.pathId];assert.ok(source,'Unknown native cube PathID');
  return {source,orientation:spec.orientation,bc1Mode:spec.bc1Mode};
 }
+// Optional authored camera mode: runtimeRoot and actual displayed bounds remain
+// explicit evidence inputs. The authored prefab is not the actual inventory camera.
+if(request.authoredPose){
+ assert.ok(request.scene&&!('model' in request.scene)&&!('normalMatrix' in request.scene)&&!('viewProjection' in request.scene)&&!('cameraPosition' in request.scene)&&!('tangentParity' in request.scene),'Do not mix authored and manual matrices');
+ const entry=fileURLToPath(new URL('../src/furniture-authored-transforms.ts',import.meta.url));
+ const {outputFiles}=await build({entryPoints:[entry],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+ const {authoredPreviewCamera,authoredRendererModel}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+ const source=read('data/furniture-preview-camera-v3.0.1.json'),camera=authoredPreviewCamera(source,1);
+ const row=sources.geometry.rows.find(r=>r.itemId===request.itemId);
+ const nodes=row.nodes.filter(n=>n.rendererPathId);
+ assert.equal(nodes.length,1);
+ const pose=request.authoredPose;
+ const model=authoredRendererModel(row.nodes,nodes[0].rendererPathId,camera.mountWorld,pose.runtimeRoot,{extents:pose.displayedExtents,lossyScale:pose.lossyScale,maxObjectSize:source.rig.maxObjectSize,considerLossyScale:source.rig.considerLossyScale});
+ request.scene={...request.scene,cameraPosition:camera.cameraPosition,viewProjection:camera.viewProjection,model:model.model,normalMatrix:model.normalMatrix,tangentParity:model.tangentParity};
+}
 const drawRequest={itemId:request.itemId,materialIndex:request.materialIndex,scene:request.scene,patternBc1Mode:request.patternBc1Mode,reflectionPrimary:cube(request.reflectionPrimary),reflectionSecondary:cube(request.reflectionSecondary)};
 const paths=new Map();
 function add(kind,sha,bytes,path){paths.set(kind+':'+sha,{bytes,path});}
