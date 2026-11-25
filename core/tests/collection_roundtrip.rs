@@ -1138,3 +1138,65 @@ fn inventory_unique_data_is_typed_per_document_and_preserved(){
  for id in 4..=9{assert_eq!(reopened.inventory_unique_data(id),e.inventory_unique_data(id));}
  assert_eq!(reopened.inventory().last().unwrap().quantity,20);
 }
+
+fn plain_flower(color:u8)->Vec<u8>{arr(vec![vec![7],arr(vec![vec![6],vec![color],vec![0],vec![0]])])}
+fn flower_color_slot(version:&str,other:Option<u8>)->Vec<u8>{
+ let mut payload=synthetic_payload(version);
+ payload[3]=if other.is_some(){0x97}else{0x96};
+ payload.extend(doc(1,arr(vec![u(4),u(1331175279),u(11),u(93),plain_flower(6)])));
+ if let Some(color)=other{payload.extend(doc(1,arr(vec![u(5),u(1331175279),u(12),u(2),plain_flower(color)])));}
+ slot_from_payload(version,payload)
+}
+#[test]
+fn plain_flower_color_cas_history_and_export_preserve_identity(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ for zipped in [false,true]{
+  let source=flower_color_slot("3.0.1",None);let input=if zipped{zip(&source)}else{source};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert_eq!(e.inventory_flower_color_options(4),vec![6,8,16]);
+  assert_eq!(e.inventory_original_unique_payload(4),Some(plain_flower(6).as_slice()));
+  assert!(e.change_inventory_flower_color(4,8,16).is_err());
+  assert!(e.change_inventory_flower_color(4,6,30).is_err());
+  assert!(!e.dirty());
+  e.change_inventory_flower_color(4,6,8).unwrap();
+  assert_eq!(e.inventory_unique_data(4),Some(U::Flower{grow_state:6,base_color:8,pattern:0,pattern_color:0}));
+  assert_eq!(e.inventory()[0].quantity,93);assert_eq!(e.history()[0].scope,Inventory);
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input.clone()).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory_unique_data(4),e.inventory_unique_data(4));
+  assert!(e.undo_scope(Inventory));assert!(!e.dirty());assert!(e.redo_scope(Inventory));
+  let exported=e.export().unwrap();let reopened=Editor::open(exported).unwrap();
+  assert_eq!(reopened.inventory_unique_data(4),e.inventory_unique_data(4));
+  assert_eq!(reopened.inventory()[0].quantity,93);
+  let before=Editor::open(input).unwrap();assert_eq!(before.inventory_original_unique_payload(4),Some(plain_flower(6).as_slice()));
+ }
+ let mut old=Editor::open(flower_color_slot("3.0.0",None)).unwrap();
+ assert!(old.inventory_flower_color_options(4).is_empty());assert!(old.change_inventory_flower_color(4,6,8).is_err());
+ let mut collision=Editor::open(flower_color_slot("3.0.1",Some(8))).unwrap();
+ assert_eq!(collision.inventory_flower_color_options(4),vec![6,16]);
+ assert!(collision.change_inventory_flower_color(4,6,8).is_err());
+ assert!(!collision.dirty());
+}
+#[test]
+fn exact_unique_payloads_retain_all_native_union_branches(){
+ let payloads=vec![
+ arr(vec![vec![0],arr(vec![guid([1,2,3,4])])]),
+ arr(vec![vec![1],arr(vec![guid([1,2,3,4]),guid([5,6,7,8]),guid([9,10,11,12])])]),
+ arr(vec![vec![2],arr(vec![vec![6],guid([1,2,3,4]),guid([0;4]),guid([0;4])])]),
+ arr(vec![vec![3],arr(vec![arr(vec![u(1),u(2)]),arr(vec![u(3)])])]),
+ arr(vec![vec![4],arr(vec![u(1),u(2),u(3),u(4),u(5)])]),
+ arr(vec![vec![5],arr(vec![guid([1,2,3,4]),plain_flower(6),u(1),u(2),u(3)])]),
+ arr(vec![vec![6],arr(vec![arr(vec![f(1.),f(0.),f(-0.),f(1.)]);3])]),
+ plain_flower(6),
+ arr(vec![vec![8],arr(vec![u(1),u(2),u(3)])]),
+ arr(vec![vec![9],arr(vec![u(1331175279),plain_flower(6),u(1),u(2),u(3)])]),
+ arr(vec![vec![10],arr(vec![vec![0xc0]])]),
+ arr(vec![vec![11],arr(vec![u(1),vec![0xc0]])])
+ ];
+ // Change the original fixarray header to array16 for 5+12 documents.
+ let mut payload=synthetic_payload("3.0.1");payload.splice(3..4,[0xdc,0,17]);
+ for (i,p) in payloads.iter().enumerate(){payload.extend(doc(1,arr(vec![u(100+i as u32),u(315822),u(100+i as u32),u(1),p.clone()])))}
+ let e=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
+ for(i,p)in payloads.iter().enumerate(){assert_eq!(e.inventory_original_unique_payload(100+i as u32),Some(p.as_slice()));}
+ let expected=[1,3,4,2,5,5,3,4,3,5,1,2];
+ for (i,(_,_,_,_,n)) in e.inventory_unique_rows().enumerate(){assert_eq!(n,expected[i]);}
+}
