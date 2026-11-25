@@ -1392,6 +1392,61 @@ fn customized_furniture_quantity_uses_normalized_identity_and_native_limits(){
  assert!(!referenced.inventory()[0].editable);assert!(referenced.change_inventory_quantity(4,93,1).is_err());
 }
 #[test]
+fn ordinary_default_furniture_can_be_added_alongside_verified_customized_variants(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=61381969i32;let handle=(1u32<<31)|item as u32;
+ let default=[503,1,0];let original=[13,2,0];
+ let make=|variants:Vec<(u32,u32,Vec<u8>)>|{
+  let mut payload=synthetic_payload("3.0.1");
+  payload[3]=0x95+variants.len() as u8;
+  for (id,uid,p) in variants{payload.extend(doc(1,arr(vec![u(id),u(item as u32),u(uid),u(2),p])));}
+  slot_from_payload("3.0.1",payload)
+ };
+ for zipped in [false,true]{
+  let raw=make(vec![(4,11,furniture_payload(original)),(5,12,furniture_payload([502,2,0]))]);
+  let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory_creatable().iter().any(|r|r.document_id==handle));
+  e.change_inventory_quantity(handle,0,3).unwrap();
+  assert!(!e.inventory_creatable().iter().any(|r|r.document_id==handle));
+  assert!(e.change_inventory_furniture_variant(4,original,default).is_err());
+  e.change_inventory_furniture_variant(4,original,[13,3,0]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.undo_scope(Inventory));
+  assert!(restored.inventory_creatable().iter().any(|r|r.document_id==handle));
+  assert!(restored.redo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let reopened=Editor::open(restored.export().unwrap()).unwrap();
+  let rows=reopened.inventory();assert_eq!(rows.len(),3);
+  assert_eq!(rows.iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![2,2,3]);
+  assert!(rows.iter().all(|r|r.item_id==item));
+  assert_eq!(reopened.inventory_original_unique_payload(rows[2].document_id),Some([0xc0].as_slice()));
+  assert_eq!(reopened.inventory_unique_data(4),e.inventory_unique_data(4));
+  assert_eq!(reopened.inventory_original_unique_payload(5),e.inventory_original_unique_payload(5));
+  assert!(!reopened.inventory_creatable().iter().any(|r|r.item_id==item));
+ }
+ for variants in [
+  vec![(4,11,furniture_payload(default))],
+  vec![(4,11,furniture_payload(original)),(5,0,vec![0xc0])],
+  vec![(4,11,furniture_payload(original)),(5,12,furniture_payload(original))],
+  vec![(4,11,furniture_payload(original)),(5,11,furniture_payload([502,2,0]))],
+  vec![(4,11,furniture_payload(original)),(5,12,arr(vec![vec![1],arr(vec![guid([1,2,3,4]),guid([0;4]),guid([0;4])])]))],
+ ]{
+  let mut e=Editor::open(make(variants)).unwrap();
+  assert!(!e.inventory_creatable().iter().any(|r|r.document_id==handle));
+  assert!(e.change_inventory_quantity(handle,0,1).is_err());assert!(!e.dirty());
+ }
+ let mut e=Editor::open(make(vec![(4,11,furniture_payload(original))])).unwrap();
+ e.change_inventory_furniture_variant(4,original,default).unwrap();
+ assert!(!e.inventory_creatable().iter().any(|r|r.document_id==handle));
+ assert!(e.change_inventory_quantity(handle,0,1).is_err());
+ assert!(e.undo_scope(Inventory));
+ e.change_inventory_quantity(handle,0,1).unwrap();
+ assert!(e.change_inventory_furniture_variant(4,original,default).is_err());
+ e.change_inventory_quantity(handle,1,0).unwrap();
+ assert!(e.change_inventory_furniture_variant(4,original,default).is_ok());
+}
+#[test]
 fn inventory_quantity_batch_is_atomic_and_recovers_one_history_step(){
  use hkia_save_core::collection::HistoryScope::{Inventory,Collections};
  for zipped in [false,true]{
