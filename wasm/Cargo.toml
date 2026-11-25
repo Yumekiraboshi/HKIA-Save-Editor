@@ -1,9 +1,0 @@
-[package]
-name = "hkia-web-editor"
-version = "0.1.0"
-edition = "2021"
-publish = false
-[lib]
-crate-type = ["cdylib"]
-[dependencies]
-hkia-save-core = { path = "../core" }
