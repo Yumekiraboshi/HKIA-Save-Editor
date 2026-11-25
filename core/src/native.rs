@@ -39,6 +39,8 @@ pub enum InventoryUniqueData {
  Flower {grow_state:u8,base_color:i32,pattern:i32,pattern_color:i32},
  Furniture {materials:[i32;3]},
  Palette {rgba_bits:[[u32;4];3]},
+ CafeAppearance {count:u8,colors:[i32;3]},
+ BobaAppearance {color_id:i32},
  Opaque {tag:i32},
 }
 #[derive(Debug,Clone,PartialEq,Eq)]
@@ -140,7 +142,7 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 enum Key<'a>{Int(i128),Str(&'a str),Guid([u32;4]),Shop([u32;4],[u32;4],i128)}
 #[derive(Clone,Debug)]
-enum Value<'a>{DocumentId(i128),Other,Nil,Bool(bool),Float(f32),Color([u32;4]),InventoryUnique(InventoryUniqueData,Vec<Range<usize>>),Time(i64,u32),Int(i128),Str(&'a str),Guid([u32;4]),Count(usize),Fields(Vec<(Value<'a>,Range<usize>)>),Key(Key<'a>),CabinApartmentPairs(Vec<CabinApartmentSourcePair>)}
+enum Value<'a>{DocumentId(i128),Other,Nil,Bool(bool),Float(f32),Color([u32;4]),ChefColors{count:u8,colors:[i32;3]},InventoryUnique(InventoryUniqueData,Vec<Range<usize>>),Time(i64,u32),Int(i128),Str(&'a str),Guid([u32;4]),Count(usize),Fields(Vec<(Value<'a>,Range<usize>)>),Key(Key<'a>),CabinApartmentPairs(Vec<CabinApartmentSourcePair>)}
 impl<'a> Value<'a>{
  fn int(&self)->Result<i128,Error>{if let Self::Int(v)=self{Ok(*v)}else{Err(Error::Schema)}}
  fn guid(&self)->Result<[u32;4],Error>{if let Self::Guid(v)=self{Ok(*v)}else{Err(Error::Schema)}}
@@ -171,7 +173,12 @@ impl<'a> Walk<'a>{
   match s{
    Spec::Primitive(s)=>self.primitive(s,depth),
    Spec::Nullable(inner)=>{if self.c.peek()?==0xc0{self.c.token()?;Ok(Value::Nil)}else{self.read(*inner,depth+1,ctx,collection)}},
-   Spec::Seq(inner)=>{if self.c.peek()?==0xc0{self.c.token()?;return Ok(Value::Nil)}let n=self.c.array()?;for _ in 0..n{self.read(*inner,depth+1,None,false)?;}Ok(Value::Count(n))},
+   Spec::Seq(inner)=>{if self.c.peek()?==0xc0{self.c.token()?;return Ok(Value::Nil)}let n=self.c.array()?;
+    if ctx==Some(("chef-colors",0)){
+     let mut colors=[0;3];
+     for i in 0..n{let v=self.read(*inner,depth+1,None,false)?;if i<3{colors[i]=i32::try_from(v.int()?).map_err(|_|Error::Schema)?;}}
+     Ok(Value::ChefColors{count:n.min(3) as u8,colors})
+    }else{for _ in 0..n{self.read(*inner,depth+1,None,false)?;}Ok(Value::Count(n))}},
    Spec::Dict(k,v)=>{
     if self.c.peek()?==0xc0{self.c.token()?;return Ok(Value::Nil)}let start=self.c.pos;let n=self.c.map()?;self.index.dictionary_entries=self.index.dictionary_entries.checked_add(n).ok_or(Error::Overflow)?;
     let deprecated=ctx==Some(("collection-key0",0));
@@ -241,7 +248,12 @@ impl<'a> Walk<'a>{
       if capture_unique {
        let unique_fields=match &value{Value::Fields(a)=>a.iter().map(|(_,span)|span.clone()).collect(),_=>Vec::new()};
        let data=match (&value,tag){
-        (Value::Fields(a),7) if a.len()==4=>InventoryUniqueData::Flower{
+        (Value::Fields(a),3) if a.len()==2=>match &a[1].0{
+          Value::ChefColors{count,colors}=>InventoryUniqueData::CafeAppearance{count:*count,colors:*colors},
+          _=>InventoryUniqueData::Opaque{tag},
+         },
+         (Value::Fields(a),4) if a.len()==5=>InventoryUniqueData::BobaAppearance{color_id:i32::try_from(a[0].0.int()?).map_err(|_|Error::Schema)?},
+         (Value::Fields(a),7) if a.len()==4=>InventoryUniqueData::Flower{
          grow_state:u8::try_from(a[0].0.int()?).map_err(|_|Error::Schema)?,
          base_color:i32::try_from(a[1].0.int()?).map_err(|_|Error::Schema)?,
          pattern:i32::try_from(a[2].0.int()?).map_err(|_|Error::Schema)?,
@@ -278,7 +290,7 @@ impl<'a> Walk<'a>{
       let n=self.c.array()?;if n>specs.len(){return Err(Error::Schema)}
       let short=name.rsplit('.').next().unwrap_or(name);let is_doc=matches!(ctx,Some((DOC,_)));let capture_all=matches!(short,"AchievementData"|"GameCounterData"|"GameCollectionsTraitModel"|"CollectionVersion"|"AchievementModel"|"GameCounterModel")||name==ROOT||name==SHOP||name==CELEBRATION||(short=="InventoryItem"&&ctx==Some((DOC,1)))||name==HOME||name==CABIN||name==VISITOR_MANAGER||matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,_)))||name=="Sunblink.UserData.UniqueItemIdModel"||name=="Sunblink.UserData.HomeObjectModelDeprecatedV71"||name=="Sunblink.Game.OwnedRemoteCabinHomeObjectClientModelDeprecatedV71";
       let mut fields=Vec::new();let mut document_id=None;
-      for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
+      for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else if short=="CafeCreationUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,3))&&i==1{Some(("chef-colors",0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
        if capture_all{fields.push((value,at..self.c.pos));}
        else if is_doc&&i==0{document_id=Some(value);}
       }

@@ -61,3 +61,14 @@ test('furniture variant draft carries native tuple independently of quantity',()
  assert.throws(()=>safeInventoryPatches([{...expected[0],after:[2147483648,2,0]}]));
  assert.throws(()=>safeInventoryPatches([...expected,...expected]));
 });
+
+test('chef wire snapshot carries ordered tint IDs, not flavors or fabricated colors',async()=>{
+ const {inventoryChefAppearance}=await load('../src/inventory-chef-display.ts');
+ const rows=decodeInventoryUnique(wire([3,1,1,1,3,2,4,3,6,14,11,0,2,1,2,4,5,1,14,0,3,1,3,3,2,1,0,0]),new Set([1,2,3]));
+ assert.deepEqual(inventoryChefAppearance(203331651,rows.get(1)),{kind:'cafe',colors:[6,14,11]});
+ assert.deepEqual(inventoryChefAppearance(1798633565,rows.get(2)),{kind:'boba',colorId:14});
+ assert.deepEqual(inventoryChefAppearance(203331651,rows.get(3)),{kind:'cafe',colors:[]});
+ assert.equal(inventoryChefAppearance(1798633565,rows.get(1)),null);
+ assert.equal(inventoryChefAppearance(315822,rows.get(1)),null);
+ assert.throws(()=>decodeInventoryUnique(wire([1,1,1,1,3,2,2,3,6,0]),new Set([1])));
+});
