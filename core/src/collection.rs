@@ -185,8 +185,8 @@ impl Editor {
    other=>Some(other)
   }
  }
- pub fn inventory_unique_rows(&self)->impl Iterator<Item=(u32,Option<i32>,Option<InventoryUniqueData>,usize)>+'_{
-  self.slot.index.inventory.iter().filter(|r|r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,self.effective_unique(r),r.unique_fields.len()))
+ pub fn inventory_unique_rows(&self)->impl Iterator<Item=(u32,Option<i32>,Option<bool>,Option<InventoryUniqueData>,usize)>+'_{
+  self.slot.index.inventory.iter().filter(|r|r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,r.unique_is_nil,self.effective_unique(r),r.unique_fields.len()))
  }
  fn flower_source_colors(&self,row:&crate::native::InventoryRow)->Option<&'static [i32]>{
   if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<=0||
