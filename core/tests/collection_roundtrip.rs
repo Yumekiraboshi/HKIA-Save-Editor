@@ -1213,6 +1213,29 @@ fn plucked_flower_quantities_preserve_unique_payload_and_history(){
  assert!(!opaque.inventory()[0].editable);assert!(opaque.change_inventory_quantity(4,93,1).is_err());
 }
 #[test]
+fn positive_seed_troweled_and_crafted_clothing_quantities_preserve_variants(){
+ for zipped in [false,true]{
+  let mut payload=synthetic_payload("3.0.1");payload[3]=0x9a;
+  let seed=arr(vec![vec![7],arr(vec![vec![0],vec![6],vec![0],vec![0]])]);
+  let plant=arr(vec![vec![7],arr(vec![vec![7],vec![8],vec![0],vec![0]])]);
+  let unsupported=arr(vec![vec![7],arr(vec![vec![3],vec![6],vec![0],vec![0]])]);
+  for (id,item,uid,unique) in [(4,1331175279,21,seed.clone()),(5,1331175279,22,plant.clone()),(6,897617923,23,plain_flower(6)),(7,1482119840,24,plain_flower(8)),(8,1331175279,25,unsupported.clone())]{
+   payload.extend(doc(1,arr(vec![u(id),u(item),u(uid),u(2),unique])));
+  }
+  let raw=slot_from_payload("3.0.1",payload);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory()[..4].iter().all(|r|r.editable&&r.quantity_minimum==1&&r.quantity_limit==Some(i32::MAX)));
+  assert!(!e.inventory()[4].editable);
+  assert!(e.change_inventory_quantities(&[(4,2,8),(8,2,8)]).is_err());assert!(!e.dirty());
+  e.change_inventory_quantities(&[(4,2,8),(5,2,9),(6,2,10),(7,2,11)]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();
+  recovered.restore_history(&cp).unwrap();
+  let reopened=Editor::open(recovered.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory().iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![8,9,10,11,2]);
+  for id in 4..=8{assert_eq!(reopened.inventory_original_unique_payload(id),e.inventory_original_unique_payload(id));}
+ }
+}
+#[test]
 fn exact_unique_payloads_retain_all_native_union_branches(){
  let payloads=vec![
  arr(vec![vec![0],arr(vec![guid([1,2,3,4])])]),
@@ -1698,6 +1721,7 @@ fn flower_clothing_refuses_saved_outfit_and_preset_references(){
   let mut e=Editor::open(make(settings)).unwrap();
   assert!(e.inventory_flower_variants(4).is_empty());
   assert!(e.change_inventory_flower_variant(4,[6,6,0,0],[6,9,0,0]).is_err());
+  assert!(!e.inventory()[0].editable);assert!(e.change_inventory_quantity(4,5,10).is_err());
   assert!(!e.dirty());
   assert!(!e.inventory_flower_variants(5).is_empty());
  }
