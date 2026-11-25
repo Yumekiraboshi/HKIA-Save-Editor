@@ -421,7 +421,7 @@ impl Editor {
  }
  fn plan_inventory_quantity(&self,id:u32,expected:i32,next:i32)->Result<InventoryQuantityDelta,Error>{
   let row=self.slot.index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
-  if !self.inventory_can_edit(row)||next<1||expected==next||
+  if !self.inventory_can_edit(row)||next<1||
    self.inventory_changes.get(&id).copied().or(row.quantity)!=Some(expected){return Err(Error::Schema)}
   let before=self.inventory_changes.get(&id).copied();
   let after=if row.quantity==Some(next){None}else{Some(next)};
@@ -429,6 +429,7 @@ impl Editor {
  }
  /// CAS updates only existing ordinary stack quantities, never IDs or unique payloads.
  pub fn change_inventory_quantity(&mut self,id:u32,expected:i32,next:i32)->Result<(),Error>{
+  if expected==next{return Err(Error::Schema)}
   let InventoryQuantityDelta{document_id,before,after}=self.plan_inventory_quantity(id,expected,next)?;
   let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   let change=Change::Inventory{document_id,before,after};
@@ -446,8 +447,10 @@ impl Editor {
   let mut deltas=Vec::with_capacity(requests.len());
   for &(id,expected,next) in requests{
    if !seen.insert(id){return Err(Error::Duplicate)}
-   deltas.push(self.plan_inventory_quantity(id,expected,next)?);
+   let delta=self.plan_inventory_quantity(id,expected,next)?;
+   if expected!=next{deltas.push(delta);}
   }
+  if deltas.is_empty(){return Err(Error::Schema)}
   let change=Change::InventoryBatch{deltas};
   self.restore_change(&change,false);
   self.undo.push(change);

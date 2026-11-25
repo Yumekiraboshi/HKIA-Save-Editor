@@ -323,3 +323,9 @@
 .inventory-unique-edit-button{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:30px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-size:13px;font-variant-numeric:tabular-nums}
 .inventory-unique-edit-button svg{width:16px;height:16px}
 .date-dialog-field select{width:100%;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;font-size:14px;min-height:36px;padding:6px}
+
+/* Selection is an explicit, temporary inventory mode; tile dimensions stay unchanged. */
+.inventory-batch-form{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.inventory-batch-form input[type=number]{width:108px;min-width:0;padding:7px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px}
+.inventory-batch-checkbox{position:absolute;inset-block-start:6px;inset-inline-start:6px;width:18px;height:18px;z-index:3;accent-color:var(--accent);cursor:pointer}
+.inventory-card.inventory-batch-selected{border-color:var(--accent);background:var(--accent-soft)}
