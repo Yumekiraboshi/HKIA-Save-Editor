@@ -13,6 +13,7 @@
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
+ import {loadInventoryCollectionRoutes,inventoryCollectionRoute,type InventoryCollectionRoutes} from './inventory-collection-routes';
  import {inventoryGroupLabel} from './inventory-native-category-copy';
  import {loadSourceItemNames,type SourceItemNames} from './source-names';
  import {decodeHistoryDetails,formatHistoryChange} from './history-details';
@@ -76,6 +77,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[]}|null>(null);
  let furnitureSelection=$state(-1);
  let inventoryNativeArt:InventoryNativeArt|null=$state(null);
+ let inventoryCollectionRoutes:InventoryCollectionRoutes=$state({});
  let inventoryEditableOnly=$state(false);
  let inventoryAddMode=$state(false);
  let inventoryBatchMode=$state(false);
@@ -232,6 +234,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   void loadFlowerDisplayDefinitions(import.meta.env.BASE_URL).then(data=>flowerDefinitions=data).catch(()=>{});
   void loadFlowerLabels(import.meta.env.BASE_URL).then(data=>flowerLabels=data).catch(()=>{});
   void loadInventoryNativeArt(import.meta.env.BASE_URL).then(art=>inventoryNativeArt=art).catch(()=>{});
+  void loadInventoryCollectionRoutes(import.meta.env.BASE_URL).then(routes=>inventoryCollectionRoutes=routes).catch(()=>{});
   // Exact game dye palettes, used exclusively for recoloring item image pixels.
   void loadNativeDyePalettes(import.meta.env.BASE_URL)
    .then(palettes=>nativeDyePalettes=palettes).catch(()=>{});
@@ -401,14 +404,16 @@ import {verifiedFloorplanName} from './floorplan-names';
   for(const row of inventoryRows.slice(0,inventoryLimit)){
    if(inventoryNativeArt?.entries.has(row.itemId)||inventoryNativeArt?.withheld.has(row.itemId))continue;
    const item=inventorySourceItems.get(row.itemId);
-   if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
+   const route=inventoryCollectionRoute(row.itemId,item?.[3],inventoryCollectionRoutes);
+   if(route&&inventorySourceGroups.has(route))groups.add(route);
   }
   // The category representatives use the same verified item atlas/cache.
   for(const tab of NATIVE_INVENTORY_TABS){
    const id=inventoryCategoryRepresentative(tab.key,nativeInventoryIndex);
    if(id===undefined||inventoryNativeArt?.entries.has(id))continue;
    const item=inventorySourceItems.get(id);
-   if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
+   const route=inventoryCollectionRoute(id,item?.[3],inventoryCollectionRoutes);
+   if(route&&inventorySourceGroups.has(route))groups.add(route);
   }
   for(const group of groups){
    if(inventoryIconPending.size>=3)break;
@@ -1242,7 +1247,8 @@ import {verifiedFloorplanName} from './floorplan-names';
       {@const representative=inventoryCategoryRepresentative(t.key,nativeInventoryIndex)}
       {@const representativeSource=representative===undefined?undefined:inventorySourceItems.get(representative)}
       {@const representativeNative=representative===undefined?undefined:inventoryNativeArt?.entries.get(representative)}
-      {@const representativeSprite=representativeNative??(representativeSource&&representative!==undefined?inventoryIconPacks[representativeSource[3]]?.entries[String(representative)]:undefined)}
+      {@const representativeRoute=representative===undefined?undefined:inventoryCollectionRoute(representative,representativeSource?.[3],inventoryCollectionRoutes)}
+      {@const representativeSprite=representativeNative??(representativeRoute&&representative!==undefined?inventoryIconPacks[representativeRoute]?.entries[String(representative)]:undefined)}
       <button type="button" class="inventory-group-option" data-inventory-group={t.key} class:active={activeInventoryGroup===t.key}
        aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;inventoryLimit=BATCH_SIZE}}>
        {#if representative!==undefined&&(representativeSprite||originalVariantArt[String(representative)]||exactVariantArt[String(representative)])}
@@ -1274,7 +1280,8 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#each inventoryRows.slice(0,inventoryLimit) as item (item.documentId)}
      {@const definition=inventorySourceItems.get(item.itemId)}
      {@const nativeSprite=inventoryNativeArt?.entries.get(item.itemId)}
-     {@const sprite=definition&&!inventoryNativeArt?.withheld.has(item.itemId)?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
+     {@const artRoute=inventoryCollectionRoute(item.itemId,definition?.[3],inventoryCollectionRoutes)}
+     {@const sprite=artRoute&&!inventoryNativeArt?.withheld.has(item.itemId)?inventoryIconPacks[artRoute]?.entries[String(item.itemId)]:undefined}
      {@const flower=flowerDisplay(item.flower,flowerDefinitions,flowerLabels[locale]??{})}
      {@const chef=inventoryChefAppearance(item.itemId,item.unique)}
      {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
