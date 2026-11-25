@@ -1,0 +1,291 @@
+{
+  "schema": "HKIA.DynamicSpriteColorEvidence.1",
+  "version": "3.0.1",
+  "source": {
+    "inventoryView": {
+      "bundle": "l_inventoryview",
+      "sha256": "061a47ae598d0bcc8c067463e19e18b360ba37d0124b94e08c484818e24d280d",
+      "cab": "CAB-d43911c69a81902a397405feb43fb245",
+      "componentCount": 10,
+      "scriptPathId": "1166997743534786626",
+      "materialFileId": 5,
+      "materialPathId": "-4345124125649775645"
+    },
+    "shaderBundle": {
+      "bundle": "shaders_alwaysloaded",
+      "sha256": "e070439c4caab460aaa692eaef75d066249a817aabaa34a3b79bca01505ad029",
+      "cab": "CAB-2b27edbfe7f08bad1cd631865ee4eb15",
+      "materialSha256": "d011e339c19b07754bb2b2651da6a5085928cb86034d8d01a19adf69a86fc092",
+      "shaderName": "Sunblink/UI/Dynamic Sprite Color",
+      "shaderPathId": "-4967195562180344513",
+      "shaderSha256": "6ef16b47df59959cd9edf925e5b69471709c2ace249e535839ffd48369358bad",
+      "pixelProgramSha256": "dfe037713a1904e5a325527057d9bc18d4af2febeccaafcf048451388d4f3638"
+    },
+    "switchMain": {
+      "sha256": "64bd5fb69239f57eb0578a1897a45a3c6f5e187480903f83df503b46bf827bfb",
+      "adjustMaskOuterUvRva": "0x2cde2e0",
+      "methodSha256": "fb8384165b9a1e60005be22fabf224e6a942350c680be21971fb6f9672d350b6"
+    }
+  },
+  "flowerBase": {
+    "sourceAtlasSha256": "04c1f4c191b0a821a0bbcb15e67a75bec85cf343a0b2e875ee8e525e1e8dfc7b",
+    "logicalSize": 256,
+    "tileSize": 96,
+    "contentSize": 84,
+    "padding": 6,
+    "alphaExactCount": 25,
+    "records": [
+      {
+        "itemId": 43114910,
+        "sourceRectTopLeft": [
+          36,
+          17,
+          250,
+          239
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 183701770,
+        "sourceRectTopLeft": [
+          40,
+          17,
+          250,
+          239
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 203856820,
+        "sourceRectTopLeft": [
+          32,
+          21,
+          234,
+          245
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 228573412,
+        "sourceRectTopLeft": [
+          15,
+          4,
+          242,
+          253
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 252458237,
+        "sourceRectTopLeft": [
+          25,
+          17,
+          226,
+          243
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 261557677,
+        "sourceRectTopLeft": [
+          22,
+          11,
+          252,
+          255
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 274491259,
+        "sourceRectTopLeft": [
+          55,
+          23,
+          214,
+          237
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 275816250,
+        "sourceRectTopLeft": [
+          23,
+          20,
+          240,
+          246
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 312661096,
+        "sourceRectTopLeft": [
+          24,
+          8,
+          245,
+          252
+        ],
+        "group": "collection_group_citytown"
+      },
+      {
+        "itemId": 462608550,
+        "sourceRectTopLeft": [
+          11,
+          21,
+          249,
+          239
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 668399845,
+        "sourceRectTopLeft": [
+          20,
+          14,
+          242,
+          244
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 1223758923,
+        "sourceRectTopLeft": [
+          38,
+          23,
+          233,
+          234
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 1299466625,
+        "sourceRectTopLeft": [
+          32,
+          26,
+          235,
+          232
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 1331175279,
+        "sourceRectTopLeft": [
+          21,
+          8,
+          241,
+          247
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 1386186941,
+        "sourceRectTopLeft": [
+          38,
+          12,
+          237,
+          242
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 1466319046,
+        "sourceRectTopLeft": [
+          25,
+          13,
+          226,
+          242
+        ],
+        "group": "collection_group_wheatflourwonderland"
+      },
+      {
+        "itemId": 1554283135,
+        "sourceRectTopLeft": [
+          37,
+          22,
+          239,
+          242
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 1561432864,
+        "sourceRectTopLeft": [
+          17,
+          9,
+          244,
+          245
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 1583118562,
+        "sourceRectTopLeft": [
+          41,
+          1,
+          217,
+          252
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 1669522060,
+        "sourceRectTopLeft": [
+          34,
+          12,
+          248,
+          242
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 1695731578,
+        "sourceRectTopLeft": [
+          19,
+          24,
+          246,
+          230
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 1804880447,
+        "sourceRectTopLeft": [
+          19,
+          14,
+          247,
+          240
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 1934826268,
+        "sourceRectTopLeft": [
+          14,
+          19,
+          231,
+          244
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 1968535430,
+        "sourceRectTopLeft": [
+          45,
+          6,
+          225,
+          248
+        ],
+        "group": "collections_group_flowers"
+      },
+      {
+        "itemId": 2105820233,
+        "sourceRectTopLeft": [
+          7,
+          16,
+          248,
+          244
+        ],
+        "group": "collections_group_flowers"
+      }
+    ]
+  },
+  "completeVariantRenderingVerified": false
+}
