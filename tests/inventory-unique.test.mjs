@@ -34,3 +34,14 @@ test('native options transport is bounded and preserves all four fields',async()
  assert.throws(()=>decodeFlowerVariants(wire([1,6,8,10])));
  assert.throws(()=>decodeFlowerVariants(wire([101])));
 });
+
+test('chef wire snapshot carries ordered tint IDs, not flavors or fabricated colors',async()=>{
+ const {inventoryChefAppearance}=await load('../src/inventory-chef-display.ts');
+ const rows=decodeInventoryUnique(wire([3,1,1,1,3,2,4,3,6,14,11,0,2,1,2,4,5,1,14,0,3,1,3,3,2,1,0,0]),new Set([1,2,3]));
+ assert.deepEqual(inventoryChefAppearance(203331651,rows.get(1)),{kind:'cafe',colors:[6,14,11]});
+ assert.deepEqual(inventoryChefAppearance(1798633565,rows.get(2)),{kind:'boba',colorId:14});
+ assert.deepEqual(inventoryChefAppearance(203331651,rows.get(3)),{kind:'cafe',colors:[]});
+ assert.equal(inventoryChefAppearance(1798633565,rows.get(1)),null);
+ assert.equal(inventoryChefAppearance(315822,rows.get(1)),null);
+ assert.throws(()=>decodeInventoryUnique(wire([1,1,1,1,3,2,2,3,6,0]),new Set([1])));
+});

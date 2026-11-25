@@ -1255,3 +1255,24 @@ fn flower_edit_rejects_legacy_remote_cabin_reference_to_uid(){
  assert!(e.change_inventory_flower_variant(4,[6,6,0,0],[6,8,0,0]).is_err());
  assert!(!e.dirty());
 }
+
+#[test]
+fn chef_appearance_is_read_only_and_preserves_full_original_payload(){
+ use hkia_save_core::native::InventoryUniqueData as U;
+ let mut payload=synthetic_payload("3.0.1");payload[3]=0x9a;
+ let cafe=arr(vec![vec![3],arr(vec![arr(vec![u(99),u(98)]),arr(vec![u(6),u(14),u(11),u(19)])])]);
+ let boba=arr(vec![vec![4],arr(vec![u(14),u(6),u(11),u(19),u(99)])]);
+ let empty=arr(vec![vec![3],arr(vec![arr(vec![]),arr(vec![])])]);
+ let nil=arr(vec![vec![3],arr(vec![arr(vec![]),vec![0xc0]])]);
+ for (id,item,p) in [(4,203331651,cafe.clone()),(5,1798633565,boba.clone()),(6,203331651,empty.clone()),(7,203331651,nil.clone())]{payload.extend(doc(1,arr(vec![u(id),u(item),u(id),u(1),p])));}
+ payload.extend(doc(1,arr(vec![u(8),u(315822),u(0),u(6),vec![0xc0]])));
+ let mut e=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
+ assert_eq!(e.inventory_unique_data(4),Some(U::CafeAppearance{count:3,colors:[6,14,11]}));
+ assert_eq!(e.inventory_unique_data(5),Some(U::BobaAppearance{color_id:14}));
+ assert_eq!(e.inventory_unique_data(6),Some(U::CafeAppearance{count:0,colors:[0;3]}));
+ assert_eq!(e.inventory_unique_data(7),Some(U::Opaque{tag:3}));
+ assert!(e.change_inventory_quantity(4,1,2).is_err());
+ e.change_inventory_quantity(8,6,7).unwrap();
+ let reopened=Editor::open(e.export().unwrap()).unwrap();
+ for (id,p) in [(4,cafe),(5,boba),(6,empty),(7,nil)]{assert_eq!(reopened.inventory_original_unique_payload(id),Some(p.as_slice()));assert_eq!(reopened.inventory_unique_data(id),e.inventory_unique_data(id));}
+}

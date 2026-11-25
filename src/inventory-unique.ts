@@ -10,8 +10,9 @@ export function decodeInventoryUnique(bytes:Uint8Array,docIds:ReadonlySet<number
  for(let j=0;j<count;j++){
   const id=u(),present=u(),uid=i(),tag=i(),fieldCount=u(),n=u();
   if(!docIds.has(id)||rows.has(id)||present>1||(!present&&uid!==0)||tag< -2||tag>11||fieldCount>5||
-   (n!==0&&n!==(tag===6?12:tag===7?4:tag===8?3:0)))throw Error('INVENTORY_UNIQUE_INVALID');
+   (n!==0&&(tag===3?n>4:n!==(tag===4?1:tag===6?12:tag===7?4:tag===8?3:0))))throw Error('INVENTORY_UNIQUE_INVALID');
   const words=Array.from({length:n},()=>u());
+  if(n!==0&&((tag===3&&(fieldCount!==2||words[0]!==n-1))||(tag===4&&fieldCount!==5)))throw Error('INVENTORY_UNIQUE_INVALID');
   const editable=u();if(editable>1||(editable===1&&(tag!==7||n!==4)))throw Error('INVENTORY_UNIQUE_INVALID');
   rows.set(id,{uniqueId:present?uid:null,tag,fieldCount,words,flowerEditable:editable===1});
  }
