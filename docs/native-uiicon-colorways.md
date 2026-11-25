@@ -1,6 +1,10 @@
 # Game-native dyeable item icon pipeline
 
-## Correct target
+## Current policy (Owner decision 2026-11-25)
+
+Use a finished original sprite for the exact appearance whenever it exists. Every appearance without a completed original must instead be generated on demand in the browser from verified native assets and rendering rules. No production batch of reconstructed combinations. Source extraction, compression, and offline verification are permitted. The batch exporter and approximation sections below are historical implementation notes, not the target policy. The 5,383 dye Item IDs already have original images; no new clothing reconstruction is required for them.
+
+## Historical target
 
 HKIA Save Editor uses the **original game's item UiIcon**, with the original
 96×96 pixel shape, camera angle, pixels, and transparency. It does **not**
