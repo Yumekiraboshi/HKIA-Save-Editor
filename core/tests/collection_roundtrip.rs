@@ -1449,6 +1449,66 @@ fn ordinary_ingredient_empty_and_replenish_preserve_identity_and_history(){
 }
 
 #[test]
+fn create_absent_material_stacks_uses_native_ids_and_scoped_history(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let candidates=e.inventory_creatable();assert_eq!(candidates.len(),37);
+  assert!(!candidates.iter().any(|r|r.item_id==460708033));
+  let apple=candidates.iter().find(|r|r.item_id==1877756618).unwrap().document_id;
+  let flour=candidates.iter().find(|r|r.item_id==627013240).unwrap().document_id;
+  assert!(e.change_inventory_quantities(&[(apple,0,6),(u32::MAX,0,7)]).is_err());
+  assert!(e.inventory().is_empty());assert!(!e.dirty());
+  e.change_inventory_quantities(&[(apple,0,6),(flour,0,9)]).unwrap();
+  assert_eq!(e.inventory().len(),2);assert_eq!(e.inventory_creatable().len(),35);
+  assert!(e.change_inventory_quantity(apple,0,1).is_err());
+  assert_eq!(e.inventory_unique_rows().count(),2);
+  let checkpoint=e.history_checkpoint().unwrap();
+  let mut restored=Editor::open(input.clone()).unwrap();restored.restore_history(&checkpoint).unwrap();
+  assert_eq!(restored.inventory(),e.inventory());
+  assert!(e.undo_scope(Inventory));assert!(e.inventory().is_empty());
+  assert!(!e.dirty());assert!(e.redo_scope(Inventory));
+  e.change_inventory_quantity(apple,6,0).unwrap();
+  assert_eq!(e.inventory().len(),1);assert_eq!(e.inventory_creatable().len(),36);
+  assert!(e.undo_scope(Inventory));
+  let exported=e.export().unwrap();let reopened=Editor::open(exported).unwrap();
+  let rows=reopened.inventory();assert_eq!(rows.len(),2);
+  assert_eq!((rows[0].document_id,rows[0].item_id,rows[0].quantity),(5,627013240,9));
+  assert_eq!((rows[1].document_id,rows[1].item_id,rows[1].quantity),(6,1877756618,6));
+  assert_eq!(reopened.inventory_original_unique_payload(5),Some([0xc0].as_slice()));
+  assert_eq!(reopened.inventory_creatable().len(),35);assert_eq!(reopened.achievements(),e.achievements());assert_eq!(reopened.entries(),e.entries());
+ }
+}
+
+#[test]
+fn absent_inventory_and_achievement_share_allocation_across_history_scopes(){
+ use hkia_save_core::{achievement::AchievementValue,collection::HistoryScope::{Inventory,Achievements}};
+ let input=slot("3.0.1");let mut e=Editor::open(input.clone()).unwrap();
+ let item=e.inventory_creatable()[0];let guid=[13220480,1299065047,2812061598,2966187300];
+ let done=AchievementValue{complete:true,current:1.0,completed:Some((1_750_000_000,123_456_700))};
+ e.change_inventory_quantity(item.document_id,0,6).unwrap();
+ e.create_achievement(guid,done).unwrap();
+ assert!(e.undo_scope(Inventory));assert!(e.inventory().is_empty());
+ let checkpoint=e.history_checkpoint().unwrap();
+ let mut recovered=Editor::open(input.clone()).unwrap();recovered.restore_history(&checkpoint).unwrap();
+ assert!(recovered.redo_scope(Inventory));assert_eq!(recovered.achievement_value(guid),Some(done));
+ let result=recovered.export().unwrap();let checked=read_slot(&result).unwrap();
+ assert_eq!(checked.index.root_next_id.unwrap().0,6);
+ assert_eq!(checked.index.achievements.last().unwrap().id,5);
+ assert_eq!(checked.index.inventory[0].id,6);
+ assert_eq!(checked.index.inventory[0].item_id,Some(item.item_id));
+ assert!(recovered.undo_scope(Achievements));
+ assert_eq!(recovered.inventory()[0].quantity,6);
+ let result=recovered.export().unwrap();let checked=read_slot(&result).unwrap();
+ assert_eq!(checked.index.root_next_id.unwrap().0,5);
+ assert_eq!(checked.index.inventory[0].id,5);
+ let mut old=Editor::open(slot("3.0.0")).unwrap();
+ assert!(old.inventory_creatable().is_empty());
+ assert!(old.change_inventory_quantity(item.document_id,0,6).is_err());
+}
+
+#[test]
 fn native_currency_rarity_does_not_authorize_membership_edits(){
  let mut payload=synthetic_payload("3.0.1");payload[3]=0x96;
  payload.extend(doc(1,arr(vec![u(4),u(460708033),u(0),u(6),vec![0xc0]])));

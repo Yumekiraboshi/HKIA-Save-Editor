@@ -90,7 +90,7 @@ pub extern "C" fn hkia_inventory_batch_change()->u32{
  })
 }
 /// 4-byte count + N rows of (document id u32, item id i32, quantity i32,
-/// editable u32). Display-only; no inventory records are ever synthesized.
+/// editable u32). Pending ingredient creation uses session-only handles.
 #[no_mangle]
 pub extern "C" fn hkia_inventory_snapshot()->u32{
  STATE.with(|s|{
@@ -105,6 +105,23 @@ pub extern "C" fn hkia_inventory_snapshot()->u32{
    b.extend(row.item_id.to_le_bytes());
    b.extend(row.quantity.to_le_bytes());
    b.extend(u32::from(row.editable).to_le_bytes());
+  }
+  a.reply=b;0
+ })
+}
+
+/// Source-checked absent ordinary ingredients; session-only handles, not native IDs.
+#[no_mangle]
+pub extern "C" fn hkia_inventory_creatable_snapshot()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let rows=editor.inventory_creatable();
+  let mut b=Vec::with_capacity(4+rows.len()*12);
+  b.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{
+   b.extend(row.document_id.to_le_bytes());b.extend(row.item_id.to_le_bytes());
+   b.extend(row.quantity_limit.unwrap_or(0).to_le_bytes());
   }
   a.reply=b;0
  })

@@ -190,3 +190,9 @@ test('zero quantity is a valid native history transition in both directions',()=
   assert.deepEqual(decodeHistoryDetails(log([op],1),records),[{scope:'inventory',documentId:4,batch:[{documentId:4,before,after}]}]);
  }
 });
+
+test('unsigned pending inventory handles retain their native history labels',()=>{
+ const id=2147483648+1877756618;
+ const op=bytes([u8(6),u32(id),i32(0),i32(6)]);
+ assert.deepEqual(decodeHistoryDetails(log([op],1),[meta('inventory',id,null)]),[{scope:'inventory',documentId:id,before:0,after:6}]);
+});

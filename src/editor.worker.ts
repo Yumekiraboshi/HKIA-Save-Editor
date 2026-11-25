@@ -12,7 +12,7 @@ type Engine = {
  memory:WebAssembly.Memory;
  hkia_stage(n:number):number; hkia_open():number;
  hkia_collection_creatable_snapshot():number;
- hkia_inventory_snapshot():number;hkia_inventory_quantity_bounds():number;hkia_inventory_flowers_snapshot():number;hkia_inventory_palettes_snapshot():number;hkia_inventory_unique_snapshot():number;hkia_inventory_flower_variants(id:number):number;hkia_inventory_flower_variant_change(id:number,...values:[...FlowerVariant,...FlowerVariant]):number;hkia_inventory_furniture_variants(id:number):number;hkia_inventory_furniture_variant_change(id:number,...values:[...FurnitureVariant,...FurnitureVariant]):number;hkia_inventory_change(id:number,before:number,after:number):number;hkia_inventory_batch_limit():number;hkia_inventory_batch_change():number;
+ hkia_inventory_snapshot():number;hkia_inventory_creatable_snapshot():number;hkia_inventory_quantity_bounds():number;hkia_inventory_flowers_snapshot():number;hkia_inventory_palettes_snapshot():number;hkia_inventory_unique_snapshot():number;hkia_inventory_flower_variants(id:number):number;hkia_inventory_flower_variant_change(id:number,...values:[...FlowerVariant,...FlowerVariant]):number;hkia_inventory_furniture_variants(id:number):number;hkia_inventory_furniture_variant_change(id:number,...values:[...FurnitureVariant,...FurnitureVariant]):number;hkia_inventory_change(id:number,before:number,after:number):number;hkia_inventory_batch_limit():number;hkia_inventory_batch_change():number;
  hkia_change(id:number,expectedPresent:number,old:bigint,nextPresent:number,value:bigint):number;
  hkia_achievement_parent_create(...args:[ number,number,number,number, number, number,number,bigint,number,number, number,number,bigint,number,number, number,number,number,number, number,number,bigint,number,number]):number;
  hkia_achievement_create(g0:number,g1:number,g2:number,g3:number,complete:number,progress:number,seconds:bigint,nanos:number,hasDate:number):number;
@@ -104,6 +104,18 @@ function snapshot(e:Engine){
   row.quantityLimit=cap;row.quantityMinimum=minimum;editableRows.delete(id);
  }
  if(editableRows.size!==0)throw Error('INVENTORY_SNAPSHOT_INVALID');
+ if(e.hkia_inventory_creatable_snapshot()!==0)throw Error('INVENTORY_SNAPSHOT_FAILED');
+ const cb=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+ if(cb.length<4)throw Error('INVENTORY_SNAPSHOT_INVALID');
+ const cv=new DataView(cb.buffer,cb.byteOffset,cb.byteLength),cn=cv.getUint32(0,true);
+ if(cn>12163||cb.length!==4+12*cn)throw Error('INVENTORY_SNAPSHOT_INVALID');
+ const inventoryCreatable:typeof inventory=[],candidateIds=new Set<number>();
+ for(let i=0;i<cn;i++){
+  const p=4+i*12,documentId=cv.getUint32(p,true),itemId=cv.getInt32(p+4,true),cap=cv.getInt32(p+8,true);
+  if(itemId<=0||documentId!==2147483648+itemId||cap<1||docIds.has(documentId)||candidateIds.has(documentId))throw Error('INVENTORY_SNAPSHOT_INVALID');
+  candidateIds.add(documentId);
+  inventoryCreatable.push({documentId,itemId,quantity:0,editable:true,quantityLimit:cap,quantityMinimum:1});
+ }
  if(e.hkia_inventory_flowers_snapshot()!==0)throw Error('FLOWER_SNAPSHOT_FAILED');
  const flowerRows=decodeInventoryFlowers(readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len()),docIds);
  for(const row of inventory){const flower=flowerRows.get(row.documentId);if(flower)row.flower=flower;}
@@ -177,7 +189,7 @@ function snapshot(e:Engine){
  for(let i=0;i<historyCount;i++){
   const offset=4+i*23,scope=h[offset],applied=h[offset+1],paired=h[offset+2];
   if(scope>2||applied>1||paired>1)throw Error('HISTORY_SNAPSHOT_INVALID');
-  const itemId=hv.getInt32(offset+3,true);
+  const itemId=scope===2?hv.getUint32(offset+3,true):hv.getInt32(offset+3,true);
   const guid:[number,number,number,number]=[
    hv.getUint32(offset+7,true),hv.getUint32(offset+11,true),
    hv.getUint32(offset+15,true),hv.getUint32(offset+19,true)
@@ -208,7 +220,7 @@ function snapshot(e:Engine){
   eligibleCollectionHistoryIds.push(id);
   lastId=id;
  }
- return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,inventory,inventoryBatchLimit:e.hkia_inventory_batch_limit(),achievements,counters,history,historyCheckpoint:checkpoint,eligibleCollectionHistoryIds,achievementGoals};
+ return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,inventory,inventoryCreatable,inventoryBatchLimit:e.hkia_inventory_batch_limit(),achievements,counters,history,historyCheckpoint:checkpoint,eligibleCollectionHistoryIds,achievementGoals};
 }
 function validAchievement(v:AchievementValue):boolean{
  return !!v&&typeof v.complete==='boolean'&&typeof v.current==='number'&&Number.isFinite(v.current)&&v.current>=0&&
@@ -283,7 +295,7 @@ async function execute(r:Request):Promise<unknown>{
   case 'inventory-batch-change':{
    const rows=r.quantityBatch;
    if(!Array.isArray(rows)||rows.length<1||rows.length>e.hkia_inventory_batch_limit()||
-    rows.some(row=>!Array.isArray(row)||row.length!==3||row.some((n,i)=>!Number.isInteger(n)||n<(i===0?1:0)||n>2147483647)))
+    rows.some(row=>!Array.isArray(row)||row.length!==3||row.some((n,i)=>!Number.isInteger(n)||n<(i===0?1:0)||n>(i===0?4294967295:2147483647))))
     throw Error('INVENTORY_INVALID');
    const len=rows.length*12,p=e.hkia_stage(len);
    if(!p||p+len>e.memory.buffer.byteLength)throw Error('INVENTORY_INVALID');
@@ -294,7 +306,7 @@ async function execute(r:Request):Promise<unknown>{
   }
   case 'inventory-change':{
    const id=r.documentId,before=r.beforeQuantity,next=r.nextQuantity;
-   if(!Number.isInteger(id)||id===undefined||id<1||id>2147483647||
+   if(!Number.isInteger(id)||id===undefined||id<1||id>4294967295||
     !Number.isInteger(before)||before===undefined||before<0||before>2147483647||
     !Number.isInteger(next)||next===undefined||next<0||next>2147483647)
     throw Error('INVENTORY_INVALID');
@@ -404,7 +416,7 @@ async function execute(r:Request):Promise<unknown>{
     }
    }
    for(const p of r.inventoryPatches??[]){
-    if(!p||!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>2147483647){
+    if(!p||!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>4294967295||(p.documentId>2147483647&&(p.kind!==undefined||p.before!==0||p.after<=0))){
      e.hkia_reset();throw Error('DRAFT_INVALID');
     }
     const ok=p.kind==='flower-variant'

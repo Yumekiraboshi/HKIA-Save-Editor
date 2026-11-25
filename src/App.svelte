@@ -5,7 +5,7 @@
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
- import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy} from './inventory-copy';
+ import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy} from './inventory-copy';
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,type FurnitureDisplay} from './inventory-furniture-display';
@@ -77,23 +77,24 @@ import {verifiedFloorplanName} from './floorplan-names';
  let furnitureSelection=$state(-1);
  let inventoryNativeArt:InventoryNativeArt|null=$state(null);
  let inventoryEditableOnly=$state(false);
+ let inventoryAddMode=$state(false);
  let inventoryBatchMode=$state(false);
  let inventoryBatchSelected=$state<Set<number>>(new Set());
  let inventoryBatchQuantity=$state<number|undefined>(undefined);
  // Presentation only: the tightest bound returned by Rust for selected rows.
  const inventoryBatchMinimum=$derived.by(()=>{
   if(!snapshot||inventoryBatchSelected.size===0)return 1;
-  return snapshot.inventory.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantityMinimum!==0)?1:0;
+  return inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantityMinimum!==0)?1:0;
  });
  const inventoryBatchMaximum=$derived.by(()=>{
   let cap=2147483647;
-  if(snapshot)for(const row of snapshot.inventory){
+  if(snapshot)for(const row of inventoryBrowseRows){
    if(inventoryBatchSelected.has(row.documentId))cap=Math.min(cap,row.quantityLimit??0);
   }
   return Math.max(1,cap);
  });
  function clearInventoryBatch(){inventoryBatchMode=false;inventoryBatchSelected=new Set();inventoryBatchQuantity=undefined}
- $effect(()=>{if(activeTool!=='inventory')clearInventoryBatch()});
+ $effect(()=>{if(activeTool!=='inventory'){clearInventoryBatch();inventoryAddMode=false}});
  let inventoryLimit=$state(BATCH_SIZE);
  let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
  let inventoryBaseline:InventoryEntry[]=[];
@@ -206,12 +207,12 @@ import {verifiedFloorplanName} from './floorplan-names';
  const groupScopedAchievementRows=$derived(achievementGroupHierarchy&&achievementGroupSelection?
   achievementGroupSelection==='__unmapped'?unmappedAchievementRows:groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows,achievementFacts):
   sourceOrderedAchievementRows);
- const inventoryGroupTotals=$derived(inventoryGroupCounts(
-  (snapshot as SaveSnapshot|null)?.inventory??[],nativeInventoryIndex));
+ const inventoryBrowseRows:InventoryEntry[]=$derived((inventoryAddMode?(snapshot as SaveSnapshot|null)?.inventoryCreatable:(snapshot as SaveSnapshot|null)?.inventory)??[]);
+ const inventoryGroupTotals=$derived(inventoryGroupCounts(inventoryBrowseRows,nativeInventoryIndex));
  const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
  const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
  const inventoryRows=$derived(browseInventory(
-  (snapshot as SaveSnapshot|null)?.inventory??[],inventoryQuery,activeInventoryGroup,
+  inventoryBrowseRows,inventoryQuery,activeInventoryGroup,
   inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale));
  const achievementRows=$derived(searchAchievementRows(achievementQuery,sourceOrderedAchievementRows,
   groupScopedAchievementRows,achievementName,guid=>achievementIndex.get(guid)?.key??''));
@@ -445,7 +446,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   }
  }
  function openInventoryTab(){
-  clearInventoryBatch();
+  clearInventoryBatch();inventoryAddMode=false;
   activeTool='inventory';inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;
   inventoryLimit=BATCH_SIZE;editingAchievement=null;error='';
   // Retry transient failures only when the user reopens Inventory.
@@ -531,7 +532,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
  function historyEntryChange(i:number):string{
-  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerVariantName,v=>v.map(n=>materialLabel(furnitureDisplay,n,furnitureCopy.defaultMaterial)).join(' / '),id=>inventoryName(inventoryHistoryItems.get(id)??0))||
+  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerVariantName,v=>v.map(n=>materialLabel(furnitureDisplay,n,furnitureCopy.defaultMaterial)).join(' / '),id=>inventoryName(id>2147483647?id-2147483648:inventoryHistoryItems.get(id)??0))||
    (tabHistory[i]?.paired?hCopy.paired:'');
  }
  function historyEntryLabel(entry:HistoryRecord,i:number):string{
@@ -541,7 +542,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const item=historyItems.get(entry.itemId??0);
    return item?nameFor(item):'#'+String(entry.itemId);
   }
-  if(entry.scope==='inventory')return inventoryName(inventoryHistoryItems.get(entry.itemId??0)??0);
+  if(entry.scope==='inventory')return inventoryName((entry.itemId??0)>2147483647?entry.itemId!-2147483648:inventoryHistoryItems.get(entry.itemId??0)??0);
   if(!entry.guid)return hCopy.title;
   return achievementName(achievementGuid(entry.guid),0);
  }
@@ -638,7 +639,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(file.size>60*1024*1024||file.size===0)throw Error(copy.typeIssue);
    await draftWrites.catch(()=>{});
    const session=await openSave(file);
-   clearInventoryBatch();
+   clearInventoryBatch();inventoryAddMode=false;
    original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;inventoryBaseline=session.inventory;update(session);
    selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';collectionSearchDrilldown=false;filter='all';
    iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;
@@ -745,7 +746,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||!inventoryBatchMode||!inventoryBatchSelected.size)return;
   const next=inventoryBatchQuantity;
   if(next===undefined||!Number.isSafeInteger(next)||next<inventoryBatchMinimum||next>inventoryBatchMaximum)return;
-  const rows=snapshot.inventory.filter(row=>inventoryBatchSelected.has(row.documentId));
+  const rows=inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId));
   if(rows.length!==inventoryBatchSelected.size||rows.some(row=>!row.editable))return;
   if(rows.every(row=>row.quantity===next)){clearInventoryBatch();return}
   if(next===0&&!confirm(inventoryEmptyCopy(locale)))return;
@@ -1188,6 +1189,11 @@ import {verifiedFloorplanName} from './floorplan-names';
      onclick={()=>{inventoryEditableOnly=!inventoryEditableOnly;inventoryLimit=BATCH_SIZE}}>
      {iCopy.editableOnly}
     </button>
+    <button type="button" class="inventory-editable-filter inventory-add-toggle" class:active={inventoryAddMode}
+     aria-pressed={inventoryAddMode} disabled={busy||(!inventoryAddMode&&snapshot.inventoryCreatable.length===0)}
+     onclick={()=>{clearInventoryBatch();inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;inventoryLimit=BATCH_SIZE}}>
+     {inventoryAddMode?iCopy.tab:'+ '+inventoryAddCopy(locale)}
+    </button>
     <button type="button" class="inventory-editable-filter inventory-batch-toggle" class:active={inventoryBatchMode}
      aria-pressed={inventoryBatchMode} disabled={busy||snapshot.inventoryBatchLimit<1}
      onclick={()=>{if(inventoryBatchMode)clearInventoryBatch();else inventoryBatchMode=true}}>
@@ -1201,7 +1207,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <button type="button" class="inventory-editable-filter" disabled={busy} onclick={clearInventoryBatch}>{copy.cancel}</button>
      </form>
     {:else}
-     <span class="inventory-total">{iCopy.count}: {inventoryRows.length.toLocaleString(locale)}</span>
+     <span class="inventory-total">{inventoryAddMode?inventoryAddCopy(locale):iCopy.count}: {inventoryRows.length.toLocaleString(locale)}</span>
     {/if}
    </div>
    {#if inventoryVisibleGroups.length>0||(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)>0}
@@ -1292,7 +1298,7 @@ import {verifiedFloorplanName} from './floorplan-names';
         <label>
          <span class="visually-hidden">{iCopy.quantity}</span>
          <input type="number" name="quantity" min={item.quantityMinimum} max={item.quantityLimit??1} step="1"
-          value={item.quantity} disabled={busy||inventoryBatchMode} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
+          value={inventoryAddMode?1:item.quantity} disabled={busy||inventoryBatchMode} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
         </label>
         <button type="submit" class="primary" disabled={busy||inventoryBatchMode} title={iCopy.apply} aria-label={iCopy.apply}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>

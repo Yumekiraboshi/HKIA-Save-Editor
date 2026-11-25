@@ -14,6 +14,7 @@ pub(crate) fn ordinary_quantity_limit(item_id:i32)->Option<i32>{
 pub(crate) fn ordinary_ingredient(item_id:i32)->bool{
  RULES.binary_search_by_key(&item_id,|row|row.0).ok().is_some_and(|i|RULES[i].1&8!=0)
 }
+pub(crate) fn ordinary_ingredient_ids()->impl Iterator<Item=i32>{RULES.iter().filter_map(|&(id,flags)|(flags&8!=0).then_some(id))}
 #[cfg(test)]
 mod tests{
  use super::*;

@@ -71,14 +71,14 @@ export function decodeHistoryDetails(
     result.push({scope:'collections',itemId,before,after});
    }else if(kind===6){
     const documentId=u32(),before=i32(),after=i32();
-    if(documentId<=0||documentId>2147483647||before<0||after<0||before===after)return [];
+    if(documentId<=0||before<0||after<0||before===after)return [];
     result.push({scope:'inventory',documentId,before,after});
    }else if(kind===10){
     const n=u32();if(n<1||n>40)return [];
     const batch:InventoryBatchDetail[]=[],seen=new Set<number>();
     for(let j=0;j<n;j++){
      const documentId=u32(),before=i32(),after=i32();
-     if(documentId<=0||documentId>2147483647||before<0||after<0||before===after||seen.has(documentId))return [];
+     if(documentId<=0||before<0||after<0||before===after||seen.has(documentId))return [];
      seen.add(documentId);batch.push({documentId,before,after});
     }
     result.push({scope:'inventory',documentId:batch[0].documentId,batch});

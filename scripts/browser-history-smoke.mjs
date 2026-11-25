@@ -435,6 +435,75 @@ async function inventoryEmptyMaterialSmoke(){
   console.log('CHROMIUM INVENTORY EMPTY PASS: confirmation, empty/refill, reload, undo/redo and preserved native records');
  }finally{await context.close()}
 }
+async function inventoryCreateMaterialSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-create-material.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot())
+  });
+  const openInventory=async()=>{
+   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+   await chooseTab(page,'inventory');
+  };
+  const search=page.locator('.inventory-controls input[type="search"]');
+  const chooseItems=()=>page.locator('[data-inventory-group="items"]').click();
+  const inputFor=async id=>{
+   await search.fill(String(id));
+   const input=page.locator('.inventory-card input[name="quantity"]');
+   await input.waitFor({timeout:30_000});return input;
+  };
+  await openInventory();
+  await page.locator('.inventory-add-toggle').click();
+  await chooseItems();
+  const apple=await inputFor(1877756618);
+  assert.equal(await apple.inputValue(),'1');
+  await apple.fill('6');
+  await page.locator('.inventory-card button[type="submit"]').click();
+  await page.locator('.state-dot.changed').waitFor();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  // Select two absent materials in the same transaction.
+  await page.locator('.inventory-batch-toggle').click();
+  await search.fill('627013240');await page.locator('.inventory-batch-checkbox').check();
+  await search.fill('1400142412');await page.locator('.inventory-batch-checkbox').check();
+  await page.locator('.inventory-batch-form input[type="number"]').fill('9');
+  await page.locator('.inventory-batch-form button[type="submit"]').click();
+  await page.locator('.inventory-batch-form').waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle:not([disabled])').waitFor();
+  await page.reload({waitUntil:'networkidle'});
+  await openInventory();await chooseItems();
+  assert.equal(await (await inputFor(1877756618)).inputValue(),'6');
+  assert.equal(await (await inputFor(627013240)).inputValue(),'9');
+  assert.equal(await (await inputFor(1400142412)).inputValue(),'9');
+  await page.locator('button[title="Undo"]').click();
+  await page.locator('button[title="Redo"]:not([disabled])').waitFor();
+  await search.fill('627013240');await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.locator('button[title="Redo"]').click();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  assert.equal(await (await inputFor(627013240)).inputValue(),'9');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([
+   page.waitForEvent('download',{timeout:30_000}),
+   page.locator('.file-menu .menu-popover > button').nth(2).click()
+  ]);
+  const output=readFileSync(await download.path());
+  const wasm=readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm');
+  const {instance}=await WebAssembly.instantiate(wasm,{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);
+  new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_snapshot(),0);
+  const iv=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(iv.getUint32(0,true),4);
+  const rows=[];
+  for(let i=0;i<4;i++){const p=4+i*16;rows.push([iv.getUint32(p,true),iv.getInt32(p+4,true),iv.getInt32(p+8,true)])}
+  assert.deepEqual(rows,[[4,315822,6],[5,627013240,9],[6,1400142412,9],[7,1877756618,6]]);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM INVENTORY CREATE PASS: individual/batch add, local recovery, undo/redo, native ID allocation and export reparse');
+ }finally{await context.close()}
+}
 async function inventoryDynamicFlowerArtSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -1373,6 +1442,7 @@ async function run(){
  await inventoryBatchQuantitySmoke();
  await inventoryQuantityBoundsSmoke();
  await inventoryEmptyMaterialSmoke();
+ await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
  await inventoryDynamicFlowerArtSmoke();
  await inventoryFlowerVariantEditSmoke();
