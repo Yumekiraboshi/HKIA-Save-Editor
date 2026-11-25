@@ -108,7 +108,7 @@ pub struct VisitorManagerScopedSourceLink{
  pub home_hash128:[u32;4],
 }
 #[derive(Debug,Default)]
-pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievements:Vec<Model>,pub counters:Vec<Model>,pub collections:Vec<CollectionEntry>,pub deprecated_count:usize,pub dictionary_entries:usize,pub collection_map:Option<Range<usize>>,pub root_documents_span:Option<Range<usize>>,pub celebrations:Vec<CelebrationSpan>,pub inventory:Vec<InventoryRow>,pub inventory_item_refs:HashSet<(i32,i32)>,pub inventory_item_refs_incomplete:bool,pub deprecated:Vec<DeprecatedEntry>,pub deprecated_map:Option<Range<usize>>,pub collection_version:Option<CollectionVersion>,
+pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievements:Vec<Model>,pub counters:Vec<Model>,pub collections:Vec<CollectionEntry>,pub deprecated_count:usize,pub dictionary_entries:usize,pub collection_map:Option<Range<usize>>,pub root_documents_span:Option<Range<usize>>,pub celebrations:Vec<CelebrationSpan>,pub inventory:Vec<InventoryRow>,pub inventory_item_refs:HashSet<(i32,i32)>,pub inventory_legacy_uid_refs:HashSet<i32>,pub inventory_item_refs_incomplete:bool,pub deprecated:Vec<DeprecatedEntry>,pub deprecated_map:Option<Range<usize>>,pub collection_version:Option<CollectionVersion>,
  /// Source rows are derived only inside this existing NativeIndex Walk;
  /// completeness means just 15 schema fields, NEVER ownership or local rights.
  pub home_sources:Vec<HomeSourceRow>,
@@ -276,11 +276,15 @@ impl<'a> Walk<'a>{
       // copied UI representation or a caller-supplied digest.
       let source_start=self.c.pos;
       let n=self.c.array()?;if n>specs.len(){return Err(Error::Schema)}
-      let short=name.rsplit('.').next().unwrap_or(name);let is_doc=matches!(ctx,Some((DOC,_)));let capture_all=matches!(short,"AchievementData"|"GameCounterData"|"GameCollectionsTraitModel"|"CollectionVersion"|"AchievementModel"|"GameCounterModel")||name==ROOT||name==SHOP||name==CELEBRATION||(short=="InventoryItem"&&ctx==Some((DOC,1)))||name==HOME||name==CABIN||name==VISITOR_MANAGER||matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,_)))||name=="Sunblink.UserData.UniqueItemIdModel";
+      let short=name.rsplit('.').next().unwrap_or(name);let is_doc=matches!(ctx,Some((DOC,_)));let capture_all=matches!(short,"AchievementData"|"GameCounterData"|"GameCollectionsTraitModel"|"CollectionVersion"|"AchievementModel"|"GameCounterModel")||name==ROOT||name==SHOP||name==CELEBRATION||(short=="InventoryItem"&&ctx==Some((DOC,1)))||name==HOME||name==CABIN||name==VISITOR_MANAGER||matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,_)))||name=="Sunblink.UserData.UniqueItemIdModel"||name=="Sunblink.UserData.HomeObjectModelDeprecatedV71";
       let mut fields=Vec::new();let mut document_id=None;
       for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
        if capture_all{fields.push((value,at..self.c.pos));}
        else if is_doc&&i==0{document_id=Some(value);}
+      }
+      if name=="Sunblink.UserData.HomeObjectModelDeprecatedV71" {
+       if let Some((v,_))=fields.get(7){let uid=i32::try_from(v.int()?).map_err(|_|Error::Schema)?;if uid>0{self.index.inventory_legacy_uid_refs.insert(uid);}}
+       else{self.index.inventory_item_refs_incomplete=true;}
       }
       if name=="Sunblink.UserData.UniqueItemIdModel" {
        if n==2 {
