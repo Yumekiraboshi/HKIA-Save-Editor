@@ -267,9 +267,13 @@ async function inventoryBatchQuantitySmoke(){
   await check(315822,20);await check(517031,20);
   await page.locator('button[title="Undo"]').click();
   await page.locator('button[title="Undo"]:disabled').waitFor();
+  await page.locator('button[title="Redo"]:not([disabled])').waitFor();
   await check(315822,6);await check(517031,9);
   await page.locator('button[title="Redo"]').click();
   await page.locator('button[title="Redo"]:disabled').waitFor();
+  // A disabled button also means the Worker request is in flight. Require the
+  // opposite history control to be enabled after the native snapshot and draft write.
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
   await check(315822,20);await check(517031,20);
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([
