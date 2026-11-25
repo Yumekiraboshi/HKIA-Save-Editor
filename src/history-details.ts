@@ -1,9 +1,11 @@
+import type {FlowerVariant} from './inventory-unique';
 import type {AchievementValue,HistoryRecord} from './worker-client';
 import {toDateTimeValue} from './collection-date';
 
 export type HistoryDetail =
  | {scope:'collections';itemId:number;before:bigint|null;after:bigint|null}
- | {scope:'inventory';documentId:number;before:number;after:number}
+ | {scope:'inventory';documentId:number;before:number;after:number;flowerVariant?:false}
+ | {scope:'inventory';documentId:number;before:FlowerVariant;after:FlowerVariant;flowerVariant:true}
  | {scope:'achievements';guid:[number,number,number,number];before:AchievementValue|null;after:AchievementValue;parentGuid:[number,number,number,number]|null;parentBefore:AchievementValue|null;parentAfter:AchievementValue|null};
 
 const MAGIC='HKIAHS01';
@@ -68,6 +70,10 @@ export function decodeHistoryDetails(
     const documentId=u32(),before=i32(),after=i32();
     if(documentId<=0||documentId>2147483647||before<1||after<1||before===after)return [];
     result.push({scope:'inventory',documentId,before,after});
+   }else if(kind===8){
+    const documentId=u32(),before:FlowerVariant=[i32(),i32(),i32(),i32()],after:FlowerVariant=[i32(),i32(),i32(),i32()];
+    if(documentId<=0||documentId>2147483647||before.every((v,i)=>v===after[i]))return [];
+    result.push({scope:'inventory',documentId,before,after,flowerVariant:true});
    }else if(kind===1){
     const id=guid(),before=value(),after=value();
     result.push({scope:'achievements',guid:id,before,after,parentGuid:null,parentBefore:null,parentAfter:null});
@@ -131,10 +137,10 @@ function achievementChanges(
 /** Details derive only from the native Rust history journal, including
  * category side effects within a single atomic achievement transaction. */
 export function formatHistoryChange(
- detail:HistoryDetail|undefined,locale:string,copy:HistoryChangeCopy,pairedLabel='',quantityLabel='Quantity'
+ detail:HistoryDetail|undefined,locale:string,copy:HistoryChangeCopy,pairedLabel='',quantityLabel='Quantity',flowerVariantName?:(value:FlowerVariant)=>string
 ):string{
  if(!detail)return '';
- if(detail.scope==='inventory')return quantityLabel+': '+detail.before+' → '+detail.after;
+ if(detail.scope==='inventory')return detail.flowerVariant?(flowerVariantName?.(detail.before)??String(detail.before))+' → '+(flowerVariantName?.(detail.after)??String(detail.after)):quantityLabel+': '+detail.before+' → '+detail.after;
  if(detail.scope==='collections'){
   if(detail.before===null)return copy.added;
   if(detail.after===null)return copy.removed;
