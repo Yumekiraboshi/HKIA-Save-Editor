@@ -1447,3 +1447,12 @@ fn ordinary_ingredient_empty_and_replenish_preserve_identity_and_history(){
   assert!(e.undo());assert!(e.undo());assert_eq!(e.inventory(),original);assert!(!e.dirty());
  }
 }
+
+#[test]
+fn native_currency_rarity_does_not_authorize_membership_edits(){
+ let mut payload=synthetic_payload("3.0.1");payload[3]=0x96;
+ payload.extend(doc(1,arr(vec![u(4),u(460708033),u(0),u(6),vec![0xc0]])));
+ let mut editor=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
+ assert_eq!(editor.inventory()[0].quantity_minimum,1);
+ assert!(editor.change_inventory_quantity(4,6,0).is_err());assert!(!editor.dirty());
+}

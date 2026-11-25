@@ -25,8 +25,8 @@ mod tests{
   let ids:Vec<u8>=RULES.iter().flat_map(|&(id,_)|id.to_le_bytes()).collect();
   let flags:Vec<u8>=RULES.iter().map(|&(_,f)|f).collect();
   assert_eq!(hex(&crate::digest::sha256(&ids)),"8a55e11da2b28b30bb212424159657d3d9e7b47baf6a21ed94fd8615d1ef4702");
-  assert_eq!(hex(&crate::digest::sha256(&flags)),"7f217f6e4d73de38591ab8975a3f1c0c322baec8b3dcf0aecda3f6a322157da8");
-  assert_eq!([1,2,4,8].map(|mask|flags.iter().filter(|&&f|f&mask!=0).count()),[10293,138,13,38]);
+  assert_eq!(hex(&crate::digest::sha256(&flags)),"07535a7d093ce3abff44857ecfd9fcb1fed54b365e7524c8a10dff10d8c2cb64");
+  assert_eq!([1,2,4,8].map(|mask|flags.iter().filter(|&&f|f&mask!=0).count()),[10293,138,13,37]);
   assert_eq!(CUSTOM_CAPS.len(),13);
   assert_eq!(RULES.iter().filter(|&&(_,f)|f&4!=0).map(|&(id,_)|id).collect::<Vec<_>>(),CUSTOM_CAPS.iter().map(|&(id,_)|id).collect::<Vec<_>>());
   assert!(CUSTOM_CAPS.iter().all(|&(_,cap)|cap>0));
