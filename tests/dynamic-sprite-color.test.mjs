@@ -48,3 +48,29 @@ test('all 25 base flower tiles have recorded native geometry; all explicit patte
   }
  }
 });
+
+test('native UI falls back to each species null-pattern mask for known patterns, including all eight effects',()=>{
+ const effects=Object.entries(defs.patterns).filter(([,d])=>d.effect).map(([k])=>Number(k));
+ assert.deepEqual(effects,[3,4,5,6,7,8,9,15]);
+ let explicit=0,fallback=0;
+ for(const item of index.items){
+  const defaultMask=item.patterns.find(p=>p.patternIndex===0);
+  assert.ok(defaultMask);
+  for(const pattern of [0,...Object.keys(defs.patterns).map(Number)]){
+   const exact=item.patterns.find(p=>p.patternIndex===pattern);
+   const result=resolveFlowerAppearance(item.itemId,{growState:6,baseColor:1,pattern,patternColor:0},defs,index);
+   assert.ok(result);
+   assert.equal(result.maskGuid,(exact??defaultMask).maskGuid);
+   assert.deepEqual(result.tints,[defs.colors['1'].rgba,pattern===0?defs.colors['1'].rgba:[1,1,1,1],defs.colors['1'].rgba]);
+   if(exact)explicit++;else fallback++;
+   if(effects.includes(pattern))assert.equal(exact,undefined);
+  }
+  assert.equal(resolveFlowerAppearance(item.itemId,{growState:6,baseColor:1,pattern:9999,patternColor:0},defs,index),null);
+  assert.equal(resolveFlowerAppearance(item.itemId,{growState:6,baseColor:9999,pattern:3,patternColor:0},defs,index),null);
+  assert.equal(resolveFlowerAppearance(item.itemId,{growState:6,baseColor:1,pattern:3,patternColor:9999},defs,index),null);
+  // Missing or broken null-pattern references still fail closed.
+  const broken={...index,items:[{...item,patterns:item.patterns.filter(p=>p.patternIndex!==0)}]};
+  assert.equal(resolveFlowerAppearance(item.itemId,{growState:6,baseColor:1,pattern:3,patternColor:0},defs,broken),null);
+ }
+ assert.equal(explicit,161);assert.equal(fallback,264);
+});

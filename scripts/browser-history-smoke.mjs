@@ -37,7 +37,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const flower=(id,color,pattern,accent)=>doc(1,arr([id],u32(43114910),u32(id),u32(1),arr([7],arr([6],u32(color),u32(pattern),u32(accent)))));
  const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
-  ...(flowerInventory?[flower(8,1,0,0),flower(9,9,0,0),flower(10,1,10,16)]:[])));
+  ...(flowerInventory?[flower(8,1,0,0),flower(9,9,0,0),flower(10,1,10,16),flower(11,1,3,0),flower(12,1,9999,0)]:[])));
  const prefix=Uint8Array.from('135b4aa4f702a45d1cc562aeb5a386ed5d17e1fd588f424dcfc59d2e140cf597'.match(/../g).map(x=>parseInt(x,16)));
  const magic=Uint8Array.from('a1a2f8333c66ec455baa2dfc6325c2437a779c9906eecff0c022e5f6b6ca73b8'.match(/../g).map(x=>parseInt(x,16)));
  const lit=[0xf0];let remain=model.length-15;
@@ -207,8 +207,10 @@ async function inventoryDynamicFlowerArtSmoke(){
   await chooseTab(page,'inventory');
   await page.locator('.inventory-controls input[type="search"]').fill('43114910');
   const sprites=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"]');
-  await sprites.nth(2).waitFor({timeout:30_000});
-  assert.equal(await sprites.count(),3);
+  await sprites.nth(3).waitFor({timeout:30_000});
+  assert.equal(await sprites.count(),4);
+  await page.locator('.inventory-card .item-sprite[data-icon-fidelity="species-fallback"]').waitFor({timeout:30_000});
+  await page.locator('.inventory-card img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
   const images=await sprites.evaluateAll(async els=>Promise.all(els.map(async el=>{
    const url=getComputedStyle(el).backgroundImage.slice(5,-2);
    if(!url.startsWith('blob:'))throw Error('expected local generated blob');
@@ -219,10 +221,10 @@ async function inventoryDynamicFlowerArtSmoke(){
    return {width:c.width,height:c.height,alpha:Array.from(bytes.filter((_,i)=>i%4===3)),rgb:Array.from(bytes.filter((_,i)=>i%4!==3))};
   })));
   for(const im of images){assert.equal(im.width,96);assert.equal(im.height,96);assert.ok(im.alpha.some(a=>a>200));assert.equal(im.alpha[0],0);}
-  assert.deepEqual(images[0].alpha,images[1].alpha);assert.deepEqual(images[0].alpha,images[2].alpha);
+  assert.deepEqual(images[0].alpha,images[1].alpha);assert.deepEqual(images[0].alpha,images[2].alpha);assert.deepEqual(images[0].alpha,images[3].alpha);
   assert.notDeepEqual(images[0].rgb,images[1].rgb);assert.notDeepEqual(images[0].rgb,images[2].rgb);
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM DYNAMIC FLOWER PASS: original source sampling, distinct same-ID appearances, local blob generation');
+  console.log('CHROMIUM DYNAMIC FLOWER PASS: original source sampling, distinct same-ID appearances, native effect-mask fallback, unknown pattern refusal, local blob generation');
  }finally{await context.close();}
 }
 async function inventoryOriginalArtSmoke(){
