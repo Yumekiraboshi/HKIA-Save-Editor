@@ -25,7 +25,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false,editableFlower=false,editableFurniture=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -41,6 +41,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const flower=(id,color,pattern,accent)=>doc(1,arr([id],u32(43114910),u32(id),u32(1),arr([7],arr([6],u32(color),u32(pattern),u32(accent)))));
  const model=arr([0],[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
+  ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
   ...(editableFlower?[flower(8,1,0,0)]:[]),
   ...(editableFurniture?[doc(1,arr([8],u32(61381969),u32(11),u32(93),arr([8],arr(u32(13),u32(2),u32(0)))))]:[]),
   ...(flowerInventory?[flower(8,1,0,0),flower(9,9,0,0),flower(10,1,10,16),flower(11,1,3,0),flower(12,1,9999,0)]:[])));
@@ -230,6 +231,66 @@ async function inventoryEditExportSmoke(){
  * Colorway fidelity is inherited from the same shared Collection pipeline:
  * an approximate render is NEVER asserted to be an exact game shader image.
  */
+async function inventoryBatchQuantitySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-inventory-batch.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({batchInventory:true}))
+  });
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('315822');
+  await page.locator('.inventory-card').first().waitFor();
+  await page.locator('.inventory-batch-toggle').click();
+  await page.locator('.inventory-batch-checkbox').check();
+  // Both IDs are ordinary clothing records in the source category index.
+  await search.fill('517031');
+  await page.locator('.inventory-batch-checkbox').check();
+  await page.locator('.inventory-batch-form input[type="number"]').fill('20');
+  await page.locator('.inventory-batch-form button[type="submit"]').click();
+  await page.locator('.inventory-batch-form').waitFor({state:'hidden'});
+  await page.locator('.state-dot.changed').waitFor();
+  await page.locator('.inventory-card button[type="submit"]:not([disabled])').first().waitFor();
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const check=async(id,count)=>{
+   await page.locator('.inventory-controls input[type="search"]').fill(String(id));
+   const q=page.locator('.inventory-card input[name="quantity"]').first();
+   await q.waitFor();assert.equal(await q.inputValue(),String(count));
+  };
+  await check(315822,20);await check(517031,20);
+  await page.locator('button[title="Undo"]').click();
+  await page.locator('button[title="Undo"]:disabled').waitFor();
+  await check(315822,6);await check(517031,9);
+  await page.locator('button[title="Redo"]').click();
+  await page.locator('button[title="Redo"]:disabled').waitFor();
+  await check(315822,20);await check(517031,20);
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([
+   page.waitForEvent('download',{timeout:30_000}),
+   page.locator('.file-menu .menu-popover > button').nth(2).click()
+  ]);
+  const output=readFileSync(await download.path());
+  const wasm=readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm');
+  const {instance}=await WebAssembly.instantiate(wasm,{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);
+  new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_snapshot(),0);
+  const iv=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(iv.getUint32(0,true),2);
+  const rows=[];
+  for(let i=0;i<2;i++){const p=4+i*16;rows.push([iv.getUint32(p,true),iv.getInt32(p+4,true),iv.getInt32(p+8,true)])}
+  assert.deepEqual(rows,[[4,315822,20],[8,517031,20]]);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM INVENTORY BATCH PASS: explicit selection, atomic CAS, reload, grouped undo/redo and WASM reparse');
+ }finally{await context.close()}
+}
 async function inventoryDynamicFlowerArtSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -1164,6 +1225,7 @@ async function run(){
  await chefRuntimeSmoke(browser,origin,base);
  await wandRuntimeSmoke(browser,origin,base);
  await inventoryEditExportSmoke();
+ await inventoryBatchQuantitySmoke();
  await inventoryOriginalArtSmoke();
  await inventoryDynamicFlowerArtSmoke();
  await inventoryFlowerVariantEditSmoke();
