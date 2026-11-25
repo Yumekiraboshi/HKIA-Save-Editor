@@ -280,14 +280,22 @@ async function inventoryBatchQuantitySmoke(){
   await search.fill('315822');
   await page.locator('.inventory-card').first().waitFor();
   await page.locator('.inventory-batch-toggle').click();
-  await page.locator('.inventory-batch-checkbox').check();
+  await page.locator('.inventory-select-visible').click();
+  assert.equal(await page.locator('.inventory-batch-checkbox:checked').count(),1);
   // Both IDs are ordinary clothing records in the source category index.
   await search.fill('517031');
-  await page.locator('.inventory-batch-checkbox').check();
+  await page.locator('.inventory-select-visible').click();
+  assert.equal(await page.locator('.inventory-batch-checkbox:checked').count(),1);
+  assert.match(await page.locator('.inventory-batch-form .inventory-total').innerText(),/^2\s*\//);
   await page.locator('.inventory-batch-form input[type="number"]').fill('20');
   await page.locator('.inventory-batch-form button[type="submit"]').click();
-  await page.locator('.inventory-batch-form').waitFor({state:'hidden'});
   await page.locator('.state-dot.changed').waitFor();
+  await page.locator('.inventory-batch-form button[type="submit"]:disabled').waitFor();
+  await page.locator('.inventory-select-visible:not([disabled])').waitFor();
+  assert.match(await page.locator('.inventory-batch-form .inventory-total').innerText(),/^0\s*\//);
+  assert.equal(await page.locator('.inventory-batch-checkbox:checked').count(),0);
+  await page.locator('.inventory-batch-toggle').click();
+  await page.locator('.inventory-batch-form').waitFor({state:'hidden'});
   await page.locator('.inventory-card button[type="submit"]:not([disabled])').first().waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
@@ -471,6 +479,9 @@ async function inventoryCreateMaterialSmoke(){
   await search.fill('1400142412');await page.locator('.inventory-batch-checkbox').check();
   await page.locator('.inventory-batch-form input[type="number"]').fill('9');
   await page.locator('.inventory-batch-form button[type="submit"]').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  assert.match(await page.locator('.inventory-batch-form .inventory-total').innerText(),/^0\s*\//);
+  await page.locator('.inventory-batch-toggle').click();
   await page.locator('.inventory-batch-form').waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').waitFor();
   await page.reload({waitUntil:'networkidle'});

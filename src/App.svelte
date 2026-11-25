@@ -5,7 +5,7 @@
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
- import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy} from './inventory-copy';
+ import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy} from './inventory-copy';
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,type FurnitureDisplay} from './inventory-furniture-display';
@@ -93,7 +93,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   }
   return Math.max(1,cap);
  });
- function clearInventoryBatch(){inventoryBatchMode=false;inventoryBatchSelected=new Set();inventoryBatchQuantity=undefined}
+ function resetInventoryBatchSelection(){inventoryBatchSelected=new Set();inventoryBatchQuantity=undefined}
+ function clearInventoryBatch(){inventoryBatchMode=false;resetInventoryBatchSelection()}
  $effect(()=>{if(activeTool!=='inventory'){clearInventoryBatch();inventoryAddMode=false}});
  let inventoryLimit=$state(BATCH_SIZE);
  let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
@@ -741,6 +742,19 @@ import {verifiedFloorplanName} from './floorplan-names';
   else if(next.size<snapshot.inventoryBatchLimit)next.add(row.documentId);
   inventoryBatchSelected=next;
  }
+ // Select only currently rendered, quantity-editable rows, up to Rust's
+ // transaction limit. Preserve explicit selections made in other tabs/searches.
+ const inventorySelectableVisible=$derived(inventoryRows.slice(0,inventoryLimit)
+  .filter(row=>row.editable&&!inventoryBatchSelected.has(row.documentId)));
+ function selectVisibleInventoryBatch(){
+  if(!snapshot||busy||!inventoryBatchMode)return;
+  const next=new Set(inventoryBatchSelected);
+  for(const row of inventorySelectableVisible){
+   if(next.size>=snapshot.inventoryBatchLimit)break;
+   next.add(row.documentId);
+  }
+  inventoryBatchSelected=next;
+ }
  async function applyInventoryBatch(event:SubmitEvent){
   event.preventDefault();
   if(!snapshot||busy||!inventoryBatchMode||!inventoryBatchSelected.size)return;
@@ -748,13 +762,13 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(next===undefined||!Number.isSafeInteger(next)||next<inventoryBatchMinimum||next>inventoryBatchMaximum)return;
   const rows=inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId));
   if(rows.length!==inventoryBatchSelected.size||rows.some(row=>!row.editable))return;
-  if(rows.every(row=>row.quantity===next)){clearInventoryBatch();return}
+  if(rows.every(row=>row.quantity===next)){resetInventoryBatchSelection();return}
   if(next===0&&!confirm(inventoryEmptyCopy(locale)))return;
   const requests:InventoryQuantityRequest[]=rows.map(row=>[row.documentId,row.quantity,next]);
   busy=true;error='';
   try{
    update(await changeInventoryQuantities(requests));
-   clearInventoryBatch();
+   resetInventoryBatchSelection();
    await persistDraft();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -1201,7 +1215,10 @@ import {verifiedFloorplanName} from './floorplan-names';
     </button>
     {#if inventoryBatchMode}
      <form class="inventory-batch-form" onsubmit={e=>void applyInventoryBatch(e)}>
-      <span class="inventory-total" aria-live="polite">{inventoryBatchSelected.size.toLocaleString(locale)} / {snapshot.inventoryBatchLimit.toLocaleString(locale)}</span>
+      <button type="button" class="inventory-editable-filter inventory-select-visible" disabled={busy||inventoryBatchSelected.size>=snapshot.inventoryBatchLimit||inventorySelectableVisible.length===0} title={inventorySelectVisibleCopy(locale)} aria-label={inventorySelectVisibleCopy(locale)} onclick={selectVisibleInventoryBatch}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 12 3 3 7-7"/></svg>
+       </button>
+       <span class="inventory-total" aria-live="polite">{inventoryBatchSelected.size.toLocaleString(locale)} / {snapshot.inventoryBatchLimit.toLocaleString(locale)}</span>
       <input type="number" min={inventoryBatchMinimum} max={inventoryBatchMaximum} step="1" required bind:value={inventoryBatchQuantity} placeholder={iCopy.quantity} aria-label={iCopy.quantity} disabled={busy}/>
       <button type="submit" class="primary" disabled={busy||!inventoryBatchSelected.size||inventoryBatchQuantity===undefined}>{iCopy.apply}</button>
       <button type="button" class="inventory-editable-filter" disabled={busy} onclick={clearInventoryBatch}>{copy.cancel}</button>
