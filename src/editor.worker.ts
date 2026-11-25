@@ -1,4 +1,5 @@
 import {decodeInventoryFlowers,type InventoryFlower} from './inventory-flower-display';
+import {decodeInventoryPalettes,type InventoryPalette} from './inventory-palette-display';
 type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'inventory-change'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type AchievementValue = {complete:boolean;current:number;completed:[bigint,number]|null};
 type AchievementPatch = {guid:number[];before:AchievementValue;after:AchievementValue};
@@ -9,7 +10,7 @@ type Engine = {
  memory:WebAssembly.Memory;
  hkia_stage(n:number):number; hkia_open():number;
  hkia_collection_creatable_snapshot():number;
- hkia_inventory_snapshot():number;hkia_inventory_flowers_snapshot():number;hkia_inventory_change(id:number,before:number,after:number):number;
+ hkia_inventory_snapshot():number;hkia_inventory_flowers_snapshot():number;hkia_inventory_palettes_snapshot():number;hkia_inventory_change(id:number,before:number,after:number):number;
  hkia_change(id:number,expectedPresent:number,old:bigint,nextPresent:number,value:bigint):number;
  hkia_achievement_parent_create(...args:[ number,number,number,number, number, number,number,bigint,number,number, number,number,bigint,number,number, number,number,number,number, number,number,bigint,number,number]):number;
  hkia_achievement_create(g0:number,g1:number,g2:number,g3:number,complete:number,progress:number,seconds:bigint,nanos:number,hasDate:number):number;
@@ -79,7 +80,7 @@ function snapshot(e:Engine){
  const iv=new DataView(bytesInv.buffer,bytesInv.byteOffset,bytesInv.byteLength);
  const countInv=iv.getUint32(0,true);
  if(countInv>1_000_000||bytesInv.length!==4+countInv*16)throw Error('INVENTORY_SNAPSHOT_INVALID');
- const inventory:Array<{documentId:number;itemId:number;quantity:number;editable:boolean;flower?:InventoryFlower}>=[];
+ const inventory:Array<{documentId:number;itemId:number;quantity:number;editable:boolean;flower?:InventoryFlower;palette?:InventoryPalette}>=[];
  const docIds=new Set<number>();
  for(let i=0;i<countInv;i++){
   const at=4+i*16,documentId=iv.getUint32(at,true),itemId=iv.getInt32(at+4,true),
@@ -91,6 +92,9 @@ function snapshot(e:Engine){
  if(e.hkia_inventory_flowers_snapshot()!==0)throw Error('FLOWER_SNAPSHOT_FAILED');
  const flowerRows=decodeInventoryFlowers(readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len()),docIds);
  for(const row of inventory){const flower=flowerRows.get(row.documentId);if(flower)row.flower=flower;}
+ if(e.hkia_inventory_palettes_snapshot()!==0)throw Error('PALETTE_SNAPSHOT_FAILED');
+ const paletteRows=decodeInventoryPalettes(readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len()),docIds);
+ for(const row of inventory){const palette=paletteRows.get(row.documentId);if(palette)row.palette=palette;}
  if(e.hkia_achievement_snapshot()!==0)throw Error('実績の取得に失敗しました。');
  const a=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
  if(a.byteLength<4)throw Error('実績データの形式が不正です。');

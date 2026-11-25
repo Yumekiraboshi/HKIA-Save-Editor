@@ -150,6 +150,17 @@ impl Editor {
    }
   })
  }
+ /// Read-only palette colors from the existing native index, with original
+ /// f32 bits intact. No new save rules or write path.
+ pub fn inventory_palettes(&self)->impl Iterator<Item=(u32,[[u32;4];3])>+'_{
+  self.slot.index.inventory.iter().filter_map(move |row|{
+   if self.slot.envelope.version!=Version::V301||row.item_id.is_none()||row.quantity.is_none(){return None}
+   match row.unique_data{
+    Some(crate::native::InventoryUniqueData::Palette{rgba_bits})=>Some((row.id,rgba_bits)),
+    _=>None
+   }
+  })
+ }
  fn inventory_can_edit(&self,r:&crate::native::InventoryRow)->bool{
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
    r.item_id.is_some_and(|id|id>0)&&r.quantity.is_some_and(|v|v>0)&&

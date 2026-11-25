@@ -1,0 +1,84 @@
+{
+  "schema": "HKIA.PaletteRuntimeSource.1",
+  "version": "3.0.1",
+  "itemId": 1835273963,
+  "maskGuid": "602c13ceeccd84df58cad480b3b9d792",
+  "source": {
+    "definitionsSha256": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0",
+    "globalAtlasSha256": "04c1f4c191b0a821a0bbcb15e67a75bec85cf343a0b2e875ee8e525e1e8dfc7b",
+    "colorSpace": 1,
+    "filterMode": 1,
+    "wrapMode": 1,
+    "mipCount": 1
+  },
+  "base": {
+    "file": "palette-base-source-v3.0.1.webp",
+    "bytes": 350,
+    "sha256": "d9a16390e810c64dc7ce461aab350cca4a731a615de228295e8b43b207025a45",
+    "rgbSha256": "01bb4c0bf94463f64d885cec884a1f4a89a22f92004d74c5c61742fe54ccf89b",
+    "width": 130,
+    "height": 260
+  },
+  "mask": {
+    "file": "palette-mask-rgb-v3.0.1.webp",
+    "bytes": 938,
+    "sha256": "064fecb96e4d6f9c3be498adbf2b10337ccc2f9cdb160a88db5a819c7231fbb7",
+    "rgbSha256": "8676b1812ad40ede1d026303785fdf514d5ace1de27ba67687f7da1522a41941",
+    "width": 258,
+    "height": 258
+  },
+  "alphaOffsetY": 130,
+  "logicalSize": 128,
+  "rows": [
+    {
+      "kind": "base",
+      "spritePathId": "4281893961233162555",
+      "spriteName": "icon_avatar_palette_custom_base",
+      "texturePathId": "-6673405714530211074",
+      "sourceRect": [
+        1644.0,
+        1908.0,
+        128.0,
+        128.0
+      ],
+      "guardRect": [
+        0,
+        0,
+        130,
+        130
+      ],
+      "sampleRect": [
+        1,
+        1,
+        128,
+        128
+      ],
+      "cropRgbaSha256": "5c2f6f716694294de9e2310ccf7e8392963fe7c2d04fdcd510797ba6f8e9d8a8"
+    },
+    {
+      "kind": "mask",
+      "spritePathId": "2390703949357470540",
+      "spriteName": "icon_avatar_palette_custom",
+      "texturePathId": "-9106854134883849474",
+      "sourceRect": [
+        516.0,
+        1032.0,
+        256.0,
+        256.0
+      ],
+      "guardRect": [
+        0,
+        0,
+        258,
+        258
+      ],
+      "sampleRect": [
+        1,
+        1,
+        256,
+        256
+      ],
+      "cropRgbaSha256": "6e24687a8aabeb0059a2e61e4ca7ba1a1f71be35194f78600f0a84675b36ecd2"
+    }
+  ]
+}
