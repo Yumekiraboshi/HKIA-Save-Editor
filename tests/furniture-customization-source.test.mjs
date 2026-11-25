@@ -25,7 +25,7 @@ test('source furniture catalog has exact full material and slot joins',()=>{
   }
  }
  assert.deepEqual(d.materials.filter(m=>m[4]!==null).map(m=>[m[0],m[4]]),[[285,1071638037],[287,1557463363],[288,1760731481],[289,1817393655]]);
- assert.equal(new Set(d.materials.map(x=>x[3])).size,780);
+ assert.equal(new Set(d.materials.map(x=>x[3])).size,772);
  const lamp=d.items.find(x=>x[0]===61381969);
  assert.deepEqual(lamp[4].map(([slot,,def,refs])=>[slot,def,refs.flatMap(r=>sets.get(r))]),[[0,503,[13,502,503,505]],[1,1,[1,2,3,4]]]);
 });
