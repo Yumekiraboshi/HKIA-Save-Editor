@@ -3,6 +3,8 @@
  * Uses a synthetic source-shaped HKIA save (never a real user's save).
  * Run after npm run build:
  *   node scripts/browser-history-smoke.mjs
+ * To verify the actually published Pages build instead of local Vite:
+ *   node scripts/browser-history-smoke.mjs --pages
  * Requires CI's locally installed Chrome and playwright-core.
  */
 import assert from 'node:assert/strict';
@@ -53,17 +55,24 @@ function installedChrome(){
  }
  throw Error('CHROME_NOT_INSTALLED');
 }
-const origin='http://127.0.0.1:4173';
-const base=process.env.GITHUB_ACTIONS==='true'?'/HKIA-Save-Editor/':'/';
-const service=spawn(process.execPath,['node_modules/vite/bin/vite.js','preview','--host','127.0.0.1','--port','4173','--strictPort'],{
+const livePages=process.argv.includes('--pages');
+const origin=livePages?'https://yumekiraboshi.github.io':'http://127.0.0.1:4173';
+const base=livePages||process.env.GITHUB_ACTIONS==='true'?'/HKIA-Save-Editor/':'/';
+const service=livePages?null:spawn(process.execPath,['node_modules/vite/bin/vite.js','preview','--host','127.0.0.1','--port','4173','--strictPort'],{
  env:process.env,stdio:['ignore','pipe','pipe']
 });
 let serviceLog='';
-for(const stream of [service.stdout,service.stderr])
+for(const stream of service?[service.stdout,service.stderr]:[])
  stream.on('data',chunk=>serviceLog+=String(chunk).slice(-2000));
 let browser;
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function waitForServer(){
+ if(livePages){
+  const response=await fetch(origin+base,{cache:'no-store',signal:AbortSignal.timeout(15000)});
+  if(!response.ok)throw Error('LIVE_PAGES_HTTP_'+response.status);
+  console.log('Testing actual published Pages URL: '+origin+base);
+  return;
+ }
  for(let i=0;i<80;i++){
   if(service.exitCode!==null)throw Error('Vite exited: '+serviceLog);
   try{const r=await fetch(origin+base);if(r.ok)return}catch{}
@@ -197,25 +206,19 @@ async function inventoryOriginalArtSmoke(){
   await page.locator('.inventory-controls input[type="search"]').fill('1286846063');
   const card=page.locator('.inventory-card').first();
   await card.waitFor();
-  await card.locator('.inventory-item-art .item-sprite').first().waitFor({timeout:30_000});
-  const original=card.locator('.inventory-item-art .item-sprite').first();
-  // The original atlas is a blob URL; build-time source-icon colorway PNGs
-  // use an immutable same-origin URL instead. Both are valid, and neither
-  // silently claims a verified game-shader-exact patterned texture.
-  await page.waitForFunction(()=>{
-   const image=document.querySelector('.inventory-card .inventory-item-art .item-sprite');
-   if(!image)return false;
-   const bg=getComputedStyle(image).backgroundImage;
-   return bg.includes('blob:')||
-    bg.includes('/dynamic-colorways/1286846063.webp')||
-    bg.includes('/source-colorways/1286846063.webp')||
-    bg.includes('/variant-art/1286846063.');
-  },null,{timeout:30_000});
+  const original=card.locator('.inventory-item-art .item-sprite[data-dye-source="game-source-sprite"]');
+  await original.waitFor({timeout:30_000});
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'3');
-  assert.ok(['game-source-sprite','game-render'].includes(
-   await original.getAttribute('data-dye-source')),
-   'same source-aware icon pipeline as Collection must be used');
+  assert.equal(await original.getAttribute('data-icon-fidelity'),'game-original');
+  const inventoryUrl=await original.evaluate(el=>getComputedStyle(el).backgroundImage);
+  assert.match(inventoryUrl,/\/(?:dynamic-colorways|source-colorways)\/1286846063\.webp/);
   await chooseTab(page,'collections');
+  await page.locator('.collection-controls input[type="search"]').fill('Ice Cream Archer Costume');
+  await page.locator('.collection-search-result').first().click();
+  const collectionArt=page.locator('#collection-item-1286846063 .item-sprite[data-dye-source="game-source-sprite"]');
+  await collectionArt.waitFor({timeout:30_000});
+  assert.equal(await collectionArt.evaluate(el=>getComputedStyle(el).backgroundImage),inventoryUrl,
+   'one Item ID must display the same original image in both tabs');
   await chooseTab(page,'inventory');
   await page.locator('.inventory-controls input[type="search"]').fill('1286846063');
   await page.locator('.inventory-card .inventory-item-art .item-sprite').first().waitFor();
@@ -243,8 +246,19 @@ async function inventoryOriginalArtSmoke(){
    return img.naturalWidth===1152&&img.naturalHeight===1152;
   }),'original non-collection item atlas must be loaded');
   assert.equal(await page.locator('.inventory-card input[name="quantity"]').first().inputValue(),'5');
+  await page.route('**/item-packs/**',route=>route.fulfill({status:404,body:'missing'}));
+  await page.route('**/native-dye-palettes.json',route=>route.fulfill({status:404,body:'missing'}));
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  // Switch from furniture back to clothing using the real game's category
+  // of the previously selected item if needed: a fresh import resets filters.
+  await page.locator('.inventory-controls input[type="search"]').fill('1286846063');
+  const independent=page.locator('.inventory-card .item-sprite[data-dye-source="game-source-sprite"]');
+  await independent.waitFor({timeout:30_000});
+  assert.equal(await independent.evaluate(el=>getComputedStyle(el).backgroundImage),inventoryUrl);
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM INVENTORY GAME ICON PASS: source-mapped Item ID, shared dye image, retained tab cache');
+  console.log('CHROMIUM INVENTORY GAME ICON PASS: same Item ID across tabs, original independent of shared packs and palette');
  }finally{await context.close();}
 }
 
@@ -862,9 +876,9 @@ async function run(){
  await page.locator('.removal-confirm-action').click();
  await page.locator('.achievement-item-grid button.achievement-toggle[aria-pressed="false"]').first().waitFor();
 
- // Exact, same-origin 8x8 red capture must outrank approximation. Supply
- // a synthetic capture via a browser route without shipping false game art.
- // A missing second capture must fall back to local source-dye rendering.
+ // An original image must outrank a registered reconstruction. Supply
+ // a synthetic reconstruction without shipping false game art, and block
+ // the old atlas/palette to exercise the independent Item ID source path.
  const fakePng=Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAFklEQVR4nGP8JWfznwEPYMInOXwUAABpGAJjJPuaSQAAAABJRU5ErkJggg==',
   'base64'
@@ -885,25 +899,36 @@ async function run(){
   status:200,contentType:'image/png',body:fakePng
  }));
  await page.route('**/variant-art/585726126.png',route=>route.fulfill({status:404,body:'missing'}));
+ await page.route('**/item-packs/**',route=>route.fulfill({status:404,body:'missing'}));
+ await page.route('**/native-dye-palettes.json',route=>route.fulfill({status:404,body:'missing'}));
  await page.reload({waitUntil:'networkidle'});
  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
  await chooseTab(page,'collections');
  const finalSearch=page.locator('.collection-controls input[type="search"]');
  await finalSearch.fill('Ice Cream Archer Hat');
  await page.locator('.collection-search-result').first().click();
- const captured=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-render"]');
- await captured.waitFor({timeout:30_000});
- assert.equal(await captured.evaluate(el=>getComputedStyle(el).backgroundSize),'contain',
-  'verified colorway assets preserve their natural aspect ratio');
- assert.ok((await captured.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/704486536.png'),
-  'verified image uses direct static item-specific pixels rather than a recolored Blob');
+ const originalFirst=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-source-sprite"]');
+ await originalFirst.waitFor({timeout:30_000});
+ await sampledSprite(originalFirst);
  await finalSearch.fill('Orange Archer Hat');
  await page.locator('.collection-search-result').first().click();
  const originalFallback=page.locator('#collection-item-585726126 .item-sprite[data-dye-source="game-source-sprite"]');
  await originalFallback.waitFor({timeout:30_000});
  assert.equal(await originalFallback.getAttribute('data-icon-fidelity'),'game-original');
  assert.ok((await originalFallback.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/dynamic-colorways/585726126.webp?v='),
-  'a missing verified override must display the actual item-specific original, not an approximation');
+  'original artwork must display even when shared packs and palettes are unavailable');
+ // When the original itself cannot decode, the separately registered
+ // reconstruction remains a fallback, with its fidelity marked accordingly.
+ await page.route(/\/(?:source-colorways|dynamic-colorways)\/704486536\.webp(?:\?.*)?$/,route=>route.fulfill({status:404,body:'missing'}));
+ await page.reload({waitUntil:'networkidle'});
+ await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+ await chooseTab(page,'collections');
+ await page.locator('.collection-controls input[type="search"]').fill('Ice Cream Archer Hat');
+ await page.locator('.collection-search-result').first().click();
+ const captured=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-render"]');
+ await captured.waitFor({timeout:30_000});
+ assert.equal(await captured.getAttribute('data-icon-fidelity'),'verified-reconstruction');
+ assert.equal(await captured.evaluate(el=>getComputedStyle(el).backgroundSize),'contain');
 
  assert.deepEqual(errors,[],'no console exceptions or 5xx during browser replay');
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
@@ -916,5 +941,5 @@ async function run(){
 }
 try{await run()}finally{
  await browser?.close();
- service.kill('SIGTERM');
+ service?.kill('SIGTERM');
 }
