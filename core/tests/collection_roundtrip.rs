@@ -1416,3 +1416,34 @@ fn inventory_quantity_limits_are_native_and_cas_atomic(){
  assert_eq!(recovered.inventory(),editor.inventory());
  assert!(editor.undo());assert_eq!(editor.inventory(),rows);assert!(editor.redo());
 }
+
+#[test]
+fn ordinary_ingredient_empty_and_replenish_preserve_identity_and_history(){
+ let mut payload=synthetic_payload("3.0.1");payload[3]=0x99;
+ for (id,item,uid,quantity) in [(4,1877756618,0,6),(5,627013240,0,0),(6,315822,0,1),(7,1400142412,2,1)]{
+  payload.extend(doc(1,arr(vec![u(id),u(item),u(uid),u(quantity),vec![0xc0]])));
+ }
+ let raw=slot_from_payload("3.0.1",payload);
+ for zipped in [false,true]{
+  let input=if zipped{zip(&raw)}else{raw.clone()};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let original=e.inventory();
+  assert_eq!(original.iter().map(|r|r.quantity_minimum).collect::<Vec<_>>(),vec![0,0,1,1]);
+  assert!(original[1].editable);
+  assert!(e.change_inventory_quantities(&[(4,6,0),(6,1,0)]).is_err());
+  assert!(e.change_inventory_quantity(7,1,0).is_err());
+  assert_eq!(e.inventory(),original);
+  e.change_inventory_quantity(4,6,0).unwrap();
+  e.change_inventory_quantity(5,0,9).unwrap();
+  e.change_inventory_quantities(&[(4,0,5),(5,9,0)]).unwrap();
+  assert_eq!(e.inventory()[0].quantity,5);assert_eq!(e.inventory()[1].quantity,0);
+  let cp=e.history_checkpoint().unwrap();
+  let mut restored=Editor::open(input.clone()).unwrap();restored.restore_history(&cp).unwrap();
+  assert_eq!(restored.inventory(),e.inventory());
+  let exported=e.export().unwrap();let reopened=Editor::open(exported).unwrap();
+  assert_eq!(reopened.inventory(),e.inventory());
+  assert_eq!(reopened.inventory().len(),original.len());
+  assert!(e.undo());assert_eq!(e.inventory()[0].quantity,0);assert_eq!(e.inventory()[1].quantity,9);
+  assert!(e.undo());assert!(e.undo());assert_eq!(e.inventory(),original);assert!(!e.dirty());
+ }
+}

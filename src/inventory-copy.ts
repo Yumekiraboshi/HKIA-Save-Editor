@@ -54,3 +54,13 @@ const batchLabels:Record<Locale,string>={
  'zh-Hans':'批量修改数量','zh-Hant':'批次修改數量'
 };
 export function inventoryBatchCopy(locale:Locale):string{return batchLabels[locale]}
+
+/** Quantity zero retains the native stack record; no placement or unlock changes. */
+const emptyLabels:Record<Locale,string>={
+ ar:'هل تريد إزالة كل الكمية المحددة من المخزون؟',de:'Den gesamten ausgewählten Bestand entfernen?',en:'Remove all of the selected quantity from inventory?', 'en-GB':'Remove all of the selected quantity from inventory?',
+ es:'¿Quitar toda la cantidad seleccionada del inventario?',fr:'Retirer toute la quantité sélectionnée de l’inventaire ?', 'fr-CA':'Retirer toute la quantité sélectionnée de l’inventaire ?',
+ it:'Rimuovere tutta la quantità selezionata dall’inventario?',ja:'選択したアイテムの所持数量を0にしますか？',ko:'선택한 아이템의 보유 수량을 모두 제거할까요?',nl:'De volledige geselecteerde hoeveelheid uit de inventaris verwijderen?',
+ 'pt-BR':'Remover toda a quantidade selecionada do inventário?',ru:'Удалить всё выбранное количество из инвентаря?',tr:'Seçili miktarın tamamı envanterden kaldırılsın mı?',
+ 'zh-Hans':'要将所选物品的持有数量清零吗？','zh-Hant':'要將所選物品的持有數量清零嗎？'
+};
+export function inventoryEmptyCopy(locale:Locale):string{return emptyLabels[locale]}

@@ -86,7 +86,7 @@ pub struct Entry {pub id:i32,pub ticks:i64}
 #[derive(Clone,Copy,Debug,PartialEq)]
 pub struct CounterEntry {pub guid:[u32;4],pub current:f32,pub counted_values:Option<usize>,pub counted_guids:usize}
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
-pub struct InventoryEntry {pub document_id:u32,pub item_id:i32,pub quantity:i32,pub editable:bool,pub quantity_limit:Option<i32>}
+pub struct InventoryEntry {pub document_id:u32,pub item_id:i32,pub quantity:i32,pub editable:bool,pub quantity_limit:Option<i32>,pub quantity_minimum:i32}
 #[derive(Clone,Copy,Debug)]
 struct InventoryQuantityDelta{document_id:u32,before:Option<i32>,after:Option<i32>}
 #[derive(Clone,Debug)]
@@ -220,9 +220,10 @@ impl Editor {
  pub fn inventory(&self)->Vec<InventoryEntry>{
   self.slot.index.inventory.iter().filter_map(|r|{
    let quantity_limit=self.inventory_quantity_limit(r);
+   let quantity_minimum=if self.inventory_can_empty(r){0}else{1};
    Some(InventoryEntry{document_id:r.id,item_id:r.item_id?,quantity:
     self.inventory_changes.get(&r.id).copied().or(r.quantity)?,
-    editable:quantity_limit.is_some(),quantity_limit})
+    editable:quantity_limit.is_some(),quantity_limit,quantity_minimum})
   }).collect()
  }
  /// Read-only lookup by document identity, never by Item ID alone.
@@ -421,9 +422,22 @@ impl Editor {
    }
   })
  }
+ /// Native subtraction clamps to zero without deleting the saved record.
+ /// Permit the zero endpoint only for source-verified ordinary ingredients,
+ /// with an exact UID-zero nil row and no ambiguous or known direct references.
+ fn inventory_can_empty(&self,r:&crate::native::InventoryRow)->bool{
+  let Some(item_id)=r.item_id else{return false};
+  self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
+   crate::inventory_source::ordinary_ingredient(item_id)&&
+   r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.quantity.is_some_and(|q|q>=0)&&
+   r.fields.iter().all(Option::is_some)&&self.inventory_item_rows.get(&item_id)==Some(&1)&&
+   !self.slot.index.inventory_item_refs_incomplete&&
+   !self.slot.index.inventory_item_refs.contains(&(item_id,0))
+ }
  fn inventory_quantity_limit(&self,r:&crate::native::InventoryRow)->Option<i32>{
   if self.slot.envelope.version!=Version::V301||r.id==0||r.id>i32::MAX as u32||
-   r.quantity?<=0||r.unique_is_nil!=Some(true)||r.fields[2].is_none(){return None}
+   r.quantity?<0||r.unique_is_nil!=Some(true)||r.fields[2].is_none()||
+   (r.quantity==Some(0)&&!self.inventory_can_empty(r)){return None}
   let item_id=r.item_id?;
   let cap=crate::inventory_source::ordinary_quantity_limit(item_id)?;
   // A finite definition limit must not be treated as an independent cap for
@@ -434,7 +448,8 @@ impl Editor {
  fn plan_inventory_quantity(&self,id:u32,expected:i32,next:i32)->Result<InventoryQuantityDelta,Error>{
   let row=self.slot.index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
   let cap=self.inventory_quantity_limit(row).ok_or(Error::Schema)?;
-  if next<1||next>cap||
+  let minimum=if self.inventory_can_empty(row){0}else{1};
+  if next<minimum||next>cap||
    self.inventory_changes.get(&id).copied().or(row.quantity)!=Some(expected){return Err(Error::Schema)}
   let before=self.inventory_changes.get(&id).copied();
   let after=if row.quantity==Some(next){None}else{Some(next)};
@@ -894,7 +909,8 @@ impl Editor {
   }
   for row in &self.slot.index.inventory {
    if let Some(v)=self.inventory_changes.get(&row.id){
-    if self.inventory_quantity_limit(row).is_none_or(|cap|*v<1||*v>cap){return Err(Error::Schema)}
+    let minimum=if self.inventory_can_empty(row){0}else{1};
+    if self.inventory_quantity_limit(row).is_none_or(|cap|*v<minimum||*v>cap){return Err(Error::Schema)}
     let span=row.fields[2].clone().ok_or(Error::Schema)?;
     let mut encoded=vec![0xd2];encoded.extend(v.to_be_bytes());
     patches.push((span,encoded));

@@ -10,6 +10,10 @@ pub(crate) fn ordinary_quantity_limit(item_id:i32)->Option<i32>{
  if flags&4==0{return Some(i32::MAX)}
  CUSTOM_CAPS.binary_search_by_key(&item_id,|row|row.0).ok().map(|i|CUSTOM_CAPS[i].1).filter(|&cap|cap>0)
 }
+/// Unrestricted ordinary ingredient candidates from the original definitions.
+pub(crate) fn ordinary_ingredient(item_id:i32)->bool{
+ RULES.binary_search_by_key(&item_id,|row|row.0).ok().is_some_and(|i|RULES[i].1&8!=0)
+}
 #[cfg(test)]
 mod tests{
  use super::*;
