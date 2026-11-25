@@ -44,3 +44,13 @@ export function inventoryCopy(locale:Locale):Copy & BrowseCopy{
  return {...(messages[locale]??(locale==='fr-CA'?messages.fr!:en)),
   ...(browsing[locale]??(locale==='fr-CA'?browsing.fr!:browsing.en!))};
 }
+
+/** The operation changes quantities of selected existing stacks only. */
+const batchLabels:Record<Locale,string>={
+ ar:'تعديل الكميات دفعة واحدة',de:'Mengen gemeinsam ändern',en:'Batch quantity', 'en-GB':'Batch quantity',
+ es:'Cambiar cantidades en lote',fr:'Modifier les quantités en lot','fr-CA':'Modifier les quantités en lot',
+ it:'Modifica quantità in blocco',ja:'数量一括変更',ko:'수량 일괄 변경',nl:'Aantallen tegelijk wijzigen',
+ 'pt-BR':'Alterar quantidades em lote',ru:'Изменить количество группой',tr:'Toplu miktar değiştirme',
+ 'zh-Hans':'批量修改数量','zh-Hant':'批次修改數量'
+};
+export function inventoryBatchCopy(locale:Locale):string{return batchLabels[locale]}
