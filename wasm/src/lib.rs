@@ -120,6 +120,7 @@ pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
   let Some(editor)=a.editor.as_ref()else{return 1};
   let mut out=vec![0;4];let mut count=0u32;
   let hints:std::collections::HashSet<_>=editor.inventory_flower_edit_hints().collect();
+  let furniture_hints:std::collections::HashSet<_>=editor.inventory_furniture_edit_hints().collect();
   for (id,uid,nil,data,fields) in editor.inventory_unique_rows(){
    if count>=1_000_000||out.len()>32*1024*1024{return 1}
    count+=1;
@@ -136,7 +137,8 @@ pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
    out.extend(uid.unwrap_or(0).to_le_bytes());out.extend(tag.to_le_bytes());
    out.extend((fields as u32).to_le_bytes());out.extend((words.len() as u32).to_le_bytes());
    for word in words{out.extend(word.to_le_bytes());}
-   out.extend(u32::from(hints.contains(&id)).to_le_bytes());
+   let hint=if hints.contains(&id){1u32}else if furniture_hints.contains(&id){2}else{0};
+   out.extend(hint.to_le_bytes());
   }
   out[..4].copy_from_slice(&count.to_le_bytes());a.reply=out;0
  })
@@ -581,3 +583,26 @@ pub extern "C" fn hkia_output_ptr()->u32{STATE.with(|s|s.borrow().output.as_ptr(
 pub extern "C" fn hkia_output_len()->u32{STATE.with(|s|s.borrow().output.len()as u32)}
 #[no_mangle]
 pub extern "C" fn hkia_clear(){STATE.with(|s|*s.borrow_mut()=State::new());}
+
+#[no_mangle]
+pub extern "C" fn hkia_inventory_furniture_variants(id:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_furniture_variants(id);
+  if rows.len()>2634{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*12);
+  out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for n in row{out.extend(n.to_le_bytes());}}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_furniture_variant_change(id:u32,b0:i32,b1:i32,b2:i32,a0:i32,a1:i32,a2:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.change_inventory_furniture_variant(id,[b0,b1,b2],[a0,a1,a2])){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}

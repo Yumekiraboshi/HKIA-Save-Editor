@@ -2,6 +2,7 @@ use crate::{archive::{ZipIndex,SLOT,ACCOUNT,MAX_ARCHIVE,crc32},envelope::Version
 use crate::wire::{Cursor,Token};
 use crate::achievement::{self,AchievementValue,AchievementEntry};
 use crate::native::{ModelState,InventoryUniqueData};
+use crate::furniture_source::{self,FurnitureItemSource};
 use std::{collections::{HashMap,HashSet},ops::Range};
 
 const MAX_TICKS:i64=3_155_378_975_999_999_999;
@@ -39,6 +40,25 @@ const FLOWER_SPECIES:&[(i32,&[i32])]=&[
  (1968535430,&[2,3,4,5,7,8,9,10,11,12,13,14,16]),
  (2105820233,&[2,3,4,5,7,8,9,10,11,12,14,16]),
 ];
+pub type FurnitureVariant=[i32;3];
+fn furniture_variant(data:InventoryUniqueData)->Option<FurnitureVariant>{
+ if let InventoryUniqueData::Furniture{materials}=data{Some(materials)}else{None}
+}
+// For collision detection only, resolve omitted/default slots to the source
+// default. This is deliberately stricter than comparing raw saved indices.
+fn furniture_key(source:&FurnitureItemSource,v:FurnitureVariant)->Option<FurnitureVariant>{
+ let mut key=v;
+ for (i,n) in v.into_iter().enumerate(){
+  match source.slots.iter().find(|s|s.slot as usize==i){
+   Some(slot)=>{
+    if n!=0&&n!=slot.default_index&&!slot.allowed.contains(&n){return None}
+    if n==0{key[i]=slot.default_index}
+   }
+   None=>if n!=0{return None}
+  }
+ }
+ Some(key)
+}
 pub type FlowerVariant=[i32;4]; // grow state, base color, pattern, pattern color
 fn flower_variant(data:InventoryUniqueData)->Option<FlowerVariant>{
  if let InventoryUniqueData::Flower{grow_state,base_color,pattern,pattern_color}=data{
@@ -70,6 +90,7 @@ enum Change {
  Collection{id:i32,before:Option<Option<i64>>,after:Option<Option<i64>>},
  Inventory{document_id:u32,before:Option<i32>,after:Option<i32>},
  FlowerVariant{document_id:u32,before:Option<FlowerVariant>,after:Option<FlowerVariant>},
+ FurnitureVariant{document_id:u32,before:Option<FurnitureVariant>,after:Option<FurnitureVariant>},
  Achievement{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
  AchievementCreated{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
  AchievementCreatedPair{guid:[u32;4],value:AchievementValue,parent:([u32;4],Option<AchievementValue>,Option<AchievementValue>)},
@@ -91,12 +112,12 @@ pub struct HistoryRecord {
 }
 impl Change {
  fn scope(&self)->HistoryScope{
-  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}|Self::FlowerVariant{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
+  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}|Self::FlowerVariant{..}|Self::FurnitureVariant{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
  }
  fn history_record(&self,applied:bool)->HistoryRecord{
   let (item_id,guid,paired)=match self {
    Self::Collection{id,..}=>(*id,[0;4],false),
-   Self::Inventory{document_id,..}|Self::FlowerVariant{document_id,..}=>(*document_id as i32,[0;4],false),
+   Self::Inventory{document_id,..}|Self::FlowerVariant{document_id,..}|Self::FurnitureVariant{document_id,..}=>(*document_id as i32,[0;4],false),
    Self::Achievement{guid,..}|Self::AchievementCreated{guid,..}=>(0,*guid,false),
    Self::AchievementCreatedPair{guid,..}|Self::AchievementParentNew{child:(guid,..),..}=>(0,*guid,true),
    Self::AchievementPair{first:(guid,..),..}=>(0,*guid,true),
@@ -115,6 +136,7 @@ pub struct Editor {
  changes:HashMap<i32,Option<i64>>,
  inventory_changes:HashMap<u32,i32>,
  flower_variant_changes:HashMap<u32,FlowerVariant>,
+ furniture_variant_changes:HashMap<u32,FurnitureVariant>,
  achievement_changes:HashMap<[u32;4],AchievementValue>,
  achievement_created:HashMap<[u32;4],AchievementValue>,
  undo:Vec<Change>,
@@ -141,7 +163,7 @@ impl Editor {
    if base.insert(row.id,row.ticks).is_some(){return Err(Error::Duplicate)}
    entries.push(Entry{id:row.id,ticks:row.ticks});
   }
-  Ok(Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),flower_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0})
+  Ok(Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0})
  }
  fn compatible(slot:&ReadSlot)->bool{
   let n=slot.index.collection_version.as_ref().map(|v|v.number);
@@ -202,19 +224,94 @@ impl Editor {
   self.slot.envelope.decoded.get(row.fields[3].clone()?)
  }
  fn effective_unique(&self,row:&crate::native::InventoryRow)->Option<InventoryUniqueData>{
-  self.flower_variant_changes.get(&row.id).copied().map(flower_unique).or(row.unique_data)
+  self.flower_variant_changes.get(&row.id).copied().map(flower_unique)
+   .or_else(||self.furniture_variant_changes.get(&row.id).copied().map(|materials|InventoryUniqueData::Furniture{materials})).or(row.unique_data)
  }
  pub fn inventory_unique_rows(&self)->impl Iterator<Item=(u32,Option<i32>,Option<bool>,Option<InventoryUniqueData>,usize)>+'_{
   self.slot.index.inventory.iter().filter(|r|r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,r.unique_is_nil,self.effective_unique(r),r.unique_fields.len()))
  }
- fn flower_source(&self,row:&crate::native::InventoryRow)->Option<&'static [i32]>{
+ fn unique_row_source(&self,row:&crate::native::InventoryRow,fields:usize)->Option<i32>{
   if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<=0||
-   row.unique_is_nil!=Some(false)||row.unique_fields.len()!=4||self.slot.index.inventory_item_refs_incomplete{return None}
+   row.unique_is_nil!=Some(false)||row.unique_fields.len()!=fields||self.slot.index.inventory_item_refs_incomplete{return None}
   let item=row.item_id?;let uid=row.unique_id?;
-  if uid<=0||self.slot.index.inventory_item_refs.contains(&(item,uid))||self.slot.index.inventory_legacy_uid_refs.contains(&uid){return None}
+  if item<=0||uid<=0||self.slot.index.inventory_item_refs.contains(&(item,uid))||self.slot.index.inventory_legacy_uid_refs.contains(&uid){return None}
+  Some(item)
+ }
+ fn flower_source(&self,row:&crate::native::InventoryRow)->Option<&'static [i32]>{
+  let item=self.unique_row_source(row,4)?;
   let patterns=FLOWER_SPECIES.iter().find(|(id,_)|*id==item)?.1;
   if !valid_flower_variant(patterns,flower_variant(row.unique_data?)?){return None}
   Some(patterns)
+ }
+ fn furniture_source(&self,row:&crate::native::InventoryRow)->Option<&'static FurnitureItemSource>{
+  let source=furniture_source::item(self.unique_row_source(row,3)?)?;
+  // Existing inventory furniture only. Home layout/exterior edits and
+  // pattern unlock grants remain outside this operation.
+  if source.is_home_layout{return None}
+  let original=furniture_variant(row.unique_data?)?;
+  if original==[0;3]||original.iter().any(|&n|furniture_source::material_unlock_item(n).is_some()){return None}
+  furniture_key(source,original)?;
+  Some(source)
+ }
+ pub fn inventory_furniture_edit_hints(&self)->impl Iterator<Item=u32>+'_ {
+  self.slot.index.inventory.iter().filter_map(|r|self.furniture_source(r).map(|_|r.id))
+ }
+ fn furniture_context(&self,id:u32)->Option<(&'static FurnitureItemSource,FurnitureVariant,FurnitureVariant,HashSet<FurnitureVariant>)>{
+  let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+  let source=self.furniture_source(row)?;
+  let original=furniture_variant(row.unique_data?)?;
+  let current=furniture_variant(self.effective_unique(row)?)?;
+  let mut reserved=HashSet::new();
+  for other in &self.slot.index.inventory{
+   if other.id==id{continue}
+   if other.unique_id==row.unique_id{return None}
+   if other.item_id!=row.item_id{continue}
+   if other.unique_is_nil==Some(true){
+    reserved.insert(furniture_key(source,[0;3])?);
+   }else{
+    // Never guess a legacy GUID or unresolved unique payload.
+    for v in [other.unique_data?,self.effective_unique(other)?]{
+     reserved.insert(furniture_key(source,furniture_variant(v)?)?);
+    }
+   }
+  }
+  if reserved.contains(&furniture_key(source,current)?)||reserved.contains(&furniture_key(source,original)?){return None}
+  Some((source,original,current,reserved))
+ }
+ fn valid_furniture_target(source:&FurnitureItemSource,original:FurnitureVariant,target:FurnitureVariant)->bool{
+  target!=[0;3]&&furniture_key(source,target).is_some()&&
+   target.iter().enumerate().all(|(i,&n)|n==0||(
+    furniture_source::material_unlock_item(n).is_none()&&
+    source.slots.iter().find(|s|s.slot as usize==i).is_some_and(|s|s.allowed.contains(&n)||original[i]==n)))
+ }
+ /// Rust issues source-defined one-slot choices. The commit accepts an
+ /// independently validated complete tuple for atomic draft replay.
+ pub fn inventory_furniture_variants(&self,id:u32)->Vec<FurnitureVariant>{
+  let Some((source,original,current,reserved))=self.furniture_context(id)else{return Vec::new()};
+  let current_key=furniture_key(source,current).unwrap();
+  let mut out=Vec::new();
+  for slot in source.slots{
+   let i=slot.slot as usize;
+   for n in std::iter::once(0).chain(slot.allowed.iter().copied()){
+    let mut v=current;v[i]=n;
+    if v==current||!Self::valid_furniture_target(source,original,v){continue}
+    let key=furniture_key(source,v).unwrap();
+    if key!=current_key&&!reserved.contains(&key)&&!out.contains(&v){out.push(v)}
+   }
+  }
+  out
+ }
+ pub fn change_inventory_furniture_variant(&mut self,id:u32,expected:FurnitureVariant,next:FurnitureVariant)->Result<(),Error>{
+  let (source,original,current,reserved)=self.furniture_context(id).ok_or(Error::Schema)?;
+  if current!=expected||current==next||!Self::valid_furniture_target(source,original,next)||
+   reserved.contains(&furniture_key(source,next).ok_or(Error::Schema)?){return Err(Error::Schema)}
+  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let before=self.furniture_variant_changes.get(&id).copied();
+  let after=if original==next{None}else{Some(next)};
+  match after{Some(v)=>{self.furniture_variant_changes.insert(id,v);},None=>{self.furniture_variant_changes.remove(&id);}}
+  self.undo.push(Change::FurnitureVariant{document_id:id,before,after});
+  if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
+  self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);self.revision=revision;Ok(())
  }
  /// Cheap presentation hint. Actual source/collision check happens on demand,
  /// never an O(inventory squared) scan in the complete inventory snapshot.
@@ -347,7 +444,7 @@ impl Editor {
   self.achievement_created.get(&guid).copied().or_else(||self.achievement_changes.get(&guid).copied())
    .or_else(||self.slot.index.achievements.iter().find(|m|m.guid==guid).and_then(|m|achievement::value(m).ok()))
  }
- pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.inventory_changes.is_empty()||!self.flower_variant_changes.is_empty()||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
+ pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.inventory_changes.is_empty()||!self.flower_variant_changes.is_empty()||!self.furniture_variant_changes.is_empty()||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
  pub fn can_undo(&self)->bool {!self.undo.is_empty()}
  pub fn can_redo(&self)->bool {!self.redo.is_empty()}
  pub fn history(&self)->Vec<HistoryRecord>{
@@ -678,6 +775,12 @@ impl Editor {
      None=>{self.flower_variant_changes.remove(&document_id);}
     }
    }
+   Change::FurnitureVariant{document_id,before,after}=>{
+    match if reverse{before}else{after}{
+     Some(v)=>{self.furniture_variant_changes.insert(document_id,v);},
+     None=>{self.furniture_variant_changes.remove(&document_id);}
+    }
+   }
    Change::Achievement{guid,before,after}=>{
     match if reverse{before}else{after}{
      Some(v)=>{self.achievement_changes.insert(guid,v);},None=>{self.achievement_changes.remove(&guid);}
@@ -721,7 +824,7 @@ impl Editor {
   self.restore_change(&change,false);self.undo.push(change);
   self.revision=self.revision.wrapping_add(1);true
  }
- pub fn reset(&mut self){self.changes.clear();self.inventory_changes.clear();self.flower_variant_changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
+ pub fn reset(&mut self){self.changes.clear();self.inventory_changes.clear();self.flower_variant_changes.clear();self.furniture_variant_changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
  pub fn export(&self)->Result<Vec<u8>,Error>{
   if !self.dirty(){return Err(Error::Schema)}
   let original_payload=&self.slot.envelope.decoded;
@@ -747,6 +850,19 @@ impl Editor {
     if current!=*v||!valid_flower_variant(patterns,*v)||reserved.contains(v){return Err(Error::Schema)}
     let original=flower_variant(row.unique_data.ok_or(Error::Schema)?).ok_or(Error::Schema)?;
     for i in 1..4{
+     if original[i]==v[i]{continue}
+     let span=row.unique_fields.get(i).cloned().ok_or(Error::Schema)?;
+     let mut encoded=vec![0xd2];encoded.extend(v[i].to_be_bytes());
+     patches.push((span,encoded));
+    }
+   }
+  }
+  for row in &self.slot.index.inventory{
+   if let Some(v)=self.furniture_variant_changes.get(&row.id){
+    let (source,original,current,reserved)=self.furniture_context(row.id).ok_or(Error::Schema)?;
+    if current!=*v||!Self::valid_furniture_target(source,original,*v)||
+     reserved.contains(&furniture_key(source,*v).ok_or(Error::Schema)?){return Err(Error::Schema)}
+    for i in 0..3{
      if original[i]==v[i]{continue}
      let span=row.unique_fields.get(i).cloned().ok_or(Error::Schema)?;
      let mut encoded=vec![0xd2];encoded.extend(v[i].to_be_bytes());
@@ -812,6 +928,10 @@ impl Editor {
      let next=self.flower_variant_changes[&b.id];
      original[i]==next[i]&&reread.envelope.decoded[a.unique_fields[i].clone()]!=original_payload[b.unique_fields[i].clone()]
     })
+   }else if let Some(next)=self.furniture_variant_changes.get(&b.id){
+    a.unique_fields.len()!=3||b.unique_fields.len()!=3||
+    b.unique_data.and_then(furniture_variant).is_none_or(|original|(0..3).any(|i|
+     original[i]==next[i]&&reread.envelope.decoded[a.unique_fields[i].clone()]!=original_payload[b.unique_fields[i].clone()]))
    }else{match (&a.fields[3],&b.fields[3]){
     (Some(a_span),Some(b_span))=>reread.envelope.decoded[a_span.clone()]!=
      self.slot.envelope.decoded[b_span.clone()],
@@ -1201,6 +1321,12 @@ impl Editor {
      for word in before.unwrap_or(original){out.extend(word.to_le_bytes());}
      for word in after.unwrap_or(original){out.extend(word.to_le_bytes());}
     }
+    Change::FurnitureVariant{document_id,before,after}=>{
+     out.push(9);out.extend(document_id.to_le_bytes());
+     let original=self.slot.index.inventory.iter().find(|r|r.id==document_id).and_then(|r|r.unique_data).and_then(furniture_variant).ok_or(Error::Schema)?;
+     for word in before.unwrap_or(original){out.extend(word.to_le_bytes());}
+     for word in after.unwrap_or(original){out.extend(word.to_le_bytes());}
+    }
     Change::Achievement{guid,before,after}=>{
      out.push(1);history_write_guid(&mut out,guid);
      history_write_value(&mut out,self.history_effective_achievement(guid,false,before)?);
@@ -1273,6 +1399,13 @@ impl Editor {
      let before=[r.i32()?,r.i32()?,r.i32()?,r.i32()?];
      let after=[r.i32()?,r.i32()?,r.i32()?,r.i32()?];
      candidate.change_inventory_flower_variant(id,before,after)?;
+     scopes.push(HistoryScope::Inventory);
+    }
+    9=>{
+     let id=r.u32()?;
+     let before=[r.i32()?,r.i32()?,r.i32()?];
+     let after=[r.i32()?,r.i32()?,r.i32()?];
+     candidate.change_inventory_furniture_variant(id,before,after)?;
      scopes.push(HistoryScope::Inventory);
     }
     1=>{

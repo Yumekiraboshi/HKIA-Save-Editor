@@ -59,7 +59,7 @@ test('UI prefers exact native names while retaining existing fallback if externa
 });
 
 
-test('additional native inventory names cover all 12,163 original IDs in 15 source-verified locales',()=>{
+test('additional native inventory names cover all 12,163 original IDs in all 16 source-verified locales',()=>{
  const packed=JSON.parse(readFileSync(new URL('../public/inventory-native-categories.json',import.meta.url),'utf8'));
  const data=gunzipSync(Buffer.from(packed.data,'base64'));
  const ids=new Set();let id=0,pos=0;
@@ -69,15 +69,17 @@ test('additional native inventory names cover all 12,163 original IDs in 15 sour
   id+=delta;pos++;ids.add(String(id));
  }
  assert.equal(pos,data.length);assert.equal(ids.size,12163);
- for(const locale of locales.filter(x=>x!=='ar')){
+ for(const locale of locales){
   const base=decodeSourceItemNames(JSON.parse(readFileSync(new URL('../public/source-names/'+locale+'.json',import.meta.url))),locale);
   const raw=JSON.parse(readFileSync(new URL('../public/inventory-names/'+locale+'.json',import.meta.url)));
   const extra=decodeInventoryAdditionalNames(raw,locale,base);
   assert.equal(Object.keys(extra).length,1901);
   assert.deepEqual(new Set([...Object.keys(base),...Object.keys(extra)]),ids,locale);
-  assert.throws(()=>decodeInventoryAdditionalNames({...raw,locale:'ar'},locale,base));
+  assert.throws(()=>decodeInventoryAdditionalNames({...raw,locale:locale==='ar'?'en':'ar'},locale,base));
   assert.throws(()=>decodeInventoryAdditionalNames(raw,locale,{...base,[Object.keys(extra)[0]]:'collision'}));
  }
+ const ar=JSON.parse(readFileSync(new URL('../public/inventory-names/ar.json',import.meta.url))).names;
+ assert.equal(ar['427689'], "سجادة نول");
  const ja=JSON.parse(readFileSync(new URL('../public/inventory-names/ja.json',import.meta.url))).names;
  const en=JSON.parse(readFileSync(new URL('../public/inventory-names/en.json',import.meta.url))).names;
  assert.equal(en['427689'],"Nul Rug");

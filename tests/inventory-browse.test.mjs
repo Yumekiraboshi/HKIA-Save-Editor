@@ -101,7 +101,10 @@ test('Inventory UI selects native source definitions, retains original game art 
  assert.doesNotMatch(app,/\{iCopy\.all\}/);
  assert.match(app,/inventoryIconPacks\[definition\[3\]\]/);
  assert.match(app,/changeInventoryQuantity\(row.documentId,row.quantity,next\)/);
- assert.match(app,/class:inventory-readonly=\{!item.editable&&!canFlower\}/);
+ assert.match(app,/class:inventory-readonly=\{!item.editable&&!canFlower&&!canFurniture\}/);
+ assert.match(app,/changeInventoryFurnitureVariant\(selected.documentId,selected.before,next\)/);
+ assert.match(app,/requestFurnitureVariants\(row.documentId\)/);
+ assert.match(app,/\{@const canFurniture=!!item.unique\?\.furnitureEditable\}/);
  assert.match(app,/changeInventoryFlowerVariant\(selected.documentId,selected.before,next\)/);
  assert.match(app,/requestFlowerVariants\(row.documentId\)/);
  assert.match(app,/bind:this=\{inventoryLoadMoreSentinel\}/);
