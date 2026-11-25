@@ -343,6 +343,10 @@ impl Editor {
     }
    }
   }
+  // A staged UID-zero ordinary row also owns the source-default identity.
+  if self.inventory_changes.contains_key(&(PENDING_ITEM|source.item_id as u32)){
+   reserved.insert(furniture_key(source,[0;3])?);
+  }
   if reserved.contains(&furniture_key(source,current)?)||reserved.contains(&furniture_key(source,original)?){return None}
   Some((source,original,current,reserved))
  }
@@ -560,9 +564,21 @@ impl Editor {
    (!self.slot.index.inventory_payload_refs_incomplete&&
     !self.slot.index.inventory_payload_item_refs.contains(&item_id))
  }
+ // The ordinary base variant is distinct from a verified nondefault tag-8
+ // stack. Reuse the original identity/reference index; check both original
+ // and effective materials so Undo/Redo never creates a default collision.
+ fn permits_separate_ordinary_base(&self,row:&crate::native::InventoryRow)->bool{
+  if !self.unique_quantity_ids.contains(&row.id){return false}
+  let Some(source)=self.furniture_source(row)else{return false};
+  let Some(default)=furniture_key(source,[0;3])else{return false};
+  [row.unique_data,self.effective_unique(row)].into_iter().all(|value|
+   value.and_then(furniture_variant).and_then(|v|furniture_key(source,v)).is_some_and(|key|key!=default))
+ }
  fn can_create_inventory_item(&self,item_id:i32)->bool{
   self.inventory_creation_source_valid()&&crate::inventory_source::ordinary_creation_item(item_id)&&
-   !self.inventory_item_rows.contains_key(&item_id)&&self.inventory_creation_payload_safe(item_id)&&
+   (!self.inventory_item_rows.contains_key(&item_id)||
+    self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item_id)).all(|r|self.permits_separate_ordinary_base(r)))&&
+   self.inventory_creation_payload_safe(item_id)&&
    !self.slot.index.inventory_item_refs.iter().any(|&(item,_)|item==item_id)
  }
  fn pending_inventory_rows(&self)->Vec<InventoryEntry>{
@@ -606,9 +622,13 @@ impl Editor {
  pub fn inventory_creatable(&self)->Vec<InventoryEntry>{
   if !self.inventory_creation_source_valid()||crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
   let referenced:HashSet<i32>=self.slot.index.inventory_item_refs.iter().map(|&(item,_)|item).collect();
+  // One pass over saved rows; ordinary/opaque/default rows block their Item
+  // ID, while verified nondefault customizable variants do not.
+  let blocked:HashSet<i32>=self.slot.index.inventory.iter().filter_map(|r|
+   (!self.permits_separate_ordinary_base(r)).then_some(r.item_id?)).collect();
   crate::inventory_source::ordinary_creation_ids().filter_map(|item_id|{
    let document_id=PENDING_ITEM|item_id as u32;
-   if self.inventory_item_rows.contains_key(&item_id)||referenced.contains(&item_id)||self.inventory_changes.contains_key(&document_id)||!self.inventory_creation_payload_safe(item_id){return None}
+   if blocked.contains(&item_id)||referenced.contains(&item_id)||self.inventory_changes.contains_key(&document_id)||!self.inventory_creation_payload_safe(item_id){return None}
    Some(InventoryEntry{document_id,item_id,quantity:0,editable:true,quantity_limit:Some(i32::MAX),quantity_minimum:1})
   }).collect()
  }
