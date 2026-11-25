@@ -109,6 +109,47 @@ pub extern "C" fn hkia_inventory_flowers_snapshot()->u32{
  })
 }
 
+/// Existing inventory unique-data metadata and typed values; exact source
+/// payloads stay in Rust. Wire: count, then document ID, UID presence, UID,
+/// tag (-2 absent/nil), field count, typed word count, words, option count, options.
+#[no_mangle]
+pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
+ use hkia_save_core::native::InventoryUniqueData as U;
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let mut out=vec![0;4];let mut count=0u32;
+  for (id,uid,data,fields) in editor.inventory_unique_rows(){
+   if count>=1_000_000||out.len()>32*1024*1024{return 1}
+   count+=1;
+   let (tag,words):(i32,Vec<u32>)=match data{
+    Some(U::Flower{grow_state,base_color,pattern,pattern_color})=>(7,vec![u32::from(grow_state),base_color as u32,pattern as u32,pattern_color as u32]),
+    Some(U::Furniture{materials})=>(8,materials.into_iter().map(|v|v as u32).collect()),
+    Some(U::Palette{rgba_bits})=>(6,rgba_bits.into_iter().flatten().collect()),
+    Some(U::Opaque{tag})=>(tag,Vec::new()),
+    None=>(-2,Vec::new())
+   };
+   out.extend(id.to_le_bytes());out.extend(u32::from(uid.is_some()).to_le_bytes());
+   out.extend(uid.unwrap_or(0).to_le_bytes());out.extend(tag.to_le_bytes());
+   out.extend((fields as u32).to_le_bytes());out.extend((words.len() as u32).to_le_bytes());
+   for word in words{out.extend(word.to_le_bytes());}
+   let options=if tag==7{editor.inventory_flower_color_options(id)}else{Vec::new()};
+   out.extend((options.len() as u32).to_le_bytes());
+   for option in options{out.extend(option.to_le_bytes());}
+  }
+  out[..4].copy_from_slice(&count.to_le_bytes());a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_flower_color_change(id:u32,before:i32,after:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.change_inventory_flower_color(id,before,after)){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+
 /// Last source-defined child completion + absent parent creation in one
 /// fully validated Rust transaction, including one-step Undo/Redo.
 #[no_mangle]
