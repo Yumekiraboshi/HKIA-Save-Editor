@@ -449,11 +449,13 @@ impl Editor {
   if cap<i32::MAX&&self.inventory_item_rows.get(&item_id)!=Some(&1){return None}
   Some(cap)
  }
+ fn inventory_creation_source_valid(&self)->bool{
+  self.slot.envelope.version==Version::V301&&!self.slot.index.inventory_item_refs_incomplete&&
+   self.slot.index.inventory.iter().all(|r|r.item_id.is_some()&&r.id<PENDING_ITEM)
+ }
  fn can_create_inventory_item(&self,item_id:i32)->bool{
-  self.slot.envelope.version==Version::V301&&crate::inventory_source::ordinary_membership_item(item_id)&&
+  self.inventory_creation_source_valid()&&crate::inventory_source::ordinary_creation_item(item_id)&&
    !self.inventory_item_rows.contains_key(&item_id)&&
-   !self.slot.index.inventory_item_refs_incomplete&&
-   self.slot.index.inventory.iter().all(|r|r.item_id.is_some()&&r.id<PENDING_ITEM)&&
    !self.slot.index.inventory_item_refs.iter().any(|&(item,_)|item==item_id)
  }
  fn pending_inventory_rows(&self)->Vec<InventoryEntry>{
@@ -495,10 +497,11 @@ impl Editor {
  }
  /// Candidate rows are source-checked and absent, not persisted inventory records.
  pub fn inventory_creatable(&self)->Vec<InventoryEntry>{
-  if crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
-  crate::inventory_source::ordinary_membership_ids().filter_map(|item_id|{
+  if !self.inventory_creation_source_valid()||crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
+  let referenced:HashSet<i32>=self.slot.index.inventory_item_refs.iter().map(|&(item,_)|item).collect();
+  crate::inventory_source::ordinary_creation_ids().filter_map(|item_id|{
    let document_id=PENDING_ITEM|item_id as u32;
-   if !self.can_create_inventory_item(item_id)||self.inventory_changes.contains_key(&document_id){return None}
+   if self.inventory_item_rows.contains_key(&item_id)||referenced.contains(&item_id)||self.inventory_changes.contains_key(&document_id){return None}
    Some(InventoryEntry{document_id,item_id,quantity:0,editable:true,quantity_limit:Some(i32::MAX),quantity_minimum:1})
   }).collect()
  }
@@ -518,7 +521,7 @@ impl Editor {
   let after=if row.quantity==Some(next){None}else{Some(next)};
   Ok(InventoryQuantityDelta{document_id:id,before,after})
  }
- /// CAS changes ordinary quantities or stages a source-verified absent ingredient.
+ /// CAS changes ordinary quantities or stages a source-verified absent ordinary item.
  /// Persisted document IDs are assigned only by the shared export allocator.
  pub fn change_inventory_quantity(&mut self,id:u32,expected:i32,next:i32)->Result<(),Error>{
   if expected==next{return Err(Error::Schema)}

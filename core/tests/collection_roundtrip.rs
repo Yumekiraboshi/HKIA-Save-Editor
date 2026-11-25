@@ -1454,14 +1454,14 @@ fn create_absent_material_stacks_uses_native_ids_and_scoped_history(){
  for zipped in [false,true]{
   let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();
-  let candidates=e.inventory_creatable();assert_eq!(candidates.len(),497);
+  let candidates=e.inventory_creatable();assert_eq!(candidates.len(),4046);
   assert!(!candidates.iter().any(|r|r.item_id==460708033));
   let apple=candidates.iter().find(|r|r.item_id==1877756618).unwrap().document_id;
   let flour=candidates.iter().find(|r|r.item_id==627013240).unwrap().document_id;
   assert!(e.change_inventory_quantities(&[(apple,0,6),(u32::MAX,0,7)]).is_err());
   assert!(e.inventory().is_empty());assert!(!e.dirty());
   e.change_inventory_quantities(&[(apple,0,6),(flour,0,9)]).unwrap();
-  assert_eq!(e.inventory().len(),2);assert_eq!(e.inventory_creatable().len(),495);
+  assert_eq!(e.inventory().len(),2);assert_eq!(e.inventory_creatable().len(),4044);
   assert!(e.change_inventory_quantity(apple,0,1).is_err());
   assert_eq!(e.inventory_unique_rows().count(),2);
   let checkpoint=e.history_checkpoint().unwrap();
@@ -1470,14 +1470,14 @@ fn create_absent_material_stacks_uses_native_ids_and_scoped_history(){
   assert!(e.undo_scope(Inventory));assert!(e.inventory().is_empty());
   assert!(!e.dirty());assert!(e.redo_scope(Inventory));
   e.change_inventory_quantity(apple,6,0).unwrap();
-  assert_eq!(e.inventory().len(),1);assert_eq!(e.inventory_creatable().len(),496);
+  assert_eq!(e.inventory().len(),1);assert_eq!(e.inventory_creatable().len(),4045);
   assert!(e.undo_scope(Inventory));
   let exported=e.export().unwrap();let reopened=Editor::open(exported).unwrap();
   let rows=reopened.inventory();assert_eq!(rows.len(),2);
   assert_eq!((rows[0].document_id,rows[0].item_id,rows[0].quantity),(5,627013240,9));
   assert_eq!((rows[1].document_id,rows[1].item_id,rows[1].quantity),(6,1877756618,6));
   assert_eq!(reopened.inventory_original_unique_payload(5),Some([0xc0].as_slice()));
-  assert_eq!(reopened.inventory_creatable().len(),495);assert_eq!(reopened.achievements(),e.achievements());assert_eq!(reopened.entries(),e.entries());
+  assert_eq!(reopened.inventory_creatable().len(),4044);assert_eq!(reopened.achievements(),e.achievements());assert_eq!(reopened.entries(),e.entries());
  }
 }
 
@@ -1558,5 +1558,30 @@ fn native_food_and_bait_membership_preserves_celebrations_and_quest_exclusion(){
   assert_eq!(after.index.celebrations.len(),before.index.celebrations.len());
   saved.change_inventory_quantities(&[(rows[0].document_id,12,0),(rows[1].document_id,17,0)]).unwrap();
   assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory().iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![0,0]);
+ }
+}
+
+#[test]
+fn ordinary_furniture_and_clothing_creation_preserves_other_data_and_defers_last_copy_removal(){
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw.clone()};
+  let mut editor=Editor::open(input.clone()).unwrap();
+  let candidates=editor.inventory_creatable();
+  assert_eq!(candidates.len(),4046);
+  let furniture=candidates.iter().find(|r|r.item_id==286009791).unwrap().document_id;
+  let clothing=candidates.iter().find(|r|r.item_id==315822).unwrap().document_id;
+  assert!(!candidates.iter().any(|r|r.item_id==517031));
+  editor.change_inventory_quantities(&[(furniture,0,12),(clothing,0,3)]).unwrap();
+  editor.change_inventory_quantity(clothing,3,0).unwrap();
+  assert!(editor.undo_scope(hkia_save_core::collection::HistoryScope::Inventory));
+  let checkpoint=editor.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();
+  recovered.restore_history(&checkpoint).unwrap();assert_eq!(recovered.inventory(),editor.inventory());
+  let mut saved=Editor::open(recovered.export().unwrap()).unwrap();
+  let rows=saved.inventory();
+  assert_eq!(rows.iter().map(|r|(r.item_id,r.quantity,r.quantity_minimum)).collect::<Vec<_>>(),vec![(315822,3,1),(286009791,12,1)]);
+  assert!(saved.change_inventory_quantity(rows[0].document_id,3,0).is_err());
+  assert!(saved.change_inventory_quantity(rows[1].document_id,12,0).is_err());
+  assert!(!saved.dirty());
+  assert_eq!(saved.entries(),editor.entries());assert_eq!(saved.achievements(),editor.achievements());
  }
 }

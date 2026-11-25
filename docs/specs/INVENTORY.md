@@ -74,3 +74,7 @@ The first ingredient slice extends to 168 ordinary fish and 56 ordinary critters
 #### Food and fishing bait membership
 
 The ordinary membership slice also includes 178 source-defined foods and 58 fishing baits (497 total IDs across the current five groups). FirstTime celebration controls the native acquisition animation, not entitlement; celebration records remain unchanged. Quest-rarity foods, DLC/event-year definitions and unique-required items remain excluded. See [inventory-quantity-source.md](../inventory-quantity-source.md). Existing source-based zero/refill and new-document addition controls are reused; this is an implementation boundary, not a reduction of comprehensive inventory scope.
+
+#### Ordinary furniture and clothing creation
+
+The absent-stack addition flow extends to 1,114 ordinary furniture and 2,435 ordinary clothing definitions. The source-verified 4,046 creation candidates remain independent from existing-stack zero-quantity eligibility (497 ordinary materials, fish, critters, food and bait). Staged additions can be cancelled, but deleting the last persisted furniture/clothing copy requires verified equip/placement reference closure. The same Rust source gate, native allocator, history, local draft, UI and export/reparse are used. See [inventory-quantity-source.md](../inventory-quantity-source.md).
