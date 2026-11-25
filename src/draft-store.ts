@@ -1,3 +1,4 @@
+import {flowerVariantOf,isFlowerVariantWire} from './inventory-unique';
 import {cloneStoredAchievementPatches,type StoredPatch} from './achievement-draft';
 import type {InventoryEntry,InventoryPatch} from './worker-client';
 export type DraftPatch={id:number;before:string|null;after:string|null};
@@ -29,23 +30,31 @@ export function diffInventory(before:readonly InventoryEntry[],after:readonly In
   const source=original.get(row.documentId);
   if(source&&source.itemId===row.itemId){
    if(source.quantity!==row.quantity)result.push({documentId:row.documentId,before:source.quantity,after:row.quantity});
-   if(source.flower&&row.flower&&source.flower.baseColor!==row.flower.baseColor)
-    result.push({documentId:row.documentId,before:source.flower.baseColor,after:row.flower.baseColor,kind:'flower-color'});
+   if(source.flower&&row.flower){
+    const before=flowerVariantOf(source.flower),after=flowerVariantOf(row.flower);
+    if(before.some((x,i)=>x!==after[i]))result.push({documentId:row.documentId,before,after,kind:'flower-variant'});
+   }
   }
  }
  return result.sort((a,b)=>a.documentId-b.documentId);
 }
 export function safeInventoryPatches(value:unknown):InventoryPatch[]{
  if(!Array.isArray(value)||value.length>20000)throw Error('DRAFT_INVALID');
- const ids=new Set<string>();
+ const ids=new Set<string>(),result:InventoryPatch[]=[];
  for(const p of value){
-  if(!p||typeof p!=='object'||!Number.isInteger(p.documentId)||p.documentId<=0||
-   p.documentId>2147483647||!Number.isInteger(p.before)||p.before<=0||
-   p.before>2147483647||!Number.isInteger(p.after)||p.after<=0||
-   p.after>2147483647||p.after===p.before||(p.kind!==undefined&&p.kind!=='flower-color')||ids.has(p.documentId+':'+(p.kind??'quantity')))throw Error('DRAFT_INVALID');
-  ids.add(p.documentId+':'+(p.kind??'quantity'));
+  if(!p||typeof p!=='object'||!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>2147483647)throw Error('DRAFT_INVALID');
+  const key=p.documentId+':'+(p.kind??'quantity');
+  if(ids.has(key))throw Error('DRAFT_INVALID');
+  ids.add(key);
+  if(p.kind==='flower-variant'){
+   if(!isFlowerVariantWire(p.before)||!isFlowerVariantWire(p.after)||p.before.every((v,i)=>v===p.after[i]))throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,kind:p.kind,before:[...p.before],after:[...p.after]});
+  }else{
+   if(p.kind!==undefined||!Number.isInteger(p.before)||!Number.isInteger(p.after)||p.before<=0||p.before>2147483647||p.after<=0||p.after>2147483647||p.before===p.after)throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,before:p.before,after:p.after});
+  }
  }
- return (value as InventoryPatch[]).map(p=>({documentId:p.documentId,before:p.before,after:p.after,...(p.kind?{kind:p.kind}:{})}));
+ return result;
 }
 function openDatabase():Promise<IDBDatabase>{
  return new Promise((resolve,reject)=>{
