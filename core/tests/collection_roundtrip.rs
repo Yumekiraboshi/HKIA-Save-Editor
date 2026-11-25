@@ -1356,3 +1356,36 @@ fn chef_appearance_is_read_only_and_preserves_full_original_payload(){
  let reopened=Editor::open(e.export().unwrap()).unwrap();
  for (id,p) in [(4,cafe),(5,boba),(6,empty),(7,nil)]{assert_eq!(reopened.inventory_original_unique_payload(id),Some(p.as_slice()));assert_eq!(reopened.inventory_unique_data(id),e.inventory_unique_data(id));}
 }
+
+#[test]
+fn wand_source_appearance_preserves_nested_identity_and_bytes(){
+ use hkia_save_core::native::InventoryUniqueData as U;
+ let mut payload=synthetic_payload("3.0.1");payload[3]=0x9a;
+ let wand=|source:u32,nested:Vec<u8>|arr(vec![vec![9],arr(vec![u(source),nested,u(104),u(125),u(1)])]);
+ let plain=wand(315822,vec![0xc0]);
+ let flower=wand(1331175279,plain_flower(6));
+ let cafe=wand(203331651,arr(vec![vec![3],arr(vec![arr(vec![u(99)]),arr(vec![u(6),u(14)])])]));
+ let nested=wand(39246601,plain.clone());
+ for (id,p) in [(4,plain.clone()),(5,flower.clone()),(6,cafe.clone()),(7,nested.clone())]{
+  payload.extend(doc(1,arr(vec![u(id),u(39246601),u(id),u(1),p])));
+ }
+ payload.extend(doc(1,arr(vec![u(8),u(315822),u(0),u(6),vec![0xc0]])));
+ let mut e=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
+ for (id,expected) in [
+  (4,vec![315822,104,125,1,u32::MAX,0]),
+  (5,vec![1331175279,104,125,1,7,4,6,6,0,0]),
+  (6,vec![203331651,104,125,1,3,3,2,6,14]),
+  (7,vec![39246601,104,125,1,9,0])
+ ]{
+  let data=e.inventory_unique_data(id).unwrap();
+  assert!(matches!(data,U::WandAppearance{..}));
+  assert_eq!(data.display_words(),(9,expected));
+  assert!(e.change_inventory_quantity(id,1,2).is_err());
+ }
+ e.change_inventory_quantity(8,6,7).unwrap();
+ let reopened=Editor::open(e.export().unwrap()).unwrap();
+ for (id,p) in [(4,plain),(5,flower),(6,cafe),(7,nested)]{
+  assert_eq!(reopened.inventory_original_unique_payload(id),Some(p.as_slice()));
+  assert_eq!(reopened.inventory_unique_data(id),e.inventory_unique_data(id));
+ }
+}
