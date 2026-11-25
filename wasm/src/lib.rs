@@ -111,7 +111,7 @@ pub extern "C" fn hkia_inventory_flowers_snapshot()->u32{
 
 /// Existing inventory unique-data metadata and typed values; exact source
 /// payloads stay in Rust. Wire: count, then document ID, UID presence, UID,
-/// tag (-2 absent/nil), field count, typed word count, words, option count, options.
+/// tag (-2 absent, -1 nil), field count, typed word count, words, option count, options.
 #[no_mangle]
 pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
  use hkia_save_core::native::InventoryUniqueData as U;
@@ -119,7 +119,7 @@ pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
   let mut a=s.borrow_mut();a.reply.clear();
   let Some(editor)=a.editor.as_ref()else{return 1};
   let mut out=vec![0;4];let mut count=0u32;
-  for (id,uid,data,fields) in editor.inventory_unique_rows(){
+  for (id,uid,nil,data,fields) in editor.inventory_unique_rows(){
    if count>=1_000_000||out.len()>32*1024*1024{return 1}
    count+=1;
    let (tag,words):(i32,Vec<u32>)=match data{
@@ -127,7 +127,7 @@ pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
     Some(U::Furniture{materials})=>(8,materials.into_iter().map(|v|v as u32).collect()),
     Some(U::Palette{rgba_bits})=>(6,rgba_bits.into_iter().flatten().collect()),
     Some(U::Opaque{tag})=>(tag,Vec::new()),
-    None=>(-2,Vec::new())
+    None=>(if nil==Some(true){-1}else{-2},Vec::new())
    };
    out.extend(id.to_le_bytes());out.extend(u32::from(uid.is_some()).to_le_bytes());
    out.extend(uid.unwrap_or(0).to_le_bytes());out.extend(tag.to_le_bytes());
