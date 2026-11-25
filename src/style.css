@@ -329,3 +329,5 @@
 .inventory-batch-form input[type=number]{width:108px;min-width:0;padding:7px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px}
 .inventory-batch-checkbox{position:absolute;inset-block-start:6px;inset-inline-start:6px;width:18px;height:18px;z-index:3;accent-color:var(--accent);cursor:pointer}
 .inventory-card.inventory-batch-selected{border-color:var(--accent);background:var(--accent-soft)}
+
+.inventory-quantity-form .inventory-compact-variant{flex:none;display:grid;place-items:center;width:30px;height:30px;padding:0}

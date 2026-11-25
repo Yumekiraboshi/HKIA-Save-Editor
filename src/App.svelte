@@ -1320,6 +1320,12 @@ import {verifiedFloorplanName} from './floorplan-names';
         <button type="submit" class="primary" disabled={busy||inventoryBatchMode} title={iCopy.apply} aria-label={iCopy.apply}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
         </button>
+        {#if canFlower}
+         <button class="inventory-unique-edit-button inventory-compact-variant" type="button" disabled={busy||inventoryBatchMode}
+          title={flowerCopy.title} aria-label={flowerCopy.title+': '+inventoryName(item.itemId)} onclick={()=>void openFlowerEditor(item)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg>
+         </button>
+        {/if}
        </form>
       {:else if canFurniture}
        <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} title={furnitureCopy.title} aria-label={furnitureCopy.title+': '+inventoryName(item.itemId)} onclick={()=>void openFurnitureEditor(item)}>
