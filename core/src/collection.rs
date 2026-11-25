@@ -419,16 +419,21 @@ impl Editor {
    r.item_id.is_some_and(|id|id>0)&&r.quantity.is_some_and(|v|v>0)&&
    r.unique_is_nil==Some(true)&&r.fields[2].is_some()
  }
- /// CAS updates only existing ordinary stack quantities, never IDs or unique payloads.
- pub fn change_inventory_quantity(&mut self,id:u32,expected:i32,next:i32)->Result<(),Error>{
+ fn plan_inventory_quantity(&self,id:u32,expected:i32,next:i32)->Result<InventoryQuantityDelta,Error>{
   let row=self.slot.index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
   if !self.inventory_can_edit(row)||next<1||expected==next||
    self.inventory_changes.get(&id).copied().or(row.quantity)!=Some(expected){return Err(Error::Schema)}
-  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
   let before=self.inventory_changes.get(&id).copied();
   let after=if row.quantity==Some(next){None}else{Some(next)};
-  match after{Some(v)=>{self.inventory_changes.insert(id,v);},None=>{self.inventory_changes.remove(&id);}}
-  self.undo.push(Change::Inventory{document_id:id,before,after});
+  Ok(InventoryQuantityDelta{document_id:id,before,after})
+ }
+ /// CAS updates only existing ordinary stack quantities, never IDs or unique payloads.
+ pub fn change_inventory_quantity(&mut self,id:u32,expected:i32,next:i32)->Result<(),Error>{
+  let InventoryQuantityDelta{document_id,before,after}=self.plan_inventory_quantity(id,expected,next)?;
+  let revision=self.revision.checked_add(1).ok_or(Error::Overflow)?;
+  let change=Change::Inventory{document_id,before,after};
+  self.restore_change(&change,false);
+  self.undo.push(change);
   if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
   self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);self.revision=revision;Ok(())
  }
@@ -441,12 +446,7 @@ impl Editor {
   let mut deltas=Vec::with_capacity(requests.len());
   for &(id,expected,next) in requests{
    if !seen.insert(id){return Err(Error::Duplicate)}
-   let row=self.slot.index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
-   if !self.inventory_can_edit(row)||next<1||expected==next||
-    self.inventory_changes.get(&id).copied().or(row.quantity)!=Some(expected){return Err(Error::Schema)}
-   let before=self.inventory_changes.get(&id).copied();
-   let after=if row.quantity==Some(next){None}else{Some(next)};
-   deltas.push(InventoryQuantityDelta{document_id:id,before,after});
+   deltas.push(self.plan_inventory_quantity(id,expected,next)?);
   }
   let change=Change::InventoryBatch{deltas};
   self.restore_change(&change,false);

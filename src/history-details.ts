@@ -2,7 +2,9 @@ import type {FlowerVariant,FurnitureVariant} from './inventory-unique';
 import type {AchievementValue,HistoryRecord} from './worker-client';
 import {toDateTimeValue} from './collection-date';
 
+export type InventoryBatchDetail={documentId:number;before:number;after:number};
 export type HistoryDetail =
+ | {scope:'inventory';documentId:number;batch:InventoryBatchDetail[]}
  | {scope:'collections';itemId:number;before:bigint|null;after:bigint|null}
  | {scope:'inventory';documentId:number;before:number;after:number;flowerVariant?:false;furnitureVariant?:false}
  | {scope:'inventory';documentId:number;before:FlowerVariant;after:FlowerVariant;flowerVariant:true;furnitureVariant?:false}
@@ -71,6 +73,15 @@ export function decodeHistoryDetails(
     const documentId=u32(),before=i32(),after=i32();
     if(documentId<=0||documentId>2147483647||before<1||after<1||before===after)return [];
     result.push({scope:'inventory',documentId,before,after});
+   }else if(kind===10){
+    const n=u32();if(n<1||n>40)return [];
+    const batch:InventoryBatchDetail[]=[],seen=new Set<number>();
+    for(let j=0;j<n;j++){
+     const documentId=u32(),before=i32(),after=i32();
+     if(documentId<=0||documentId>2147483647||before<1||after<1||before===after||seen.has(documentId))return [];
+     seen.add(documentId);batch.push({documentId,before,after});
+    }
+    result.push({scope:'inventory',documentId:batch[0].documentId,batch});
    }else if(kind===8){
     const documentId=u32(),before:FlowerVariant=[i32(),i32(),i32(),i32()],after:FlowerVariant=[i32(),i32(),i32(),i32()];
     if(documentId<=0||documentId>2147483647||before.every((v,i)=>v===after[i]))return [];
@@ -142,9 +153,10 @@ function achievementChanges(
 /** Details derive only from the native Rust history journal, including
  * category side effects within a single atomic achievement transaction. */
 export function formatHistoryChange(
- detail:HistoryDetail|undefined,locale:string,copy:HistoryChangeCopy,pairedLabel='',quantityLabel='Quantity',flowerVariantName?:(value:FlowerVariant)=>string,furnitureVariantName?:(value:FurnitureVariant)=>string
+ detail:HistoryDetail|undefined,locale:string,copy:HistoryChangeCopy,pairedLabel='',quantityLabel='Quantity',flowerVariantName?:(value:FlowerVariant)=>string,furnitureVariantName?:(value:FurnitureVariant)=>string,inventoryBatchName?:(documentId:number)=>string
 ):string{
  if(!detail)return '';
+ if(detail.scope==='inventory'&&'batch' in detail)return detail.batch.map(row=>(inventoryBatchName?.(row.documentId)??String(row.documentId))+': '+row.before+' → '+row.after).join(' · ');
  if(detail.scope==='inventory')return detail.furnitureVariant?(furnitureVariantName?.(detail.before)??String(detail.before))+' → '+(furnitureVariantName?.(detail.after)??String(detail.after)):detail.flowerVariant?(flowerVariantName?.(detail.before)??String(detail.before))+' → '+(flowerVariantName?.(detail.after)??String(detail.after)):quantityLabel+': '+detail.before+' → '+detail.after;
  if(detail.scope==='collections'){
   if(detail.before===null)return copy.added;

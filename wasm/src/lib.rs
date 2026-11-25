@@ -70,6 +70,25 @@ pub extern "C" fn hkia_inventory_change(document_id:u32,before:i32,after:i32)->u
   }
  })
 }
+/// The batch transport uses the same local staging buffer as history replay.
+#[no_mangle]
+pub extern "C" fn hkia_inventory_batch_limit()->u32{
+ hkia_save_core::collection::MAX_INVENTORY_BATCH as u32
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_batch_change()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  let bytes=std::mem::take(&mut a.stage);
+  if bytes.is_empty()||bytes.len()%12!=0||bytes.len()/12>hkia_save_core::collection::MAX_INVENTORY_BATCH{return 1}
+  let requests=bytes.chunks_exact(12).map(|row|(
+   u32::from_le_bytes(row[0..4].try_into().unwrap()),
+   i32::from_le_bytes(row[4..8].try_into().unwrap()),
+   i32::from_le_bytes(row[8..12].try_into().unwrap())
+  )).collect::<Vec<_>>();
+  match a.editor.as_mut().map(|e|e.change_inventory_quantities(&requests)){Some(Ok(()))=>0,_=>1}
+ })
+}
 /// 4-byte count + N rows of (document id u32, item id i32, quantity i32,
 /// editable u32). Display-only; no inventory records are ever synthesized.
 #[no_mangle]
