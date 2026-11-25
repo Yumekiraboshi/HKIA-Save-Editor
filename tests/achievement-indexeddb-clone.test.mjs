@@ -106,7 +106,9 @@ test('existing inventory stack patches survive reactive state and reject duplica
  assert.deepEqual(structuredClone(patches),patches);
  assert.deepEqual(store.diffInventory(before,before),[]);
  assert.throws(()=>store.safeInventoryPatches([{documentId:4,before:6,after:25},{documentId:4,before:6,after:8}]),/DRAFT_INVALID/);
- assert.throws(()=>store.safeInventoryPatches([{documentId:4,before:6,after:0}]),/DRAFT_INVALID/);
+ assert.deepEqual(store.safeInventoryPatches([{documentId:4,before:6,after:0}]),[{documentId:4,before:6,after:0}]);
+ assert.deepEqual(store.safeInventoryPatches([{documentId:4,before:0,after:6}]),[{documentId:4,before:0,after:6}]);
+ assert.throws(()=>store.safeInventoryPatches([{documentId:4,before:6,after:-1}]),/DRAFT_INVALID/);
 });
 test('tampered or duplicated achievement drafts cannot be persisted',()=>{
  const duplicate=reactive([expected,expected]);

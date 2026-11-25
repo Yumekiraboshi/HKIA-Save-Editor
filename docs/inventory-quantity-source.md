@@ -6,6 +6,8 @@ The typed fields give 10,293 stackable definitions, 138 requiring unique data, 1
 
 Existing ordinary positive-quantity rows with a verified definition and no unique payload use the native cap in Rust CAS, batch CAS and export. Unknown definitions and unique-required definitions with missing payload are read-only. Finite-cap definitions with multiple saved rows of the same item ID remain read-only rather than guessing aggregate allocation. UI receives limits from the Worker; it does not infer edit authority.
 
-A separate conservative ingredient candidate flag identifies 38 definitions for later membership research; it does not grant permission to create/delete, prove DLC rights, or authorize changing UID/ownership. Existing draft replay is subject to the same validation, and previously accepted out-of-bounds drafts may fail closed. Existing source values are not normalized merely by opening or exporting an unrelated edit.
+A separate conservative ingredient candidate flag identifies 37 definitions for later membership research; it does not grant permission to create/delete, prove DLC rights, or authorize changing UID/ownership. Existing draft replay is subject to the same validation, and previously accepted out-of-bounds drafts may fail closed. Existing source values are not normalized merely by opening or exporting an unrelated edit.
 
 Extraction: run `python scripts/extract-inventory-quantity-rules.py /path/to/definitions --check` against the verified source bundle. No network, Unity executable, or personal save is required. Generated file: `core/src/inventory_source_data.rs`.
+
+The ingredient candidate projection is restricted to Common/Uncommon/Rare (2/3/4). Original definition 460708033 has Rarity.Currency (1), so it is not a membership candidate; the separate currency editing contract is not inferred from the Ingredient bit.

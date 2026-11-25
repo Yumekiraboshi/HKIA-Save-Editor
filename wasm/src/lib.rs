@@ -111,7 +111,7 @@ pub extern "C" fn hkia_inventory_snapshot()->u32{
 }
 
 /// Existing inventory quantity bounds, separate from the stable 16-byte
-/// inventory row ABI: count + (document id u32, positive maximum i32).
+/// inventory row ABI: count + (document id u32, minimum i32, maximum i32).
 #[no_mangle]
 pub extern "C" fn hkia_inventory_quantity_bounds()->u32{
  STATE.with(|s|{
@@ -122,7 +122,7 @@ pub extern "C" fn hkia_inventory_quantity_bounds()->u32{
   let mut b=vec![0;4];let mut count=0u32;
   for row in rows{
    if let Some(cap)=row.quantity_limit{
-    count+=1;b.extend(row.document_id.to_le_bytes());b.extend(cap.to_le_bytes());
+    count+=1;b.extend(row.document_id.to_le_bytes());b.extend(row.quantity_minimum.to_le_bytes());b.extend(cap.to_le_bytes());
    }
   }
   b[..4].copy_from_slice(&count.to_le_bytes());

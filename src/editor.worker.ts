@@ -82,26 +82,26 @@ function snapshot(e:Engine){
  const iv=new DataView(bytesInv.buffer,bytesInv.byteOffset,bytesInv.byteLength);
  const countInv=iv.getUint32(0,true);
  if(countInv>1_000_000||bytesInv.length!==4+countInv*16)throw Error('INVENTORY_SNAPSHOT_INVALID');
- const inventory:Array<{documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;flower?:InventoryFlower;palette?:InventoryPalette;unique?:InventoryUniqueInfo}>=[];
+ const inventory:Array<{documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;quantityMinimum:number;flower?:InventoryFlower;palette?:InventoryPalette;unique?:InventoryUniqueInfo}>=[];
  const docIds=new Set<number>();
  for(let i=0;i<countInv;i++){
   const at=4+i*16,documentId=iv.getUint32(at,true),itemId=iv.getInt32(at+4,true),
    quantity=iv.getInt32(at+8,true),editable=iv.getUint32(at+12,true);
   if(docIds.has(documentId)||editable>1)throw Error('INVENTORY_SNAPSHOT_INVALID');
   docIds.add(documentId);
-  inventory.push({documentId,itemId,quantity,editable:editable===1,quantityLimit:null});
+  inventory.push({documentId,itemId,quantity,editable:editable===1,quantityLimit:null,quantityMinimum:1});
  }
  if(e.hkia_inventory_quantity_bounds()!==0)throw Error('INVENTORY_SNAPSHOT_FAILED');
  const boundsBytes=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
  if(boundsBytes.length<4)throw Error('INVENTORY_SNAPSHOT_INVALID');
  const bv=new DataView(boundsBytes.buffer,boundsBytes.byteOffset,boundsBytes.byteLength);
  const boundCount=bv.getUint32(0,true),editableRows=new Map(inventory.filter(row=>row.editable).map(row=>[row.documentId,row]));
- if(boundCount!==editableRows.size||boundsBytes.length!==4+8*boundCount)throw Error('INVENTORY_SNAPSHOT_INVALID');
+ if(boundCount!==editableRows.size||boundsBytes.length!==4+12*boundCount)throw Error('INVENTORY_SNAPSHOT_INVALID');
  for(let i=0;i<boundCount;i++){
-  const p=4+i*8,id=bv.getUint32(p,true),cap=bv.getInt32(p+4,true);
+  const p=4+i*12,id=bv.getUint32(p,true),minimum=bv.getInt32(p+4,true),cap=bv.getInt32(p+8,true);
   const row=editableRows.get(id);
-  if(!row||cap<1)throw Error('INVENTORY_SNAPSHOT_INVALID');
-  row.quantityLimit=cap;editableRows.delete(id);
+  if(!row||(minimum!==0&&minimum!==1)||cap<1)throw Error('INVENTORY_SNAPSHOT_INVALID');
+  row.quantityLimit=cap;row.quantityMinimum=minimum;editableRows.delete(id);
  }
  if(editableRows.size!==0)throw Error('INVENTORY_SNAPSHOT_INVALID');
  if(e.hkia_inventory_flowers_snapshot()!==0)throw Error('FLOWER_SNAPSHOT_FAILED');
@@ -283,7 +283,7 @@ async function execute(r:Request):Promise<unknown>{
   case 'inventory-batch-change':{
    const rows=r.quantityBatch;
    if(!Array.isArray(rows)||rows.length<1||rows.length>e.hkia_inventory_batch_limit()||
-    rows.some(row=>!Array.isArray(row)||row.length!==3||row.some(n=>!Number.isInteger(n)||n<1||n>2147483647)))
+    rows.some(row=>!Array.isArray(row)||row.length!==3||row.some((n,i)=>!Number.isInteger(n)||n<(i===0?1:0)||n>2147483647)))
     throw Error('INVENTORY_INVALID');
    const len=rows.length*12,p=e.hkia_stage(len);
    if(!p||p+len>e.memory.buffer.byteLength)throw Error('INVENTORY_INVALID');
@@ -295,8 +295,8 @@ async function execute(r:Request):Promise<unknown>{
   case 'inventory-change':{
    const id=r.documentId,before=r.beforeQuantity,next=r.nextQuantity;
    if(!Number.isInteger(id)||id===undefined||id<1||id>2147483647||
-    !Number.isInteger(before)||before===undefined||before<1||
-    !Number.isInteger(next)||next===undefined||next<1||next>2147483647)
+    !Number.isInteger(before)||before===undefined||before<0||before>2147483647||
+    !Number.isInteger(next)||next===undefined||next<0||next>2147483647)
     throw Error('INVENTORY_INVALID');
    if(e.hkia_inventory_change(id,before,next)!==0)throw Error('INVENTORY_CONFLICT');
    return snapshot(e);
@@ -410,7 +410,7 @@ async function execute(r:Request):Promise<unknown>{
     const ok=p.kind==='flower-variant'
      ?isFlowerVariantWire(p.before)&&isFlowerVariantWire(p.after)&&e.hkia_inventory_flower_variant_change(p.documentId,...p.before,...p.after)===0
      :p.kind==='furniture-variant'?isFurnitureVariantWire(p.before)&&isFurnitureVariantWire(p.after)&&e.hkia_inventory_furniture_variant_change(p.documentId,...p.before,...p.after)===0
-      :p.kind===undefined&&Number.isInteger(p.before)&&Number.isInteger(p.after)&&p.before>=1&&p.before<=2147483647&&p.after>=1&&p.after<=2147483647&&e.hkia_inventory_change(p.documentId,p.before,p.after)===0;
+      :p.kind===undefined&&Number.isInteger(p.before)&&Number.isInteger(p.after)&&p.before>=0&&p.before<=2147483647&&p.after>=0&&p.after<=2147483647&&e.hkia_inventory_change(p.documentId,p.before,p.after)===0;
     if(!ok){e.hkia_reset();throw Error('DRAFT_CONFLICT');}
    }
    for(const p of achievements){

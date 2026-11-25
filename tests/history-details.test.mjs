@@ -177,8 +177,16 @@ test('inventory batch is one native history step with every stack change retaine
  for(const invalid of [
   bytes([u8(10),u32(0)]),bytes([u8(10),u32(41)]),
   bytes([u8(10),u32(2),u32(4),i32(6),i32(20),u32(4),i32(9),i32(20)]),
-  bytes([u8(10),u32(1),u32(4),i32(6),i32(0)]),
+  bytes([u8(10),u32(1),u32(4),i32(6),i32(-1)]),
   bytes([u8(10),u32(1),u32(4),i32(6),i32(6)]),
   batch.slice(0,-1)
  ])assert.deepEqual(decodeHistoryDetails(log([invalid],1),records),[]);
+});
+
+test('zero quantity is a valid native history transition in both directions',()=>{
+ const records=[meta('inventory',4,null)];
+ for(const [before,after] of [[6,0],[0,6]]){
+  const op=bytes([u8(10),u32(1),u32(4),i32(before),i32(after)]);
+  assert.deepEqual(decodeHistoryDetails(log([op],1),records),[{scope:'inventory',documentId:4,batch:[{documentId:4,before,after}]}]);
+ }
 });
