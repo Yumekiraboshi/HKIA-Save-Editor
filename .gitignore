@@ -11,6 +11,3 @@ public/source-colorways/*.webp
 
 # Derived per-item dynamic sprites are validated and materialized at build time.
 public/dynamic-colorways/
-
-# Generated exact Item ID alternate collection artwork routes.
-public/inventory-art/collection-routes.json
