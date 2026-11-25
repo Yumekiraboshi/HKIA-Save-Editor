@@ -70,3 +70,7 @@ The source-bounded ingredient allowlist also supports addition of previously abs
 #### Expanded ordinary additions and zero quantity
 
 The first ingredient slice extends to 168 ordinary fish and 56 ordinary critters from the same pinned v3.0.1 source (261 distinct Item IDs total). See [inventory-quantity-source.md](../inventory-quantity-source.md) for exact native definition gates. Existing zero quantity rows can be refilled, absent rows added, and eligible positive stacks emptied using the same native editor controls. No collection, quest, reward, entitlement or catch-history mutation is implied. Unsupported items remain read-only for membership operations pending evidence.
+
+#### Food and fishing bait membership
+
+The ordinary membership slice also includes 178 source-defined foods and 58 fishing baits (497 total IDs across the current five groups). FirstTime celebration controls the native acquisition animation, not entitlement; celebration records remain unchanged. Quest-rarity foods, DLC/event-year definitions and unique-required items remain excluded. See [inventory-quantity-source.md](../inventory-quantity-source.md). Existing source-based zero/refill and new-document addition controls are reused; this is an implementation boundary, not a reduction of comprehensive inventory scope.
