@@ -45,7 +45,10 @@ test('rejects other items, unauthorized source slot selections, mismatched GUIDs
 });
 test('GPU bridge requests exact original geometry by digest and rejects unavailable or wrong-size payload before GPU allocation',async()=>{
  const d=sources(),plan=resolveNativeRugMaterial(d,32709745,207),requests=[];
- await assert.rejects(drawNativeRugDiagnostic({},d,{itemId:32709745,materialIndex:207},async ref=>{requests.push(ref);return new ArrayBuffer(0);}),/RUG_DRAW_PAYLOAD_LENGTH/);
+ const identity=[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],scene={model:identity,viewProjection:identity,normalMatrix:[1,0,0,0,1,0,0,0,1],tangentParity:1,cameraPosition:[0,0,2],mainLightDirection:[0,0,1],mainLightColor:[1,1,1],ambient:[.2,.2,.2],emissionColor:[0,0,0],ambientMain:[0,0,0],ambientFill:[0,0,0],screenOcclusion:1,screenOcclusionStrength:0,reflectionBlendWeight:0,reflectionIntensity:1,emissionMask:0,fogVarying:0,fogMultiplier:0};
+ const source=Object.values(read('data/furniture-light-region-source-v3.0.1.json').cubemaps)[0],cube={source,orientation:{sourceSha256:source.sha256,sourceFaceForTarget:[0,1,2,3,4,5],texelOrientation:'native-webgl',evidence:'synthetic preflight only'},bc1Mode:'rgb'};
+ const request={itemId:32709745,materialIndex:207,scene,patternBc1Mode:'rgb',reflectionPrimary:cube,reflectionSecondary:cube};
+ await assert.rejects(drawNativeRugDiagnostic({},d,request,async ref=>{requests.push(ref);return new ArrayBuffer(0);}),/RUG_DRAW_PAYLOAD_LENGTH/);
  assert.deepEqual(requests,[{kind:'geometry',sha256:plan.geometry.geometrySha256,bytes:7680}]);
  await assert.rejects(drawNativeRugDiagnostic({},d,{itemId:32709745,materialIndex:1},async()=>{throw Error('UNEXPECTED_READ');}),/MATERIAL_NOT_IN_SLOT/);
 });
