@@ -78,7 +78,7 @@ export function browseInventory(
 ):InventoryEntry[]{
  const q=term.trim().toLocaleLowerCase();
  return rows.filter(row=>{
-  if(editableOnly&&!row.editable)return false;
+  if(editableOnly&&!row.editable&&!row.unique?.flowerEditable)return false;
   if(!nativeInventoryGroups(row.itemId,index).includes(selectedGroup))return false;
   if(!q)return true;
   const source=sourceItems.get(row.itemId);
