@@ -47,8 +47,9 @@ export function safeInventoryPatches(value:unknown):InventoryPatch[]{
   if(ids.has(key))throw Error('DRAFT_INVALID');
   ids.add(key);
   if(p.kind==='flower-variant'){
-   if(!isFlowerVariantWire(p.before)||!isFlowerVariantWire(p.after)||p.before.every((v,i)=>v===p.after[i]))throw Error('DRAFT_INVALID');
-   result.push({documentId:p.documentId,kind:p.kind,before:[...p.before],after:[...p.after]});
+   const before:unknown=p.before,after:unknown=p.after;
+   if(!isFlowerVariantWire(before)||!isFlowerVariantWire(after)||before.every((v,i)=>v===after[i]))throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,kind:p.kind,before:[...before],after:[...after]});
   }else{
    if(p.kind!==undefined||!Number.isInteger(p.before)||!Number.isInteger(p.after)||p.before<=0||p.before>2147483647||p.after<=0||p.after>2147483647||p.before===p.after)throw Error('DRAFT_INVALID');
    result.push({documentId:p.documentId,before:p.before,after:p.after});
