@@ -10,6 +10,7 @@ ROOT=Path(__file__).resolve().parents[1]
 SOURCE='ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0'
 IDS='8a55e11da2b28b30bb212424159657d3d9e7b47baf6a21ed94fd8615d1ef4702'
 FLAGS='7f217f6e4d73de38591ab8975a3f1c0c322baec8b3dcf0aecda3f6a322157da8'
+GATHERED='8cb0a2929cf109bbc768239f5bcede17ecdd97e913db861f83349a8fd7c7e60d'
 
 def require(ok,message):
     if not ok: raise ValueError(message)
@@ -78,7 +79,7 @@ def extract(source):
         if flags&0x4000: p=align(p)
         return value,p
     n=s.unpack_from('<I',b,p)[0];p=align(p+4)
-    rows=[];caps=[]
+    rows=[];caps=[];gathered=[]
     for _ in range(n):
         _,start,size,i=s.unpack_from('<qqIi',b,p);p+=24
         if i!=3: continue
@@ -98,12 +99,22 @@ def extract(source):
                    and not cat&(1|2|64|256|134217728))
         rows.append((id,int(stack)|unique*2|custom*4|int(bool(candidate))*8))
         if custom:caps.append((id,d['CustomMaxCount']))
+        # Native raw masks: CreationStationIngredient | Fish / Critter.
+        # Always-periodicity, ordinary rarity, unrestricted original definition.
+        if (d['ItemOwnership']==18 and stack and not unique and not custom
+            and not d['ReleaseVersion'] and d['RequiredDlcContent']=='0'*32
+            and d['CollectionEventYear']=='0'*32 and d['CelebrationPeriodicity']==0
+            and d['Rarity'] in (2,3,4) and cat in (268451840,268435464)):
+            gathered.append((id,cat))
     rows.sort();caps.sort()
     require(len(rows)==12163 and len({i for i,_ in rows})==12163 and rows[0][0]>0,'item IDs')
     require(hashlib.sha256(b''.join(s.pack('<i',i) for i,_ in rows)).hexdigest()==IDS,'ID fingerprint')
     require(hashlib.sha256(bytes(f for _,f in rows)).hexdigest()==FLAGS,'rule fingerprint')
     require(len(caps)==13 and all(cap>0 for _,cap in caps),'cap table')
-    return rows,caps
+    gathered.sort()
+    require(len(gathered)==224 and sum(cat==268451840 for _,cat in gathered)==168,'gathered category counts')
+    require(hashlib.sha256(b''.join(s.pack('<i',id) for id,_ in gathered)).hexdigest()==GATHERED,'gathered fingerprint')
+    return rows,caps,[id for id,_ in gathered]
 
 def render(rows,caps):
     header=("// Generated from verified Steam v3.0.1 InventoryItemDefinitionAsset type tree.\n"
@@ -119,8 +130,15 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source',type=Path);parser.add_argument('--check',action='store_true')
     args=parser.parse_args()
-    generated=render(*extract(args.source))
-    target=ROOT/'core/src/inventory_source_data.rs'
-    if args.check: require(target.read_text()==generated,'checked-in rules differ')
-    else: target.write_text(generated)
-    print('Verified 12163 item definitions and 13 custom caps')
+    rows,caps,gathered=extract(args.source)
+    generated=render(rows,caps)
+    gathered_source=("// Generated from the pinned original Steam v3.0.1 definitions.\n"
+                     "// 168 fish, 56 critters; native ordinary, always-periodic definitions.\n"
+                     f"// ID little-endian SHA256 {GATHERED}\n"
+                     "pub(super) const GATHERED_IDS:&[i32]=&[\n"
+                     +''.join(' '+','.join(str(id) for id in gathered[i:i+8])+',\n' for i in range(0,len(gathered),8))+'];\n')
+    for name,content in [('inventory_source_data.rs',generated),('inventory_gathered_data.rs',gathered_source)]:
+        target=ROOT/'core/src'/name
+        if args.check: require(target.read_text()==content,'checked-in source differs: '+name)
+        else: target.write_text(content)
+    print('Verified 12163 item definitions, 13 custom caps and 224 gathered-item candidates')
