@@ -647,7 +647,9 @@ async function inventoryFurnitureVariantEditSmoke(){
   await page.locator('.inventory-controls input[type="search"]').fill('61381969');
   const button=page.locator('.inventory-card .inventory-unique-edit-button');
   await button.waitFor({timeout:30_000});
-  assert.match(await button.innerText(),/93/);
+  const quantity=page.locator('.inventory-card input[name="quantity"]');
+  await quantity.waitFor();assert.equal(await quantity.inputValue(),'93');
+  assert.equal(await quantity.getAttribute('min'),'1');
   await button.click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"][open]');
   await dialog.waitFor();
@@ -687,7 +689,16 @@ async function inventoryFurnitureVariantEditSmoke(){
   await page.locator('.bar-actions button[title="Redo"]:not([disabled])').waitFor();
   await redo.click();
   await page.locator('.bar-actions button[title="Undo"]:not([disabled])').waitFor();
-  assert.match(await button.innerText(),/93/);
+  assert.equal(await quantity.inputValue(),'93');
+  await quantity.fill('42');
+  await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]').click();
+  await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-group-option[data-inventory-group="furniture"]').click();
+  await page.locator('.inventory-controls input[type="search"]').fill('61381969');
+  await quantity.waitFor();assert.equal(await quantity.inputValue(),'42');
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([
    page.waitForEvent('download',{timeout:30_000}),
@@ -711,6 +722,9 @@ async function inventoryFurnitureVariantEditSmoke(){
   }
   assert.equal(at,v.byteLength);
   assert.deepEqual(furniture,{present:1,uid:11,tag:8,fields:3,words:patch.after});
+  assert.equal(e.hkia_inventory_snapshot(),0);
+  const iv=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(iv.getUint32(0,true),2);assert.equal(iv.getUint32(20,true),8);assert.equal(iv.getInt32(28,true),42);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM FURNITURE VARIANT EDIT PASS: native choices, CAS, draft, Undo/Redo and exported payload reparse');
  }finally{await context.close();}

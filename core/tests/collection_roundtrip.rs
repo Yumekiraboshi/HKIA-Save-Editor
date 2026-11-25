@@ -1351,6 +1351,47 @@ fn furniture_variant_source_bounded_cas_history_and_export(){
 }
 
 #[test]
+fn customized_furniture_quantity_uses_normalized_identity_and_native_limits(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ for zipped in [false,true]{
+  let raw=furniture_edit_slot(Some(furniture_payload([502,2,0])));let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==1&&r.quantity_limit==Some(i32::MAX)));
+  assert!(e.change_inventory_quantities(&[(4,93,50),(5,2,0)]).is_err());assert!(!e.dirty());
+  e.change_inventory_quantities(&[(4,93,50),(5,2,20)]).unwrap();
+  let quantities=Editor::open(e.export().unwrap()).unwrap();
+  for id in 4..=5{assert_eq!(quantities.inventory_original_unique_payload(id),e.inventory_original_unique_payload(id));}
+  e.change_inventory_furniture_variant(4,[13,2,0],[13,3,0]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);
+  assert!(restored.redo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let reopened=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory().iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![50,20]);
+  assert_eq!(reopened.inventory_unique_data(4),e.inventory_unique_data(4));
+  assert_eq!(reopened.inventory_original_unique_payload(5),e.inventory_original_unique_payload(5));
+ }
+ let mut duplicate=Editor::open(furniture_edit_slot(Some(furniture_payload([13,2,0])))).unwrap();
+ assert!(duplicate.inventory().iter().all(|r|!r.editable));assert!(duplicate.change_inventory_quantity(4,93,1).is_err());
+ let legacy=arr(vec![vec![1],arr(vec![guid([1,2,3,4]),guid([0;4]),guid([0;4])])]);
+ let mut opaque=Editor::open(furniture_edit_slot(Some(legacy))).unwrap();
+ assert!(!opaque.inventory()[0].editable);assert!(opaque.change_inventory_quantity(4,93,1).is_err());
+ // The source defaults of this desk lamp are 503 and 1. An explicit
+ // default-material payload aliases a nil ordinary row.
+ let mut payload=synthetic_payload("3.0.1");payload[3]=0x97;
+ payload.extend(doc(1,arr(vec![u(4),u(61381969),u(11),u(93),furniture_payload([503,1,0])])));
+ payload.extend(doc(1,arr(vec![u(5),u(61381969),u(0),u(2),vec![0xc0]])));
+ let mut normalized=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
+ assert!(!normalized.inventory()[0].editable);assert!(normalized.change_inventory_quantity(4,93,1).is_err());
+ // The copied placement reference index also captures UniqueItemModel.
+ let mut payload=synthetic_payload("3.0.1");payload[3]=0x97;
+ payload.extend(doc(1,arr(vec![u(4),u(61381969),u(11),u(93),furniture_payload([13,2,0])])));
+ let copied=arr(vec![u(6),arr(vec![]),arr(vec![arr(vec![u(61381969),furniture_payload([13,2,0])])])]);
+ payload.extend(doc(22,copied));
+ let mut referenced=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
+ assert!(!referenced.inventory()[0].editable);assert!(referenced.change_inventory_quantity(4,93,1).is_err());
+}
+#[test]
 fn inventory_quantity_batch_is_atomic_and_recovers_one_history_step(){
  use hkia_save_core::collection::HistoryScope::{Inventory,Collections};
  for zipped in [false,true]{
