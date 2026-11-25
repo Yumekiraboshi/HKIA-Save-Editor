@@ -345,6 +345,7 @@ async function inventoryFurnitureVariantEditSmoke(){
   });
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');
+  await page.locator('.inventory-group-option[data-inventory-group="furniture"]').click();
   await page.locator('.inventory-controls input[type="search"]').fill('61381969');
   const button=page.locator('.inventory-card .inventory-unique-edit-button');
   await button.waitFor({timeout:30_000});
@@ -379,6 +380,7 @@ async function inventoryFurnitureVariantEditSmoke(){
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');
+  await page.locator('.inventory-group-option[data-inventory-group="furniture"]').click();
   await page.locator('.inventory-controls input[type="search"]').fill('61381969');
   await button.waitFor();
   const undo=page.locator('.bar-actions button[title="Undo"]');
