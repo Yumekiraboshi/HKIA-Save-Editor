@@ -34,6 +34,8 @@ import {searchAchievementRows} from './achievement-search';
  import {loadNativeColorwayIcons} from './native-colorway-icons';
  import DyeSprite from './DyeSprite.svelte';
  import DynamicFlowerSprite from './DynamicFlowerSprite.svelte';
+ import DynamicPaletteSprite from './DynamicPaletteSprite.svelte';
+ import {CUSTOM_PALETTE_ITEM_ID} from './inventory-palette-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {toAchievementDateTimeValue,fromAchievementDateTimeValue} from './achievement-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
@@ -1127,7 +1129,9 @@ import {verifiedFloorplanName} from './floorplan-names';
      <article class="inventory-card" class:inventory-readonly={!item.editable&&!canColor}>
       <div class="inventory-card-heading">
        <span class="inventory-item-art" class:flower-variant={!!flower} aria-hidden="true">
-        {#if item.flower&&flowerDefinitions&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+        {#if item.palette&&item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+         <DynamicPaletteSprite itemId={item.itemId} palette={item.palette}/>
+        {:else if item.flower&&flowerDefinitions&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicFlowerSprite itemId={item.itemId} flower={item.flower} definitions={flowerDefinitions} fallback={nativeSprite??sprite}/>
         {:else if originalVariantArt[String(item.itemId)]||exactVariantArt[String(item.itemId)]||(!nativeSprite&&sprite&&nativeDyePalettes[String(item.itemId)])}
          <DyeSprite sprite={nativeSprite??sprite} palette={nativeDyePalettes[String(item.itemId)]}

@@ -150,6 +150,22 @@ pub extern "C" fn hkia_inventory_flower_color_change(id:u32,before:i32,after:i32
  })
 }
 
+/// Read-only palette payload: count + (document ID, 12 original f32 bit words).
+#[no_mangle]
+pub extern "C" fn hkia_inventory_palettes_snapshot()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let mut b=vec![0;4];let mut count=0u32;
+  for (id,colors) in editor.inventory_palettes(){
+   if count==1_000_000{return 1}
+   count+=1;b.extend(id.to_le_bytes());
+   for color in colors{for bits in color{b.extend(bits.to_le_bytes());}}
+  }
+  b[..4].copy_from_slice(&count.to_le_bytes());a.reply=b;0
+ })
+}
+
 /// Last source-defined child completion + absent parent creation in one
 /// fully validated Rust transaction, including one-step Undo/Redo.
 #[no_mangle]

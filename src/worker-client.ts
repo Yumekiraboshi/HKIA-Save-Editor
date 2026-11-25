@@ -7,7 +7,8 @@ export type AchievementDraftPatch={guid:[number,number,number,number];before:Ach
 export type CounterEntry={guid:[number,number,number,number];current:number;countedValues:number|null;countedGuids:number};
 import type {InventoryUniqueInfo} from './inventory-unique';
 import type {InventoryFlower} from './inventory-flower-display';
-export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean;flower?:InventoryFlower;unique?:InventoryUniqueInfo};
+import type {InventoryPalette} from './inventory-palette-display';
+export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean;flower?:InventoryFlower;palette?:InventoryPalette;unique?:InventoryUniqueInfo};
 export type InventoryPatch={documentId:number;before:number;after:number;kind?:'flower-color'};
 export type HistoryScope='collections'|'achievements'|'inventory';
 export type HistoryRecord={
