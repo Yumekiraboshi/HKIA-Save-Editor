@@ -16,6 +16,12 @@ pub(crate) fn ordinary_quantity_limit(item_id:i32)->Option<i32>{
 pub(crate) fn is_uncapped_required_unique_stack(item_id:i32)->bool{
  RULES.binary_search_by_key(&item_id,|row|row.0).ok().is_some_and(|i|RULES[i].1==3)
 }
+/// Exact Item IDs from the pinned v3.0.1 palette and chef runtime
+/// source manifests. This maps source families, not color/flavor edit rights.
+pub(crate) const CUSTOM_PALETTE_ID:i32=1835273963;
+pub(crate) const CAFE_IDS:&[i32]=&[203331651,406277059,905853141,973085470,1053426049,1061947263,1237708874,1338995084,1932639321];
+pub(crate) const BOBA_ID:i32=1798633565;
+pub(crate) fn is_chef_color(id:i32)->bool{matches!(id,6..=34|46|47|140..=142)}
 /// Source-bounded ordinary ingredients, fish, critters, food and bait. Definition
 /// evidence only: the editor separately validates version, identity and references.
 pub(crate) fn ordinary_membership_item(item_id:i32)->bool{

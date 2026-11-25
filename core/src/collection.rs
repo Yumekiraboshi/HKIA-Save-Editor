@@ -496,6 +496,46 @@ impl Editor {
    FLOWER_CROWN_SPECIES.binary_search_by_key(&item,|&(id,_)|id).is_ok()||
    FLOWER_CLOTHING_GENERIC.contains(&item)||item==FLOWER_CLOTHING_NO_PATTERN
  }
+ // Quantity-only support for the exact palette and chef definitions. A
+ // single saved Item ID row avoids guessing their native variant equality.
+ // The full payload has already passed the typed native walker; never
+ // reconstruct flavors, sweetness or colors from the display projection.
+ fn single_appearance_quantity_source(&self,row:&crate::native::InventoryRow)->Option<i32>{
+  use crate::inventory_source::{CUSTOM_PALETTE_ID,CAFE_IDS,BOBA_ID,is_chef_color,is_uncapped_required_unique_stack};
+  let item=row.item_id?;
+  if self.inventory_item_rows.get(&item)!=Some(&1)||!is_uncapped_required_unique_stack(item){return None}
+  match row.unique_data?{
+   InventoryUniqueData::Palette{rgba_bits} if item==CUSTOM_PALETTE_ID=>{
+    self.unique_row_source(row,3)?;
+    if !rgba_bits.iter().flatten().all(|&bits|(0.0..=1.0).contains(&f32::from_bits(bits))){return None}
+   }
+   InventoryUniqueData::CafeAppearance{count,colors} if CAFE_IDS.binary_search(&item).is_ok()=>{
+    self.unique_row_source(row,2)?;
+    if count==0||!colors.iter().take(count as usize).all(|&n|is_chef_color(n)){return None}
+    // The display snapshot is capped at three. Check the entire saved
+    // color sequence, not just the display prefix, and reject nil flavors.
+    let decoded=&self.slot.envelope.decoded;
+    let flavors=decoded.get(row.unique_fields[0].clone())?;
+    let mut flavor_cursor=Cursor::new(flavors);
+    if flavor_cursor.array().ok()?==0{return None}
+    let data=decoded.get(row.unique_fields[1].clone())?;
+    let mut cursor=Cursor::new(data);
+    let n=cursor.array().ok()?;
+    if n==0||n>64{return None}
+    for _ in 0..n{
+     let v=cursor.int(i32::MIN as i128,i32::MAX as i128).ok()? as i32;
+     if !is_chef_color(v){return None}
+    }
+    if cursor.pos!=data.len(){return None}
+   }
+   InventoryUniqueData::BobaAppearance{color_id} if item==BOBA_ID=>{
+    self.unique_row_source(row,5)?;
+    if !is_chef_color(color_id){return None}
+   }
+   _=>return None
+  }
+  Some(item)
+ }
  fn index_unique_quantity_ids(&self)->HashSet<u32>{
   if self.slot.envelope.version!=Version::V301||self.slot.index.inventory_payload_refs_incomplete{return HashSet::new()}
   let mut uid_counts=HashMap::<i32,usize>::new();
@@ -522,6 +562,7 @@ impl Editor {
    if ambiguous.contains(&item)||uid_counts.get(&uid)!=Some(&1)||
     self.slot.index.inventory_payload_item_refs.contains(&item)||
     !row.fields.iter().all(Option::is_some){return None}
+   if self.single_appearance_quantity_source(row)==Some(item){return Some(row.id)}
    if let Some(source)=self.furniture_source(row){
     if crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX){return None}
     let key=furniture_key(source,furniture_variant(row.unique_data?)?)?;
