@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE='ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0'
 IDS='8a55e11da2b28b30bb212424159657d3d9e7b47baf6a21ed94fd8615d1ef4702'
-FLAGS='7f217f6e4d73de38591ab8975a3f1c0c322baec8b3dcf0aecda3f6a322157da8'
+FLAGS='07535a7d093ce3abff44857ecfd9fcb1fed54b365e7524c8a10dff10d8c2cb64'
 GATHERED='8cb0a2929cf109bbc768239f5bcede17ecdd97e913db861f83349a8fd7c7e60d'
 
 def require(ok,message):
@@ -95,7 +95,7 @@ def extract(source):
         cat=d['ItemCategory']
         candidate=(d['ItemOwnership']==18 and stack and not unique and not custom
                    and not d['ReleaseVersion'] and d['RequiredDlcContent']=='0'*32
-                   and d['CollectionEventYear']=='0'*32 and cat&2048
+                   and d['CollectionEventYear']=='0'*32 and d['Rarity'] in (2,3,4) and cat&2048
                    and not cat&(1|2|64|256|134217728))
         rows.append((id,int(stack)|unique*2|custom*4|int(bool(candidate))*8))
         if custom:caps.append((id,d['CustomMaxCount']))
