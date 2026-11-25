@@ -22,7 +22,7 @@ const isPatch=(p:DraftPatch)=>Number.isInteger(p.id)&&p.id>0&&p.id<=2147483647
  &&(p.before===null||typeof p.before==='string'&&/^-?\d{1,19}$/.test(p.before))
  &&(p.after===null||typeof p.after==='string'&&/^-?\d{1,19}$/.test(p.after));
 
-/** Only existing document IDs are tracked; these are not item-creation intents. */
+/** Existing rows and Rust-issued session handles are tracked, never fabricated saved document IDs. */
 export function diffInventory(before:readonly InventoryEntry[],after:readonly InventoryEntry[]):InventoryPatch[]{
  const original=new Map(before.map(x=>[x.documentId,x]));
  const result:InventoryPatch[]=[];
@@ -36,6 +36,8 @@ export function diffInventory(before:readonly InventoryEntry[],after:readonly In
    }
    const furnitureBefore=furnitureVariantOf(source.unique),furnitureAfter=furnitureVariantOf(row.unique);
    if(furnitureBefore&&furnitureAfter&&furnitureBefore.some((v,i)=>v!==furnitureAfter[i]))result.push({documentId:row.documentId,before:furnitureBefore,after:furnitureAfter,kind:'furniture-variant'});
+  }else if(!source&&row.documentId===2147483648+row.itemId&&row.itemId>0&&row.quantity>0){
+   result.push({documentId:row.documentId,before:0,after:row.quantity});
   }
  }
  return result.sort((a,b)=>a.documentId-b.documentId);
@@ -44,7 +46,7 @@ export function safeInventoryPatches(value:unknown):InventoryPatch[]{
  if(!Array.isArray(value)||value.length>20000)throw Error('DRAFT_INVALID');
  const ids=new Set<string>(),result:InventoryPatch[]=[];
  for(const p of value){
-  if(!p||typeof p!=='object'||!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>2147483647)throw Error('DRAFT_INVALID');
+  if(!p||typeof p!=='object'||!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>4294967295||(p.documentId>2147483647&&(p.kind!==undefined||p.before!==0||p.after<=0)))throw Error('DRAFT_INVALID');
   const key=p.documentId+':'+(p.kind??'quantity');
   if(ids.has(key))throw Error('DRAFT_INVALID');
   ids.add(key);

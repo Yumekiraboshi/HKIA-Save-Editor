@@ -64,3 +64,8 @@ const emptyLabels:Record<Locale,string>={
  'zh-Hans':'要将所选物品的持有数量清零吗？','zh-Hant':'要將所選物品的持有數量清零嗎？'
 };
 export function inventoryEmptyCopy(locale:Locale):string{return emptyLabels[locale]}
+
+const addLabels:Record<Locale,string>={
+ ar:'إضافة عناصر',de:'Gegenstände hinzufügen',en:'Add items','en-GB':'Add items',es:'Añadir objetos',fr:'Ajouter des objets','fr-CA':'Ajouter des objets',it:'Aggiungi oggetti',ja:'アイテム追加',ko:'아이템 추가',nl:'Items toevoegen','pt-BR':'Adicionar itens',ru:'Добавить предметы',tr:'Eşya ekle','zh-Hans':'添加物品','zh-Hant':'新增物品'
+};
+export function inventoryAddCopy(locale:Locale):string{return addLabels[locale]}

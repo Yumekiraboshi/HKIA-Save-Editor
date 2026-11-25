@@ -35,6 +35,7 @@ export type SaveSnapshot={
  entries:Array<[number,bigint]>;
  achievements:AchievementEntry[];
  inventory:InventoryEntry[];
+ inventoryCreatable:InventoryEntry[];
  counters:CounterEntry[];
 };
 type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'furniture-variants'|'furniture-variant-change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
