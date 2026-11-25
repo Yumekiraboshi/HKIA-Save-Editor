@@ -5,7 +5,6 @@ import {readFileSync,readdirSync,writeFileSync,existsSync,mkdirSync} from 'node:
 import {createHash} from 'node:crypto';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {buildInventoryThumbnailIndex} from './inventory-thumbnail-index.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const ID=/^[1-9][0-9]{0,9}\.webp$/;
@@ -156,5 +155,5 @@ export function unpackDynamicColorways(root){
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  const root=fileURLToPath(new URL('..',import.meta.url));
- unpackSourceColorways(root);unpackDynamicColorways(root);buildInventoryThumbnailIndex(root);
+ unpackSourceColorways(root);unpackDynamicColorways(root);
 }
