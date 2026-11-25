@@ -1237,3 +1237,21 @@ fn flower_variants_are_source_bounded_atomic_and_recoverable(){
  assert_eq!(out.inventory()[0].quantity,93);
  assert!(e.undo_scope(Inventory));assert!(e.undo_scope(Inventory));assert!(!e.dirty());
 }
+
+#[test]
+fn flower_edit_rejects_legacy_remote_cabin_reference_to_uid(){
+ let mut payload=synthetic_payload("3.0.1");payload[3]=0x97;
+ payload.extend(doc(1,arr(vec![u(4),u(1331175279),u(11),u(93),plain_flower(6)])));
+ // VisitorCabinClientManager -> owned cabin -> owned home -> deprecated object.
+ // ItemId and UniqueId are persisted at keys 1 and 4 of the legacy object.
+ let legacy=arr(vec![guid([1,2,3,4]),u(1331175279),u(0),u(0),u(11),
+  vec![0xc0],vec![0xc0],plain_flower(6),arr(vec![]),arr(vec![])]);
+ let home=arr(vec![guid([5,6,7,8]),l(0),arr(vec![legacy]),u(0),u(0),
+  guid([0;4]),arr(vec![]),vec![0xc0],vec![0xc0],u(0)]);
+ let cabin=arr(vec![guid([9,10,11,12]),arr(vec![home])]);
+ payload.extend(doc(19,arr(vec![u(0),arr(vec![cabin]),arr(vec![])])));
+ let mut e=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
+ assert!(e.inventory_flower_variants(4).is_empty());
+ assert!(e.change_inventory_flower_variant(4,[6,6,0,0],[6,8,0,0]).is_err());
+ assert!(!e.dirty());
+}
