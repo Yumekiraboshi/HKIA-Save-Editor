@@ -16,7 +16,7 @@ export function generateFurnitureSource(d){
  ];
  for(const [id,,,kind,slots] of d.items){
   const fields=slots.map(([slot,,def,refs])=>{
-   const allowed=[...new Set(refs.flatMap(ref=>{if(!sets.has(ref))throw Error(\'Unresolved set\');return sets.get(ref)}))];
+   const allowed=[...new Set(refs.flatMap(ref=>{if(!sets.has(ref))throw Error('Unresolved set');return sets.get(ref)}))];
    return 'FurnitureSlotSource{slot:'+slot+',default_index:'+def+',allowed:&['+allowed.join(',')+']}';
   });
   lines.push(' FurnitureItemSource{item_id:'+id+',is_home_layout:'+(kind===1)+',slots:&['+fields.join(',')+']},');
