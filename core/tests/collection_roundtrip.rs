@@ -1479,3 +1479,30 @@ fn create_absent_material_stacks_uses_native_ids_and_scoped_history(){
   assert_eq!(reopened.inventory_creatable().len(),36);assert_eq!(reopened.achievements(),e.achievements());assert_eq!(reopened.entries(),e.entries());
  }
 }
+
+#[test]
+fn absent_inventory_and_achievement_share_allocation_across_history_scopes(){
+ use hkia_save_core::{achievement::AchievementValue,collection::HistoryScope::{Inventory,Achievements}};
+ let input=slot("3.0.1");let mut e=Editor::open(input.clone()).unwrap();
+ let item=e.inventory_creatable()[0];let guid=[13220480,1299065047,2812061598,2966187300];
+ let done=AchievementValue{complete:true,current:1.0,completed:Some((1_750_000_000,123_456_700))};
+ e.change_inventory_quantity(item.document_id,0,6).unwrap();
+ e.create_achievement(guid,done).unwrap();
+ assert!(e.undo_scope(Inventory));assert!(e.inventory().is_empty());
+ let checkpoint=e.history_checkpoint().unwrap();
+ let mut recovered=Editor::open(input.clone()).unwrap();recovered.restore_history(&checkpoint).unwrap();
+ assert!(recovered.redo_scope(Inventory));assert_eq!(recovered.achievement_value(guid),Some(done));
+ let result=recovered.export().unwrap();let checked=read_slot(&result).unwrap();
+ assert_eq!(checked.index.root_next_id.unwrap().0,6);
+ assert_eq!(checked.index.achievements.last().unwrap().id,5);
+ assert_eq!(checked.index.inventory[0].id,6);
+ assert_eq!(checked.index.inventory[0].item_id,Some(item.item_id));
+ assert!(recovered.undo_scope(Achievements));
+ assert_eq!(recovered.inventory()[0].quantity,6);
+ let result=recovered.export().unwrap();let checked=read_slot(&result).unwrap();
+ assert_eq!(checked.index.root_next_id.unwrap().0,5);
+ assert_eq!(checked.index.inventory[0].id,5);
+ let mut old=Editor::open(slot("3.0.0")).unwrap();
+ assert!(old.inventory_creatable().is_empty());
+ assert!(old.change_inventory_quantity(item.document_id,0,6).is_err());
+}

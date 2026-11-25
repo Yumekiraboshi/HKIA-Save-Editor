@@ -128,3 +128,14 @@ test('worker values still use normalized draft payloads with native history chec
  assert.match(worker,/workerAchievementGuid\(guid\)/);
  assert.match(worker,/workerAchievementValue\(beforeValue\)/);
 });
+
+test('pending ordinary item additions are included in net drafts, never saved as native identities',()=>{
+ const id=2147483648+1877756618;
+ const pending=[{documentId:id,itemId:1877756618,quantity:6,editable:true}];
+ const patch=[{documentId:id,before:0,after:6}];
+ assert.deepEqual(store.diffInventory([],pending),patch);
+ assert.deepEqual(store.safeInventoryPatches(patch),patch);
+ assert.deepEqual(store.diffInventory([],[]),[]);
+ assert.throws(()=>store.safeInventoryPatches([{documentId:id,before:1,after:6}]),/DRAFT_INVALID/);
+ assert.throws(()=>store.safeInventoryPatches([{documentId:id,before:0,after:0}]),/DRAFT_INVALID/);
+});

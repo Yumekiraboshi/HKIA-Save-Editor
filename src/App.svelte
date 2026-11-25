@@ -207,7 +207,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const groupScopedAchievementRows=$derived(achievementGroupHierarchy&&achievementGroupSelection?
   achievementGroupSelection==='__unmapped'?unmappedAchievementRows:groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows,achievementFacts):
   sourceOrderedAchievementRows);
- const inventoryBrowseRows=$derived((inventoryAddMode?snapshot?.inventoryCreatable:snapshot?.inventory)??[]);
+ const inventoryBrowseRows:InventoryEntry[]=$derived((inventoryAddMode?(snapshot as SaveSnapshot|null)?.inventoryCreatable:(snapshot as SaveSnapshot|null)?.inventory)??[]);
  const inventoryGroupTotals=$derived(inventoryGroupCounts(inventoryBrowseRows,nativeInventoryIndex));
  const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
  const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
