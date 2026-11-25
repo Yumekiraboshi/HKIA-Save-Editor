@@ -1,13 +1,14 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,requestFlowerVariants,changeInventoryFlowerVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,requestFlowerVariants,changeInventoryFlowerVariant,requestFurnitureVariants,changeInventoryFurnitureVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
  import {inventoryCopy} from './inventory-copy';
- import {flowerVariantOf,type FlowerVariant} from './inventory-unique';
- import {flowerEditorCopy} from './inventory-unique-copy';
+ import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
+ import {flowerEditorCopy,furnitureEditorCopy} from './inventory-unique-copy';
+ import {loadFurnitureDisplay,materialLabel,materialSwatch,type FurnitureDisplay} from './inventory-furniture-display';
  import {inventoryCategoryRepresentative,browseInventory,inventoryGroupCounts,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
@@ -66,6 +67,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  let flowerDialogEl:HTMLDialogElement|undefined=$state();
  let flowerEdit=$state<{documentId:number;itemId:number;revision:number;before:FlowerVariant;options:FlowerVariant[]}|null>(null);
  let flowerSelection=$state(-1);
+ let furnitureDialogEl:HTMLDialogElement|undefined=$state();
+ let furnitureDisplay:FurnitureDisplay|null=$state(null);
+ let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[]}|null>(null);
+ let furnitureSelection=$state(-1);
  let inventoryNativeArt:InventoryNativeArt|null=$state(null);
  let inventoryEditableOnly=$state(false);
  let inventoryLimit=$state(BATCH_SIZE);
@@ -153,6 +158,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const achCopy=$derived(achievementCopy(locale));
  const iCopy=$derived(inventoryCopy(locale));
  const flowerCopy=$derived(flowerEditorCopy(locale));
+ const furnitureCopy=$derived(furnitureEditorCopy(locale));
  const hCopy=$derived(historyCopy(locale));
  const hDetailCopy=$derived(historyDetailCopy(locale));
  const compactCopy=$derived(compactAchievementCopy(locale));
@@ -502,7 +508,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
  function historyEntryChange(i:number):string{
-  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerVariantName)||
+  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerVariantName,v=>v.map(n=>materialLabel(furnitureDisplay,n,furnitureCopy.defaultMaterial)).join(' / '))||
    (tabHistory[i]?.paired?hCopy.paired:'');
  }
  function historyEntryLabel(entry:HistoryRecord):string{
@@ -657,6 +663,34 @@ import {verifiedFloorplanName} from './floorplan-names';
    flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options};
    flowerSelection=-1;await tick();
    if(flowerDialogEl&&!flowerDialogEl.open)flowerDialogEl.showModal();
+  }catch(e){error=describeError(e)}
+  finally{busy=false}
+ }
+ async function openFurnitureEditor(row:InventoryEntry){
+  const before=furnitureVariantOf(row.unique);
+  if(!snapshot||busy||!before||!row.unique?.furnitureEditable)return;
+  const revision=snapshot.revision;
+  busy=true;error='';
+  try{
+   const [options,display]=await Promise.all([requestFurnitureVariants(row.documentId),furnitureDisplay?Promise.resolve(furnitureDisplay):loadFurnitureDisplay()]);
+   if(!snapshot||snapshot.revision!==revision)return;
+   furnitureDisplay=display;
+   furnitureEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options};
+   furnitureSelection=-1;await tick();
+   if(furnitureDialogEl&&!furnitureDialogEl.open)furnitureDialogEl.showModal();
+  }catch(e){error=describeError(e)}
+  finally{busy=false}
+ }
+ function closeFurnitureEditor(){if(furnitureDialogEl?.open)furnitureDialogEl.close()}
+ async function applyInventoryFurnitureVariant(event:SubmitEvent){
+  event.preventDefault();
+  const selected=furnitureEdit;
+  if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
+  const next=selected.options[furnitureSelection];if(!next)return;
+  busy=true;error='';
+  try{
+   update(await changeInventoryFurnitureVariant(selected.documentId,selected.before,next));
+   closeFurnitureEditor();await persistDraft();
   }catch(e){error=describeError(e)}
   finally{busy=false}
  }
@@ -1146,7 +1180,8 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const sprite=definition&&!inventoryNativeArt?.withheld.has(item.itemId)?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
      {@const flower=flowerDisplay(item.flower,flowerDefinitions,flowerLabels[locale]??{})}
      {@const canFlower=!!item.flower&&!!item.unique?.flowerEditable&&!!flowerDefinitions&&!!flowerLabels[locale]}
-     <article class="inventory-card" class:inventory-readonly={!item.editable&&!canFlower}>
+     {@const canFurniture=!!item.unique?.furnitureEditable}
+      <article class="inventory-card" class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture}>
       <div class="inventory-card-heading">
        <span class="inventory-item-art" class:flower-variant={!!flower} aria-hidden="true">
         {#if item.palette&&item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
@@ -1187,6 +1222,11 @@ import {verifiedFloorplanName} from './floorplan-names';
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
         </button>
        </form>
+      {:else if canFurniture}
+       <button class="inventory-unique-edit-button" type="button" disabled={busy} title={furnitureCopy.title} aria-label={furnitureCopy.title+': '+inventoryName(item.itemId)} onclick={()=>void openFurnitureEditor(item)}>
+        <span>{item.quantity}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg>
+       </button>
       {:else if canFlower}
        <button class="inventory-unique-edit-button" type="button" disabled={busy}
         title={flowerCopy.title} aria-label={flowerCopy.title+': '+inventoryName(item.itemId)} onclick={()=>void openFlowerEditor(item)}>
@@ -1346,6 +1386,55 @@ import {verifiedFloorplanName} from './floorplan-names';
    {/if}
   {/if}
  </main>
+ <dialog class="date-dialog" bind:this={furnitureDialogEl} aria-labelledby="furniture-editor-title" onclose={()=>{furnitureEdit=null;furnitureSelection=-1}} oncancel={e=>{if(busy)e.preventDefault()}}>
+  {#if furnitureEdit}
+   {@const edit=furnitureEdit}
+   {@const selected=edit.options[furnitureSelection]??edit.before}
+   <form class="date-dialog-inner" onsubmit={e=>void applyInventoryFurnitureVariant(e)}>
+    <div class="date-dialog-heading">
+     <h2 id="furniture-editor-title">{inventoryName(edit.itemId)}</h2>
+     <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFurnitureEditor}>×</button>
+    </div>
+    <div class="date-dialog-field">
+     <span>{furnitureCopy.title}</span>
+     {#each [0,1,2] as slot}
+      {#if edit.before[slot]!==0||edit.options.some(v=>v[slot]!==edit.before[slot])}
+       <div style="display:flex;align-items:center;gap:8px;margin:4px 0">
+        <span>{furnitureCopy.part} {String.fromCharCode(65+slot)}</span>
+        <span style:background={materialSwatch(furnitureDisplay,edit.itemId,slot,selected[slot])} style="width:24px;height:24px;border:1px solid currentColor;border-radius:4px;flex-shrink:0" aria-hidden="true"></span>
+        <span>{materialLabel(furnitureDisplay,selected[slot],furnitureCopy.defaultMaterial)}</span>
+       </div>
+      {/if}
+     {/each}
+    </div>
+    {#if edit.options.length}
+     <label class="date-dialog-field">
+      <span>{furnitureCopy.material}</span>
+      <select bind:value={furnitureSelection} disabled={busy} required>
+       <option value={-1} disabled>{furnitureCopy.title}</option>
+       {#each [0,1,2] as slot}
+        {#if edit.options.some(v=>v[slot]!==edit.before[slot])}
+         <optgroup label={furnitureCopy.part+' '+String.fromCharCode(65+slot)}>
+          {#each edit.options as v,i}
+           {#if v[slot]!==edit.before[slot]}
+            <option value={i}>{materialLabel(furnitureDisplay,v[slot],furnitureCopy.defaultMaterial)}</option>
+           {/if}
+          {/each}
+         </optgroup>
+        {/if}
+       {/each}
+      </select>
+     </label>
+    {:else}
+     <p class="compact-hint">{iCopy.readonly}</p>
+    {/if}
+    <div class="date-dialog-actions">
+     <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFurnitureEditor}>{copy.cancel}</button>
+     <button type="submit" class="primary" disabled={busy||furnitureSelection<0}>{copy.apply}</button>
+    </div>
+   </form>
+  {/if}
+ </dialog>
  <dialog class="date-dialog" bind:this={flowerDialogEl} aria-labelledby="flower-editor-title"
   onclose={()=>{flowerEdit=null;flowerSelection=-1}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if flowerEdit}
