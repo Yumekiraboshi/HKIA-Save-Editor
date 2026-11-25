@@ -5,9 +5,10 @@ export type AchievementEntry={guid:[number,number,number,number];value:Achieveme
 export type AchievementPatch={guid:[number,number,number,number];before:AchievementValue;after:AchievementValue};
 export type AchievementDraftPatch={guid:[number,number,number,number];before:AchievementValue|null;after:AchievementValue};
 export type CounterEntry={guid:[number,number,number,number];current:number;countedValues:number|null;countedGuids:number};
+import type {InventoryUniqueInfo} from './inventory-unique';
 import type {InventoryFlower} from './inventory-flower-display';
-export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean;flower?:InventoryFlower};
-export type InventoryPatch={documentId:number;before:number;after:number};
+export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean;flower?:InventoryFlower;unique?:InventoryUniqueInfo};
+export type InventoryPatch={documentId:number;before:number;after:number;kind?:'flower-color'};
 export type HistoryScope='collections'|'achievements'|'inventory';
 export type HistoryRecord={
  scope:HistoryScope;applied:boolean;paired:boolean;
@@ -33,7 +34,7 @@ export type SaveSnapshot={
  inventory:InventoryEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'inventory-change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'inventory-change'|'flower-color-change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -64,6 +65,9 @@ export function changeCollection(itemId:number,expected:bigint|null,next:bigint|
 /** Existing ordinary stack only. Rust enforces structural eligibility and CAS. */
 export function changeInventoryQuantity(documentId:number,beforeQuantity:number,nextQuantity:number):Promise<SaveSnapshot>{
  return rpc('inventory-change',{documentId,beforeQuantity,nextQuantity}) as Promise<SaveSnapshot>;
+}
+export function changeInventoryFlowerColor(documentId:number,beforeColor:number,nextColor:number):Promise<SaveSnapshot>{
+ return rpc('flower-color-change',{documentId,beforeColor,nextColor}) as Promise<SaveSnapshot>;
 }
 /** CAS-validated atomic leaf+parent change; both revert with one Undo. */
 export function changeAchievementPair(first:AchievementPatch,second:AchievementPatch):Promise<SaveSnapshot>{
@@ -140,6 +144,6 @@ export function applyDraft(patches:ChangeRequest[],achievementPatches:Achievemen
  return rpc('batch',{
   patches:patches.map(workerCollectionPatch),
   achievementPatches:achievementPatches.map(workerAchievementDraftPatch),
-  inventoryPatches:inventoryPatches.map(p=>({documentId:p.documentId,before:p.before,after:p.after}))
+  inventoryPatches:inventoryPatches.map(p=>({documentId:p.documentId,before:p.before,after:p.after,...(p.kind?{kind:p.kind}:{})}))
  }) as Promise<SaveSnapshot>;
 }
