@@ -474,12 +474,12 @@ impl Editor {
   })
  }
  /// Native subtraction clamps to zero without deleting the saved record.
- /// Permit the zero endpoint only for source-verified ordinary ingredients,
+ /// Permit the zero endpoint only for source-verified ordinary materials, fish and critters,
  /// with an exact UID-zero nil row and no ambiguous or known direct references.
  fn inventory_can_empty(&self,r:&crate::native::InventoryRow)->bool{
   let Some(item_id)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
-   crate::inventory_source::ordinary_ingredient(item_id)&&
+   crate::inventory_source::ordinary_membership_item(item_id)&&
    r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.quantity.is_some_and(|q|q>=0)&&
    r.fields.iter().all(Option::is_some)&&self.inventory_item_rows.get(&item_id)==Some(&1)&&
    !self.slot.index.inventory_item_refs_incomplete&&
@@ -497,7 +497,7 @@ impl Editor {
   Some(cap)
  }
  fn can_create_inventory_item(&self,item_id:i32)->bool{
-  self.slot.envelope.version==Version::V301&&crate::inventory_source::ordinary_ingredient(item_id)&&
+  self.slot.envelope.version==Version::V301&&crate::inventory_source::ordinary_membership_item(item_id)&&
    !self.inventory_item_rows.contains_key(&item_id)&&
    !self.slot.index.inventory_item_refs_incomplete&&
    self.slot.index.inventory.iter().all(|r|r.item_id.is_some()&&r.id<PENDING_ITEM)&&
@@ -543,7 +543,7 @@ impl Editor {
  /// Candidate rows are source-checked and absent, not persisted inventory records.
  pub fn inventory_creatable(&self)->Vec<InventoryEntry>{
   if crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
-  crate::inventory_source::ordinary_ingredient_ids().filter_map(|item_id|{
+  crate::inventory_source::ordinary_membership_ids().filter_map(|item_id|{
    let document_id=PENDING_ITEM|item_id as u32;
    if !self.can_create_inventory_item(item_id)||self.inventory_changes.contains_key(&document_id){return None}
    Some(InventoryEntry{document_id,item_id,quantity:0,editable:true,quantity_limit:Some(i32::MAX),quantity_minimum:1})
