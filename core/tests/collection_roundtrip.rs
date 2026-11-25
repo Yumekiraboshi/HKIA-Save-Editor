@@ -1256,6 +1256,43 @@ fn flower_edit_rejects_legacy_remote_cabin_reference_to_uid(){
  assert!(!e.dirty());
 }
 
+fn furniture_payload(v:[u32;3])->Vec<u8>{arr(vec![vec![8],arr(v.into_iter().map(u).collect())])}
+fn furniture_edit_slot(peer:Option<Vec<u8>>)->Vec<u8>{
+ let mut payload=synthetic_payload("3.0.1");payload[3]=if peer.is_some(){0x97}else{0x96};
+ payload.extend(doc(1,arr(vec![u(4),u(61381969),u(11),u(93),furniture_payload([13,2,0])])));
+ if let Some(p)=peer{payload.extend(doc(1,arr(vec![u(5),u(61381969),u(12),u(2),p])));}
+ slot_from_payload("3.0.1",payload)
+}
+#[test]
+fn furniture_variant_source_bounded_cas_history_and_export(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ for zipped in [false,true]{
+  let raw=furniture_edit_slot(None);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let before=[13,2,0];
+  assert!(e.inventory_furniture_variants(4).contains(&[502,2,0]));
+  assert!(e.inventory_furniture_variants(4).contains(&[13,3,0]));
+  for bad in [[14,2,0],[13,2,3],[0,0,0],[285,2,0]]{assert!(e.change_inventory_furniture_variant(4,before,bad).is_err());}
+  assert!(e.change_inventory_furniture_variant(4,[503,2,0],[502,2,0]).is_err());
+  assert!(!e.dirty());
+  e.change_inventory_furniture_variant(4,before,[502,2,0]).unwrap();
+  e.change_inventory_furniture_variant(4,[502,2,0],[502,3,0]).unwrap();
+  assert_eq!(e.inventory_unique_data(4),Some(U::Furniture{materials:[502,3,0]}));
+  assert_eq!(e.inventory()[0].quantity,93);
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory_unique_data(4),e.inventory_unique_data(4));
+  assert!(e.undo_scope(Inventory));assert!(e.redo_scope(Inventory));
+  let reopened=Editor::open(e.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory_unique_data(4),e.inventory_unique_data(4));assert_eq!(reopened.inventory()[0].quantity,93);
+ }
+ let mut collision=Editor::open(furniture_edit_slot(Some(vec![0xc0]))).unwrap();
+ assert!(collision.change_inventory_furniture_variant(4,[13,2,0],[503,1,0]).is_err());
+ assert!(collision.change_inventory_furniture_variant(4,[13,2,0],[0,1,0]).is_err());
+ let legacy=arr(vec![vec![1],arr(vec![guid([1,2,3,4]),guid([0;4]),guid([0;4])])]);
+ let opaque=Editor::open(furniture_edit_slot(Some(legacy))).unwrap();
+ assert!(opaque.inventory_furniture_variants(4).is_empty());
+}
+
 #[test]
 fn chef_appearance_is_read_only_and_preserves_full_original_payload(){
  use hkia_save_core::native::InventoryUniqueData as U;

@@ -25,7 +25,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false,editableFlower=false,chefInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false,editableFlower=false,editableFurniture=false,chefInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -46,6 +46,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(editableFlower?[flower(8,1,0,0)]:[]),
   ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
+  ...(editableFurniture?[doc(1,arr([8],u32(61381969),u32(11),u32(93),arr([8],arr(u32(13),u32(2),u32(0)))))]:[]),
   ...(flowerInventory?[flower(8,1,0,0),flower(9,9,0,0),flower(10,1,10,16),flower(11,1,3,0),flower(12,1,9999,0)]:[])));
  const prefix=Uint8Array.from('135b4aa4f702a45d1cc562aeb5a386ed5d17e1fd588f424dcfc59d2e140cf597'.match(/../g).map(x=>parseInt(x,16)));
  const magic=Uint8Array.from('a1a2f8333c66ec455baa2dfc6325c2437a779c9906eecff0c022e5f6b6ca73b8'.match(/../g).map(x=>parseInt(x,16)));
@@ -361,6 +362,90 @@ async function inventoryFlowerVariantEditSmoke(){
   assert.deepEqual(Array.from({length:4},(_,i)=>v.getInt32(8+i*4,true)),patch[0].after);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM FLOWER VARIANT EDIT PASS: native choices, CAS, local draft and exported payload reparse');
+ }finally{await context.close();}
+}
+async function inventoryFurnitureVariantEditSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-furniture-edit.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({editableFurniture:true}))
+  });
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-group-option[data-inventory-group="furniture"]').click();
+  await page.locator('.inventory-controls input[type="search"]').fill('61381969');
+  const button=page.locator('.inventory-card .inventory-unique-edit-button');
+  await button.waitFor({timeout:30_000});
+  assert.match(await button.innerText(),/93/);
+  await button.click();
+  const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"][open]');
+  await dialog.waitFor();
+  const select=dialog.locator('select');
+  const value=await select.locator('optgroup option').first().getAttribute('value');
+  assert.ok(value!==null);
+  await select.selectOption(value);
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.waitFor({state:'hidden'});
+  await page.locator('.state-dot.changed').waitFor();
+  await page.waitForFunction(()=>!document.querySelector('.inventory-unique-edit-button')?.disabled);
+  const patches=await page.evaluate(()=>new Promise((resolve,reject)=>{
+   const open=indexedDB.open('hkia-editor-local-session',1);
+   open.onerror=()=>reject(open.error);
+   open.onsuccess=()=>{
+    const db=open.result;
+    const request=db.transaction('unsaved-changes','readonly').objectStore('unsaved-changes').get('current');
+    request.onsuccess=()=>{db.close();resolve(request.result?.inventoryPatches??[])};
+    request.onerror=()=>{db.close();reject(request.error)};
+   };
+  }));
+  assert.equal(patches.length,1);
+  const patch=patches[0];
+  assert.equal(patch.kind,'furniture-variant');
+  assert.equal(patch.documentId,8);
+  assert.deepEqual(patch.before,[13,2,0]);
+  assert.equal(patch.after.filter((v,i)=>v!==patch.before[i]).length,1);
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-group-option[data-inventory-group="furniture"]').click();
+  await page.locator('.inventory-controls input[type="search"]').fill('61381969');
+  await button.waitFor();
+  const undo=page.locator('.bar-actions button[title="Undo"]');
+  const redo=page.locator('.bar-actions button[title="Redo"]');
+  await undo.click();
+  await page.locator('.bar-actions button[title="Redo"]:not([disabled])').waitFor();
+  await redo.click();
+  await page.locator('.bar-actions button[title="Undo"]:not([disabled])').waitFor();
+  assert.match(await button.innerText(),/93/);
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([
+   page.waitForEvent('download',{timeout:30_000}),
+   page.locator('.file-menu .menu-popover > button').nth(2).click()
+  ]);
+  const output=readFileSync(await download.path());
+  const wasm=readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm');
+  const {instance}=await WebAssembly.instantiate(wasm,{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);
+  new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);
+  assert.equal(e.hkia_inventory_unique_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  let at=0;
+  const u=()=>{const n=v.getUint32(at,true);at+=4;return n};
+  const count=u();let furniture;
+  for(let i=0;i<count;i++){
+   const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();
+   const words=Array.from({length:n},()=>u()|0);u();
+   if(id===8)furniture={present,uid,tag,fields,words};
+  }
+  assert.equal(at,v.byteLength);
+  assert.deepEqual(furniture,{present:1,uid:11,tag:8,fields:3,words:patch.after});
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM FURNITURE VARIANT EDIT PASS: native choices, CAS, draft, Undo/Redo and exported payload reparse');
  }finally{await context.close();}
 }
 async function inventoryOriginalArtSmoke(){
@@ -1114,6 +1199,7 @@ async function run(){
  await inventoryOriginalArtSmoke();
  await inventoryDynamicFlowerArtSmoke();
  await inventoryFlowerVariantEditSmoke();
+ await inventoryFurnitureVariantEditSmoke();
  await achievementDstFoldExportSmoke();
  await achievementAtlasRetrySmoke();
 }

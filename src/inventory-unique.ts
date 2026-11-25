@@ -1,5 +1,5 @@
 /** Typed view of Rust-owned native unique-data snapshot; no save rules. */
-export type InventoryUniqueInfo={uniqueId:number|null;tag:number;fieldCount:number;words:number[];flowerEditable:boolean};
+export type InventoryUniqueInfo={uniqueId:number|null;tag:number;fieldCount:number;words:number[];flowerEditable:boolean;furnitureEditable?:boolean};
 function validSimpleAppearanceWords(tag:number,words:readonly number[]):boolean{
  if(words.length===0)return true; // opaque, partial or absent
  return tag===3?words.length<=4&&words[0]===words.length-1:
@@ -22,8 +22,8 @@ export function decodeInventoryUnique(bytes:Uint8Array,docIds:ReadonlySet<number
    if(fieldCount!==5||n<6||sourceTag< -1||sourceTag>11||sourceCount!==n-6||sourceCount>12||
      !validSimpleAppearanceWords(sourceTag,words.slice(6)))throw Error('INVENTORY_UNIQUE_INVALID');
   }else if(!validSimpleAppearanceWords(tag,words)||(n!==0&&((tag===3&&fieldCount!==2)||(tag===4&&fieldCount!==5))))throw Error('INVENTORY_UNIQUE_INVALID');
-  const editable=u();if(editable>1||(editable===1&&(tag!==7||n!==4)))throw Error('INVENTORY_UNIQUE_INVALID');
-  rows.set(id,{uniqueId:present?uid:null,tag,fieldCount,words,flowerEditable:editable===1});
+  const editable=u();if(editable>2||(editable===1&&(tag!==7||n!==4))||(editable===2&&(tag!==8||n!==3)))throw Error('INVENTORY_UNIQUE_INVALID');
+  rows.set(id,{uniqueId:present?uid:null,tag,fieldCount,words,flowerEditable:editable===1,...(editable===2?{furnitureEditable:true}:{})});
  }
  if(at!==v.byteLength)throw Error('INVENTORY_UNIQUE_INVALID');
  return rows;
@@ -42,4 +42,18 @@ export function decodeFlowerVariants(bytes:Uint8Array):FlowerVariant[]{
  const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),n=v.getUint32(0,true);
  if(n>100||bytes.length!==4+n*16)throw Error('FLOWER_OPTIONS_INVALID');
  return Array.from({length:n},(_,i)=>[0,1,2,3].map(j=>v.getInt32(4+i*16+j*4,true)) as FlowerVariant);
+}
+
+export type FurnitureVariant=[number,number,number];
+export function isFurnitureVariantWire(v:unknown):v is FurnitureVariant{
+ return Array.isArray(v)&&v.length===3&&v.every(n=>Number.isInteger(n)&&n>=-2147483648&&n<=2147483647);
+}
+export function furnitureVariantOf(info:InventoryUniqueInfo|undefined):FurnitureVariant|null{
+ return info?.tag===8&&info.words.length===3?info.words.map(n=>n|0) as FurnitureVariant:null;
+}
+export function decodeFurnitureVariants(bytes:Uint8Array):FurnitureVariant[]{
+ if(bytes.length<4)throw Error('INVENTORY_UNIQUE_INVALID');
+ const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),n=v.getUint32(0,true);
+ if(n>2634||bytes.length!==4+n*12)throw Error('INVENTORY_UNIQUE_INVALID');
+ return Array.from({length:n},(_,i)=>[0,1,2].map(j=>v.getInt32(4+i*12+j*4,true)) as FurnitureVariant);
 }

@@ -57,7 +57,6 @@ export async function loadSourceItemNames(base:string,locale:Locale):Promise<Sou
  const names=decodeSourceItemNames(await response.json(),locale);
  // Keep original collection names if the supplemental asset is unavailable.
  // No other language or guessed title substitutes for an unresolved native ID.
- if(locale==='ar')return names;
  try{
   const extra=await fetch(base+'inventory-names/'+encodeURIComponent(locale)+'.json');
   if(extra.ok)Object.assign(names,decodeInventoryAdditionalNames(await extra.json(),locale,names));
