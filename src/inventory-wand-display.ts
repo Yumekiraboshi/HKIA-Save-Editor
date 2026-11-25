@@ -13,7 +13,7 @@ export function inventoryWandAppearance(itemId:number,unique:InventoryUniqueInfo
  const w=unique.words;
  if(w.length<6||w.length>18||w[5]!==w.length-6)return null;
  const sourceItemId=w[0]|0,tag=w[4]|0;
- if(sourceItemId<=0||tag< -1||tag>11||(tag===-1&&w[5]!==0))return null;
+ if(sourceItemId<0||tag< -1||tag>11||(tag===-1&&w[5]!==0))return null;
  return {sourceItemId,magicCharacteristicId:w[1]|0,fleckCharacteristicId:w[2]|0,styleCharacteristicId:w[3]|0,
   sourceUnique:tag===-1?null:{tag,words:w.slice(6)}};
 }

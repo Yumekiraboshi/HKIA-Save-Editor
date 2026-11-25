@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({stdin:{contents:"export * from './wand-appearance'; export * from './dynamic-sprite-raster';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {resolveWandBaseTints,rasterizeDynamicSprite}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {resolveWandBaseTints,rasterizeDynamicSprite,overlayPlacement,sourceOver}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const dir=new URL('../public/dynamic-wand-art/',import.meta.url),read=n=>readFileSync(new URL(n,dir)),sha=b=>createHash('sha256').update(b).digest('hex');
 const raw=read('wand-runtime-source-v3.0.1.json'),m=JSON.parse(raw);
 const magic=new Map(m.magic.map(r=>[r.characteristicId,r.rgba])),flecks=new Map(m.flecks.map(r=>[r.characteristicId,r.rgba]));
@@ -45,4 +45,20 @@ test('linear-data mask is sampled without sRGB decoding, existing sRGB path is u
  const p=(47*96+47)*4;
  assert.deepEqual(a,rasterizeDynamicSprite({...input,maskColorSpace:'srgb'}));
  assert.ok(a[p]>b[p]);assert.ok(Math.abs(b[p]-187)<=1);assert.equal(a[p+3],255);assert.equal(b[p+3],255);
+});
+
+test('native magic icon source map and all nine item transforms use exact original source',()=>{
+ const bytes=read('wand-subicon-source-v3.0.1.json'),sub=JSON.parse(bytes);
+ assert.equal(sha(bytes),'e69a97ec439e0574a024aaf9ec4379cb83d6946adc460cc2d7c53ab7b617d1a6');
+ assert.deepEqual(sub.magic.map(x=>x.characteristicId),[...magic.keys()]);
+ assert.equal(new Set(sub.magic.map(x=>x.spritePathId)).size,13);
+ assert.equal(sub.wands.length,9);
+ for(const w of sub.wands){
+  assert.equal(w.definitionPathId,m.rows.find(x=>x.itemId===w.itemId).definitionPathId);
+  assert.equal(w.scale,Math.fround(.4));assert.deepEqual(w.offsetPercent,[-.25,.25]);assert.equal(w.rotation,0);
+ }
+ const data=read(sub.texture.file);assert.equal(data.length,sub.texture.bytes);assert.equal(sha(data),sub.texture.sha256);
+ assert.deepEqual(overlayPlacement(84,84,{logicalWidth:256,logicalHeight:128,scale:.4,offsetPercent:[-.25,.25],rotation:0}),{width:33.6,height:16.8,cx:21,cy:21,radians:0});
+ assert.deepEqual(sourceOver([0,0,1,1],[1,0,0,.5]),[.5,0,.5,1]);
+ assert.deepEqual(sourceOver([0,0,0,0],[1,0,0,.5]),[1,0,0,.5]);
 });

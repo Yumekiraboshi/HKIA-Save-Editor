@@ -60,3 +60,9 @@ test('wand snapshot separates native source identity from its nested appearance'
  assert.throws(()=>decodeInventoryUnique(wire([1,1,1,1,9,5,7,315822,104,125,1,9,1,0,0]),new Set([1])));
  assert.throws(()=>decodeInventoryUnique(wire([1,1,1,1,9,5,6,315822,104,125,1,7,4,0]),new Set([1])));
 });
+
+test('zero source Item ID is the native magic Sprite selector, not absent',async()=>{
+ const {inventoryWandAppearance}=await load('../src/inventory-wand-display.ts');
+ const row=decodeInventoryUnique(wire([1,1,1,1,9,5,6,0,104,125,1,-1,0,0]),new Set([1])).get(1);
+ assert.equal(inventoryWandAppearance(39246601,row).sourceItemId,0);
+});

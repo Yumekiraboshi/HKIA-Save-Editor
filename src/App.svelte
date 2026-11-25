@@ -38,6 +38,8 @@ import {searchAchievementRows} from './achievement-search';
  import DynamicFlowerSprite from './DynamicFlowerSprite.svelte';
  import DynamicPaletteSprite from './DynamicPaletteSprite.svelte';
  import DynamicChefSprite from './DynamicChefSprite.svelte';
+ import DynamicWandSprite from './DynamicWandSprite.svelte';
+ import {inventoryWandAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance} from './inventory-chef-display';
  import {CUSTOM_PALETTE_ITEM_ID} from './inventory-palette-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
@@ -1148,11 +1150,14 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const sprite=definition&&!inventoryNativeArt?.withheld.has(item.itemId)?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
      {@const flower=flowerDisplay(item.flower,flowerDefinitions,flowerLabels[locale]??{})}
      {@const chef=inventoryChefAppearance(item.itemId,item.unique)}
+     {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
      {@const canFlower=!!item.flower&&!!item.unique?.flowerEditable&&!!flowerDefinitions&&!!flowerLabels[locale]}
      <article class="inventory-card" class:inventory-readonly={!item.editable&&!canFlower}>
       <div class="inventory-card-heading">
        <span class="inventory-item-art" class:flower-variant={!!flower} aria-hidden="true">
-        {#if chef&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+        {#if wand&&wand.sourceItemId===0&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+          <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite}/>
+         {:else if chef&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicChefSprite itemId={item.itemId} appearance={chef} fallback={nativeSprite??sprite}/>
          {:else if item.palette&&item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicPaletteSprite itemId={item.itemId} palette={item.palette}/>

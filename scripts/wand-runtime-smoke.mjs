@@ -16,7 +16,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
   await page.route(root+'__wand_runtime_fixture__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
   await page.goto(root+'__wand_runtime_fixture__.html');
   const out=await page.evaluate(async base=>{
-   const {renderWandBaseArt}=await import(base+'__wand_runtime_fixture__.mjs');
+   const {renderWandBaseArt,renderWandMagicArt}=await import(base+'__wand_runtime_fixture__.mjs');
    const m=await (await fetch(base+'dynamic-wand-art/wand-runtime-source-v3.0.1.json')).json();
    const sha=async b=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b)),v=>v.toString(16).padStart(2,'0')).join('');
    const pixels=async blob=>{
@@ -35,9 +35,17 @@ export async function wandRuntimeSmoke(browser,origin,base){
     const first=await renderWandBaseArt(row.itemId,a),second=await renderWandBaseArt(row.itemId,b);
     rows.push({id:row.itemId,a:await pixels(first),b:await pixels(second),cache:first===await renderWandBaseArt(row.itemId,a)});
    }
-   return {rows,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
+   const composed=[];
+   for(const magic of m.magic){
+    const a={sourceItemId:0,magicCharacteristicId:magic.characteristicId,fleckCharacteristicId:125};
+    const one=await renderWandMagicArt(39246601,a),baseArt=await renderWandBaseArt(39246601,a);
+    composed.push({id:magic.characteristicId,pixels:await pixels(one),base:await pixels(baseArt),cached:one===await renderWandMagicArt(39246601,a)});
+   }
+   return {rows,composed,unsupportedSource:await renderWandMagicArt(39246601,{sourceItemId:315822,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
   },base);
   assert.equal(out.rows.length,9);assert.ok(out.unknown);
+  assert.equal(out.composed.length,13);assert.ok(out.unsupportedSource);
+  for(const c of out.composed){assert.ok(c.pixels.visible&&c.cached);assert.notEqual(c.pixels.rgba,c.base.rgba);}
   for(const row of out.rows){
    assert.equal(row.a.width,96);assert.equal(row.a.height,96);assert.ok(row.a.visible&&row.b.visible);
    assert.equal(row.a.alpha,row.b.alpha);assert.notEqual(row.a.rgba,row.b.rgba,'same item must render different original color inputs: '+row.id);
