@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE='ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0'
 IDS='8a55e11da2b28b30bb212424159657d3d9e7b47baf6a21ed94fd8615d1ef4702'
-FLAGS='07535a7d093ce3abff44857ecfd9fcb1fed54b365e7524c8a10dff10d8c2cb64'
+FLAGS='8beb988d3c808a937efe06de80c159855c23f8e0ceba0c4de5b2730d6fc5c109'
 GATHERED='8cb0a2929cf109bbc768239f5bcede17ecdd97e913db861f83349a8fd7c7e60d'
 FOOD_BAIT='abaf644ea95b721a2d21109647304fda13366723ba3ac425903cededb1fde39a'
 
@@ -80,7 +80,7 @@ def extract(source):
         if flags&0x4000: p=align(p)
         return value,p
     n=s.unpack_from('<I',b,p)[0];p=align(p+4)
-    rows=[];caps=[];gathered=[];food_bait=[]
+    rows=[];caps=[];gathered=[];food_bait=[];cosmetic_counts=[0,0]
     for _ in range(n):
         _,start,size,i=s.unpack_from('<qqIi',b,p);p+=24
         if i!=3: continue
@@ -98,7 +98,14 @@ def extract(source):
                    and not d['ReleaseVersion'] and d['RequiredDlcContent']=='0'*32
                    and d['CollectionEventYear']=='0'*32 and d['Rarity'] in (2,3,4) and cat&2048
                    and not cat&(1|2|64|256|134217728))
-        rows.append((id,int(stack)|unique*2|custom*4|int(bool(candidate))*8))
+        cosmetic=(d['ItemOwnership']==18 and stack and not unique and not custom
+                  and not d['ReleaseVersion'] and d['RequiredDlcContent']=='0'*32
+                  and d['CollectionEventYear']=='0'*32 and d['Rarity'] in (2,3,4)
+                  and not cat&1 and cat&(64|256))
+        if cosmetic:
+            require(bool(cat&64)!=bool(cat&256),'ambiguous cosmetic category')
+            cosmetic_counts[0 if cat&64 else 1]+=1
+        rows.append((id,int(stack)|unique*2|custom*4|int(bool(candidate))*8|int(bool(cosmetic))*16))
         if custom:caps.append((id,d['CustomMaxCount']))
         # Native raw masks: CreationStationIngredient | Fish / Critter.
         # Always-periodicity, ordinary rarity, unrestricted original definition.
@@ -114,6 +121,7 @@ def extract(source):
             and d['CollectionEventYear']=='0'*32 and d['CelebrationPeriodicity']==1
             and d['Rarity'] in (2,3,4) and cat in (269557760,8192)):
             food_bait.append((id,cat))
+    require(cosmetic_counts==[1114,2435],'cosmetic category counts')
     rows.sort();caps.sort()
     require(len(rows)==12163 and len({i for i,_ in rows})==12163 and rows[0][0]>0,'item IDs')
     require(hashlib.sha256(b''.join(s.pack('<i',i) for i,_ in rows)).hexdigest()==IDS,'ID fingerprint')
@@ -131,7 +139,8 @@ def render(rows,caps):
     header=("// Generated from verified Steam v3.0.1 InventoryItemDefinitionAsset type tree.\n"
             "// Ids sorted ascending; flags: 1=Stackable, 2=RequiresUniqueData,\n"
             "// 4=HasCustomMaxCount, 8=conservative ordinary ingredient definition candidate.\n"
-            "// Bit 8 does not authorize creation/removal or prove player rights.\n"
+            "// Bit 16 = ordinary furniture/clothing definition candidate for addition only.\n"
+            "// Candidate flags do not authorize creation/removal or prove player rights.\n"
             f"// ID little-endian SHA256 {IDS}\n// flag SHA256 {FLAGS}\n"
             "pub(super) const RULES:&[(i32,u8)]=&[\n")
     fmt=lambda pairs: ' '+','.join(f'({i},{v})' for i,v in pairs)+',\n'
@@ -156,4 +165,4 @@ if __name__=='__main__':
         target=ROOT/'core/src'/name
         if args.check: require(target.read_text()==content,'checked-in source differs: '+name)
         else: target.write_text(content)
-    print('Verified 12163 item definitions, 13 custom caps, 224 gathered-item and 236 food/bait candidates')
+    print('Verified 12163 item definitions, 13 custom caps, 224 gathered-item 236 food/bait and 3549 furniture/clothing creation candidates')
