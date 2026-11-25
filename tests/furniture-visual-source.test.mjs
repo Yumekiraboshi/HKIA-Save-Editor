@@ -10,7 +10,7 @@ test('all customizable furniture and floorplan records retain exact original vis
  assert.deepEqual(source.rows.map(r=>[r[0],r[1],r[2]]),catalog.items.map(r=>[r[0],r[2],r[3]]));
  assert.equal(new Set(source.rows.map(r=>r[0])).size,649);assert.equal(new Set(source.rows.map(r=>r[3])).size,648);
  assert.equal(source.rows.filter(r=>r[6]!==null).length,44);assert.equal(source.rows.filter(r=>r[2]===1).length,28);
- for(const r of source.rows){assert.equal(r.length,8);assert.match(r[1],/^-?\\d+$/);assert.match(r[3],/^-?\\d+$/);for(const guid of r.slice(4,6))assert.match(guid,/^[a-f0-9]{32}$/);if(r[6]!==null)assert.match(r[6],/^[a-f0-9]{32}$/);assert.match(r[7],/^[a-f0-9]{64}$/);}
+ for(const r of source.rows){assert.equal(r.length,8);assert.match(r[1],/^-?[0-9]+$/);assert.match(r[3],/^-?[0-9]+$/);for(const guid of r.slice(4,6))assert.match(guid,/^[a-f0-9]{32}$/);if(r[6]!==null)assert.match(r[6],/^[a-f0-9]{32}$/);assert.match(r[7],/^[a-f0-9]{64}$/);}
 });
 
 const addrRaw=readFileSync(new URL('../data/furniture-addressables-v3.0.1.json',import.meta.url));
