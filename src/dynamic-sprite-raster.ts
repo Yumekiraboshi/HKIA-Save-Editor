@@ -15,8 +15,8 @@ function sample(p:PixelBuffer,x:number,y:number,channel:number,linear:boolean):n
 export function sampleLinearRgb(p:PixelBuffer,x:number,y:number):Rgba{
  return [sample(p,x,y,0,true),sample(p,x,y,1,true),sample(p,x,y,2,true),1];
 }
-export type RasterInput={base:PixelBuffer;mask:PixelBuffer;baseRect:Rect;maskRect:Rect;trim:Rect;alphaOffsetY:number;logicalSize:number;tints:TintSet};
-/** Native zero-border, non-rotated Sprite geometry, sRGB textures, bilinear
+export type RasterInput={base:PixelBuffer;mask:PixelBuffer;baseRect:Rect;maskRect:Rect;trim:Rect;alphaOffsetY:number;logicalSize:number;tints:TintSet;maskColorSpace?:'srgb'|'linear'};
+/** Native zero-border, non-rotated Sprite geometry, sRGB base texture, source-selected mask color space, bilinear
  * clamp sampling and non-clipped white UI shader. Source crops retain
  * one original texel of guard on every side. Alpha is separate, linear data.
  * The 84px content/6px padding are editor layout, not game capture geometry.
@@ -39,7 +39,9 @@ export function rasterizeDynamicSprite(input:RasterInput):Uint8ClampedArray{
   const mx=maskRect[0]+u*maskRect[2],my=maskRect[1]+v*maskRect[3];
   const rgb=sampleLinearRgb(base,bx,by);
   const rgba:Rgba=[rgb[0],rgb[1],rgb[2],sample(base,bx,by+alphaOffsetY,0,false)];
-  const result=dynamicSpritePixel(rgba,sampleLinearRgb(mask,mx,my),linearTints);
+  // A linear-data Texture2D must not undergo the sRGB transfer function.
+  const m:Rgba=input.maskColorSpace==='linear'?[sample(mask,mx,my,0,false),sample(mask,mx,my,1,false),sample(mask,mx,my,2,false),1]:sampleLinearRgb(mask,mx,my);
+  const result=dynamicSpritePixel(rgba,m,linearTints);
   const p=(y*96+x)*4;
   for(let c=0;c<3;c++)out[p+c]=Math.round(clamp(linearToSrgb(clamp(result[c],1)),1)*255);
   out[p+3]=Math.round(clamp(result[3],1)*255);
