@@ -54,9 +54,10 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
   ...(ordinaryFurnitureInventory?[doc(1,arr([8],u32(427689),[0],u32(5),[0xc0])),doc(1,arr([9],u32(3202680),[0],u32(6),[0xc0])),furnitureHomeObject]:[]),
   ...(ordinaryClothingInventory?[doc(10,arr([8],hash(1,2,3,4),
-   ordinaryClothingInventory==='equipped'?arr(hash(0x6ae79913,0x4dfd99ac,0xe020e4be,0x0f6869ef)):arr(),
+   ordinaryClothingInventory==='equipped'?arr(hash(0x6ae79913,0x4dfd99ac,0xe020e4be,0x0f6869ef)):ordinaryClothingInventory==='flower-equipped'?arr(hash(0x7f2bd4e4,0x4c45f5cf,0x7f4ec1b4,0xa1107995)):arr(),
    ordinaryClothingInventory==='preset'?arr(hash(11,22,33,44)):arr(),arr(),hash(1,2,3,4),[0xc3],[0xc0])),
-   doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
+   doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr())),
+   ...(['flower','flower-equipped'].includes(ordinaryClothingInventory)?[doc(1,arr([8],u32(897617923),u32(11),u32(6),arr([7],arr([6],u32(6),u32(0),u32(0)))))]:[])]:[]),
   ...(emptyMaterialInventory?[doc(1,arr([9],u32(emptyMaterialInventory==='currency'?348154640:1877756618),[0],u32(6),[0xc0])),doc(1,arr([10],u32(emptyMaterialInventory==='currency'?1774854033:627013240),[0],u32(0),[0xc0]))]:[]),
   ...(editableFlower?[flower(8,1,0,0)]:[]),
   ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
@@ -793,7 +794,7 @@ async function inventoryEmptyMaterialSmoke(currency=false){
  }finally{await context.close()}
 }
 async function ordinaryClothingRemovalSmoke(){
- for(const state of [true,'equipped','preset']){
+ for(const state of [true,'equipped','preset','flower','flower-equipped']){
   const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
   try{
    const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -802,11 +803,12 @@ async function ordinaryClothingRemovalSmoke(){
     buffer:Buffer.from(createSyntheticSlot({ordinaryClothingInventory:state}))});
    await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
    await chooseTab(page,'inventory');
-   await page.locator('.inventory-controls input[type="search"]').fill('315822');
+   const flower=['flower','flower-equipped'].includes(state),allowed=state===true||state==='flower';
+   await page.locator('.inventory-controls input[type="search"]').fill(flower?'897617923':'315822');
    const card=page.locator('.inventory-card'),input=card.locator('input[name="quantity"]'),remove=card.locator('.inventory-stack-delete');
-   await input.waitFor();assert.equal(await input.getAttribute('min'),state===true?'0':'1');
-   assert.equal(await remove.isEnabled(),state===true);
-   if(state===true){
+   await input.waitFor();assert.equal(await input.getAttribute('min'),allowed?'0':'1');
+   assert.equal(await remove.isEnabled(),allowed);
+   if(allowed){
     await remove.click();const modal=page.locator('.removal-confirm-dialog');await modal.waitFor({state:'visible'});
     await modal.locator('.removal-confirm-action').click();await page.locator('.inventory-empty-stack').waitFor();
     assert.equal(await input.inputValue(),'0');await page.locator('button[title="Undo"]:not([disabled])').click();
@@ -815,7 +817,7 @@ async function ordinaryClothingRemovalSmoke(){
    assert.deepEqual(errors,[]);
   }finally{await context.close()}
  }
- console.log('CHROMIUM ORDINARY CLOTHING REMOVAL PASS: clear avatar, equipped piece and unresolved preset');
+ console.log('CHROMIUM CLOTHING REMOVAL PASS: ordinary and flower-crafted, clear avatar, equipped piece and unresolved preset');
 }
 async function ordinaryFurnitureRemovalSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
