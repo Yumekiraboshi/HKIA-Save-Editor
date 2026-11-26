@@ -95,7 +95,7 @@ export function decodeHistoryDetails(
     const createdHandle=u32(),documentId=u32(),itemId=i32();
     const before:FurnitureVariant=[i32(),i32(),i32()],variant:FurnitureVariant=[i32(),i32(),i32()];
     const quantity=i32();
-    if(createdHandle<=2147483647||documentId<=0||documentId>2147483647||itemId<=0||quantity<=0||before.every((v,i)=>v===variant[i]))return [];
+    if(createdHandle<=2147483647||documentId<=0||itemId<=0||quantity<=0||before.every((v,i)=>v===variant[i])||(documentId>2147483647&&(documentId!==2147483648+itemId||before.some(n=>n!==0))))return [];
     result.push({scope:'inventory',documentId,createdHandle,itemId,variant,quantity,furnitureCreated:true});
    }else if(kind===8){
     const documentId=u32(),before:FlowerVariant=[i32(),i32(),i32(),i32()],after:FlowerVariant=[i32(),i32(),i32(),i32()];
