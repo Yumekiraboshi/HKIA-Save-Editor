@@ -33,6 +33,7 @@ export function nativeBaseIsOpaque(s:NativeTextureSource,bytes:ArrayBuffer){
  const b=new Uint8Array(bytes),v=new DataView(bytes);
  if(s.format===4||s.format===5)return b.every((x,i)=>i%4!==3||x===255);
  if(s.format===10){
+  if(!b.length||b.length%8)return false;
   for(let i=0;i<b.length;i+=8)if(v.getUint16(i,true)<=v.getUint16(i+2,true)){
    const indices=v.getUint32(i+4,true);for(let j=0;j<16;j++)if(((indices>>>(j*2))&3)===3)return false;
   }
@@ -103,8 +104,8 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
  return {geometry:bound.geometry,plans,fidelity:'forward-diagnostic-only' as const};
 }
 /** One depth buffer, one model upload, and one upload per distinct texture.
- * All source bindings are resolved before GPU work; a failed source never
- * produces a partially rendered result. Caller owns the isolated framebuffer. */
+ * All source bindings and payloads are resolved before the first draw.
+ * Caller owns the isolated framebuffer and discards it on any thrown error. */
 export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:FurnitureMultiSources,request:FurnitureMultiRequest,read:ReadRugPayload){
  const resolved=resolveFurnitureMultiDiagnostic(d,request);
  const getBytes=async(kind:RugPayload['kind'],sha256:string,bytes:number)=>{
