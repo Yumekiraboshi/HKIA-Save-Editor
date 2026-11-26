@@ -1,3 +1,4 @@
+import {HISTORY_MAX_BYTES,HISTORY_MAX_ROWS,MAX_INVENTORY_DRAFT_PATCHES} from './history-limits';
 import {flowerVariantOf,isFlowerVariantWire,furnitureVariantOf,isFurnitureVariantWire} from './inventory-unique';
 import {paletteVariantOf,isPaletteVariantWire} from './inventory-palette-display';
 import {isCafeVariantWire} from './inventory-cafe-display';
@@ -14,11 +15,11 @@ const KEY='current';
 const VERSION=1;
 const HISTORY_MAGIC=[72,75,73,65,72,83,48,49]; // HKIAHS01
 export function safeHistoryCheckpoint(value:unknown):Uint8Array|null{
- if(!(value instanceof Uint8Array)||value.length<16||value.length>128*1024||
+ if(!(value instanceof Uint8Array)||value.length<16||value.length>HISTORY_MAX_BYTES||
   HISTORY_MAGIC.some((byte,i)=>value[i]!==byte))return null;
  const view=new DataView(value.buffer,value.byteOffset,value.byteLength);
  const count=view.getUint32(8,true),active=view.getUint32(12,true);
- if(count>256||active>count)return null;
+ if(count>HISTORY_MAX_ROWS||active>count)return null;
  return new Uint8Array(value);
 }
 const isPatch=(p:DraftPatch)=>Number.isInteger(p.id)&&p.id>0&&p.id<=2147483647
@@ -70,7 +71,7 @@ export function inventoryPatchesEqual(a:readonly InventoryPatch[],b:readonly Inv
  return JSON.stringify(canonical(a))===JSON.stringify(canonical(b));
 }
 export function safeInventoryPatches(value:unknown):InventoryPatch[]{
- if(!Array.isArray(value)||value.length>20000)throw Error('DRAFT_INVALID');
+ if(!Array.isArray(value)||value.length>MAX_INVENTORY_DRAFT_PATCHES)throw Error('DRAFT_INVALID');
  const ids=new Set<string>(),result:InventoryPatch[]=[];
  for(const p of value){
   if(!p||typeof p!=='object'||!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>4294967295||(p.documentId>2147483647&&p.kind!=='flower-create'&&p.kind!=='furniture-create'&&p.kind!=='palette-create'&&p.kind!=='boba-create'&&p.kind!=='cafe-create'&&(p.kind!==undefined||p.before!==0||p.after<=0)))throw Error('DRAFT_INVALID');

@@ -8,7 +8,7 @@ use std::{collections::{HashMap,HashSet},ops::Range};
 const MAX_TICKS:i64=3_155_378_975_999_999_999;
 const MAX_UNDO:usize=256;
 // A group journal record is at most 485 bytes, keeping all 256 entries within the existing 128 KiB checkpoint budget.
-pub const MAX_INVENTORY_BATCH:usize=40;
+pub const MAX_INVENTORY_BATCH:usize=256;
 // Session-only handle for an absent ordinary ingredient. Never a saved document ID.
 const PENDING_ITEM:u32=1<<31;
 // Steam 3.0.1 FlowerSettings.AvailableColors (30 entries) minus the
@@ -2393,7 +2393,9 @@ mod tests {
 /// Every edit is reconstructed from the original source using the regular
 /// source-validated CAS APIs before any recovered history is committed.
 const HISTORY_MAGIC:&[u8;8]=b"HKIAHS01";
-const HISTORY_MAX_BYTES:usize=128*1024;
+// The entire 256-step journal fits even when every step has 256 quantity deltas.
+pub const HISTORY_MAX_BYTES:usize=1024*1024;
+const _:()=assert!(16+MAX_UNDO*(5+MAX_INVENTORY_BATCH*12)<=HISTORY_MAX_BYTES);
 
 struct HistoryCursor<'a>{bytes:&'a [u8],pos:usize}
 impl<'a> HistoryCursor<'a>{

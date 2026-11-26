@@ -238,3 +238,16 @@ test('flower creation from a staged source shows both native journal steps',()=>
  assert.equal(result.length,2);assert.equal(result[1].createdHandle,b);assert.equal(result[1].documentId,a);
  assert.deepEqual(decodeHistoryDetails(log([second],1),[meta('inventory',a,null)]),[]);
 });
+
+test('maximum native inventory batch and full history remain displayable',async()=>{
+ const {HISTORY_MAX_BYTES,HISTORY_MAX_ROWS,HISTORY_MAX_BATCH_ROWS}=await compiled('../src/history-limits.ts');
+ assert.equal(HISTORY_MAX_BATCH_ROWS,256);
+ const make=n=>bytes([u8(10),u32(n),...Array.from({length:n},(_,i)=>bytes([u32(4+i),i32(1),i32(2)]))]);
+ const op=make(HISTORY_MAX_BATCH_ROWS),records=Array.from({length:HISTORY_MAX_ROWS},()=>meta('inventory',4,null,true));
+ const full=log(Array.from({length:HISTORY_MAX_ROWS},()=>op),HISTORY_MAX_ROWS);
+ assert.ok(full.length>128*1024&&full.length<=HISTORY_MAX_BYTES);
+ const decoded=decodeHistoryDetails(full,records);
+ assert.equal(decoded.length,HISTORY_MAX_ROWS);
+ assert.equal(decoded[0].batch.length,HISTORY_MAX_BATCH_ROWS);
+ assert.deepEqual(decodeHistoryDetails(log([make(HISTORY_MAX_BATCH_ROWS+1)],1),[records[0]]),[]);
+});

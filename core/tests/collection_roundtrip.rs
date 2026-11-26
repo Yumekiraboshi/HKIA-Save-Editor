@@ -2720,3 +2720,45 @@ fn mixed_chef_creations_share_uid_and_document_allocator_and_replay(){
   assert!(reopened.inventory_boba_rows().any(|(_,v,_)|v==boba_next));
  }
 }
+
+#[test]
+fn large_inventory_batch_and_full_journal_roundtrip(){
+ use hkia_save_core::collection::{MAX_INVENTORY_BATCH,HISTORY_MAX_BYTES,HistoryScope::Inventory};
+ assert_eq!(MAX_INVENTORY_BATCH,256);
+ let pristine=Editor::open(slot("3.0.1")).unwrap();
+ let ids:Vec<_>=pristine.inventory_creatable().into_iter().take(MAX_INVENTORY_BATCH).map(|r|r.item_id).collect();
+ assert_eq!(ids.len(),MAX_INVENTORY_BATCH);
+ let mut payload=synthetic_payload("3.0.1");
+ let count=(5+ids.len()) as u16;
+ payload.splice(3..4,[0xdc,(count>>8) as u8,count as u8]);
+ payload.splice(2..3,u((ids.len()+4) as u32));
+ for (i,item) in ids.iter().enumerate(){
+  payload.extend(doc(1,arr(vec![u(i as u32+4),u(*item as u32),u(0),u(1),vec![0xc0]])));
+ }
+ let input=slot_from_payload("3.0.1",payload);
+ let mut editor=Editor::open(input.clone()).unwrap();
+ let original=editor.inventory();
+ assert_eq!(original.len(),MAX_INVENTORY_BATCH);
+ assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==0));
+ let requests:Vec<_>=original.iter().map(|r|(r.document_id,1,2)).collect();
+ let mut invalid=requests.clone();invalid.push((999999,1,2));
+ assert!(editor.change_inventory_quantities(&invalid).is_err());assert_eq!(editor.revision(),0);
+ let mut before=1;
+ for step in 0..256{
+  let after=if step==255{0}else if before==1{2}else{1};
+  let requests:Vec<_>=original.iter().map(|r|(r.document_id,before,after)).collect();
+  editor.change_inventory_quantities(&requests).unwrap();
+  before=after;
+ }
+ assert_eq!(editor.history().len(),256);
+ assert!(editor.inventory().iter().all(|r|r.quantity==0));
+ let cp=editor.history_checkpoint().unwrap();
+ assert_eq!(cp.len(),16+256*(5+256*12));
+ assert!(cp.len()>128*1024&&cp.len()<=HISTORY_MAX_BYTES);
+ let mut recovered=Editor::open(input).unwrap();recovered.restore_history(&cp).unwrap();
+ assert_eq!(recovered.inventory(),editor.inventory());assert_eq!(recovered.history_checkpoint().unwrap(),cp);
+ assert!(recovered.undo_scope(Inventory));assert!(recovered.inventory().iter().all(|r|r.quantity==2));
+ assert!(recovered.redo_scope(Inventory));assert_eq!(recovered.inventory(),editor.inventory());
+ let reopened=Editor::open(recovered.export().unwrap()).unwrap();
+ assert_eq!(reopened.inventory(),editor.inventory());
+}
