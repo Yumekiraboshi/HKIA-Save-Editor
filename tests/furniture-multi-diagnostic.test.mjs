@@ -50,11 +50,11 @@ test('all 1394 chair slot combinations resolve all three actual meshes and prese
  const defaults=resolveFurnitureMultiDiagnostic(d,r);
  assert.deepEqual(defaults.plans.map(p=>p.selectedIndex),[364,532,null]);
 });
-test('all six rug choices reuse multi renderer selection; other shaders and missing assets refuse',()=>{
+test('all six rug choices reuse multi renderer selection; unsupported features and missing assets refuse',()=>{
  const d=sources();
  for(let i=207;i<=212;i++){const p=resolveFurnitureMultiDiagnostic(d,request(d,32709745,[i,0,0]));assert.equal(p.plans.length,1);assert.equal(p.plans[0].selectedIndex,i);}
- assert.throws(()=>resolveFurnitureMultiDiagnostic(d,request(d,34770598)),/SHADER_UNSUPPORTED/);
- assert.throws(()=>resolveFurnitureMultiDiagnostic(d,request(d,61381969)),/SHADER_UNSUPPORTED/);
+ assert.throws(()=>resolveFurnitureMultiDiagnostic(d,request(d,34770598)),/PATTERN_UNAVAILABLE|MESH_CHANNEL|NULL_PATTERN_CONTRIBUTES|BASE_UV|SHADER_UNSUPPORTED/);
+ assert.throws(()=>resolveFurnitureMultiDiagnostic(d,request(d,61381969)),/SHADER_UNSUPPORTED|PATTERN_UNAVAILABLE|MESH_CHANNEL|NULL_PATTERN_CONTRIBUTES|BASE_UV/);
  const bad=structuredClone(d);bad.additionalPatterns.rows=bad.additionalPatterns.rows.filter(p=>p.guid!=='7bebf58b5f8604c39a34e774c87ced5c');
  assert.throws(()=>resolveFurnitureMultiDiagnostic(bad,request(bad)),/PATTERN_UNAVAILABLE/);
  assert.throws(()=>resolveFurnitureMultiDiagnostic(d,{...request(d),bc1Modes:{}}),/BC1_MODE/);

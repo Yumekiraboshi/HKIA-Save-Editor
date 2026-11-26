@@ -11,6 +11,7 @@ import {uploadNativeTexture,validateNativeTextureLayout,type NativeTextureSource
 import {uploadNativeCube,validateNativeCubeOrientation} from './native-cube-upload';
 import {createFurnitureForwardRenderer,validateFurnitureForwardInputs,type FurnitureForwardMaterial,type FurnitureForwardScene} from './furniture-forwardlit-gpu';
 import type {Vec3,Vec4} from './furniture-surface-v3.0.1';
+import {furnitureRimFromMaterial} from './furniture-rim-v3.0.1';
 type Pattern=NativeTextureSource&{guid:string;bundle:string;bundleSha256:string;pathId:string;objectSha256:string};
 export type FurnitureMultiSources=Omit<RugNativeSources,'variants'>&{
  variants:RugNativeSources['variants']&{bundleNames:readonly string[];patterns:readonly (readonly [string,number,number,readonly number[]])[]};
@@ -66,8 +67,9 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
  validateNativeGeometryLayout(bound.geometry);
  const plans=bound.plans.map(p=>{
   const base=p.baseMaterial,f=base.floats,c=base.colors;
-  if(base.shader!==shaderId||base.validKeywords.length||base.textures._PatternNormalMap?.texture!==null||base.textures._Surface_EffectMap?.texture!==null||
-   f._PatternNormalMap_Toggle!==0||f._Surface_Effect!==0||f.CUSTOM_RIMLIGHT!==0||f.GLIMMER!==0||f._AlphaClip!==0||f._Material_Alpha!==0||f._ZWrite!==1)fail('SHADER_UNSUPPORTED');
+  if(base.shader!==shaderId||base.textures._PatternNormalMap?.texture!==null||base.textures._Surface_EffectMap?.texture!==null||
+   f._PatternNormalMap_Toggle!==0||f._Surface_Effect!==0||f.GLIMMER!==0||f._AlphaClip!==0||f._Material_Alpha!==0||f._ZWrite!==1)fail('SHADER_UNSUPPORTED');
+  const rim=furnitureRimFromMaterial(base.validKeywords,f);
   const link=(name:string)=>get(base.textures[name],'TEXTURE_LINK');
   const st=(name:string):Vec4=>{const l=link(name);return [...l.scale,...l.offset] as Vec4;};
   const tex=(name:string)=>get(d.base.textures[get(link(name).texture,'TEXTURE_NULL')],'TEXTURE');
@@ -98,7 +100,7 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
    rotationCenter:treatment?.rotationCenter??[c._PatternRotateCenter[0],c._PatternRotateCenter[1]],
    smoothnessShift:treatment?.smoothnessShift??f._Smoothness_Shift,metallicShift:treatment?.metallicShift??f._Metallic_Shift,
    patternSmoothnessShift:treatment?.patternSmoothnessShift??f._Smoothness_Shift_Pattern,patternMetallicShift:treatment?.patternMetallicShift??f._Metallic_Shift_Pattern,
-   occlusionStrength:f._OcclusionStrength,worldUV:f._Pattern_WorldUV===1
+   occlusionStrength:f._OcclusionStrength,worldUV:f._Pattern_WorldUV===1,...(rim?{rim}:{})
   };
   if(!pattern&&material.baseColor[3]<=0)fail('NULL_PATTERN_CONTRIBUTES');
   const modelNodes=treatment?nodes.map(node=>node.rendererPathId===p.rendererPathId?{...node,scale:furnitureTreatmentScale(node.scale,treatment!.mirrored)}:node):nodes;

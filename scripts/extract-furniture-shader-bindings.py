@@ -10,7 +10,7 @@ def require(x,msg):
 def sha(b):return hashlib.sha256(b).hexdigest()
 def module(name):
     s=importlib.util.spec_from_file_location(name,Path(__file__).with_name(name+'.py'));m=importlib.util.module_from_spec(s);s.loader.exec_module(m);return m
-def extract(raw,mesh,audit,shader_audit,vector_output=None,lighting_output=None):
+def extract(raw,mesh,audit,shader_audit,vector_output=None,lighting_output=None,rim_output=None):
     require(sha(raw)==SHA,'source bundle');_,pairs=audit.auditor.extract_nodes(raw);cab=dict(pairs)[CAB];trees,_=mesh.type_trees(cab)
     b=next(o for c,p,o,e in audit.serialized_objects(cab,classes=(48,)) if p==PID and e=='<');require(sha(b)==OBJECT,'shader identity')
     # Fixed byte-size records can contain aligned child fields. Traverse all
@@ -65,6 +65,7 @@ def extract(raw,mesh,audit,shader_audit,vector_output=None,lighting_output=None)
     require(len(passes)==4 and len(used)==145,'program coverage')
     if vector_output is not None:vector_output.write_text(json.dumps(surface_vectors(segs[1]),separators=(',',':'))+'\n')
     if lighting_output is not None:lighting_output.write_text(json.dumps(lighting_vectors(segs[1]),separators=(',',':'))+'\n')
+    if rim_output is not None:rim_output.write_text(json.dumps(rim_vectors(segs,table),separators=(',',':'))+'\n')
     return {'schema':'HKIA.FurnitureShaderBindings.1','version':'3.0.1','bundleSha256':SHA,'objectSha256':OBJECT,'keywordNames':keywords,'passes':passes,'uniqueProgramBlobs':len(used),'renderFidelity':'unverified'}
 def evaluate(w,start,end,registers):
  def operand(ins,i):
@@ -98,6 +99,8 @@ def evaluate(w,start,end,registers):
   elif op==1:r=[x if y else 0. for x,y in zip(*vs)] # comparison mask only
   elif op==14:r=[x/y for x,y in zip(*vs)]
   elif op==16:r=[sum(x*y for x,y in zip(vs[0][:3],vs[1][:3]))]*4
+  elif op==25:r=[2**x for x in vs[0]]
+  elif op==47:r=[math.log2(x) if x>0 else -math.inf if x==0 else math.nan for x in vs[0]]
   elif op==68:r=[1/math.sqrt(x) for x in vs[0]]
   elif op==15:r=[sum(x*y for x,y in zip(vs[0][:2],vs[1][:2]))]*4
   elif op==49:r=[float(x<y) for x,y in zip(*vs)]
@@ -159,5 +162,25 @@ def lighting_vectors(b):
         cases.append({'input':u,'expected':{'color':r[2,0][:3],'reflection':{'direction':direction,'lod':lod}}})
     return {'schema':'HKIA.FurnitureLightingVectors.1','version':'3.0.1','cases':cases}
 
+def rim_vectors(segs,table):
+    """Synthetic register samples for the exact original rim-only pixel program.
+    No original compiled program bytes are included in output."""
+    off,n,seg=table[23]
+    require(sha(segs[seg][off:off+n])=='3f075a9e594289745f33cae80f9557e07a7b8a585db548e76b92b675a77dc853','rim parameter blob')
+    b=segs[1];off=172866;d=b[off:off+5568]
+    require(sha(d)=='1e217a67dd0d975499f651736a3f82fcab8780e0127e5be1c0cc2457e1b89987','rim pixel program')
+    o=next(i for i in struct.unpack_from('<'+'I'*struct.unpack_from('<I',d,28)[0],d,32) if d[i:i+4]==b'SHEX')
+    w=struct.unpack_from('<'+'I'*(struct.unpack_from('<I',d,o+4)[0]//4),d,o+8)
+    require(sha(struct.pack('<207I',*w[1015:1222]))=='e317fc095ebc9e798079f84695e178de997a16a9269928231b6287d87c322eaf','rim token block')
+    rng=random.Random(103);cases=[]
+    for i in range(128):
+        alb=[rng.uniform(.01,1) for _ in range(3)];rough=rng.random();nv=rng.uniform(-1,1);occ=rng.random();amb=[rng.random() for _ in range(3)];lit=[rng.uniform(0,2) for _ in range(3)]
+        power=rng.uniform(0,5);feather=rng.random();intensity=rng.uniform(0,5);coloring=rng.random()
+        reg={(0,0):alb+[rough],(0,1):[lit[0],occ,lit[1],lit[2]],(0,5):[0,0,0,nv],(1,6):amb+[0],(8,1,5):[0,0,power,feather],(8,1,6):[intensity,coloring,0,0]}
+        evaluate(w,1015,1222,reg)
+        expected=reg[0,0][:3];require(all(math.isfinite(x) for x in expected),'nonfinite rim output')
+        cases.append([alb,rough,nv,occ,amb,lit,{'power':power,'feathering':feather,'intensity':intensity,'coloring':coloring},expected])
+    return {'schema':'HKIA.FurnitureRimVectors.1','version':'3.0.1','cases':cases}
+
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('bundle',type=Path);p.add_argument('--out',type=Path,required=True);p.add_argument('--vectors',type=Path);p.add_argument('--lighting-vectors',type=Path);a=p.parse_args();d=extract(a.bundle.read_bytes(),module('extract-furniture-mesh-source'),module('audit-native-dye-materials'),module('audit-native-character-shader'),a.vectors,a.lighting_vectors);a.out.write_text(json.dumps(d,separators=(',',':'))+'\n')
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('bundle',type=Path);p.add_argument('--out',type=Path,required=True);p.add_argument('--vectors',type=Path);p.add_argument('--lighting-vectors',type=Path);p.add_argument('--rim-vectors',type=Path);a=p.parse_args();d=extract(a.bundle.read_bytes(),module('extract-furniture-mesh-source'),module('audit-native-dye-materials'),module('audit-native-character-shader'),a.vectors,a.lighting_vectors,a.rim_vectors);a.out.write_text(json.dumps(d,separators=(',',':'))+'\n')
