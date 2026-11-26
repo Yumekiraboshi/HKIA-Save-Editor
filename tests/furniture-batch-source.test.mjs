@@ -20,3 +20,28 @@ test('batch plan covers all original customizable models and referenced pattern 
  const chair=plan.models.find(r=>r.itemId===90163601);assert.deepEqual(chair.slots.map(s=>s.choices.length),[41,34]);
  const rug=plan.models.find(r=>r.itemId===32709745);assert.deepEqual(rug.slots[0].choices,[207,208,209,210,211,212]);
 });
+
+test('static mesh extraction resolves repeated MonoBehaviour types by original object index',()=>{
+ const py=String.raw`
+import struct, importlib.util
+spec=importlib.util.spec_from_file_location('mesh','scripts/extract-furniture-mesh-source.py')
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+b=bytearray(48);struct.pack_into('>I',b,8,22)
+b.extend(b'2022.3\0'+struct.pack('<iBI',19,1,2))
+for name in (b'first\0',b'second\0'):
+    b.extend(struct.pack('<iBh',114,0,0)+bytes(32))
+    b.extend(struct.pack('<II',1,len(name)))
+    b.extend(struct.pack('<HBBIIiiiQ',1,0,0,0,0,4,0,0,0)+name+struct.pack('<I',0))
+b.extend(struct.pack('<I',2));b.extend(bytes((-len(b))%4))
+b.extend(struct.pack('<qqIi',101,0,4,0));b.extend(struct.pack('<qqIi',102,4,4,1));b.extend(struct.pack('<II',0,0))
+try:
+    m.type_trees(bytes(b))
+    raise AssertionError('ambiguous legacy class schema accepted')
+except ValueError as e:
+    assert 'multiple class schemas' in str(e)
+trees,ext,types=m.type_trees(bytes(b),indexed=True)
+assert types=={'101':0,'102':1} and ext==[]
+assert trees[types['101']][2]=='first' and trees[types['102']][2]=='second'
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
+});

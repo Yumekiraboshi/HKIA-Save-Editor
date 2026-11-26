@@ -103,6 +103,7 @@ def extract_batch(plan,root,out,kind,limit):
         for row in rows:groups[row['bundles'][0]].append((typ,row))
     found=locate(root,set(groups))
     mesh=module('extract-furniture-mesh-source');audit=module('audit-native-dye-materials')
+    cab_index=module('batch-furniture-base-materials').CabIndex(root,{n for r in model_rows for n in r['bundles']},module('resolve-unityfs-cabs').node_names) if model_rows else None
     pattern=module('extract-furniture-pattern-texture')
     chair=module('stage-furniture-chair-patterns');typed=module('extract-furniture-preview-camera')
     known_models=unique(read('furniture-mesh-source-sample-v3.0.1.json')['rows'],lambda x:x['itemId'])
@@ -120,7 +121,7 @@ def extract_batch(plan,root,out,kind,limit):
                 results.append({**receipt,'status':'unresolved','reason':bundle_error});continue
             try:
                 if typ=='geometry':
-                    meta,payload=mesh.extract(raw,bundle,row['guid'],key,audit)
+                    meta,payload=mesh.extract(raw,bundle,row['guid'],key,audit,resolve_cab=lambda cab:cab_index.resolve(cab,set(row['bundles'])))
                     if key in known_models:require(meta==known_models[key],'pinned geometry mismatch')
                     save_pair(out/'mesh',key,'.geometry.bin',meta,payload)
                 elif key in known_chair:

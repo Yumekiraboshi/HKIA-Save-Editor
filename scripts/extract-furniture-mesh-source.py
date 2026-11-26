@@ -18,13 +18,13 @@ def string(b,p=0):
     return b[p+4:p+4+n].decode(),align(p+4+n)
 def ptr(b,p=0):
     f,i=struct.unpack_from('<iq',b,p);return [f,str(i)]
-def type_trees(b):
+def type_trees(b,indexed=False):
     if len(b)<48 or struct.unpack_from('>I',b,8)[0]!=22 or b[16]!=0:raise ValueError('serialized file format')
     _,p=cs(b,48);p+=4
     if b[p]!=1:raise ValueError('original type tree required')
     p+=1;n=u(b,p);p+=4;out={}
     if n>512:raise ValueError('type count')
-    for _ in range(n):
+    for type_index in range(n):
         c=struct.unpack_from('<i',b,p)[0];p+=7+(16 if c==114 or c<0 else 0)+16
         n,s=struct.unpack_from('<II',b,p);p+=8
         if n>100000 or s>10000000 or p+32*n+s>len(b):raise ValueError('tree bounds')
@@ -40,15 +40,23 @@ def type_trees(b):
             elif root is None:root=node
             else:raise ValueError('tree root')
             stack.append(node)
-        if c in out:raise ValueError('multiple class schemas; use a supported static bundle')
-        out[c]=root;p+=32*n+s;d=u(b,p);p+=4+4*d
-    count=u(b,p);p=align(p+4)+count*24
+        key=type_index if indexed else c
+        if key in out:raise ValueError('multiple class schemas; use a supported static bundle')
+        out[key]=root;p+=32*n+s;d=u(b,p);p+=4+4*d
+    count=u(b,p);p=align(p+4);object_types={}
+    if count>2000000 or p+count*24>len(b):raise ValueError('object table bounds')
+    if indexed:
+        for j in range(count):
+            pid,_,_,idx=struct.unpack_from('<qqIi',b,p+j*24)
+            if idx not in out or str(pid) in object_types:raise ValueError('invalid object type')
+            object_types[str(pid)]=idx
+    p+=count*24
     scripts=u(b,p);p+=4+scripts*12
     ext=u(b,p);p+=4;external=[]
     if ext>1024:raise ValueError('external count')
     for _ in range(ext):
         _,p=cs(b,p);p+=20;path,p=cs(b,p);external.append(path)
-    return out,external
+    return (out,external,object_types) if indexed else (out,external)
 
 def walk(no,b,p=0,depth=0):
     _,ty,na,bs,meta,ch=no
@@ -81,17 +89,21 @@ def array_ptr(b):
     if len(b)!=4+12*n:raise ValueError('PPtr array bounds')
     return [ptr(b,4+i*12) for i in range(n)]
 
-def extract(raw, bundle_name, guid, item_id, audit):
+def extract(raw, bundle_name, guid, item_id, audit, resolve_cab=None):
     _,pairs=audit.auditor.extract_nodes(raw);nodes=dict(pairs)
     cabs=[n for n in nodes if re.fullmatch('CAB-[0-9a-f]{32}',n)]
     if len(cabs)!=1:raise ValueError('one CAB required')
-    cab=cabs[0];b=nodes[cab];stream=nodes[cab+'.resS'];trees,externals=type_trees(b)
+    cab=cabs[0];b=nodes[cab];stream=nodes.get(cab+'.resS',b'');trees,externals,object_types=type_trees(b,indexed=True)
     objects={pid:(c,o) for c,pid,o,e in audit.serialized_objects(b,classes=(1,4,21,23,28,33,43,114,142)) if e=='<'}
     def obj(pid,cls):
         c,o=objects[pid]
         if c!=cls:raise ValueError('object type mismatch')
         return o
-    def f(pid,cls):return fields(trees[cls],obj(pid,cls))
+    def f(pid,cls):return fields(trees[object_types[pid]],obj(pid,cls))
+    def component_class(ref):
+        if ref[0]!=0:return None
+        if ref[1] not in object_types:raise ValueError('missing component object')
+        return objects.get(ref[1],(None,None))[0]
     def local(ref,cls):
         if ref[0]!=0:raise ValueError('external object not supported')
         obj(ref[1],cls);return ref[1]
@@ -100,7 +112,8 @@ def extract(raw, bundle_name, guid, item_id, audit):
         key,p=string(container,p);first,n=struct.unpack_from('<ii',container,p);ref=ptr(container,p+8);p+=20
         if key==guid:matches.append(local(ref,1))
     if len(matches)!=1:raise ValueError('missing or ambiguous native prefab key')
-    root=matches[0];root_fields=f(root,1);root_comps=array_ptr(root_fields['m_Component']);root_tr=[ref[1] for ref in root_comps if ref[0]==0 and objects[ref[1]][0]==4];scripts=[ref[1] for ref in root_comps if ref[0]==0 and objects[ref[1]][0]==114]
+    root=matches[0];root_fields=f(root,1);root_comps=array_ptr(root_fields['m_Component']);root_tr=[ref[1] for ref in root_comps if component_class(ref)==4];scripts=[ref[1] for ref in root_comps if component_class(ref)==114]
+    scripts=[pid for pid in scripts if ptr(f(pid,114)['m_Script'])==[1,'-4647883882007958521']]
     if len(root_tr)!=1 or len(scripts)!=1:raise ValueError('unsupported root components')
     sf=f(scripts[0],114);script=ptr(sf['m_Script']);
     if script!=[1,'-4647883882007958521'] or not externals[0].endswith('CAB-2383a36f15413272ed26f383f73f6431'):raise ValueError('unknown visual slot script')
@@ -111,14 +124,40 @@ def extract(raw, bundle_name, guid, item_id, audit):
         if slot not in (0,1,2) or rid in slots:raise ValueError('unsupported slot binding')
         slots[rid]={'slot':slot,'displayedDefinitionGuid':ref or None}
     if p!=len(s):raise ValueError('slot object length')
-    packed=bytearray();meshes={};scene=[];seen=set();materials={}
+    packed=bytearray();meshes={};scene=[];seen=set();materials={};mesh_origins={};external_meshes={}
     def put(data):
         while len(packed)%4:packed.append(0)
         pos=len(packed);packed.extend(data);return [pos,len(data),sha(data)]
-    def mesh(pid):
-        if pid in meshes:return
-        m=f(pid,43);v=m['m_VertexData'];nv,nc=struct.unpack_from('<II',v);channels=[list(v[8+i*4:12+i*4]) for i in range(nc)];off,size=struct.unpack_from('<QI',m['m_StreamData']);path,_=string(m['m_StreamData'],12)
-        if path!=f'archive:/{cab}/{cab}.resS' or off+size>len(stream) or not nv or size%nv or size//nv>64 or u(v,8+4*nc)!=0 or m['m_MeshCompression']!=b'\0':raise ValueError('unsupported vertex stream')
+    def mesh(ref):
+        file_id,pid=ref
+        origin=cab;source_stream=stream;source_name=bundle_name;source_hash=None
+        if file_id==0:
+            mesh_object=obj(pid,43);m=f(pid,43)
+        else:
+            if resolve_cab is None or not 1<=file_id<=len(externals):raise ValueError('external mesh source unavailable')
+            path=externals[file_id-1];origin=path.rsplit('/',1)[-1]
+            if not re.fullmatch('CAB-[0-9a-f]{32}',origin) or path!=f'archive:/{origin}/{origin}':raise ValueError('external mesh CAB path')
+            if origin not in external_meshes:
+                # Bound retained external CAB data to one bundle per model.
+                external_meshes.clear()
+                source_path=resolve_cab(origin)
+                if source_path is None:raise ValueError('missing external mesh CAB '+origin)
+                external_raw=source_path.read_bytes();source_name=source_path.name.removesuffix('.bin');source_hash=sha(external_raw)
+                external_nodes=dict(audit.auditor.extract_nodes(external_raw)[1]);external_cabs=[k for k in external_nodes if re.fullmatch('CAB-[0-9a-f]{32}',k)]
+                if external_cabs!=[origin]:raise ValueError('external mesh CAB identity')
+                blob=external_nodes[origin];et,_,ei=type_trees(blob,indexed=True)
+                eo={p:o for c,p,o,e in audit.serialized_objects(blob,classes=(43,)) if e=='<'}
+                external_meshes[origin]=(source_name,source_hash,et,ei,eo,external_nodes.get(origin+'.resS',b''))
+                del external_nodes,external_raw,blob
+            source_name,source_hash,et,ei,eo,source_stream=external_meshes[origin]
+            if pid not in eo:raise ValueError('missing external Mesh object')
+            mesh_object=eo[pid];m=fields(et[ei[pid]],mesh_object)
+        if pid in meshes:
+            if mesh_origins[pid]!=origin:raise ValueError('ambiguous mesh Path ID across CABs')
+            return pid
+        mesh_origins[pid]=origin
+        v=m['m_VertexData'];nv,nc=struct.unpack_from('<II',v);channels=[list(v[8+i*4:12+i*4]) for i in range(nc)];off,size=struct.unpack_from('<QI',m['m_StreamData']);path,_=string(m['m_StreamData'],12)
+        if path!=f'archive:/{origin}/{origin}.resS' or off+size>len(source_stream) or not nv or size%nv or size//nv>64 or u(v,8+4*nc)!=0 or m['m_MeshCompression']!=b'\0':raise ValueError('unsupported vertex stream')
         stride=size//nv;fmt={0:4,1:2,2:1};end=0
         for st,o,ft,d in channels:
             dim=d&15
@@ -126,22 +165,24 @@ def extract(raw, bundle_name, guid, item_id, audit):
             if st!=0 or ft not in fmt or dim>4:raise ValueError('unsupported channel')
             end=max(end,o+fmt[ft]*dim)
         if end!=stride or channels[0]!=[0,0,0,3]:raise ValueError('stride mismatch')
-        vb=stream[off:off+size];ib=m['m_IndexBuffer'];n=u(ib);ib=ib[4:4+n];fmt=u(m['m_IndexFormat']);sm=m['m_SubMeshes']
+        vb=source_stream[off:off+size];ib=m['m_IndexBuffer'];n=u(ib);ib=ib[4:4+n];fmt=u(m['m_IndexFormat']);sm=m['m_SubMeshes']
         if fmt!=0 or u(sm)!=1 or len(sm)!=52:raise ValueError('unsupported submesh/index format')
         first,count,top,base,fv,vc=struct.unpack_from('<6I',sm,4)
         if first or top or base or fv or vc!=nv or count*2!=len(ib) or count%3 or any(i[0]>=nv for i in struct.iter_unpack('<H',ib)):raise ValueError('index bounds')
         positions=[struct.unpack_from('<3f',vb,i*stride) for i in range(nv)]
         if not all(math.isfinite(x) for row in positions for x in row):raise ValueError('nonfinite vertices')
-        meshes[pid]={'name':string(m['m_Name'])[0],'objectSha256':sha(obj(pid,43)),'vertexCount':nv,'indexCount':count,'stride':stride,'channels':channels,'vertexBytes':put(vb),'indexBytes':put(ib),'bounds':[list(struct.unpack('<6f',m['m_LocalAABB']))], 'streamOffset':off}
+        meshes[pid]={'name':string(m['m_Name'])[0],'objectSha256':sha(mesh_object),'vertexCount':nv,'indexCount':count,'stride':stride,'channels':channels,'vertexBytes':put(vb),'indexBytes':put(ib),'bounds':[list(struct.unpack('<6f',m['m_LocalAABB']))], 'streamOffset':off}
+        if file_id:meshes[pid].update(sourceCab=origin,sourceBundle=source_name,sourceBundleSha256=source_hash)
+        return pid
     def visit(tid,parent=None):
         if tid in seen or len(seen)>512:raise ValueError('transform cycle or size')
         seen.add(tid);tr=f(tid,4);go=local(ptr(tr['m_GameObject']),1);gf=f(go,1)
         if ptr(tr['m_Father'])!=[0,parent or '0']:raise ValueError('transform parent')
         row={'transformPathId':tid,'parentPathId':parent,'gameObjectPathId':go,'name':string(gf['m_Name'])[0],'active':bool(gf['m_IsActive'][0]),'rotation':list(struct.unpack('<4f',tr['m_LocalRotation'])),'position':list(struct.unpack('<3f',tr['m_LocalPosition'])),'scale':list(struct.unpack('<3f',tr['m_LocalScale']))}
-        comps=array_ptr(gf['m_Component']);mf=[r[1] for r in comps if r[0]==0 and objects[r[1]][0]==33];rr=[r[1] for r in comps if r[0]==0 and objects[r[1]][0]==23]
+        comps=array_ptr(gf['m_Component']);mf=[r[1] for r in comps if component_class(r)==33];rr=[r[1] for r in comps if component_class(r)==23]
         if len(mf)!=len(rr) or len(rr)>1:raise ValueError('unsupported renderer pairing')
         if rr:
-            rid=rr[0];m=f(mf[0],33);r=f(rid,23);mid=local(ptr(m['m_Mesh']),43);mesh(mid);refs=array_ptr(r['m_Materials'])
+            rid=rr[0];m=f(mf[0],33);r=f(rid,23);mid=mesh(ptr(m['m_Mesh']));refs=array_ptr(r['m_Materials'])
             if len(refs)!=1:raise ValueError('multi-material mesh')
             ref=refs[0];matkey=f'{ref[0]}:{ref[1]}'
             if ref[0]==0:
