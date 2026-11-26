@@ -427,8 +427,41 @@ impl Editor {
   }
   out
  }
+ // Only the intersection of verified ordinary acquisition definitions and
+ // original non-layout customizable furniture. No inferred ownership.
+ fn absent_furniture_choices(&self,item_id:i32)->Vec<FurnitureVariant>{
+  if self.inventory_item_rows.contains_key(&item_id)||self.inventory_changes.contains_key(&(PENDING_ITEM|item_id as u32))||
+   !self.can_create_inventory_item(item_id)||crate::inventory_source::ordinary_quantity_limit(item_id)!=Some(i32::MAX){return Vec::new()}
+  let Some(source)=furniture_source::item(item_id)else{return Vec::new()};
+  if source.is_home_layout{return Vec::new()}
+  let Some(default)=furniture_key(source,[0;3])else{return Vec::new()};
+  let mut reserved=HashSet::new();
+  for (&id,f) in &self.pending_furniture{
+   if f.item_id!=item_id{continue}
+   for v in [f.variant,self.furniture_variant_changes.get(&id).copied().unwrap_or(f.variant)]{
+    let Some(key)=furniture_key(source,v)else{return Vec::new()};
+    reserved.insert(key);
+   }
+  }
+  let mut out=Vec::new();
+  for slot in source.slots{
+   for &n in slot.allowed{
+    let mut v=[0;3];v[slot.slot as usize]=n;
+    if !Self::valid_furniture_target(source,[0;3],v){continue}
+    let Some(key)=furniture_key(source,v)else{continue};
+    if key!=default&&!reserved.contains(&key)&&!out.contains(&v){out.push(v)}
+   }
+  }
+  out
+ }
+ pub fn inventory_absent_furniture_ids(&self)->Vec<i32>{
+  if !self.absent_flower_budget_available(){return Vec::new()}
+  furniture_source::ITEMS.iter().filter_map(|s|(!self.absent_furniture_choices(s.item_id).is_empty()).then_some(s.item_id)).collect()
+ }
  pub fn inventory_furniture_creation_variants(&self,id:u32)->Vec<FurnitureVariant>{
-  if !self.absent_flower_budget_available()||!self.unique_quantity_ids.contains(&id){return Vec::new()}
+  if !self.absent_flower_budget_available(){return Vec::new()}
+  if id&PENDING_ITEM!=0{return self.absent_furniture_choices((id&!PENDING_ITEM) as i32)}
+  if !self.unique_quantity_ids.contains(&id){return Vec::new()}
   let Some((source,original,current,_))=self.furniture_context(id)else{return Vec::new()};
   // No new restricted ownership: only existing, source-validated furniture.
   if self.slot.index.inventory_payload_item_refs.contains(&source.item_id){return Vec::new()}
@@ -441,11 +474,17 @@ impl Editor {
  }
  pub fn create_inventory_furniture_variant(&mut self,source_id:u32,expected:FurnitureVariant,next:FurnitureVariant,quantity:i32)->Result<u32,Error>{
   if quantity<=0||!self.inventory_furniture_creation_variants(source_id).contains(&next){return Err(Error::Schema)}
-  let (source,_,current,_)=self.furniture_context(source_id).ok_or(Error::Schema)?;
-  if current!=expected{return Err(Error::Schema)}
+  let item_id=if source_id&PENDING_ITEM!=0{
+   if expected!=[0;3]{return Err(Error::Schema)}
+   (source_id&!PENDING_ITEM) as i32
+  }else{
+   let (source,_,current,_)=self.furniture_context(source_id).ok_or(Error::Schema)?;
+   if current!=expected{return Err(Error::Schema)}
+   source.item_id
+  };
   let document_id=self.allocate_staged_unique_handle()?;
   let revision=self.next_edit_revision()?;
-  let change=Change::FurnitureCreated{document_id,source_id,expected,furniture:PendingFurniture{item_id:source.item_id,variant:next},quantity};
+  let change=Change::FurnitureCreated{document_id,source_id,expected,furniture:PendingFurniture{item_id,variant:next},quantity};
   self.restore_change(&change,false);self.undo.push(change);self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);self.revision=revision;
   Ok(document_id)
  }

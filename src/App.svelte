@@ -73,7 +73,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let flowerSelection=$state(-1);
  let furnitureDialogEl:HTMLDialogElement|undefined=$state();
  let furnitureDisplay:FurnitureDisplay|null=$state(null);
- let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[];creationOptions:FurnitureVariant[]}|null>(null);
+ let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[];creationOptions:FurnitureVariant[];createOnly:boolean}|null>(null);
  let furnitureSelection=$state(-1);
  let inventoryNativeArt:InventoryNativeArt|null=$state(null);
  let inventoryEditableOnly=$state(false);
@@ -716,15 +716,16 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{busy=false}
  }
  async function openFurnitureEditor(row:InventoryEntry){
-  const before=furnitureVariantOf(row.unique);
-  if(!snapshot||busy||!before||!row.unique?.furnitureEditable)return;
+  const createOnly=row.furnitureCreatable===true;
+  const before:FurnitureVariant|null=createOnly?[0,0,0]:furnitureVariantOf(row.unique);
+  if(!snapshot||busy||!before||(!createOnly&&!row.unique?.furnitureEditable))return;
   const revision=snapshot.revision;
   busy=true;error='';
   try{
-   const [options,creationOptions,display]=await Promise.all([requestFurnitureVariants(row.documentId),requestFurnitureCreationVariants(row.documentId),furnitureDisplay?Promise.resolve(furnitureDisplay):loadFurnitureDisplay()]);
+   const [options,creationOptions,display]=await Promise.all([createOnly?Promise.resolve([] as FurnitureVariant[]):requestFurnitureVariants(row.documentId),requestFurnitureCreationVariants(row.documentId),furnitureDisplay?Promise.resolve(furnitureDisplay):loadFurnitureDisplay()]);
    if(!snapshot||snapshot.revision!==revision)return;
    furnitureDisplay=display;
-   furnitureEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions};
+   furnitureEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:createOnly?creationOptions:options,creationOptions,createOnly};
    furnitureSelection=-1;await tick();
    if(furnitureDialogEl&&!furnitureDialogEl.open)furnitureDialogEl.showModal();
   }catch(e){error=describeError(e)}
@@ -1325,7 +1326,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const chef=inventoryChefAppearance(item.itemId,item.unique)}
      {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
      {@const canFlower=!!item.flower&&!!item.unique?.flowerEditable&&!!flowerDefinitions&&!!flowerLabels[locale]}
-     {@const canFurniture=!!item.unique?.furnitureEditable}
+     {@const canFurniture=!!item.unique?.furnitureEditable||!!item.furnitureCreatable}
       <article class="inventory-card" class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!item.flowerCreatable} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
       {#if inventoryBatchMode&&item.editable}
        <input class="inventory-batch-checkbox" type="checkbox" checked={inventoryBatchSelected.has(item.documentId)} aria-label={iBatchCopy+': '+inventoryName(item.itemId)}
@@ -1552,7 +1553,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   {#if furnitureEdit}
    {@const edit=furnitureEdit}
    {@const selected=edit.options[furnitureSelection]??edit.before}
-   <form class="date-dialog-inner" onsubmit={e=>void applyInventoryFurnitureVariant(e)}>
+   <form class="date-dialog-inner" onsubmit={e=>{if(edit.createOnly){e.preventDefault();void addInventoryFurnitureVariant()}else void applyInventoryFurnitureVariant(e)}}>
     <div class="date-dialog-heading">
      <h2 id="furniture-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFurnitureEditor}>×</button>
@@ -1593,9 +1594,9 @@ import {verifiedFloorplanName} from './floorplan-names';
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFurnitureEditor}>{copy.cancel}</button>
      {#if edit.creationOptions.length}
-      <button type="button" class="inventory-create-furniture" disabled={busy||furnitureSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[furnitureSelection]?.[i]))} onclick={()=>void addInventoryFurnitureVariant()}>{inventoryAddCopy(locale)}</button>
+      <button type={edit.createOnly?'submit':'button'} class="inventory-create-furniture" disabled={busy||furnitureSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[furnitureSelection]?.[i]))} onclick={()=>{if(!edit.createOnly)void addInventoryFurnitureVariant()}}>{inventoryAddCopy(locale)}</button>
      {/if}
-     <button type="submit" class="primary" disabled={busy||furnitureSelection<0}>{copy.apply}</button>
+     {#if !edit.createOnly}<button type="submit" class="primary" disabled={busy||furnitureSelection<0}>{copy.apply}</button>{/if}
     </div>
    </form>
   {/if}

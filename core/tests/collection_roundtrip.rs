@@ -2046,3 +2046,45 @@ fn flower_clothing_refuses_saved_outfit_and_preset_references(){
  let e=Editor::open(make(mermaid)).unwrap();
  assert!(e.inventory_flower_variants(4).is_empty());assert!(e.inventory_flower_variants(5).is_empty());
 }
+
+#[test]
+fn unowned_customized_furniture_uses_verified_acquisition_and_material_choices(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=61381969;let candidate=(1u32<<31)|item as u32;
+ for zipped in [false,true]{
+  let raw=slot_from_payload("3.0.1",synthetic_payload("3.0.1"));
+  let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let ids=e.inventory_absent_furniture_ids();
+  assert!(ids.contains(&item));assert!(ids.len()<=295);
+  assert!(!ids.contains(&45426907)); // Home layout.
+  let choices=e.inventory_furniture_creation_variants(candidate);
+  let target=[0,2,0];assert!(choices.contains(&target));
+  for bad in [[0,0,0],[503,0,0],[0,99999999,0],[0,2,3],[502,2,0]]{
+   assert!(e.create_inventory_furniture_variant(candidate,[0;3],bad,1).is_err());
+  }
+  assert!(e.create_inventory_furniture_variant(candidate,[0,1,0],target,1).is_err());
+  let handle=e.create_inventory_furniture_variant(candidate,[0;3],target,2).unwrap();
+  assert_ne!(handle,candidate);
+  assert!(e.create_inventory_furniture_variant(candidate,[0;3],target,1).is_err());
+  e.change_inventory_furniture_variant(handle,target,[502,2,0]).unwrap();
+  e.change_inventory_quantity(handle,2,4).unwrap();
+  e.change_inventory_quantity(candidate,0,3).unwrap(); // Ordinary base remains independent.
+  assert!(!e.inventory_absent_furniture_ids().contains(&item));
+  let cp=e.history_checkpoint().unwrap();let mut r=Editor::open(input.clone()).unwrap();r.restore_history(&cp).unwrap();
+  assert_eq!(r.inventory(),e.inventory());
+  for _ in 0..4{assert!(r.undo_scope(Inventory));}
+  let cp=r.history_checkpoint().unwrap();let mut r=Editor::open(input).unwrap();r.restore_history(&cp).unwrap();
+  for _ in 0..4{assert!(r.redo_scope(Inventory));}
+  let reopened=Editor::open(r.export().unwrap()).unwrap();
+  let rows=reopened.inventory();assert_eq!(rows.len(),2);
+  assert!(rows.iter().all(|row|row.item_id==item));
+  let custom=rows.iter().find(|row|row.quantity==4).unwrap();
+  let base=rows.iter().find(|row|row.quantity==3).unwrap();
+  assert_eq!(reopened.inventory_unique_data(custom.document_id),e.inventory_unique_data(handle));
+  assert_eq!(reopened.inventory_unique_data(base.document_id),None);
+  assert!(reopened.inventory_unique_rows().any(|r|r.0==custom.document_id&&r.1==Some(1)));
+  assert!(reopened.inventory_unique_rows().any(|r|r.0==base.document_id&&r.1==Some(0)));
+  assert!(reopened.inventory_furniture_creation_variants(candidate).is_empty());
+ }
+}

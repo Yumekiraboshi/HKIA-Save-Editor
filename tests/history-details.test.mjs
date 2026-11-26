@@ -213,3 +213,10 @@ test('native furniture creation history retains the material tuple and staged id
  assert.deepEqual(detail,{scope:'inventory',documentId:source,createdHandle:handle,itemId,variant:[502,2,0],quantity:7,furnitureCreated:true});
  assert.match(formatHistoryChange(detail,'en',historyDetailCopy('en'),'','Quantity',undefined,()=> 'Material'),/Material · Quantity: 7$/);
 });
+
+test('absent furniture creation preserves unsigned source identity and rejects forged source tuples',()=>{
+ const handle=2147483649,itemId=61381969,source=2147483648+itemId;
+ const op=(id,before)=>bytes([u8(12),u32(handle),u32(id),i32(itemId),...([...before,0,2,0].map(i32)),i32(4)]);
+ assert.deepEqual(decodeHistoryDetails(log([op(source,[0,0,0])],1),[meta('inventory',source,null)]),[{scope:'inventory',documentId:source,createdHandle:handle,itemId,variant:[0,2,0],quantity:4,furnitureCreated:true}]);
+ for(const [id,before] of [[source+1,[0,0,0]],[source,[1,0,0]]])assert.deepEqual(decodeHistoryDetails(log([op(id,before)],1),[meta('inventory',id,null)]),[]);
+});
