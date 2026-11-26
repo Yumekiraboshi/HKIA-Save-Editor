@@ -63,7 +63,7 @@ test('confirmation checks save identity, revision and current recorded/completed
  assert.match(app,/else if\(target\.kind==='achievements'\)await quickToggleAchievement\(target\.item,undefined,undefined,true\)/);
  assert.match(app,/target\.requests\.some\(\(\[id,before\]\)=>!snapshot\?\.inventory\.some\(row=>row\.documentId===id&&row\.quantity===before&&row\.editable&&row\.quantityMinimum===0\)/);
  assert.match(app,/if\(target\.batch\)\{update\(await changeInventoryQuantities\(target\.requests\)\)/);
- assert.match(app,/requestRemoval\(\{kind:'inventory',requests,batch,name,revision:snapshot\.revision\},opener\)/);
+ assert.match(app,/requestRemoval\(\{kind:'inventory',requests,batch,name,targets:details,revision:snapshot\.revision\},opener\)/);
  assert.match(app,/if\(next===0\)\{requestInventoryDelete\(rows,true,/);
  assert.match(app,/if\(next===0\)\{requestInventoryDelete\(\[row\],false,/);
  assert.doesNotMatch(app,/confirm\(inventoryEmptyCopy\(locale\)\)/);
@@ -76,4 +76,13 @@ test('confirmation checks save identity, revision and current recorded/completed
  const style=read('../src/style.css');
  assert.match(style,/\.removal-confirm-dialog::backdrop/);
  assert.match(style,/\.removal-confirm-action\{background:var\(--danger\)/);
+});
+
+test('batch removal preview is derived from the same nonzero targets as the native CAS requests',()=>{
+ const app=read('../src/App.svelte');
+ assert.match(app,/const targets=rows\.filter\(row=>row\.quantity>0\)/);
+ assert.match(app,/const requests:InventoryQuantityRequest\[\]=targets\.map\(row=>\[row\.documentId,row\.quantity,0\]\)/);
+ assert.match(app,/const details=targets\.map\(row=>\(\{documentId:row\.documentId,name:/);
+ assert.match(app,/\{#each pendingRemoval\.targets as target \(target\.documentId\)\}/);
+ assert.match(app,/target\.quantity\.toLocaleString\(locale\)/);
 });
