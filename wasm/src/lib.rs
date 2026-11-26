@@ -210,6 +210,19 @@ pub extern "C" fn hkia_inventory_flower_variants(id:u32)->u32{
  })
 }
 #[no_mangle]
+pub extern "C" fn hkia_inventory_flower_preview(id:u32,b0:i32,b1:i32,b2:i32,b3:i32,a0:i32,a1:i32,a2:i32,a3:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let Ok((rows,creatable))=e.inventory_flower_preview(id,[b0,b1,b2,b3],[a0,a1,a2,a3])else{return 1};
+  if rows.len()>100{return 1}
+  let mut out=Vec::with_capacity(8+rows.len()*16);
+  out.extend((creatable as u32).to_le_bytes());out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for n in row{out.extend(n.to_le_bytes());}}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
 pub extern "C" fn hkia_inventory_default_furniture_ids()->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();
