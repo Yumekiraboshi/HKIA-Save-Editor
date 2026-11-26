@@ -1568,7 +1568,7 @@ fn create_flower_variants_allocates_distinct_native_uids_and_keeps_source(){
   assert!(e.create_inventory_flower_variant(4,before,first,1).is_err());
   assert!(e.change_inventory_flower_variant(4,before,first).is_err());
   e.change_inventory_quantity(a,3,5).unwrap();
-  assert!(e.change_inventory_quantity(a,5,0).is_err());
+  assert!(e.change_inventory_quantity(a,4,0).is_err()); // Stale CAS.
   assert_eq!(e.inventory().len(),4);
   let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();recovered.restore_history(&cp).unwrap();
   assert_eq!(recovered.inventory(),e.inventory());
@@ -2173,5 +2173,49 @@ fn unowned_customized_furniture_uses_verified_acquisition_and_material_choices()
   assert!(reopened.inventory_unique_rows().any(|r|r.0==custom.document_id&&r.1==Some(1)));
   assert!(reopened.inventory_unique_rows().any(|r|r.0==base.document_id&&r.1==Some(0)));
   assert!(reopened.inventory_furniture_creation_variants(candidate).is_empty());
+ }
+}
+
+#[test]
+fn cancel_staged_unique_rows_preserves_history_and_never_allocates_deleted_uids(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let flower_item=43114910;let furniture_item=61381969;
+ let flower_candidate=(1u32<<31)|flower_item as u32;
+ let furniture_candidate=(1u32<<31)|furniture_item as u32;
+ for zipped in [false,true]{
+  let raw=slot_from_payload("3.0.1",synthetic_payload("3.0.1"));
+  let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  let f=e.inventory_flower_creation_variants(flower_candidate)[0];
+  let a=e.create_inventory_flower_variant(flower_candidate,[0;4],f,2).unwrap();
+  let b=e.create_inventory_furniture_variant(furniture_candidate,[0;3],[0,2,0],3).unwrap();
+  let edited=e.inventory_flower_variants(a)[0];
+  e.change_inventory_flower_variant(a,f,edited).unwrap();
+  e.change_inventory_furniture_variant(b,[0,2,0],[502,2,0]).unwrap();
+  assert!(e.inventory().iter().filter(|r|r.document_id==a||r.document_id==b).all(|r|r.quantity_minimum==0));
+  let before=e.inventory();let appearance=e.inventory_unique_data(a);
+  assert!(e.change_inventory_quantities(&[(a,2,0),(b,4,0)]).is_err());
+  assert_eq!(e.inventory(),before);
+  e.change_inventory_quantities(&[(a,2,0),(b,3,0)]).unwrap();
+  assert_eq!(e.inventory(),original);assert!(!e.dirty());assert!(e.export().is_err());
+  assert_eq!(e.inventory_unique_data(a),None);assert_eq!(e.inventory_unique_data(b),None);
+  assert!(!e.inventory_flower_edit_hints().any(|id|id==a));
+  assert!(!e.inventory_furniture_edit_hints().any(|id|id==b));
+  assert!(!e.inventory_flowers().any(|row|row.0==a));
+  assert!(e.change_inventory_quantity(a,0,1).is_err());
+  assert!(e.inventory_flower_variants(a).is_empty());assert!(e.inventory_furniture_variants(b).is_empty());
+  let cp=e.history_checkpoint().unwrap();let mut r=Editor::open(input.clone()).unwrap();r.restore_history(&cp).unwrap();
+  assert_eq!(r.inventory(),original);assert!(!r.dirty());
+  assert!(r.undo_scope(Inventory));assert_eq!(r.inventory(),before);
+  assert_eq!(r.inventory_unique_data(a),appearance);
+  assert!(r.redo_scope(Inventory));assert!(!r.dirty());
+  // A cancelled tuple is available again, but its history handle is never reused.
+  let c=r.create_inventory_flower_variant(flower_candidate,[0;4],f,5).unwrap();assert_ne!(c,a);
+  let saved=Editor::open(r.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory().len(),original.len()+1);
+  assert_eq!(saved.inventory().last().unwrap().quantity,5);
+  assert_eq!(saved.inventory_unique_rows().last().unwrap().1,Some(1));
+  let cp=r.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();recovered.restore_history(&cp).unwrap();
+  assert_eq!(recovered.inventory(),r.inventory());
  }
 }
