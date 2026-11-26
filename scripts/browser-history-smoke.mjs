@@ -626,6 +626,18 @@ async function inventoryBatchQuantitySmoke(){
   for(let i=0;i<2;i++){const p=4+i*16;rows.push([iv.getUint32(p,true),iv.getInt32(p+4,true),iv.getInt32(p+8,true)])}
   assert.deepEqual(rows,[[4,315822,20],[8,517031,20]]);
   assert.deepEqual(errors,[]);
+  // Add candidates far exceed the incremental 40-card display limit.
+  await page.locator('.inventory-add-toggle').click();
+  await page.locator('[data-inventory-group="furniture"]').click();
+  await page.locator('.inventory-batch-toggle').click();
+  const selectedTotal=page.locator('.inventory-batch-form .inventory-total');
+  const limit=Number((await selectedTotal.innerText()).split('/')[1].replace(/[,\s]/g,''));
+  assert.ok(limit>=40);
+  await page.locator('.inventory-select-visible').click();
+  assert.equal(Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,'')),limit);
+  await page.locator('.inventory-batch-toggle').click();
+  assert.equal(await page.locator('.inventory-batch-form').count(),0);
+  assert.deepEqual(errors,[]);
   console.log('CHROMIUM INVENTORY BATCH PASS: explicit selection, atomic CAS, reload, grouped undo/redo and WASM reparse');
  }finally{await context.close()}
 }
