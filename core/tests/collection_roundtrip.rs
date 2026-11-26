@@ -1552,6 +1552,32 @@ fn create_flower_variants_allocates_distinct_native_uids_and_keeps_source(){
  }
 }
 #[test]
+fn unowned_flower_creation_uses_only_source_defaults_and_native_ids(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let input=slot_from_payload("3.0.1",synthetic_payload("3.0.1"));
+ let mut e=Editor::open(input.clone()).unwrap();let item=43114910;let candidate=(1u32<<31)|item as u32;
+ assert_eq!(e.inventory_absent_flower_ids().len(),23);
+ assert_eq!(e.inventory_flower_creation_variants(candidate),vec![[6,2,0,0],[6,5,0,0],[6,10,0,0]]);
+ for bad in [[6,1,0,0],[6,14,0,0],[6,2,1,16],[7,2,0,0]]{
+  assert!(e.create_inventory_flower_variant(candidate,[0;4],bad,1).is_err());
+ }
+ assert!(e.create_inventory_flower_variant((1u32<<31)|312661096,[0;4],[6,3,0,0],1).is_err());
+ let a=e.create_inventory_flower_variant(candidate,[0;4],[6,2,0,0],3).unwrap();
+ assert_ne!(a,candidate);assert_eq!(e.inventory_flower_creation_variants(candidate),vec![[6,5,0,0],[6,10,0,0]]);
+ let b=e.create_inventory_flower_variant(candidate,[0;4],[6,5,0,0],5).unwrap();
+ assert!(e.create_inventory_flower_variant(candidate,[0;4],[6,5,0,0],1).is_err());
+ let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();recovered.restore_history(&cp).unwrap();
+ assert_eq!(recovered.inventory(),e.inventory());
+ assert!(recovered.undo_scope(Inventory));assert_eq!(recovered.inventory_flower_creation_variants(candidate).len(),2);
+ assert!(recovered.redo_scope(Inventory));
+ let reopened=Editor::open(recovered.export().unwrap()).unwrap();
+ let rows=reopened.inventory();assert_eq!(rows.len(),2);
+ assert_eq!(rows.iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![3,5]);
+ assert_eq!(reopened.inventory_unique_data(rows[0].document_id),e.inventory_unique_data(a));
+ assert_eq!(reopened.inventory_unique_data(rows[1].document_id),e.inventory_unique_data(b));
+ assert!(!reopened.inventory_absent_flower_ids().contains(&item));
+}
+#[test]
 fn palette_and_chef_quantity_preserves_entire_original_payload(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let palette=arr(vec![vec![6],arr(vec![arr(vec![f(0.25),f(0.5),f(-0.0),f(1.0)]);3])]);
