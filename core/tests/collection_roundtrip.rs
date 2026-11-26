@@ -3071,3 +3071,26 @@ fn saved_palette_zero_refill_requires_complete_unreferenced_avatar_context(){
   assert!(e.change_inventory_quantity(4,2,0).is_err());assert!(!e.dirty());
  }
 }
+
+#[test]
+fn furniture_multislot_creation_and_edit_are_atomic(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let before=[13,2,0];let target=[502,3,0];
+ for zipped in [false,true]{
+  let raw=furniture_edit_slot(None);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let options=e.inventory_furniture_creation_variants(4);
+  assert!(options.contains(&[502,2,0])&&options.contains(&[13,3,0])&&!options.contains(&target));
+  assert!(e.create_inventory_furniture_variant(4,before,[502,3,3],2).is_err());assert!(!e.dirty());
+  let id=e.create_inventory_furniture_variant(4,before,target,2).unwrap();
+  assert_eq!(e.history().len(),1);assert_eq!(e.inventory_unique_data(id),Some(U::Furniture{materials:target}));
+  assert!(e.create_inventory_furniture_variant(4,before,target,1).is_err());
+  assert!(e.change_inventory_furniture_variant(4,before,target).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut r=Editor::open(input).unwrap();r.restore_history(&cp).unwrap();
+  assert!(r.undo_scope(Inventory));assert!(!r.dirty());assert!(r.redo_scope(Inventory));
+  let saved=Editor::open(r.export().unwrap()).unwrap();assert_eq!(saved.inventory_unique_data(4),Some(U::Furniture{materials:before}));
+  let added=&saved.inventory()[1];assert_eq!(added.quantity,2);assert_eq!(saved.inventory_unique_data(added.document_id),Some(U::Furniture{materials:target}));
+ }
+ let mut collision=Editor::open(furniture_edit_slot(Some(furniture_payload([502,3,0])))).unwrap();
+ assert!(collision.create_inventory_furniture_variant(4,before,target,2).is_err());assert!(!collision.dirty());
+}

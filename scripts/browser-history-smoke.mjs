@@ -1631,6 +1631,9 @@ async function inventoryFurnitureVariantEditSmoke(){
   const value=await select.locator('optgroup option').first().getAttribute('value');
   assert.ok(value!==null);
   await select.selectOption(value);
+  const second=await select.locator('optgroup').nth(1).locator('option').first().getAttribute('value');assert.ok(second!==null);
+  await select.selectOption(second);
+  assert.equal(await dialog.locator('.inventory-furniture-reset').count(),2);
   await dialog.locator('button[type="submit"]').click();
   await dialog.waitFor({state:'hidden'});
   await page.locator('.state-dot.changed').waitFor();
@@ -1650,7 +1653,7 @@ async function inventoryFurnitureVariantEditSmoke(){
   assert.equal(patch.kind,'furniture-variant');
   assert.equal(patch.documentId,8);
   assert.deepEqual(patch.before,[13,2,0]);
-  assert.equal(patch.after.filter((v,i)=>v!==patch.before[i]).length,1);
+  assert.equal(patch.after.filter((v,i)=>v!==patch.before[i]).length,2);
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');
