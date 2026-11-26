@@ -9,3 +9,15 @@ Recovered four fingerprinted native arithmetic blocks (exclusive word ranges 112
 Reproduce synthetic vectors locally with `python scripts/extract-furniture-refractive-vectors.py /path/to/definitions --out /tmp/refractive-vectors.json`. The verifier pins source bundle, Shader object, DXBC and token blocks; original shader binaries remain local. No real icon, source asset pack or player save is committed.
 
 Remaining: recover the native view displacement/facing computation including refraction noise, normal mip and view transform; reconstruct original opaque-camera pass/clear/background, lighting and alpha/depth/culling rules; connect to shared GPU renderer, exercise real models and verify game-origin icon appearance. This is not production display support.
+
+## Native refraction direction and mip-normal stage
+
+Reacquired definitions and rechecked the same original bundle and Shader hashes. The high-quality ForwardLit pixel program 192 contains the following additional fingerprinted ranges (word offsets, exclusive end):
+- 294–305: 8a7c28674408b38ea26e3fbabd94c5cf43258f2be7c6a9210c7dd1f1e474451d
+- 318–435: 0eae10bf797bd9cc1e0f7ee17b04482a7015e33b3948f38d1cf5e9499926218e
+- 933–973: 1855bf9bf89de907d2f06cd7debfb029cd0aba2e4e75bc126f3013cbd4f35691
+- 987–1126: c3cd4c868233df02edf35e1adab59ba4db38725b5c8b0ebcbd6c559cd0d81f7d
+
+The refraction normal uses a separate explicit bump-map mip level (5 * smoothness), alpha-multiplied red and green normal unpack, and interpolation toward tangent Z before the original three tangent-row dot products and normalization. Noise is sampled at UV * noise scale and remapped to [-1,1] times noise power. For a verified positive-facing dot c = dot(N,V), facing is min(exp2(log2(c)*fresnel),1). With eta = refraction index, k = 1-eta²(1-c²), displacement is eta*V-(eta*c+sqrt(k))*N for nonnegative k, otherwise zero; noise is added after this mask. The first two view-matrix rows project the result into screen displacement. No absolute-value or arbitrary clamp of c is introduced. Nonpositive-facing behavior is not claimed verified.
+
+Local independent token evaluator on the actual pinned DXBC, 1,024 synthetic positive-facing samples, including 398 negative-discriminant cases, max Float64 difference 2.220446049250313e-15. The GPU port and the source-vector regeneration CLI are added; GPU execution of the complete shader remains unverified. The CLI reuses the existing source reader and token evaluator, explicitly models the original sqrt/ge/bitwise mask for negative discriminants, and checks each full instruction range fingerprint. Run `python scripts/verify-furniture-refractive-displacement.py /path/to/definitions --out /tmp/displacement.json`. The module supplies the inputs to the prior RGB composition stage. The opaque camera render pass, source vertex bindings and transparent draw ordering, native scene values, and production icon verification remain outstanding.
