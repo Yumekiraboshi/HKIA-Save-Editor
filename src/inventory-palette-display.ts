@@ -45,3 +45,9 @@ export function paletteFromWords(words:PaletteVariant):InventoryPalette{
 export function paletteColorHex(words:PaletteVariant,slot:number):string{
  return '#'+paletteFromWords(words)[slot].slice(0,3).map(n=>Math.round(Math.max(0,Math.min(1,n))*255).toString(16).padStart(2,'0')).join('');
 }
+
+/** Presentation-only swatches for a saved palette in the removal confirmation. */
+export function paletteRemovalSwatches(palette:InventoryPalette|undefined):string[]{
+ if(!palette||palette.length!==3||!palette.every(c=>c.length===4&&c.every(v=>Number.isFinite(v)&&v>=0&&v<=1)))return [];
+ return palette.map(c=>'rgba('+c.slice(0,3).map(n=>Math.round(n*255)).join(',')+','+c[3]+')');
+}
