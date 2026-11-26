@@ -53,3 +53,36 @@ export function createFurnitureTreatmentResolver(c:Catalog,v:Variants){
   });
  };
 }
+
+/** Join the exact authored renderer IDs, mesh and material references to the
+ * selected slot treatments. Preserve non-customizable renderers, never
+ * assume the first mesh is the whole item. This is a diagnostic draw plan;
+ * a downstream renderer must support every referenced shader and texture. */
+export function bindFurnitureRendererTreatments(d:RugNativeSources,itemId:number,indices:readonly number[]){
+ const choices=createFurnitureTreatmentResolver(d.catalog,d.variants)(itemId,indices);
+ const geo=d.geometry.rows.filter(r=>r.itemId===itemId),base=d.base.rows.filter(r=>r.itemId===itemId);
+ if(geo.length!==1||base.length!==1||d.geometry.version!=='3.0.1'||d.base.version!=='3.0.1')fail('RENDER_SOURCE');
+ const geometry=geo[0],bindings=unique(base[0].bindings,x=>x[0]);
+ const used=new Set<number>();
+ const plans=geometry.nodes.filter(n=>n.rendererPathId!==undefined).map(n=>{
+  const id=n.rendererPathId!,binding=bindings.get(id),materialKey=n.material;
+  if(!binding||!materialKey||!n.meshPathId||!geometry.meshes[n.meshPathId]||
+   !n.active||n.enabled!==true)throw Error('FURNITURE_TREATMENT_RENDERER');
+  bindings.delete(id);
+  const ref=geometry.materials[materialKey] as {objectSha256?:string;externalCab?:string;pathId?:string}|undefined;
+  const material=d.base.materials[binding[1]];
+  if(!ref||!material)throw Error('FURNITURE_TREATMENT_BASE');
+  const [file,pid]=materialKey.split(':');
+  if(file==='0'){
+   if(binding[1]!==geometry.cab+':'+pid||material.objectSha256!==ref.objectSha256)fail('BASE_LINK');
+  }else if(!ref.externalCab||ref.pathId!==pid||binding[1]!==ref.externalCab.split('/').at(-1)+':'+pid)fail('BASE_LINK');
+  if((n.slot?.slot??null)!==(binding[2]?.slot??null)||(n.slot?.displayedDefinitionGuid??null)!==(binding[2]?.displayedDefinitionGuid??null))fail('SLOT_LINK');
+  if(n.slot?.displayedDefinitionGuid!=null)fail('AUTHORED_OVERRIDE_UNRESOLVED');
+  const choice=n.slot?choices.find(x=>x.slot===n.slot!.slot):null;
+  if(n.slot&&!choice)fail('SLOT_MISSING');
+  if(choice)used.add(choice.slot);
+  return {rendererPathId:id,meshPathId:n.meshPathId,baseMaterialId:binding[1],baseMaterial:material,choice:choice??null};
+ });
+ if(bindings.size||choices.some(x=>!used.has(x.slot)))fail('RENDERER_COVERAGE');
+ return {geometry,plans,fidelity:'source-binding-only' as const};
+}
