@@ -1,7 +1,7 @@
 import {resolveFlowerAppearance,type FlowerMaskIndex} from './flower-appearance';
 import type {PixelBuffer,Rect} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,type TextureAsset} from './dynamic-art-assets';
-import type {InventoryFlower,FlowerDisplayDefinitions} from './inventory-flower-display';
+import {flowerGrowthKind,type InventoryFlower,type FlowerDisplayDefinitions} from './inventory-flower-display';
 
 const ROOT=import.meta.env.BASE_URL+'inventory-flower-art/';
 const MANIFEST_SHA='0cefd2977c3e25157023e3c47a180e7ebe4e8ab850dfdbe5bd481ae38d0b5020';
@@ -27,7 +27,7 @@ function sources():Promise<Sources>{
 /** Shared display-only compositor; save fields are consumed from the
  * Rust/WASM snapshot. No output is written to disk or sent to a service. */
 export async function renderFlowerArt(itemId:number,flower:InventoryFlower,defs:FlowerDisplayDefinitions):Promise<Blob|null>{
- if(flower.growState!==6||(flower.pattern!==0&&!Object.hasOwn(defs.patterns,String(flower.pattern))))return null;
+ if(flowerGrowthKind(itemId,flower)!=='plucked'||(flower.pattern!==0&&!Object.hasOwn(defs.patterns,String(flower.pattern))))return null;
  try{
   const source=await sources();
   const appearance=resolveFlowerAppearance(itemId,flower,defs,source.index);
