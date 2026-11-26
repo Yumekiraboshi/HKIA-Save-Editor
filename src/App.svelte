@@ -71,6 +71,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  let flowerDialogEl:HTMLDialogElement|undefined=$state();
  let flowerEdit=$state<{documentId:number;itemId:number;revision:number;before:FlowerVariant;options:FlowerVariant[];creationOptions:FlowerVariant[];absent?:boolean}|null>(null);
  let flowerSelection=$state(-1);
+ let variantAddQuantity=$state<number|undefined>(1);
+ const validVariantAddQuantity=$derived(typeof variantAddQuantity==='number'&&Number.isInteger(variantAddQuantity)&&variantAddQuantity>=1&&variantAddQuantity<=2147483647);
  let furnitureDialogEl:HTMLDialogElement|undefined=$state();
  let furnitureDisplay:FurnitureDisplay|null=$state(null);
  let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[];creationOptions:FurnitureVariant[];createOnly:boolean}|null>(null);
@@ -700,7 +702,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const [options,creationOptions]=await Promise.all([requestFlowerVariants(row.documentId),requestFlowerCreationVariants(row.documentId)]);
    if(!snapshot||snapshot.revision!==revision)return;
    flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions};
-   flowerSelection=-1;await tick();
+   flowerSelection=-1;variantAddQuantity=1;await tick();
    if(flowerDialogEl&&!flowerDialogEl.open)flowerDialogEl.showModal();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -713,7 +715,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const options=await requestFlowerCreationVariants(row.documentId);
    if(!snapshot||snapshot.revision!==revision||!options.length)return;
    flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before:[0,0,0,0],options,creationOptions:options,absent:true};
-   flowerSelection=0;await tick();
+   flowerSelection=0;variantAddQuantity=1;await tick();
    if(flowerDialogEl&&!flowerDialogEl.open)flowerDialogEl.showModal();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -729,7 +731,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(!snapshot||snapshot.revision!==revision)return;
    furnitureDisplay=display;
    furnitureEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:createOnly?creationOptions:options,creationOptions,createOnly};
-   furnitureSelection=-1;await tick();
+   furnitureSelection=-1;variantAddQuantity=1;await tick();
    if(furnitureDialogEl&&!furnitureDialogEl.open)furnitureDialogEl.showModal();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -751,10 +753,11 @@ import {verifiedFloorplanName} from './floorplan-names';
   const selected=furnitureEdit;
   if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
   const next=selected.options[furnitureSelection];
-  if(!next||!selected.creationOptions.some(v=>v.every((n,i)=>n===next[i])))return;
+  const quantity=variantAddQuantity;
+  if(!next||!validVariantAddQuantity||quantity===undefined||!selected.creationOptions.some(v=>v.every((n,i)=>n===next[i])))return;
   busy=true;error='';
   try{
-   update(await createInventoryFurnitureVariant(selected.documentId,selected.before,next,1));
+   update(await createInventoryFurnitureVariant(selected.documentId,selected.before,next,quantity));
    closeFurnitureEditor();await persistDraft();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -776,10 +779,11 @@ import {verifiedFloorplanName} from './floorplan-names';
   const selected=flowerEdit;
   if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
   const next=selected.options[flowerSelection];
-  if(!next||!selected.creationOptions.some(v=>v.every((n,i)=>n===next[i])))return;
+  const quantity=variantAddQuantity;
+  if(!next||!validVariantAddQuantity||quantity===undefined||!selected.creationOptions.some(v=>v.every((n,i)=>n===next[i])))return;
   busy=true;error='';
   try{
-   update(await createInventoryFlowerVariant(selected.documentId,selected.before,next,1));
+   update(await createInventoryFlowerVariant(selected.documentId,selected.before,next,quantity));
    closeFlowerEditor();await persistDraft();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -1594,12 +1598,18 @@ import {verifiedFloorplanName} from './floorplan-names';
     {:else}
      <p class="compact-hint">{iCopy.readonly}</p>
     {/if}
+    {#if edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[furnitureSelection]?.[i]))}
+     <label class="date-dialog-field">
+      <span>{inventoryAddCopy(locale)} · {iCopy.quantity}</span>
+      <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
+     </label>
+    {/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFurnitureEditor}>{copy.cancel}</button>
      {#if edit.creationOptions.length}
-      <button type={edit.createOnly?'submit':'button'} class="inventory-create-furniture" disabled={busy||furnitureSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[furnitureSelection]?.[i]))} onclick={()=>{if(!edit.createOnly)void addInventoryFurnitureVariant()}}>{inventoryAddCopy(locale)}</button>
+      <button type={edit.createOnly?'submit':'button'} class="inventory-create-furniture" disabled={busy||!validVariantAddQuantity||furnitureSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[furnitureSelection]?.[i]))} onclick={()=>{if(!edit.createOnly)void addInventoryFurnitureVariant()}}>{inventoryAddCopy(locale)}</button>
      {/if}
-     {#if !edit.createOnly}<button type="submit" class="primary" disabled={busy||furnitureSelection<0}>{copy.apply}</button>{/if}
+     {#if !edit.createOnly}<button type="submit" formnovalidate class="primary" disabled={busy||furnitureSelection<0}>{copy.apply}</button>{/if}
     </div>
    </form>
   {/if}
@@ -1647,12 +1657,18 @@ import {verifiedFloorplanName} from './floorplan-names';
     {:else}
      <p class="compact-hint">{iCopy.readonly}</p>
     {/if}
+    {#if edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[flowerSelection]?.[i]))}
+     <label class="date-dialog-field">
+      <span>{inventoryAddCopy(locale)} · {iCopy.quantity}</span>
+      <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
+     </label>
+    {/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFlowerEditor}>{copy.cancel}</button>
      {#if edit.creationOptions.length}
-      <button type="button" class="inventory-create-flower" disabled={busy||flowerSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[flowerSelection]?.[i]))} onclick={()=>void addInventoryFlowerVariant()}>{inventoryAddCopy(locale)}</button>
+      <button type="button" class="inventory-create-flower" disabled={busy||!validVariantAddQuantity||flowerSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[flowerSelection]?.[i]))} onclick={()=>void addInventoryFlowerVariant()}>{inventoryAddCopy(locale)}</button>
      {/if}
-     {#if !edit.absent}<button type="submit" class="primary" disabled={busy||flowerSelection<0}>{copy.apply}</button>{/if}
+     {#if !edit.absent}<button type="submit" formnovalidate class="primary" disabled={busy||flowerSelection<0}>{copy.apply}</button>{/if}
     </div>
    </form>
   {/if}

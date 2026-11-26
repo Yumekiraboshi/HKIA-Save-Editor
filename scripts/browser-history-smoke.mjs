@@ -661,7 +661,12 @@ async function inventoryFlowerVariantEditSmoke(){
   await page.locator('.inventory-controls input[type="search"]').fill('43114910');
   await page.locator('.inventory-card img[src$="pattern-'+patch[0].after[2]+'.webp"]').waitFor();
   const quantity=page.locator('.inventory-card input[name="quantity"]');
-  await quantity.waitFor();assert.equal(await quantity.getAttribute('min'),'1');
+  await quantity.waitFor();assert.equal(await quantity.getAttribute('min'),'0');
+  page.once('dialog',d=>d.accept());
+  await quantity.fill('0');await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]').click();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  assert.equal(await quantity.inputValue(),'0');
   await quantity.fill('25');await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]').click();
   await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
   await page.reload({waitUntil:'networkidle'});
@@ -711,10 +716,17 @@ async function inventoryFlowerCreationSmoke(){
   const select=dialog.locator('select');
   const value=await select.locator('optgroup').first().locator('option').first().getAttribute('value');
   assert.ok(value!==null);await select.selectOption(value);
+  const create=dialog.locator('.inventory-create-flower');
+  const addQuantity=dialog.locator('input[name="variant-add-quantity"]');
+  assert.equal(await addQuantity.inputValue(),'1');
+  for(const invalid of ['0','2147483648','1.5','']){
+   await addQuantity.fill(invalid);assert.equal(await create.isDisabled(),true);
+  }
+  await addQuantity.fill('5');
   await dialog.locator('.inventory-create-flower:not([disabled])').click();
   await dialog.waitFor({state:'hidden'});
   const added=cards.nth(1).locator('input[name="quantity"]');
-  await added.waitFor();assert.equal(await added.inputValue(),'1');
+  await added.waitFor();assert.equal(await added.inputValue(),'5');
   assert.equal(await cards.first().locator('input[name="quantity"]').inputValue(),'1');
   await added.fill('7');await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]').click();
   await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
@@ -724,9 +736,9 @@ async function inventoryFlowerCreationSmoke(){
   await added.waitFor();assert.equal(await added.inputValue(),'7');
   const undo=page.locator('.bar-actions button[title="Undo"]:not([disabled])');
   const redo=page.locator('.bar-actions button[title="Redo"]:not([disabled])');
-  await undo.click();await page.waitForFunction(()=>document.querySelectorAll('.inventory-card input[name="quantity"]')[1]?.value==='1');
+  await undo.click();await page.waitForFunction(()=>document.querySelectorAll('.inventory-card input[name="quantity"]')[1]?.value==='5');
   await undo.click();await cards.nth(1).waitFor({state:'detached'});
-  await redo.click();await added.waitFor();assert.equal(await added.inputValue(),'1');
+  await redo.click();await added.waitFor();assert.equal(await added.inputValue(),'5');
   await redo.click();await page.waitForFunction(()=>document.querySelectorAll('.inventory-card input[name="quantity"]')[1]?.value==='7');
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
@@ -924,9 +936,16 @@ async function inventoryFurnitureCreationSmoke(){
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"]');await dialog.waitFor();
   const value=await dialog.locator('select optgroup option').first().getAttribute('value');assert.ok(value!==null);
   await dialog.locator('select').selectOption(value);
+  const create=dialog.locator('.inventory-create-furniture');
+  const addQuantity=dialog.locator('input[name="variant-add-quantity"]');
+  assert.equal(await addQuantity.inputValue(),'1');
+  for(const invalid of ['0','2147483648','1.5','']){
+   await addQuantity.fill(invalid);assert.equal(await create.isDisabled(),true);
+  }
+  await addQuantity.fill('4');
   await dialog.locator('.inventory-create-furniture:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   const added=cards.nth(1).locator('input[name="quantity"]');
-  await added.waitFor();assert.equal(await added.inputValue(),'1');
+  await added.waitFor();assert.equal(await added.inputValue(),'4');
   assert.equal(await cards.first().locator('input[name="quantity"]').inputValue(),'93');
   await cards.nth(1).locator('.inventory-unique-edit-button').click();await dialog.waitFor();
   const next=await dialog.locator('select optgroup option').first().getAttribute('value');assert.ok(next!==null);
