@@ -103,7 +103,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||inventoryBatchSelected.size===0)return 1;
   return inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantityMinimum!==0)?1:0;
  });
- const inventoryBatchCanDelete=$derived(!inventoryAddMode&&inventoryBatchSelected.size>0&&inventoryBatchMinimum===0&&inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantity>0));
+ const inventoryBatchCanDelete=$derived.by(()=>!inventoryAddMode&&inventoryBatchSelected.size>0&&inventoryBatchMinimum===0&&inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantity>0));
  const inventoryBatchMaximum=$derived.by(()=>{
   let cap=2147483647;
   if(snapshot)for(const row of inventoryBrowseRows){
