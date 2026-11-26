@@ -18,7 +18,15 @@ test('native local checkpoint is replayed through source-validated CAS, not inje
  assert.match(core,/for scope in scopes\[active\.\.\]\.iter\(\)\.rev\(\)/);
  assert.match(core,/if candidate\.history_checkpoint\(\)\?\.as_slice\(\)!=checkpoint/);
  assert.match(core,/\*self=candidate;/);
- assert.match(core,/const HISTORY_MAX_BYTES:usize=128\*1024/);
+ assert.match(core,/pub const HISTORY_MAX_BYTES:usize=1024\*1024/);
+ assert.match(core,/const _: \(\)=assert!|const _:\(\)=assert!/);
+ const limits=read('../src/history-limits.ts');
+ const nativeBytes=Number(core.match(/pub const HISTORY_MAX_BYTES:usize=(\d+)\*(\d+)/)[1])*1024;
+ const browserBytes=Number(limits.match(/HISTORY_MAX_BYTES=(\d+)\*(\d+)/)[1])*1024;
+ assert.equal(browserBytes,nativeBytes);
+ assert.equal(Number(limits.match(/HISTORY_MAX_BATCH_ROWS=(\d+)/)[1]),Number(core.match(/MAX_INVENTORY_BATCH:usize=(\d+)/)[1]));
+ assert.match(read('../wasm/src/lib.rs'),/hkia_save_core::collection::HISTORY_MAX_BYTES/);
+ for(const path of ['../src/editor.worker.ts','../src/draft-store.ts','../src/history-details.ts'])assert.match(read(path),/HISTORY_MAX_BYTES/);
 });
 
 test('WASM checkpoint bytes reach IndexedDB and can be restored atomically through worker',()=>{
