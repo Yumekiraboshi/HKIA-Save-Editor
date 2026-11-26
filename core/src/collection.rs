@@ -7,7 +7,7 @@ use std::{collections::{HashMap,HashSet},ops::Range};
 
 const MAX_TICKS:i64=3_155_378_975_999_999_999;
 const MAX_UNDO:usize=256;
-// A group journal record is at most 485 bytes, keeping all 256 entries within the existing 128 KiB checkpoint budget.
+// The compile-time journal capacity assertion below covers every maximum-size batch.
 pub const MAX_INVENTORY_BATCH:usize=256;
 // Session-only handle for an absent ordinary ingredient. Never a saved document ID.
 const PENDING_ITEM:u32=1<<31;
