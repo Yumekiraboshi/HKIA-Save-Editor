@@ -1,5 +1,7 @@
 //! Source-defined v3.0.1 item quantity semantics. No entitlement inference.
 use crate::inventory_source_data::{RULES,CUSTOM_CAPS};
+use crate::inventory_furniture_reference_data::FURNITURE_REFERENCE_KEYS;
+use crate::inventory_clothing_reference_data::{CLOTHING_REFERENCE_ROWS,CLOTHING_REFERENCE_GROUPS,FLOWER_CLOTHING_REFERENCE_KEYS};
 use crate::inventory_gathered_data::{GATHERED_IDS,FOOD_BAIT_IDS};
 /// Maximum from InventoryItemExtensions.MaxCount(IInventoryItemData):
 /// !Stackable -> 1; HasCustomMaxCount -> CustomMaxCount; otherwise Int32.MaxValue.
@@ -54,9 +56,35 @@ mod currency_source_tests{
   for id in [484139114,2092387705,615026760,709633628,1141761080]{assert!(!existing_currency_item(id));}
  }
 }
+/// FNV-1a of the four native little-endian Hash128 words. Only a denial key:
+/// collisions conservatively refuse deletion; they never identify or create items.
+pub(crate) fn furniture_guid_fingerprint(words:[u32;4])->u32{
+ words.into_iter().flat_map(u32::to_le_bytes).fold(2166136261u32,|h,b|(h^u32::from(b)).wrapping_mul(16777619))
+}
+pub(crate) fn ordinary_furniture_guid_fingerprint(item_id:i32)->Option<u32>{
+ FURNITURE_REFERENCE_KEYS.binary_search_by_key(&item_id,|r|r.0).ok().map(|i|FURNITURE_REFERENCE_KEYS[i].1)
+}
+#[cfg(test)]
+mod furniture_reference_tests{
+ use super::*;
+ #[test]fn exact_original_furniture_subset_and_denial_fingerprints(){
+  assert_eq!(FURNITURE_REFERENCE_KEYS.len(),1114);
+  assert!(FURNITURE_REFERENCE_KEYS.windows(2).all(|w|w[0].0<w[1].0));
+  let ids:Vec<_>=FURNITURE_REFERENCE_KEYS.iter().flat_map(|r|r.0.to_le_bytes()).collect();
+  let keys:Vec<_>=FURNITURE_REFERENCE_KEYS.iter().flat_map(|r|r.1.to_le_bytes()).collect();
+  let hex=|b:&[u8]|crate::digest::sha256(b).iter().map(|x|format!("{x:02x}")).collect::<String>();
+  assert_eq!(hex(&ids),"8fbdf8f0b216c3513b9526cf9ce0f201cab30ce97ada1b2b6d4137f4edc4715b");
+  assert_eq!(hex(&keys),"703d7d7a46cf57bad14b9f6212a3a72ee9e25af8a6d8f5ad1f67b95de50e6235");
+  assert_eq!(FURNITURE_REFERENCE_KEYS.iter().map(|r|r.1).collect::<std::collections::HashSet<_>>().len(),1114);
+  assert!(FURNITURE_REFERENCE_KEYS.iter().all(|&(id,_)|ordinary_creation_item(id)&&ordinary_quantity_limit(id)==Some(i32::MAX)));
+  assert_eq!(ordinary_furniture_guid_fingerprint(427689),Some(furniture_guid_fingerprint([0x17fc7530,0x48eebd45,0x68b373b0,0xa7812c9b])));
+  assert!(ordinary_furniture_guid_fingerprint(286009791).is_some());
+  assert_eq!(ordinary_furniture_guid_fingerprint(315822),None);
+ }
+}
 /// Creation is independent of removing the last saved copy: cosmetic
-/// definitions may be added but persisted cosmetic zero remains gated
-/// until equip/placement references have been verified.
+/// definitions may be added; persisted zero is separately gated in the editor
+/// by its source family and original placement/equipment reference index.
 pub(crate) fn ordinary_creation_item(item_id:i32)->bool{
  ordinary_membership_item(item_id)||RULES.binary_search_by_key(&item_id,|row|row.0).ok().is_some_and(|i|RULES[i].1&16!=0)
 }
@@ -274,5 +302,53 @@ pub(crate) const BOBA_WITNESSES:&[(i32,i32,i32)]=&[
   assert!(BOBA_SOURCE_TRIPLES.windows(2).all(|x|x[0]<x[1]));
   assert!(BOBA_SOURCE_TRIPLES.iter().all(|&[c,f,_]|BOBA_WITNESSES.iter().any(|&(_,flavor,color)|(flavor,color)==(f,c))));
   assert_eq!(BOBA_SOURCE_TRIPLES.len()*BOBA_PEARLS.len()*BOBA_SWEETNESS.len(),152);
+ }
+}
+
+/// Denial-only keys: the exact ordinary item GUID and the source outfit's
+/// shared normal/water avatar piece GUIDs and outfit GUID.
+pub(crate) fn ordinary_clothing_reference_keys(item:i32)->Option<(u32,&'static [u32])>{
+ let (_,parent,key)=CLOTHING_REFERENCE_ROWS[CLOTHING_REFERENCE_ROWS.binary_search_by_key(&item,|r|r.0).ok()?];
+ let (_,keys)=CLOTHING_REFERENCE_GROUPS[CLOTHING_REFERENCE_GROUPS.binary_search_by_key(&parent,|r|r.0).ok()?];
+ Some((key,keys))
+}
+pub(crate) fn flower_clothing_reference_keys(item:i32)->Option<&'static [u32]>{
+ FLOWER_CLOTHING_REFERENCE_KEYS.binary_search_by_key(&item,|r|r.0).ok().map(|i|FLOWER_CLOTHING_REFERENCE_KEYS[i].1)
+}
+#[cfg(test)]
+mod clothing_reference_tests{
+ use super::*;
+ #[test]fn exact_source_clothing_crosswalk(){
+  assert_eq!(CLOTHING_REFERENCE_ROWS.len(),2435);
+  assert_eq!(FLOWER_CLOTHING_REFERENCE_KEYS.len(),27);
+  assert!(FLOWER_CLOTHING_REFERENCE_KEYS.windows(2).all(|w|w[0].0<w[1].0));
+  let mut flower=Vec::new();
+  for &(id,keys) in FLOWER_CLOTHING_REFERENCE_KEYS{
+   assert_eq!(keys.len(),3);
+   assert!(keys.windows(2).all(|w|w[0]<w[1]));
+   assert!(is_uncapped_required_unique_stack(id));
+   flower.extend(id.to_le_bytes());flower.push(keys.len() as u8);
+   for key in keys{flower.extend(key.to_le_bytes());}
+  }
+  let flower_hash=crate::digest::sha256(&flower).iter().map(|x|format!("{x:02x}")).collect::<String>();
+  assert_eq!(flower_hash,"80aa4103198c492cb9e670b21c397e7f94dba77730b99cdf257d8bf46abfc16a");
+  assert_eq!(CLOTHING_REFERENCE_GROUPS.len(),225);
+  assert!(CLOTHING_REFERENCE_ROWS.windows(2).all(|w|w[0].0<w[1].0));
+  assert!(CLOTHING_REFERENCE_GROUPS.windows(2).all(|w|w[0].0<w[1].0));
+  let mut rows=Vec::new();let mut groups=Vec::new();
+  for &(id,parent,k) in CLOTHING_REFERENCE_ROWS{
+   assert!(ordinary_creation_item(id));assert_eq!(ordinary_furniture_guid_fingerprint(id),None);
+   assert!(ordinary_clothing_reference_keys(id).is_some());rows.extend(id.to_le_bytes());rows.extend(parent.to_le_bytes());rows.extend(k.to_le_bytes());
+  }
+  for &(p,keys) in CLOTHING_REFERENCE_GROUPS{
+   assert!(keys.len()>=2&&keys.windows(2).all(|w|w[0]<w[1]));
+   groups.extend(p.to_le_bytes());groups.push(keys.len() as u8);for k in keys{groups.extend(k.to_le_bytes());}
+  }
+  let hex=|b:&[u8]|crate::digest::sha256(b).iter().map(|x|format!("{x:02x}")).collect::<String>();
+  assert_eq!(hex(&rows),"0fc9bc9ac3d87997801ac7e62127d30a32aebd64843338d7022458c42fa091e6");
+  assert_eq!(hex(&groups),"024dc49b7b93e3187e28e25bcee72d510274f0c712625681a055d6a86b062ce5");
+  let (own,keys)=ordinary_clothing_reference_keys(315822).unwrap();
+  assert_eq!(own,1481090328);assert!(keys.contains(&furniture_guid_fingerprint([0xc0fb08c4,0x4a3b1847,0x87dc1dad,0x177dbe7e])));
+  assert!(keys.contains(&furniture_guid_fingerprint([0x6ae79913,0x4dfd99ac,0xe020e4be,0x0f6869ef])));
  }
 }

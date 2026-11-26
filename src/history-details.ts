@@ -1,3 +1,4 @@
+import {HISTORY_MAX_BYTES,HISTORY_MAX_ROWS,HISTORY_MAX_BATCH_ROWS} from './history-limits';
 import type {FlowerVariant,FurnitureVariant} from './inventory-unique';
 import {CUSTOM_PALETTE_ITEM_ID,paletteColorHex,type PaletteVariant} from './inventory-palette-display';
 import type {CafeVariant} from './inventory-cafe-display';
@@ -26,8 +27,7 @@ export type HistoryDetail =
  | {scope:'achievements';guid:[number,number,number,number];before:AchievementValue|null;after:AchievementValue;parentGuid:[number,number,number,number]|null;parentBefore:AchievementValue|null;parentAfter:AchievementValue|null};
 
 const MAGIC='HKIAHS01';
-const MAX_BYTES=128*1024;
-const MAX_ROWS=256;
+
 
 /** Read the bounded Rust HKIAHS01 transaction journal. This is a *view* of
  * native history, not a second authority for edits or recovery. Malformed,
@@ -36,7 +36,7 @@ const MAX_ROWS=256;
 export function decodeHistoryDetails(
  input:Uint8Array|null,history:readonly HistoryRecord[]
 ):HistoryDetail[]{
- if(!(input instanceof Uint8Array)||input.byteLength<16||input.byteLength>MAX_BYTES)return [];
+ if(!(input instanceof Uint8Array)||input.byteLength<16||input.byteLength>HISTORY_MAX_BYTES)return [];
  const v=new DataView(input.buffer,input.byteOffset,input.byteLength);
  let at=0;
  const take=(n:number)=>{
@@ -75,7 +75,7 @@ export function decodeHistoryDetails(
  try{
   if(String.fromCharCode(...input.subarray(take(8),at))!==MAGIC)return [];
   const count=u32(),active=u32();
-  if(count>MAX_ROWS||count!==history.length||active>count||
+  if(count>HISTORY_MAX_ROWS||count!==history.length||active>count||
    history.filter(x=>x.applied).length!==active)return [];
   const result:HistoryDetail[]=[];
   for(let i=0;i<count;i++){
@@ -88,7 +88,7 @@ export function decodeHistoryDetails(
     if(documentId<=0||before<0||after<0||before===after)return [];
     result.push({scope:'inventory',documentId,before,after});
    }else if(kind===10){
-    const n=u32();if(n<1||n>40)return [];
+    const n=u32();if(n<1||n>HISTORY_MAX_BATCH_ROWS)return [];
     const batch:InventoryBatchDetail[]=[],seen=new Set<number>();
     for(let j=0;j<n;j++){
      const documentId=u32(),before=i32(),after=i32();

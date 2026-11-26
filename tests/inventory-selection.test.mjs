@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
+import {build} from 'esbuild';
+const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/inventory-selection.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
+const {selectMatchingInventoryRows}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+test('selection includes unrendered matches, preserves other tabs, skips locked rows and obeys live Rust limit',()=>{
+ const rows=Array.from({length:350},(_,i)=>({documentId:i+1,editable:i%2===0}));
+ const original=new Set([999,1]);
+ const next=selectMatchingInventoryRows(rows,original,120);
+ assert.equal(next.size,120);
+ assert.ok(next.has(999)&&next.has(1)&&next.has(237));
+ assert.ok(!next.has(2)&&!next.has(239));
+ assert.deepEqual([...original],[999,1]);
+ assert.deepEqual([...selectMatchingInventoryRows(rows,next,120)],[...next]);
+ const all=selectMatchingInventoryRows(rows,next,256);
+ assert.equal(all.size,176);
+ assert.ok(all.has(349));
+ assert.deepEqual([...selectMatchingInventoryRows([],original,256)],[...original]);
+});

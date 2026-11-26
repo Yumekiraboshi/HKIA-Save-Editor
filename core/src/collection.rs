@@ -7,8 +7,8 @@ use std::{collections::{HashMap,HashSet},ops::Range};
 
 const MAX_TICKS:i64=3_155_378_975_999_999_999;
 const MAX_UNDO:usize=256;
-// A group journal record is at most 485 bytes, keeping all 256 entries within the existing 128 KiB checkpoint budget.
-pub const MAX_INVENTORY_BATCH:usize=40;
+// The compile-time journal capacity assertion below covers every maximum-size batch.
+pub const MAX_INVENTORY_BATCH:usize=256;
 // Session-only handle for an absent ordinary ingredient. Never a saved document ID.
 const PENDING_ITEM:u32=1<<31;
 // Steam 3.0.1 FlowerSettings.AvailableColors (30 entries) minus the
@@ -379,7 +379,7 @@ impl Editor {
  }
  fn unique_row_source(&self,row:&crate::native::InventoryRow,fields:usize)->Option<i32>{
   if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<0||
-   (row.quantity==Some(0)&&!Self::is_emptyable_unique_family(row))||
+   (row.quantity==Some(0)&&!self.is_emptyable_unique_family(row)&&!self.palette_zero_reference_safe(row))||
    row.unique_is_nil!=Some(false)||row.unique_fields.len()!=fields||self.slot.index.inventory_item_refs_incomplete{return None}
   let item=row.item_id?;let uid=row.unique_id?;
   if item<=0||uid<=0||self.slot.index.inventory_item_refs.contains(&(item,uid))||self.slot.index.inventory_legacy_uid_refs.contains(&uid){return None}
@@ -526,6 +526,8 @@ impl Editor {
   if self.pending_furniture.contains_key(&id){
    if !self.inventory_changes.contains_key(&id){return Vec::new()}
   }else if id&PENDING_ITEM!=0{return self.absent_furniture_choices((id&!PENDING_ITEM) as i32)}
+  else if !self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|
+   self.inventory_changes.get(&id).copied().or(r.quantity).is_some_and(|q|q>0)){return Vec::new()}
   if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|self.saved_default_furniture_source(r)){
    return self.default_furniture_choices(item)
   }
@@ -648,6 +650,8 @@ impl Editor {
    crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
   let Some(row)=self.slot.index.inventory.iter().find(|r|r.id==id)else{return Vec::new()};
   let Some(item)=row.item_id else{return Vec::new()};
+  if crate::inventory_source::flower_clothing_reference_keys(item).is_some()&&
+   !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return Vec::new()}
   if self.slot.index.inventory_payload_item_refs.contains(&item){return Vec::new()}
   let Some(original)=row.unique_data.and_then(flower_variant)else{return Vec::new()};
   self.inventory_flower_variants(id).into_iter().filter(|&v|v!=original).collect()
@@ -671,6 +675,8 @@ impl Editor {
   if quantity<=0||!self.inventory_creation_source_valid()||!self.unique_quantity_ids.contains(&source_id){return Err(Error::Schema)}
   let row=self.slot.index.inventory.iter().find(|r|r.id==source_id).ok_or(Error::Schema)?;
   let item_id=row.item_id.ok_or(Error::Schema)?;
+  if crate::inventory_source::flower_clothing_reference_keys(item_id).is_some()&&
+   !self.inventory_changes.get(&source_id).copied().or(row.quantity).is_some_and(|q|q>0){return Err(Error::Schema)}
   // The same exact species/processor source gate and reference index apply.
   if self.slot.index.inventory_payload_item_refs.contains(&item_id){return Err(Error::Schema)}
   let (patterns,current,reserved)=self.flower_context(source_id).ok_or(Error::Schema)?;
@@ -782,25 +788,54 @@ impl Editor {
   r.item_id.is_some_and(|item|FLOWER_SPECIES.iter().any(|&(id,_)|id==item))&&
    r.unique_data.and_then(flower_variant).is_some_and(|v|matches!(v[0],0|6|7))
  }
- // Only consumable families with the existing source-authorized
- // complete payload and quantity gates. No palette/outfit/layout removal.
- fn is_emptyable_unique_family(r:&crate::native::InventoryRow)->bool{
+ // Source-bounded furniture removal checks every original placement/copy
+ // reference by Item ID, regardless of material tuple or UID. This is
+ // deliberately conservative: a reference to a sibling also denies zero.
+ fn furniture_zero_reference_safe(&self,item:i32)->bool{
+  crate::inventory_source::ordinary_furniture_guid_fingerprint(item).is_some_and(|key|
+   !self.slot.index.inventory_furniture_refs_incomplete&&
+   !self.slot.index.inventory_item_refs_incomplete&&
+   !self.slot.index.inventory_payload_refs_incomplete&&
+   !self.slot.index.inventory_furniture_item_refs.contains(&item)&&
+   !self.slot.index.inventory_payload_item_refs.contains(&item)&&
+   !self.slot.index.inventory_furniture_guid_refs.contains(&key))
+ }
+ // Family eligibility only; full UID, source tuple and peer validation
+ // is still required in index_unique_quantity_ids before zero/refill.
+ fn is_emptyable_unique_family(&self,r:&crate::native::InventoryRow)->bool{
   use crate::inventory_source::{CAFE_IDS,BOBA_ID};
   Self::is_emptyable_flower_species(r)||match (r.item_id,r.unique_data){
    (Some(item),Some(InventoryUniqueData::CafeAppearance{..}))=>CAFE_IDS.binary_search(&item).is_ok(),
    (Some(item),Some(InventoryUniqueData::BobaAppearance{..}))=>item==BOBA_ID,
+   (Some(item),Some(InventoryUniqueData::Furniture{..}))=>self.furniture_zero_reference_safe(item),
+   (Some(item),Some(InventoryUniqueData::Flower{grow_state:6,..}))=>crate::inventory_source::flower_clothing_reference_keys(item).is_some_and(|keys|self.clothing_zero_reference_safe(item,keys.iter())),
    _=>false
   }
  }
+ fn ordinary_clothing_zero_reference_safe(&self,item:i32)->bool{
+  let Some((own,group))=crate::inventory_source::ordinary_clothing_reference_keys(item)else{return false};
+  self.clothing_zero_reference_safe(item,std::iter::once(&own).chain(group.iter()))
+ }
+ fn clothing_zero_reference_safe<'a>(&self,item:i32,mut keys:impl Iterator<Item=&'a u32>)->bool{
+  let index=&self.slot.index;
+  index.inventory_clothing_avatar_models>0&&index.inventory_clothing_general_models==1&&
+   !index.inventory_clothing_refs_incomplete&&!index.inventory_clothing_unknown_preset&&
+   !index.inventory_furniture_refs_incomplete&&!index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
+   !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
+   keys.all(|k|
+    !index.inventory_clothing_guid_refs.contains(k)&&!index.inventory_furniture_guid_refs.contains(k))
+ }
+      self.furniture_zero_reference_safe(item_id)||self.ordinary_clothing_zero_reference_safe(item_id))&&
  /// Native subtraction clamps to zero without deleting the saved record.
  /// Existing consumables must pass the full original unique quantity
  /// identity/reference index, including copied payloads.
  fn inventory_can_empty(&self,r:&crate::native::InventoryRow)->bool{
-  if Self::is_emptyable_unique_family(r)&&self.unique_quantity_ids.contains(&r.id){return true}
+  if (self.is_emptyable_unique_family(r)||self.palette_zero_reference_safe(r))&&self.unique_quantity_ids.contains(&r.id){return true}
   let Some(item_id)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
    (crate::inventory_source::ordinary_membership_item(item_id)||
-    (crate::inventory_source::existing_currency_item(item_id)&&
+    ((crate::inventory_source::existing_currency_item(item_id)||
+      self.furniture_zero_reference_safe(item_id)||self.ordinary_clothing_zero_reference_safe(item_id))&&
      !self.slot.index.inventory_payload_refs_incomplete&&
      !self.slot.index.inventory_payload_item_refs.contains(&item_id)))&&
    r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.quantity.is_some_and(|q|q>=0)&&
@@ -1190,6 +1225,17 @@ impl Editor {
   let InventoryUniqueData::Palette{rgba_bits}=row.unique_data? else{return None};
   rgba_bits.iter().flatten().all(|&bits|(0.0..=1.0).contains(&f32::from_bits(bits))).then_some(rgba_bits)
  }
+ // A palette may be copied into an avatar snapshot or wand instead of
+ // referenced by Item ID/UID. Compare the original full RGBA tuple using
+ // native approximate equality, with a complete original context only.
+ fn palette_zero_reference_safe(&self,row:&crate::native::InventoryRow)->bool{
+  let Some(original)=Self::palette_identity(row)else{return false};
+  let index=&self.slot.index;
+  index.inventory_palette_avatar_models>0&&index.inventory_palette_general_models==1&&
+   !index.inventory_palette_context_incomplete&&!index.inventory_palette_copies_incomplete&&
+   !index.inventory_payload_refs_incomplete&&!index.inventory_item_refs_incomplete&&
+   !index.inventory_palette_copies.iter().any(|&copy|Self::palette_equal(copy,original))
+ }
  fn palette_equal(a:[[u32;4];3],b:[[u32;4];3])->bool{
   a.iter().zip(b).all(|(a,b)|{
    let square=|i:usize|{let d=f32::from_bits(a[i])-f32::from_bits(b[i]);d*d};
@@ -1253,6 +1299,8 @@ impl Editor {
  // Every new channel must be a permitted native output, not an inherited
  // arbitrary or event-only color. No acquisition or outfit data is written.
  pub fn inventory_palette_creation_variants(&self,id:u32)->Vec<PaletteVariant>{
+  if !self.pending_palettes.contains_key(&id)&&!self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|
+   self.inventory_changes.get(&id).copied().or(r.quantity).is_some_and(|q|q>0)){return Vec::new()}
   let item=crate::inventory_source::CUSTOM_PALETTE_ID;
   if !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
    self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||
@@ -2531,7 +2579,9 @@ mod tests {
 /// Every edit is reconstructed from the original source using the regular
 /// source-validated CAS APIs before any recovered history is committed.
 const HISTORY_MAGIC:&[u8;8]=b"HKIAHS01";
-const HISTORY_MAX_BYTES:usize=128*1024;
+// The entire 256-step journal fits even when every step has 256 quantity deltas.
+pub const HISTORY_MAX_BYTES:usize=1024*1024;
+const _:()=assert!(16+MAX_UNDO*(5+MAX_INVENTORY_BATCH*12)<=HISTORY_MAX_BYTES);
 
 struct HistoryCursor<'a>{bytes:&'a [u8],pos:usize}
 impl<'a> HistoryCursor<'a>{

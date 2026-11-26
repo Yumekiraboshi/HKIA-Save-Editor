@@ -139,9 +139,23 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
  /// presets, placed items, mail and wand sources), separate from UID refs.
  pub inventory_payload_item_refs:HashSet<i32>,
  pub inventory_payload_refs_incomplete:bool,
+ /// Additional original furniture ID/GUID references in layouts and legacy models.
+ pub inventory_furniture_item_refs:HashSet<i32>,
+ pub inventory_furniture_guid_refs:HashSet<u32>,
+ pub inventory_furniture_refs_incomplete:bool,
+ /// Extra clothing reference keys from actual saved avatar/outfit models.
+ pub inventory_clothing_guid_refs:HashSet<u32>,
+ pub inventory_clothing_refs_incomplete:bool,
+ pub inventory_clothing_avatar_models:usize,
+ pub inventory_clothing_general_models:usize,
+ /// Source preset definitions outside the pinned bundle remain unresolved.
+ pub inventory_clothing_unknown_preset:bool,
  /// Exact tag-6 copies outside inventory, including unkeyed outfit snapshots.
  pub inventory_palette_copies:Vec<[[u32;4];3]>,
  pub inventory_palette_copies_incomplete:bool,
+ pub inventory_palette_avatar_models:usize,
+ pub inventory_palette_general_models:usize,
+ pub inventory_palette_context_incomplete:bool,
  /// A legacy or modern wand payload outside the bag cannot be safely joined by UID.
  pub inventory_wand_copies:bool,
  pub(crate) document_spans:Vec<DocumentSpan>,
@@ -214,6 +228,14 @@ impl<'a> Walk<'a>{
      let mut colors=[0;3];
      for i in 0..n{let v=self.read(*inner,depth+1,None,false)?;if i<3{colors[i]=i32::try_from(v.int()?).map_err(|_|Error::Schema)?;}}
      Ok(Value::ChefColors{count:n.min(3) as u8,colors})
+    }else if matches!(ctx,Some(("clothing-guid-list",0))|Some(("clothing-preset-list",0))){
+     for _ in 0..n{
+      let words=self.read(*inner,depth+1,None,false)?.guid()?;
+      if words!=[0;4]{
+       self.index.inventory_clothing_guid_refs.insert(crate::inventory_source::furniture_guid_fingerprint(words));
+       if ctx==Some(("clothing-preset-list",0)){self.index.inventory_clothing_unknown_preset=true;}
+      }
+     }Ok(Value::Count(n))
     }else{for _ in 0..n{self.read(*inner,depth+1,None,false)?;}Ok(Value::Count(n))}},
    Spec::Dict(k,v)=>{
     if self.c.peek()?==0xc0{self.c.token()?;return Ok(Value::Nil)}let start=self.c.pos;let n=self.c.map()?;self.index.dictionary_entries=self.index.dictionary_entries.checked_add(n).ok_or(Error::Overflow)?;
@@ -365,6 +387,89 @@ impl<'a> Walk<'a>{
        _=>&[],
       };
       if payload_ref_keys.iter().any(|&key|key>=n){self.index.inventory_payload_refs_incomplete=true;}
+      // Native metadata v3.0.1: HomeModel WallpaperId/FloorId/FloorPlanId,
+      // PocketHomeModel FloorPlanId, remote home equivalents, layout defaults,
+      // and the stand's worn item ID. Keep this extra guard separate from
+      // existing source gates for ordinary consumables and unique variants.
+      let furniture_ref_keys:&[usize]=match name{
+       HOME=>&[2,3,12],
+       "Sunblink.UserData.PocketHomeModel"=>&[4],
+       "Sunblink.Game.OwnedRemoteHomeClientModel"=>&[3,4,9],
+       "Sunblink.UserData.HomeLayoutModel"=>&[2,4,5],
+       "Sunblink.Game.ClothingStandTraitModel"=>&[0],
+       _=>&[],
+      };
+      let furniture_guid_key=match name{
+       "Sunblink.UserData.HomeObjectModelDeprecatedV71"|"Sunblink.Game.WandUniqueDataDeprecatedV75"|
+       "Sunblink.UserData.Types.CollectionBoxItemModel"=>Some(0),
+       "Sunblink.UserData.MermaidifierOutfitModel"=>Some(1),
+       _=>None,
+      };
+      // Truncated reference-bearing models may omit nested placement or
+      // associated items; fail closed for this new furniture endpoint only.
+      let furniture_min_fields=match name{
+       HOME=>15,
+       "Sunblink.UserData.HomeObjectModel"=>10,
+       "Sunblink.UserData.HomeObjectModelDeprecatedV71"=>14,
+       "Sunblink.Game.OwnedRemoteCabinHomeObjectClientModel"=>6,
+       "Sunblink.Game.OwnedRemoteCabinHomeObjectClientModelDeprecatedV71"=>10,
+       "Sunblink.Game.OwnedRemoteHomeClientModel"=>10,
+       "Sunblink.UserData.PocketHomeModel"=>5,
+       "Sunblink.UserData.HomeLayoutModel"=>6,
+       "Sunblink.UserData.HomeKitModel"=>2,
+       "Sunblink.UserData.HomeWallpaperModel"|"Sunblink.UserData.HomeFloorModel"|
+       "Sunblink.UserData.UniqueItemModel"|"Sunblink.Game.TableTraitModel"|
+       "Sunblink.Game.WandUniqueData"|"Sunblink.Game.WandUniqueDataDeprecatedV75"=>2,
+       _=>0,
+      };
+      if n<furniture_min_fields||furniture_ref_keys.iter().any(|&key|key>=n)||furniture_guid_key.is_some_and(|key|key>=n){
+       self.index.inventory_furniture_refs_incomplete=true;
+      }
+      // Source metadata keys for saved piece, outfit, item and NPC GUIDs.
+      // A nonempty body/mouth preset list is not certified by the pinned
+      // source bundle, so it separately prevents clothing deletion.
+      let clothing_guid_lists:&[usize]=match name{
+       "Sunblink.UserData.AvatarSpeciesSettingsModel"=>&[2,4],
+       "Sunblink.UserData.OutfitAvatarSnapshotModel"=>&[1],
+       "Sunblink.UserData.NpcTraitModel"=>&[0,1],
+       _=>&[],
+      };
+      let clothing_preset_list=match name{
+       "Sunblink.UserData.AvatarSpeciesSettingsModel"=>Some(3),
+       "Sunblink.UserData.OutfitAvatarSnapshotModel"=>Some(2),
+       _=>None,
+      };
+      let clothing_guid_key=match name{
+       "Sunblink.UserData.NpcTraitModel"=>Some(2),
+       "Sunblink.UserData.NpcEquippedOutfitModel"|"Sunblink.UserData.AvatarBaldHeadOverride"=>Some(0),
+       "Sunblink.UserData.MermaidifierOutfitModel"=>Some(1),
+       _=>None,
+      };
+      let clothing_min_fields=match name{
+       "Sunblink.UserData.AvatarSpeciesSettingsModel"=>5,
+       "Sunblink.UserData.AvatarGeneralSettingsModel"=>6,
+       "Sunblink.UserData.OutfitPresetModel"=>6,
+       "Sunblink.UserData.OutfitAvatarSnapshotModel"=>3,
+       "Sunblink.UserData.NpcTraitModel"=>5,
+       "Sunblink.UserData.NpcEquippedOutfitModel"|"Sunblink.UserData.AvatarBaldHeadOverride"=>1,
+       "Sunblink.UserData.MermaidifierOutfitModel"=>3,
+       _=>0,
+      };
+      if n<clothing_min_fields{self.index.inventory_clothing_refs_incomplete=true;}
+      if name=="Sunblink.UserData.AvatarSpeciesSettingsModel"{self.index.inventory_clothing_avatar_models+=1;}
+      if name=="Sunblink.UserData.AvatarGeneralSettingsModel"{self.index.inventory_clothing_general_models+=1;}
+      // A truncated avatar or preset could omit its palette snapshot.
+      // Preserve existing positive quantity/edit rules; zero requires
+      // complete original avatar context in addition to the copy index.
+      if name=="Sunblink.UserData.AvatarSpeciesSettingsModel"{
+       self.index.inventory_palette_avatar_models+=1;
+       if n<8{self.index.inventory_palette_context_incomplete=true;}
+      }
+      if name=="Sunblink.UserData.AvatarGeneralSettingsModel"{
+       self.index.inventory_palette_general_models+=1;
+       if n<6{self.index.inventory_palette_context_incomplete=true;}
+      }
+      if name=="Sunblink.UserData.OutfitPresetModel"&&n<6{self.index.inventory_palette_context_incomplete=true;}
       if short=="OutfitAvatarSnapshotModel"&&n<4{self.index.inventory_palette_copies_incomplete=true;}
       // Historical GUID-based flower outfit/wand payloads cannot safely
       // be joined by integer ID here; fail closed for that domain.
@@ -375,10 +480,22 @@ impl<'a> Walk<'a>{
       };
       if opaque_flower_ref.is_some_and(|key|key>=n){self.index.inventory_payload_refs_incomplete=true;}
       let mut fields=Vec::new();let mut document_id=None;
-      for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else if short=="CafeCreationUniqueData"&&matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,3))|Some((WAND_SOURCE_CAPTURE,3)))&&i==1{Some(("chef-colors",0))}else if short=="WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&i==1{Some((WAND_SOURCE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
+      for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if clothing_guid_lists.contains(&i){Some(("clothing-guid-list",0))}else if clothing_preset_list==Some(i){Some(("clothing-preset-list",0))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else if short=="CafeCreationUniqueData"&&matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,3))|Some((WAND_SOURCE_CAPTURE,3)))&&i==1{Some(("chef-colors",0))}else if short=="WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&i==1{Some((WAND_SOURCE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
        if payload_ref_keys.contains(&i){
         let item=i32::try_from(value.int()?).map_err(|_|Error::Schema)?;
         if item>0{self.index.inventory_payload_item_refs.insert(item);}
+       }
+       if furniture_ref_keys.contains(&i){
+        let item=i32::try_from(value.int()?).map_err(|_|Error::Schema)?;
+        if item>0{self.index.inventory_furniture_item_refs.insert(item);}
+       }
+       if clothing_guid_key==Some(i){
+        let words=value.guid()?;
+        if words!=[0;4]{self.index.inventory_clothing_guid_refs.insert(crate::inventory_source::furniture_guid_fingerprint(words));}
+       }
+       if furniture_guid_key==Some(i){
+        let words=value.guid()?;
+        if words!=[0;4]{self.index.inventory_furniture_guid_refs.insert(crate::inventory_source::furniture_guid_fingerprint(words));}
        }
        if opaque_flower_ref==Some(i)&&!matches!(&value,Value::Nil){
         let mut c=Cursor::new(&self.c.bytes[at..self.c.pos]);
@@ -408,6 +525,8 @@ impl<'a> Walk<'a>{
         let item=i32::try_from(fields[0].0.int()?).map_err(|_|Error::Schema)?;
         let uid=i32::try_from(fields[1].0.int()?).map_err(|_|Error::Schema)?;
         self.index.inventory_item_refs.insert((item,uid));
+        // Furniture zero must also deny a same-item reference with a different UID.
+        if item>0{self.index.inventory_furniture_item_refs.insert(item);}
        }else{self.index.inventory_item_refs_incomplete=true;}
       }
       if name==HOME {

@@ -70,11 +70,17 @@ const addLabels:Record<Locale,string>={
 };
 export function inventoryAddCopy(locale:Locale):string{return addLabels[locale]}
 
-/** Select displayed quantity-editable rows within the current native batch limit. */
+/** Select matching quantity-editable records within the native batch limit. */
 const selectVisibleLabels:Record<Locale,string>={
- ar:'تحديد العناصر الظاهرة حتى الحد الأقصى',de:'Sichtbare Gegenstände bis zum Limit auswählen',en:'Select visible items up to the limit','en-GB':'Select visible items up to the limit',
- es:'Seleccionar objetos visibles hasta el límite',fr:'Sélectionner les objets visibles dans la limite autorisée','fr-CA':'Sélectionner les objets visibles dans la limite autorisée',
- it:'Seleziona gli oggetti visibili fino al limite',ja:'表示中のアイテムを上限まで選択',ko:'표시된 아이템을 한도까지 선택',nl:'Zichtbare items tot de limiet selecteren',
- 'pt-BR':'Selecionar itens visíveis até o limite',ru:'Выбрать видимые предметы до лимита',tr:'Görünen eşyaları sınıra kadar seç','zh-Hans':'选择当前显示的物品（不超过上限）','zh-Hant':'選取目前顯示的物品（不超過上限）'
+ ar:'تحديد العناصر المطابقة حتى الحد الأقصى',de:'Passende Gegenstände bis zum Limit auswählen',en:'Select matching items up to the limit','en-GB':'Select matching items up to the limit',
+ es:'Seleccionar objetos coincidentes hasta el límite',fr:'Sélectionner les objets correspondants dans la limite autorisée','fr-CA':'Sélectionner les objets correspondants dans la limite autorisée',
+ it:'Seleziona gli oggetti corrispondenti fino al limite',ja:'該当するアイテムを上限まで選択',ko:'일치하는 아이템을 한도까지 선택',nl:'Overeenkomende items tot de limiet selecteren',
+ 'pt-BR':'Selecionar itens correspondentes até o limite',ru:'Выбрать подходящие предметы до лимита',tr:'Eşleşen eşyaları sınıra kadar seç','zh-Hans':'选择匹配的物品（不超过上限）','zh-Hant':'選取相符的物品（不超過上限）'
 };
 export function inventorySelectVisibleCopy(locale:Locale):string{return selectVisibleLabels[locale]}
+
+/** Explicit removal of all units in the selected stack(s). */
+const deleteLabels:Record<Locale,string>={
+ ar:'حذف',de:'Löschen',en:'Delete','en-GB':'Delete',es:'Eliminar',fr:'Supprimer','fr-CA':'Supprimer',it:'Elimina',ja:'削除',ko:'삭제',nl:'Verwijderen','pt-BR':'Excluir',ru:'Удалить',tr:'Sil','zh-Hans':'删除','zh-Hant':'刪除'
+};
+export function inventoryDeleteCopy(locale:Locale):string{return deleteLabels[locale]}

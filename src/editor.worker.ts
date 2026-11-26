@@ -1,3 +1,4 @@
+import {HISTORY_MAX_BYTES,MAX_INVENTORY_DRAFT_PATCHES} from './history-limits';
 import type {InventoryPatch,InventoryQuantityRequest} from './worker-client';
 import {decodeInventoryUnique,decodeFlowerVariants,isFlowerVariantWire,decodeFurnitureVariants,isFurnitureVariantWire,type FurnitureVariant,type FlowerVariant,type InventoryUniqueInfo} from './inventory-unique';
 import {decodeInventoryFlowers,type InventoryFlower} from './inventory-flower-display';
@@ -246,7 +247,7 @@ function snapshot(e:Engine){
  let checkpoint:Uint8Array|null=null;
  if(e.hkia_history_checkpoint()===0){
   const saved=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
-  if(saved.length>=16&&saved.length<=128*1024)checkpoint=saved;
+  if(saved.length>=16&&saved.length<=HISTORY_MAX_BYTES)checkpoint=saved;
  }
  if(e.hkia_collection_creatable_snapshot()!==0)throw Error('COLLECTION_ELIGIBILITY_FAILED');
  const eligible=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
@@ -567,6 +568,8 @@ async function execute(r:Request):Promise<unknown>{
   case 'batch':{
    const patches=r.patches;
    const achievements=r.achievementPatches??[];
+   const inventoryPatches=r.inventoryPatches??[];
+   if(!Array.isArray(inventoryPatches)||inventoryPatches.length>MAX_INVENTORY_DRAFT_PATCHES)throw Error('DRAFT_INVALID');
    if(!Array.isArray(patches)||patches.length>20000||!Array.isArray(achievements)||achievements.length>10000)throw Error('DRAFT_INVALID');
    for(const p of patches){
     if(!Number.isInteger(p.id)||p.id<=0||p.id>2147483647){
@@ -577,7 +580,7 @@ async function execute(r:Request):Promise<unknown>{
      e.hkia_reset();throw Error('DRAFT_CONFLICT');
     }
    }
-   for(const p of r.inventoryPatches??[]){
+   for(const p of inventoryPatches){
     // Unique creation requires the native checkpoint with its source CAS
     // and exact handle. Net changes are a verification view, never a writer.
     if(p?.kind==='flower-create'||p?.kind==='furniture-create'||p?.kind==='palette-create'||p?.kind==='boba-create'||p?.kind==='cafe-create'||p?.kind==='wand-create'){e.hkia_reset();throw Error('HISTORY_RESTORE_CONFLICT')}
@@ -613,7 +616,7 @@ async function execute(r:Request):Promise<unknown>{
   case 'history-restore':{
    const checkpoint=r.checkpoint;
    if(!(checkpoint instanceof Uint8Array)||checkpoint.byteLength<16||
-    checkpoint.byteLength>128*1024)throw Error('HISTORY_CHECKPOINT_INVALID');
+    checkpoint.byteLength>HISTORY_MAX_BYTES)throw Error('HISTORY_CHECKPOINT_INVALID');
    const p=e.hkia_stage(checkpoint.byteLength);
    if(p===0||p+checkpoint.byteLength>e.memory.buffer.byteLength)throw Error('HISTORY_CHECKPOINT_INVALID');
    new Uint8Array(e.memory.buffer,p,checkpoint.byteLength).set(checkpoint);

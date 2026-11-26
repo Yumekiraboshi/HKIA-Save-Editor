@@ -4,6 +4,8 @@
  * explicit caller inputs: this is not the native scene selection or final icon. */
 import type {Vec2,Vec3,Vec4,FurnitureSurfaceUniforms} from './furniture-surface-v3.0.1';
 import {nativeMeshDrawRange,type UploadedNativeMesh} from './native-furniture-mesh';
+import {furnitureRimGLSL,validateFurnitureRim,type FurnitureRimParameters} from './furniture-rim-v3.0.1';
+import {customLitSurfaceGLSL} from './furniture-customlit-v3.0.1';
 export const furnitureForwardVertex=`#version 300 es
 precision highp float;
 layout(location=0) in vec3 position;
@@ -33,18 +35,18 @@ void main(){
  pUV=vec2(co*q.x+s*q.y,-s*q.x+co*q.y)+c;
 }`;
 /** Separate pure shader function permits independently supplied native-token fixtures. */
-export const furnitureForwardLightingGLSL=`
+export const furnitureForwardLightingGLSL=furnitureRimGLSL+`
 float sat(float v){return clamp(v,0.,1.);}
 vec4 reflectionCoordinates(vec3 n,vec3 v,float rough){
  float r=max(rough*rough,.0078125);
  return vec4(2.*dot(n,v)*n-v,(1.7-.7*r)*r*6.);
 }
-vec3 evaluateLighting(vec3 albedo,float rough,float metallic,float occlusion,
+vec3 evaluateLightingWithRim(vec3 albedo,float rough,float metallic,float occlusion,
  vec3 n,vec3 v,vec3 l,vec3 mainLightColor,vec3 ambient,
  float screenOcclusion,float screenOcclusionStrength,vec3 primary,vec3 secondary,
  float reflectionBlendWeight,float reflectionIntensity,float reflectionStrength,
  vec3 emissionColor,float emissionMask,vec3 ambientMain,vec3 ambientFill,
- float fogVarying,float fogMultiplier){
+ float fogVarying,float fogMultiplier,bool rimEnabled,vec4 rim){
  vec3 h=normalize(v+l);
  float oneMinusReflectivity=.96*(1.-metallic);
  vec3 diffuse=albedo*oneMinusReflectivity,specular=mix(vec3(.04),albedo,metallic);
@@ -61,8 +63,12 @@ vec3 evaluateLighting(vec3 albedo,float rough,float metallic,float occlusion,
  vec3 lit=(diffuse+spec*specular)*sat(dot(n,l))*mainLightColor+
  amb*(diffuse+refl*reflectionIntensity*reflectionStrength*reflectionBRDF)*occlusion+
  albedo*emissionColor*emissionMask;
+ if(rimEnabled)lit=evaluateFurnitureRim(albedo,rough,dot(n,v),occlusion,ambient,lit,rim);
  float ldv=-dot(l,v),wm=sat(.6*ldv+.4),wf=sat(-.6*ldv+.4);
  return mix(lit,wm*ambientMain+wf*ambientFill,fogVarying*fogMultiplier);
+}
+vec3 evaluateLighting(vec3 albedo,float rough,float metallic,float occlusion,vec3 n,vec3 v,vec3 l,vec3 mainLightColor,vec3 ambient,float screenOcclusion,float screenOcclusionStrength,vec3 primary,vec3 secondary,float reflectionBlendWeight,float reflectionIntensity,float reflectionStrength,vec3 emissionColor,float emissionMask,vec3 ambientMain,vec3 ambientFill,float fogVarying,float fogMultiplier){
+ return evaluateLightingWithRim(albedo,rough,metallic,occlusion,n,v,l,mainLightColor,ambient,screenOcclusion,screenOcclusionStrength,primary,secondary,reflectionBlendWeight,reflectionIntensity,reflectionStrength,emissionColor,emissionMask,ambientMain,ambientFill,fogVarying,fogMultiplier,false,vec4(0.));
 }
 `;
 export const furnitureForwardFragment=`#version 300 es
@@ -72,12 +78,14 @@ in vec3 worldPosition,worldNormal,worldTangent,worldBitangent;
 uniform sampler2D baseMap,patternMap,comboMap,normalMap;
 uniform samplerCube reflectionPrimary,reflectionSecondary;
 uniform vec4 baseColor,patternTint;
-uniform bool useBaseMapMask;
+uniform bool useBaseMapMask,rimEnabled,customLit,useComboEmissionMask;
+uniform float materialAlpha;
+uniform vec4 rimParameters;
 uniform float smoothnessShift,metallicShift,patternSmoothnessShift,patternMetallicShift,occlusionStrength;
 uniform vec3 cameraPosition,mainLightDirection,mainLightColor,ambient,emissionColor,ambientMain,ambientFill;
 uniform float screenOcclusion,screenOcclusionStrength,reflectionBlendWeight,reflectionIntensity,reflectionStrength,emissionMask,fogVarying,fogMultiplier;
 out vec4 color;
-`+furnitureForwardLightingGLSL+`
+`+furnitureForwardLightingGLSL+customLitSurfaceGLSL+`
 void main(){
  vec4 b=texture(baseMap,bUV),p=texture(patternMap,pUV),c=texture(comboMap,bUV),nm=texture(normalMap,bUV);
  float w=baseColor.a>0.?(useBaseMapMask?b.a:1.):0.;
@@ -87,15 +95,21 @@ void main(){
  float occlusion=1.+occlusionStrength*(c.b-1.);
  vec2 xy=vec2(nm.r*nm.a,nm.g)*2.-1.;
  vec3 tn=vec3(xy,sqrt(max(0.,1.-min(1.,dot(xy,xy)))))*(gl_FrontFacing?1.:-1.);
- vec3 n=normalize(mat3(worldTangent,worldBitangent,worldNormal)*tn);
+ float alpha=1.,mask=useComboEmissionMask?c.a:emissionMask;
+ if(customLit){
+  CustomLitSurface s=customLitSurface(b,c,nm,baseColor,smoothnessShift,metallicShift,occlusionStrength,materialAlpha,gl_FrontFacing);
+  albedo=s.albedo;rough=s.roughness;metallic=s.metallic;occlusion=s.occlusion;mask=s.emissionMask;alpha=s.alpha;tn=s.normal;
+ }
+ vec3 transformedNormal=mat3(worldTangent,worldBitangent,worldNormal)*tn;
+ vec3 n=customLit?transformedNormal*inversesqrt(max(dot(transformedNormal,transformedNormal),.00006103515625)):normalize(transformedNormal);
  vec3 v=normalize(cameraPosition-worldPosition);
  vec4 refl=reflectionCoordinates(n,v,rough);
  vec3 rp=textureLod(reflectionPrimary,refl.xyz,refl.w).rgb;
  vec3 rs=textureLod(reflectionSecondary,refl.xyz,refl.w).rgb;
- color=vec4(evaluateLighting(albedo,rough,metallic,occlusion,n,v,mainLightDirection,
+ color=vec4(evaluateLightingWithRim(albedo,rough,metallic,occlusion,n,v,mainLightDirection,
  mainLightColor,ambient,screenOcclusion,screenOcclusionStrength,rp,rs,
- reflectionBlendWeight,reflectionIntensity,reflectionStrength,emissionColor,emissionMask,
- ambientMain,ambientFill,fogVarying,fogMultiplier),1.);
+ reflectionBlendWeight,reflectionIntensity,reflectionStrength,emissionColor,mask,
+ ambientMain,ambientFill,fogVarying,fogMultiplier,rimEnabled,rimParameters),alpha);
 }`;
 
 export type FurnitureForwardScene={
@@ -105,7 +119,7 @@ export type FurnitureForwardScene={
  screenOcclusion:number;screenOcclusionStrength:number;reflectionBlendWeight:number;
  reflectionIntensity:number;reflectionStrength:number;emissionMask:number;fogVarying:number;fogMultiplier:number;
 };
-export type FurnitureForwardMaterial=FurnitureSurfaceUniforms&{baseST:Vec4;patternST:Vec4;rotationTurns:number;rotationCenter:Vec2;worldUV:boolean};
+export type FurnitureForwardMaterial=FurnitureSurfaceUniforms&{baseST:Vec4;patternST:Vec4;rotationTurns:number;rotationCenter:Vec2;worldUV:boolean;rim?:FurnitureRimParameters;customLit?:{materialAlpha:number};useComboEmissionMask?:boolean};
 export type FurnitureForwardTextures={baseMap:WebGLTexture;patternMap:WebGLTexture;comboMap:WebGLTexture;normalMap:WebGLTexture;reflectionPrimary:WebGLTexture;reflectionSecondary:WebGLTexture};
 const textureNames=['baseMap','patternMap','comboMap','normalMap','reflectionPrimary','reflectionSecondary'] as const;
 const sceneVectors=['cameraPosition','mainLightDirection','mainLightColor','ambient','emissionColor','ambientMain','ambientFill'] as const;
@@ -113,6 +127,8 @@ const sceneScalars=['screenOcclusion','screenOcclusionStrength','reflectionBlend
 const materialScalars=['smoothnessShift','metallicShift','patternSmoothnessShift','patternMetallicShift','occlusionStrength','rotationTurns'] as const;
 const finite=(a:readonly number[],length:number)=>a.length===length&&a.every(Number.isFinite);
 export function validateFurnitureForwardInputs(s:FurnitureForwardScene,m:FurnitureForwardMaterial){
+ if(m.rim!==undefined)validateFurnitureRim(m.rim);
+ if(m.customLit!==undefined&&(!m.customLit||m.customLit.materialAlpha!==0||m.baseColor[3]!==1||m.worldUV||m.useBaseMapMask)||m.useComboEmissionMask!==undefined&&typeof m.useComboEmissionMask!=='boolean')throw Error('FURNITURE_FORWARD_INPUT');
  if(!finite(s.model,16)||!finite(s.viewProjection,16)||!finite(s.normalMatrix,9)||![1,-1].includes(s.tangentParity)||
  !sceneVectors.every(k=>finite(s[k],3))||!sceneScalars.every(k=>Number.isFinite(s[k]))||
  Math.abs(Math.hypot(...s.mainLightDirection)-1)>1e-5||s.reflectionBlendWeight<0||s.reflectionBlendWeight>1||
@@ -136,7 +152,7 @@ export function createFurnitureForwardRenderer(gl:WebGL2RenderingContext){
   vs=compile(gl.VERTEX_SHADER,furnitureForwardVertex);fs=compile(gl.FRAGMENT_SHADER,furnitureForwardFragment);
   gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
   if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error('FURNITURE_FORWARD_LINK '+gl.getProgramInfoLog(program));
-  const names=['model','viewProjection','normalMatrix','tangentParity','baseST','patternST','rotationCenter','worldUV','baseColor','patternTint','useBaseMapMask',...textureNames,...sceneVectors,...sceneScalars,...materialScalars];
+  const names=['model','viewProjection','normalMatrix','tangentParity','baseST','patternST','rotationCenter','worldUV','baseColor','patternTint','useBaseMapMask','rimEnabled','rimParameters','customLit','materialAlpha','useComboEmissionMask',...textureNames,...sceneVectors,...sceneScalars,...materialScalars];
   for(const name of names){const u=gl.getUniformLocation(program,name);if(u===null)throw Error('FURNITURE_FORWARD_UNIFORM '+name);uniforms.set(name,u);}
  }catch(e){gl.deleteProgram(program);throw e;}
  finally{if(vs)gl.deleteShader(vs);if(fs)gl.deleteShader(fs);}
@@ -156,6 +172,9 @@ export function createFurnitureForwardRenderer(gl:WebGL2RenderingContext){
    for(const k of materialScalars)gl.uniform1f(u(k),m[k]);
    for(const k of ['baseST','patternST','baseColor','patternTint'] as const)gl.uniform4fv(u(k),new Float32Array(m[k]));
    gl.uniform2fv(u('rotationCenter'),new Float32Array(m.rotationCenter));gl.uniform1i(u('worldUV'),Number(m.worldUV));gl.uniform1i(u('useBaseMapMask'),Number(m.useBaseMapMask));
+   gl.uniform1i(u('customLit'),Number(m.customLit!==undefined));gl.uniform1f(u('materialAlpha'),m.customLit?.materialAlpha??0);gl.uniform1i(u('useComboEmissionMask'),Number(m.useComboEmissionMask===true));
+   gl.uniform1i(u('rimEnabled'),Number(m.rim!==undefined));
+   const rim=m.rim;gl.uniform4fv(u('rimParameters'),new Float32Array(rim?[rim.power,rim.feathering,rim.intensity,rim.coloring]:[0,0,0,0]));
    for(const [i,k] of textureNames.entries()){
     gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(i<4?gl.TEXTURE_2D:gl.TEXTURE_CUBE_MAP,textures[k]);gl.uniform1i(u(k),i);
    }

@@ -26,7 +26,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,quantityBounds=false,emptyMaterialInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -45,17 +45,29 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const chef=(id,item,unique)=>doc(1,arr([id],u32(item),u32(id),u32(1),unique));
  const cafe=colors=>arr([3],arr(arr(u32(99)),arr(...colors.map(u32))));
  const boba=color=>arr([4],arr(u32(color),u32(6),u32(11),u32(19),u32(99)));
+ const placedFurniture=arr(u32(3202680),u32(0),u32(0),u32(0),u32(0),u32(0),[0xc0],[0xc0],arr(),arr(),u32(0),arr(),u32(0));
+ const furnitureHome=arr(hash(41,42,43,44),arr(),u32(0),u32(0),hash(0,0,0,0),i64(0n),[0xc0],[0xc2],[0xc0],arr(placedFurniture),[0xc0],[0xc0],u32(0),u32(0),arr());
+ const furnitureHomeObject=doc(32,arr([10],hash(10,0,0,0),[0],arr(doc(8,arr(arr(furnitureHome))))));
  const model=arr([0],cafeCreateInventory?[10]:(editableFlower||editableFurniture||paletteCreationInventory||bobaCreateInventory||wandEditInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
+  ...(paletteRemovalInventory?[doc(10,arr([8],hash(1,2,3,4),arr(),arr(),arr(),hash(1,2,3,4),[0xc3],
+   paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
+   doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
+  ...(ordinaryFurnitureInventory?[doc(1,arr([8],u32(427689),[0],u32(5),[0xc0])),doc(1,arr([9],u32(3202680),[0],u32(6),[0xc0])),furnitureHomeObject]:[]),
+  ...(ordinaryClothingInventory?[doc(10,arr([8],hash(1,2,3,4),
+   ordinaryClothingInventory==='equipped'?arr(hash(0x6ae79913,0x4dfd99ac,0xe020e4be,0x0f6869ef)):ordinaryClothingInventory==='flower-equipped'?arr(hash(0x7f2bd4e4,0x4c45f5cf,0x7f4ec1b4,0xa1107995)):arr(),
+   ordinaryClothingInventory==='preset'?arr(hash(11,22,33,44)):arr(),arr(),hash(1,2,3,4),[0xc3],[0xc0])),
+   doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr())),
+   ...(['flower','flower-equipped'].includes(ordinaryClothingInventory)?[doc(1,arr([8],u32(897617923),u32(11),u32(6),arr([7],arr([6],u32(6),u32(0),u32(0)))))]:[])]:[]),
   ...(emptyMaterialInventory?[doc(1,arr([9],u32(emptyMaterialInventory==='currency'?348154640:1877756618),[0],u32(6),[0xc0])),doc(1,arr([10],u32(emptyMaterialInventory==='currency'?1774854033:627013240),[0],u32(0),[0xc0]))]:[]),
+  ...(wandEditInventory?[chef(8,1429161083,arr([9],arr([0],[0xc0],u32(104),u32(125),u32(118))))]:[]),
   ...(editableFlower?[flower(8,1,0,0)]:[]),
   ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
   ...(cafeCreateInventory?[chef(8,1338995084,arr([3],arr(arr(u32(44),u32(49),u32(48)),arr(u32(6),u32(46),u32(9))))),chef(9,1932639321,arr([3],arr(arr(u32(44),u32(137)),arr(u32(6),u32(10))))),doc(1,arr([10],u32(1643431747),[0],u32(1),[0xc0]))]:[]),
   ...(cafeEditInventory?[chef(8,203331651,arr([3],arr(arr(u32(44),u32(49),u32(48)),arr(u32(6),u32(46),u32(9)))))]:[]),
   ...(bobaCreateInventory?[chef(8,1798633565,arr([4],arr(u32(6),u32(44),u32(76),u32(75),u32(73))))]:[]),
-  ...(wandEditInventory?[chef(8,1429161083,arr([9],arr([0],[0xc0],u32(104),u32(125),u32(118))))]:[]),
   ...(bobaEditInventory?[chef(8,1798633565,arr([4],arr(u32(6),u32(44),u32(76),u32(75),u32(73))))]:[]),
   ...(chefQuantityInventory?[chef(8,203331651,cafe([6,14,11,19])),chef(9,1798633565,boba(14)),chef(10,203331651,cafe([6,14,11,20])),chef(11,1798633565,arr([4],arr(u32(14),u32(6),u32(11),u32(19),u32(98))))]:[]),
   ...(editableFurniture?[doc(1,arr([8],u32(61381969),u32(11),u32(93),arr([8],arr(u32(13),u32(2),u32(0)))))]:[]),
@@ -199,6 +211,39 @@ async function inventoryDynamicPaletteArtSmoke(){
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM DYNAMIC PALETTE PASS: native unique Color1/2/3, independent quantities, draft recovery and local generation');
  }finally{await context.close();}
+}
+async function inventoryPaletteRemovalSmoke(){
+ for(const state of [true,'copied']){
+  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+  try{
+   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+   await page.goto(origin+base,{waitUntil:'networkidle'});
+   await page.locator('input[type="file"]').setInputFiles({name:'synthetic-palette-removal.save',mimeType:'application/octet-stream',
+    buffer:Buffer.from(createSyntheticSlot({artInventory:true,paletteInventory:true,paletteRemovalInventory:state}))});
+   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+   await chooseTab(page,'inventory');
+   const search=page.locator('.inventory-controls input[type="search"]');
+   await search.fill('1835273963');
+   const cards=page.locator('.inventory-card');
+   await page.waitForFunction(()=>document.querySelectorAll('.inventory-card input[name="quantity"]').length===2);
+   assert.equal(await cards.locator('input[name="quantity"][min="0"]').count(),state===true?2:1);
+   assert.equal(await cards.locator('.inventory-stack-delete:not([disabled])').count(),state===true?2:1);
+   await cards.locator('.inventory-stack-delete:not([disabled])').first().click();
+   const modal=page.locator('.removal-confirm-dialog');await modal.waitFor({state:'visible'});
+   await modal.locator('.removal-confirm-action').click();
+   await page.locator('.inventory-empty-stack').waitFor();
+   assert.equal(await page.locator('.inventory-empty-stack input[name="quantity"]').inputValue(),'0');
+   await page.reload({waitUntil:'networkidle'});
+   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+   await chooseTab(page,'inventory');await search.fill('1835273963');
+   await page.locator('.inventory-empty-stack').waitFor();
+   await page.locator('button[title="Undo"]:not([disabled])').click();
+   await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});
+   assert.equal(await cards.locator('.inventory-stack-delete:not([disabled])').count(),state===true?2:1);
+   assert.deepEqual(errors,[]);
+  }finally{await context.close()}
+ }
+ console.log('CHROMIUM PALETTE REMOVAL PASS: copied avatar palette protected; zero, recovery and undo');
 }
 async function inventoryPaletteCreationSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
@@ -490,10 +535,10 @@ async function inventoryChefQuantitySmoke(){
   assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.min)),['0','0']);
   await inputs.nth(1).fill('8');await apply(1);await settled();
   inputs=await inputFor(203331651);await inputs.first().fill('0');
-  page.once('dialog',d=>d.accept());await apply();
+  await apply();await confirmInventoryRemoval(page);
   await settled();
   inputs=await inputFor(1798633565);
-  await inputs.first().fill('0');page.once('dialog',d=>d.accept());await apply();
+  await inputs.first().fill('0');await apply();await confirmInventoryRemoval(page);
   await settled();
   await page.reload({waitUntil:'networkidle'});await openInventory();
   assert.deepEqual(await (await inputFor(203331651)).evaluateAll(rows=>rows.map(r=>r.value)),['0','7']);
@@ -593,6 +638,12 @@ async function inventoryEditExportSmoke(){
  * Colorway fidelity is inherited from the same shared Collection pipeline:
  * an approximate render is NEVER asserted to be an exact game shader image.
  */
+async function confirmInventoryRemoval(page,accept=true){
+ const modal=page.locator('.removal-confirm-dialog');
+ await modal.waitFor({state:'visible'});
+ await modal.locator(accept?'.removal-confirm-action':'.removal-cancel').click();
+ await modal.waitFor({state:'hidden'});
+}
 async function inventoryBatchQuantitySmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -676,6 +727,18 @@ async function inventoryBatchQuantitySmoke(){
   for(let i=0;i<2;i++){const p=4+i*16;rows.push([iv.getUint32(p,true),iv.getInt32(p+4,true),iv.getInt32(p+8,true)])}
   assert.deepEqual(rows,[[4,315822,20],[8,517031,20]]);
   assert.deepEqual(errors,[]);
+  // Add candidates far exceed the incremental 40-card display limit.
+  await page.locator('.inventory-add-toggle').click();
+  await page.locator('[data-inventory-group="furniture"]').click();
+  await page.locator('.inventory-batch-toggle').click();
+  const selectedTotal=page.locator('.inventory-batch-form .inventory-total');
+  const limit=Number((await selectedTotal.innerText()).split('/')[1].replace(/[,\s]/g,''));
+  assert.ok(limit>=40);
+  await page.locator('.inventory-select-visible').click();
+  assert.equal(Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,'')),limit);
+  await page.locator('.inventory-batch-toggle').click();
+  assert.equal(await page.locator('.inventory-batch-form').count(),0);
+  assert.deepEqual(errors,[]);
   console.log('CHROMIUM INVENTORY BATCH PASS: explicit selection, atomic CAS, reload, grouped undo/redo and WASM reparse');
  }finally{await context.close()}
 }
@@ -743,12 +806,15 @@ async function inventoryEmptyMaterialSmoke(currency=false){
   await openItems();
   let input=await inputFor(first);
   assert.equal(await input.getAttribute('min'),'0');
-  await input.fill('0');
-  page.once('dialog',d=>d.dismiss());
-  await apply();
+  const deleteButton=page.locator('.inventory-stack-delete');
+  const removal=page.locator('.removal-confirm-dialog');
+  const initial=await input.inputValue();
+  await deleteButton.click();await removal.waitFor({state:'visible'});
+  await removal.locator('.removal-cancel').click();await removal.waitFor({state:'hidden'});
+  assert.equal(await input.inputValue(),initial);
   assert.equal(await page.locator('.state-dot.changed').count(),0);
-  page.once('dialog',d=>d.accept());
-  await apply();
+  await deleteButton.click();await removal.waitFor({state:'visible'});
+  await removal.locator('.removal-confirm-action').click();
   await page.locator('.state-dot.changed').waitFor();
   await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
   input=await inputFor(second);
@@ -766,6 +832,32 @@ async function inventoryEmptyMaterialSmoke(currency=false){
   await page.locator('button[title="Redo"]').click();
   await page.locator('button[title="Redo"]:disabled').waitFor();
   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  assert.equal(await (await inputFor(second)).inputValue(),'5');
+  input=await inputFor(first);await input.fill('6');await apply();
+  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-batch-toggle').click();
+  await page.locator('.inventory-batch-checkbox').check();
+  await inputFor(second);await page.locator('.inventory-batch-checkbox').check();
+  const batchDelete=page.locator('.inventory-batch-delete');
+  await batchDelete.click();await removal.waitFor({state:'visible'});
+  assert.equal(await removal.locator('.removal-confirm-name').innerText(),'2');
+  await removal.locator('.removal-cancel').click();await removal.waitFor({state:'hidden'});
+  assert.equal(await (await inputFor(first)).inputValue(),'6');
+  assert.equal(await (await inputFor(second)).inputValue(),'5');
+  await page.locator('.inventory-batch-form input[type="number"]').fill('0');
+  await page.locator('.inventory-batch-form button[type="submit"]').click();
+  await confirmInventoryRemoval(page);
+  await page.waitForFunction(()=>document.querySelector('.inventory-batch-form .inventory-total')?.textContent?.trim().startsWith('0 /'));
+  assert.equal(await (await inputFor(first)).inputValue(),'0');
+  assert.equal(await (await inputFor(second)).inputValue(),'0');
+  await page.locator('.inventory-batch-toggle').click();
+  await page.locator('button[title="Undo"]').click();
+  await page.locator('button[title="Redo"]:not([disabled])').waitFor();
+  assert.equal(await (await inputFor(first)).inputValue(),'6');
+  assert.equal(await (await inputFor(second)).inputValue(),'5');
+  await page.locator('button[title="Undo"]').click();
+  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  assert.equal(await (await inputFor(first)).inputValue(),'0');
   assert.equal(await (await inputFor(second)).inputValue(),'5');
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([
@@ -785,6 +877,101 @@ async function inventoryEmptyMaterialSmoke(currency=false){
   assert.deepEqual(rows,[[4,315822,6],[9,first,0],[10,second,5]]);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM INVENTORY '+(currency?'CURRENCY':'MATERIAL')+' EMPTY PASS: confirmation, empty/refill, reload, undo/redo and preserved native records');
+ }finally{await context.close()}
+}
+async function ordinaryClothingRemovalSmoke(){
+ for(const state of [true,'equipped','preset','flower','flower-equipped']){
+  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+  try{
+   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+   await page.goto(origin+base,{waitUntil:'networkidle'});
+   await page.locator('input[type="file"]').setInputFiles({name:'synthetic-ordinary-clothing.save',mimeType:'application/octet-stream',
+    buffer:Buffer.from(createSyntheticSlot({ordinaryClothingInventory:state}))});
+   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+   await chooseTab(page,'inventory');
+   const flower=['flower','flower-equipped'].includes(state),allowed=state===true||state==='flower';
+   await page.locator('.inventory-controls input[type="search"]').fill(flower?'897617923':'315822');
+   const card=page.locator('.inventory-card'),input=card.locator('input[name="quantity"]'),remove=card.locator('.inventory-stack-delete');
+   await input.waitFor();assert.equal(await input.getAttribute('min'),allowed?'0':'1');
+   assert.equal(await remove.isEnabled(),allowed);
+   if(allowed){
+    await remove.click();const modal=page.locator('.removal-confirm-dialog');await modal.waitFor({state:'visible'});
+    await modal.locator('.removal-confirm-action').click();await page.locator('.inventory-empty-stack').waitFor();
+    assert.equal(await input.inputValue(),'0');await page.locator('button[title="Undo"]:not([disabled])').click();
+    await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});assert.equal(await input.inputValue(),'6');
+   }
+   assert.deepEqual(errors,[]);
+  }finally{await context.close()}
+ }
+ console.log('CHROMIUM CLOTHING REMOVAL PASS: ordinary and flower-crafted, clear avatar, equipped piece and unresolved preset');
+}
+async function ordinaryFurnitureRemovalSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-ordinary-furniture.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({ordinaryFurnitureInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  const input=page.locator('.inventory-card input[name="quantity"]');
+  const remove=page.locator('.inventory-card .inventory-stack-delete');
+  await search.fill('3202680');await input.waitFor();
+  assert.equal(await input.getAttribute('min'),'1');assert.equal(await remove.isDisabled(),true);
+  await search.fill('427689');await input.waitFor();
+  assert.equal(await input.getAttribute('min'),'0');assert.equal(await remove.isEnabled(),true);
+  await remove.click();
+  const modal=page.locator('.removal-confirm-dialog');
+  await modal.waitFor({state:'visible'});await modal.locator('.removal-confirm-action').click();
+  await page.locator('.inventory-empty-stack').waitFor();
+  assert.equal(await input.inputValue(),'0');
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});
+  assert.equal(await input.inputValue(),'5');
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: unreferenced stack zero/undo; placed stack protected');
+ }finally{await context.close()}
+}
+async function inventoryEmptyBrowseSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-empty-browse.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({emptyMaterialInventory:true}))
+  });
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('[data-inventory-group="items"]').click();
+  const cards=page.locator('.inventory-card'),search=page.locator('.inventory-controls input[type="search"]');
+  await cards.first().waitFor();
+  assert.equal(await cards.count(),1);
+  await search.fill('627013240');
+  await page.locator('.inventory-empty-stack').waitFor();
+  assert.equal(await cards.locator('input[name="quantity"]').inputValue(),'0');
+  await search.clear();
+  await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle').click();
+  await search.fill('627013240');
+  const input=cards.locator('input[name="quantity"]');
+  await input.waitFor();
+  assert.equal(await input.inputValue(),'1');
+  await input.fill('7');
+  await cards.locator('button[type="submit"]').click();
+  await cards.waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle:not([disabled])').click();
+  await search.fill('627013240');
+  await input.waitFor();
+  assert.equal(await input.inputValue(),'7');
+  await page.locator('button[title="Undo"]').click();
+  await page.locator('.inventory-empty-stack').waitFor();
+  assert.equal(await input.inputValue(),'0');
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM INVENTORY EMPTY BROWSE PASS: hide unowned, search, refill, undo');
  }finally{await context.close()}
 }
 async function inventoryCreateMaterialSmoke(){
@@ -954,7 +1141,7 @@ async function inventoryFlowerGrowthDisplaySmoke(){
    await page.waitForFunction(k=>document.querySelectorAll('.inventory-card').length===1&&document.querySelector('[data-flower-growth="'+k+'"]'),kind);
    const card=cards.first(),quantity=card.locator('input[name="quantity"]'),apply=card.locator('.inventory-quantity-form button[type="submit"]');
    assert.equal(await quantity.getAttribute('min'),'0');
-   await quantity.fill('0');page.once('dialog',d=>d.accept());await apply.click();
+   await quantity.fill('0');await apply.click();await confirmInventoryRemoval(page);
    await apply.waitFor({state:'visible'});
    await card.locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
    assert.equal(await quantity.inputValue(),'0');
@@ -1020,8 +1207,7 @@ async function inventoryFlowerVariantEditSmoke(){
   await page.locator('.inventory-card img[src$="pattern-'+patch[0].after[2]+'.webp"]').waitFor();
   const quantity=page.locator('.inventory-card input[name="quantity"]');
   await quantity.waitFor();assert.equal(await quantity.getAttribute('min'),'0');
-  page.once('dialog',d=>d.accept());
-  await quantity.fill('0');await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]').click();
+  await quantity.fill('0');await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]').click();await confirmInventoryRemoval(page);
   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
   await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
   assert.equal(await quantity.inputValue(),'0');
@@ -1299,11 +1485,11 @@ async function inventoryAbsentFurnitureCreationSmoke(){
   await card.locator('input[name="quantity"]').waitFor();assert.equal(await card.locator('input[name="quantity"]').inputValue(),'1');
   const quantity=card.locator('input[name="quantity"]');
   assert.equal(await quantity.getAttribute('min'),'0');
-  page.once('dialog',d=>d.dismiss());
   await quantity.fill('0');await card.locator('.inventory-quantity-form button[type="submit"]').click();
+  await confirmInventoryRemoval(page,false);
   assert.equal(await card.count(),1);
-  page.once('dialog',d=>d.accept());
   await card.locator('.inventory-quantity-form button[type="submit"]').click();
+  await confirmInventoryRemoval(page);
   await card.waitFor({state:'hidden'});
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
@@ -1384,6 +1570,35 @@ async function inventoryFurnitureCreationSmoke(){
   console.log('CHROMIUM FURNITURE CREATION PASS: source retained, staged customization, quantity, recovery and native output reparse');
  }finally{await context.close();}
 }
+async function customizedFurnitureRemovalSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-custom-furniture-zero.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({editableFurniture:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  const card=page.locator('.inventory-card'),input=card.locator('input[name="quantity"]');
+  await search.fill('61381969');await input.waitFor();
+  assert.equal(await input.getAttribute('min'),'0');
+  await card.locator('.inventory-stack-delete').click();
+  const modal=page.locator('.removal-confirm-dialog');await modal.waitFor({state:'visible'});
+  await modal.locator('.removal-confirm-action').click();
+  await page.locator('.inventory-empty-stack').waitFor();assert.equal(await input.inputValue(),'0');
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('61381969');
+  await page.locator('.inventory-empty-stack').waitFor();assert.equal(await input.inputValue(),'0');
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});
+  assert.equal(await input.inputValue(),'93');
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM CUSTOMIZED FURNITURE REMOVAL PASS: zero, reload, undo');
+ }finally{await context.close()}
+}
 async function inventoryFurnitureVariantEditSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -1402,7 +1617,7 @@ async function inventoryFurnitureVariantEditSmoke(){
   await button.waitFor({timeout:30_000});
   const quantity=page.locator('.inventory-card input[name="quantity"]');
   await quantity.waitFor();assert.equal(await quantity.inputValue(),'93');
-  assert.equal(await quantity.getAttribute('min'),'1');
+  assert.equal(await quantity.getAttribute('min'),'0');
   await button.click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"][open]');
   await dialog.waitFor();
@@ -2231,6 +2446,7 @@ async function run(){
  await achievementExportReopenRoundtrip();
  await inventoryDynamicPaletteArtSmoke();
  await inventoryPaletteCreationSmoke();
+ await inventoryPaletteRemovalSmoke();
  await chefRuntimeSmoke(browser,origin,base);
  await inventoryChefArtSmoke();
  await inventoryBobaEditSmoke();
@@ -2245,6 +2461,9 @@ async function run(){
  await inventoryQuantityBoundsSmoke();
  await inventoryEmptyMaterialSmoke();
  await inventoryEmptyMaterialSmoke(true);
+ await inventoryEmptyBrowseSmoke();
+ await ordinaryFurnitureRemovalSmoke();
+ await ordinaryClothingRemovalSmoke();
  await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
  await inventoryDynamicFlowerArtSmoke();
@@ -2255,6 +2474,7 @@ async function run(){
  await inventoryAbsentFlowerCreationSmoke();
  await inventoryFlowerClothingCreationSmoke();
  await inventoryFurnitureVariantEditSmoke();
+ await customizedFurnitureRemovalSmoke();
  await inventoryFurnitureCreationSmoke();
  await inventoryAbsentFurnitureCreationSmoke();
  await inventoryDefaultFurnitureCreationSmoke();

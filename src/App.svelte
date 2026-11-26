@@ -5,11 +5,12 @@
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
- import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy} from './inventory-copy';
+ import {selectMatchingInventoryRows} from './inventory-selection';
+ import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy,inventoryDeleteCopy} from './inventory-copy';
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,type FurnitureDisplay} from './inventory-furniture-display';
- import {inventoryCategoryRepresentative,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryRefillable,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,flowerGrowthKind,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
@@ -58,7 +59,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  type ThemePref='system'|'light'|'dark';
  type PendingRemoval=
   | {kind:'collections';id:number;name:string;before:bigint;revision:number;fromDateDialog:boolean}
-  | {kind:'achievements';item:AchievementListRow;name:string;revision:number};
+  | {kind:'achievements';item:AchievementListRow;name:string;revision:number}
+  | {kind:'inventory';requests:InventoryQuantityRequest[];batch:boolean;name:string;revision:number};
  const BATCH_SIZE=40;
  const EPOCH=621355968000000000n;
  const ICONS=import.meta.env.BASE_URL+'icons/';
@@ -105,6 +107,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||inventoryBatchSelected.size===0)return 1;
   return inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantityMinimum!==0)?1:0;
  });
+ const inventoryBatchCanDelete=$derived.by(()=>!inventoryAddMode&&inventoryBatchSelected.size>0&&inventoryBatchMinimum===0&&inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantity>0));
  const inventoryBatchMaximum=$derived.by(()=>{
   let cap=2147483647;
   if(snapshot)for(const row of inventoryBrowseRows){
@@ -231,13 +234,15 @@ import {verifiedFloorplanName} from './floorplan-names';
  const groupScopedAchievementRows=$derived(achievementGroupHierarchy&&achievementGroupSelection?
   achievementGroupSelection==='__unmapped'?unmappedAchievementRows:groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows,achievementFacts):
   sourceOrderedAchievementRows);
- const inventoryBrowseRows:InventoryEntry[]=$derived((inventoryAddMode?(snapshot as SaveSnapshot|null)?.inventoryCreatable:(snapshot as SaveSnapshot|null)?.inventory)??[]);
- const inventoryGroupTotals=$derived(inventoryGroupCounts(inventoryBrowseRows,nativeInventoryIndex));
- const inventoryMatchTotals=$derived(inventorySearchGroupCounts(inventoryBrowseRows,inventoryQuery,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName));
+ const inventoryAvailableToAdd=$derived(inventoryAddRows((snapshot as SaveSnapshot|null)?.inventory??[],(snapshot as SaveSnapshot|null)?.inventoryCreatable??[]));
+ const inventoryBrowseRows:InventoryEntry[]=$derived(inventoryAddMode?inventoryAvailableToAdd:(snapshot as SaveSnapshot|null)?.inventory??[]);
+ const inventoryDisplayedRows=$derived(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,inventoryQuery));
+ const inventoryGroupTotals=$derived(inventoryGroupCounts(inventoryDisplayedRows,nativeInventoryIndex));
+ const inventoryMatchTotals=$derived(inventorySearchGroupCounts(inventoryDisplayedRows,inventoryQuery,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName));
  const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
  const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
  const inventoryRows=$derived(browseInventory(
-  inventoryBrowseRows,inventoryQuery,activeInventoryGroup,
+  inventoryDisplayedRows,inventoryQuery,activeInventoryGroup,
   inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale,inventoryVariantSearchName));
  const achievementRows=$derived(searchAchievementRows(achievementQuery,sourceOrderedAchievementRows,
   groupScopedAchievementRows,achievementName,guid=>achievementIndex.get(guid)?.key??''));
@@ -936,7 +941,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const next=(event.currentTarget as HTMLInputElement).value;
   inventoryLimit=BATCH_SIZE;
   if(!next.trim())return;
-  const counts=inventorySearchGroupCounts(inventoryBrowseRows,next,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
+  const counts=inventorySearchGroupCounts(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,next),next,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
   inventoryGroup=inventorySearchTarget(activeInventoryGroup,counts);
  }
  function toggleInventoryBatch(row:InventoryEntry){
@@ -946,18 +951,26 @@ import {verifiedFloorplanName} from './floorplan-names';
   else if(next.size<snapshot.inventoryBatchLimit)next.add(row.documentId);
   inventoryBatchSelected=next;
  }
- // Select only currently rendered, quantity-editable rows, up to Rust's
- // transaction limit. Preserve explicit selections made in other tabs/searches.
- const inventorySelectableVisible=$derived(inventoryRows.slice(0,inventoryLimit)
-  .filter(row=>row.editable&&!inventoryBatchSelected.has(row.documentId)));
- function selectVisibleInventoryBatch(){
+ // Select matching editable records independently of incremental rendering.
+ // Explicit selections in other categories/searches remain selected.
+ const inventorySelectableMatching=$derived(inventoryRows.some(row=>row.editable&&!inventoryBatchSelected.has(row.documentId)));
+ function selectMatchingInventoryBatch(){
   if(!snapshot||busy||!inventoryBatchMode)return;
-  const next=new Set(inventoryBatchSelected);
-  for(const row of inventorySelectableVisible){
-   if(next.size>=snapshot.inventoryBatchLimit)break;
-   next.add(row.documentId);
-  }
-  inventoryBatchSelected=next;
+  inventoryBatchSelected=selectMatchingInventoryRows(inventoryRows,inventoryBatchSelected,snapshot.inventoryBatchLimit);
+ }
+ function requestInventoryDelete(rows:InventoryEntry[],batch:boolean,opener:HTMLElement){
+  if(!snapshot||busy||inventoryAddMode||!rows.length||rows.some(row=>!row.editable||row.quantityMinimum!==0))return;
+  const targets=rows.filter(row=>row.quantity>0);
+  if(!targets.length)return;
+  const requests:InventoryQuantityRequest[]=targets.map(row=>[row.documentId,row.quantity,0]);
+  const name=batch?targets.length.toLocaleString(locale):inventoryName(targets[0].itemId)+(inventoryVariantSearchName(targets[0])?' · '+inventoryVariantSearchName(targets[0]):'')+' × '+targets[0].quantity.toLocaleString(locale);
+  void requestRemoval({kind:'inventory',requests,batch,name,revision:snapshot.revision},opener);
+ }
+ function requestInventoryBatchDelete(opener:HTMLElement){
+  if(!inventoryBatchMode||!inventoryBatchCanDelete)return;
+  const rows=inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId));
+  if(rows.length!==inventoryBatchSelected.size)return;
+  requestInventoryDelete(rows,true,opener);
  }
  async function applyInventoryBatch(event:SubmitEvent){
   event.preventDefault();
@@ -967,7 +980,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const rows=inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId));
   if(rows.length!==inventoryBatchSelected.size||rows.some(row=>!row.editable))return;
   if(rows.every(row=>row.quantity===next)){resetInventoryBatchSelection();return}
-  if(next===0&&!confirm(inventoryEmptyCopy(locale)))return;
+  if(next===0){requestInventoryDelete(rows,true,(event.submitter??event.currentTarget) as HTMLElement);return;}
   const requests:InventoryQuantityRequest[]=rows.map(row=>[row.documentId,row.quantity,next]);
   busy=true;error='';
   try{
@@ -987,7 +1000,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const next=Number(value);
   if(!Number.isSafeInteger(next)||row.quantityLimit===null||next<row.quantityMinimum||next>row.quantityLimit){error=copy.fileError;return}
   if(next===row.quantity)return;
-  if(next===0&&!confirm(inventoryEmptyCopy(locale)))return;
+  if(next===0){requestInventoryDelete([row],false,(event.submitter??event.currentTarget) as HTMLElement);return;}
   busy=true;error='';
   try{
    update(await changeInventoryQuantity(row.documentId,row.quantity,next));
@@ -1024,7 +1037,9 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(snapshot.revision!==target.revision||original!==removalOriginal||
    (target.kind==='collections'
     ?recorded[String(target.id)]!==target.before
-    :snapshot.achievements.find(row=>achievementGuid(row.guid)===target.item.guid)?.value.complete!==true)){
+    :target.kind==='achievements'
+     ?snapshot.achievements.find(row=>achievementGuid(row.guid)===target.item.guid)?.value.complete!==true
+     :target.requests.some(([id,before])=>!snapshot?.inventory.some(row=>row.documentId===id&&row.quantity===before&&row.editable&&row.quantityMinimum===0)))){
    closeRemovalConfirmation();error=removalCopy.stale;return;
   }
   closeRemovalConfirmation();
@@ -1034,7 +1049,16 @@ import {verifiedFloorplanName} from './floorplan-names';
     if(success)closeDateDialog();
     else dateValidation=error||copy.fileError;
    }
-  }else await quickToggleAchievement(target.item,undefined,undefined,true);
+  }else if(target.kind==='achievements')await quickToggleAchievement(target.item,undefined,undefined,true);
+  else{
+   busy=true;error='';
+   try{
+    if(target.batch){update(await changeInventoryQuantities(target.requests));resetInventoryBatchSelection()}
+    else{const [id,before,next]=target.requests[0];update(await changeInventoryQuantity(id,before,next))}
+    await persistDraft();
+   }catch(e){error=describeError(e)}
+   finally{busy=false}
+  }
  }
  async function toggleCollection(id:number,name:string,opener:HTMLElement){
   if(!snapshot||busy||pendingRemoval)return;
@@ -1411,7 +1435,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {iCopy.editableOnly}
     </button>
     <button type="button" class="inventory-editable-filter inventory-add-toggle" class:active={inventoryAddMode}
-     aria-pressed={inventoryAddMode} disabled={busy||(!inventoryAddMode&&snapshot.inventoryCreatable.length===0)}
+     aria-pressed={inventoryAddMode} disabled={busy||(!inventoryAddMode&&inventoryAvailableToAdd.length===0)}
      onclick={()=>{clearInventoryBatch();inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;inventoryLimit=BATCH_SIZE}}>
      {inventoryAddMode?iCopy.tab:'+ '+inventoryAddCopy(locale)}
     </button>
@@ -1422,12 +1446,13 @@ import {verifiedFloorplanName} from './floorplan-names';
     </button>
     {#if inventoryBatchMode}
      <form class="inventory-batch-form" onsubmit={e=>void applyInventoryBatch(e)}>
-      <button type="button" class="inventory-editable-filter inventory-select-visible" disabled={busy||inventoryBatchSelected.size>=snapshot.inventoryBatchLimit||inventorySelectableVisible.length===0} title={inventorySelectVisibleCopy(locale)} aria-label={inventorySelectVisibleCopy(locale)} onclick={selectVisibleInventoryBatch}>
+      <button type="button" class="inventory-editable-filter inventory-select-visible" disabled={busy||inventoryBatchSelected.size>=snapshot.inventoryBatchLimit||!inventorySelectableMatching} title={inventorySelectVisibleCopy(locale)} aria-label={inventorySelectVisibleCopy(locale)} onclick={selectMatchingInventoryBatch}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 12 3 3 7-7"/></svg>
        </button>
        <span class="inventory-total" aria-live="polite">{inventoryBatchSelected.size.toLocaleString(locale)} / {snapshot.inventoryBatchLimit.toLocaleString(locale)}</span>
       <input type="number" min={inventoryBatchMinimum} max={inventoryBatchMaximum} step="1" required bind:value={inventoryBatchQuantity} placeholder={iCopy.quantity} aria-label={iCopy.quantity} disabled={busy}/>
       <button type="submit" class="primary" disabled={busy||!inventoryBatchSelected.size||inventoryBatchQuantity===undefined}>{iCopy.apply}</button>
+      {#if !inventoryAddMode}<button type="button" class="inventory-editable-filter inventory-batch-delete" disabled={busy||!inventoryBatchCanDelete} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)} onclick={e=>requestInventoryBatchDelete(e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>{/if}
       <button type="button" class="inventory-editable-filter" disabled={busy} onclick={clearInventoryBatch}>{copy.cancel}</button>
      </form>
     {:else}
@@ -1485,11 +1510,14 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const canCafe=!!item.cafe?.editable}
      {@const canWand=!!item.unique?.wandEditable&&!!wand}
      {@const canBoba=!!item.boba?.editable}
-      <article class="inventory-card" class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!item.flowerCreatable} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
+      <article class="inventory-card" class:inventory-empty-stack={!inventoryAddMode&&inventoryRefillable(item)} class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!item.flowerCreatable} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
       {#if inventoryBatchMode&&item.editable}
        <input class="inventory-batch-checkbox" type="checkbox" checked={inventoryBatchSelected.has(item.documentId)} aria-label={iBatchCopy+': '+inventoryName(item.itemId)}
         disabled={busy||(!inventoryBatchSelected.has(item.documentId)&&inventoryBatchSelected.size>=snapshot.inventoryBatchLimit)} onchange={()=>toggleInventoryBatch(item)}/>
       {/if}
+        {#if !inventoryAddMode&&!inventoryBatchMode&&item.editable}
+         <button type="button" class="inventory-stack-delete" disabled={busy||item.quantityMinimum!==0||item.quantity<=0} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)+': '+inventoryName(item.itemId)} onclick={e=>requestInventoryDelete([item],false,e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
+        {/if}
       <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
        <span class="inventory-item-art" class:flower-variant={!!flower} aria-hidden="true">
         {#if wand&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
@@ -2031,14 +2059,14 @@ import {verifiedFloorplanName} from './floorplan-names';
   {#if pendingRemoval}
    <div class="removal-confirm-inner">
     <div class="date-dialog-heading">
-     <h2 id="removal-confirm-title">{pendingRemoval.kind==='collections'?removalCopy.collectionTitle:removalCopy.achievementTitle}</h2>
+     <h2 id="removal-confirm-title">{pendingRemoval.kind==='inventory'?inventoryDeleteCopy(locale):pendingRemoval.kind==='collections'?removalCopy.collectionTitle:removalCopy.achievementTitle}</h2>
      <button type="button" class="date-dialog-close" aria-label={removalCopy.cancel} disabled={busy} onclick={closeRemovalConfirmation}>×</button>
     </div>
     <strong class="removal-confirm-name">{pendingRemoval.name}</strong>
-    <p class="removal-confirm-warning">{pendingRemoval.kind==='collections'?removalCopy.collectionWarning:removalCopy.achievementWarning}</p>
+    <p class="removal-confirm-warning">{pendingRemoval.kind==='inventory'?inventoryEmptyCopy(locale):pendingRemoval.kind==='collections'?removalCopy.collectionWarning:removalCopy.achievementWarning}</p>
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel removal-cancel" autofocus disabled={busy} onclick={closeRemovalConfirmation}>{removalCopy.cancel}</button>
-     <button type="button" class="removal-confirm-action" disabled={busy} onclick={()=>void confirmRemoval()}>{removalCopy.remove}</button>
+     <button type="button" class="removal-confirm-action" disabled={busy} onclick={()=>void confirmRemoval()}>{pendingRemoval.kind==='inventory'?inventoryDeleteCopy(locale):removalCopy.remove}</button>
     </div>
    </div>
   {/if}
