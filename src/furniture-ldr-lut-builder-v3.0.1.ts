@@ -61,12 +61,14 @@ function grade(uv:V2,p:V4,u:NativeLdrBuilderUniforms,curve:NativeLdrCurveSample)
   const y=curve(slot,x);if(!Number.isFinite(y))return fail('CURVE_SAMPLE');return sat(y);
  };
  const shifted=h+u.hueSatContrast[0];
- let h2=shifted+sample(4,shifted)-.5;
+ const hueCurve=sample(4,shifted),lumCurve=sample(7,lum(c));
+ let h2=shifted+hueCurve-.5;
  if(h2>1)h2-=1;else if(h2<0)h2+=1;
  const offsets=[1,k,f(1/3)];
  const out=rgb(i=>q[0]*(1+s*(sat(Math.abs(fract(h2+offsets[i])*6-3)-1)-1)));
- const l=lum(out),mult=2*sample(7,lum(c))*2*sample(5,h)*2*sample(6,s)*u.hueSatContrast[1];
- const channels=rgb(i=>sample((i+1) as 1|2|3,sample(0,l+mult*(out[i]-l)+1/256)+1/256));
+ const l=lum(out),mult=2*lumCurve*2*sample(5,h)*2*sample(6,s)*u.hueSatContrast[1];
+ const master=rgb(i=>sample(0,l+mult*(out[i]-l)+1/256));
+ const channels=rgb(i=>sample((i+1) as 1|2|3,master[i]+1/256));
  return [...channels,1];
 }
 export function nativeLdrBuilderPixel(uv:V2,p:V4,u:NativeLdrBuilderUniforms,curve:NativeLdrCurveSample):V4{
