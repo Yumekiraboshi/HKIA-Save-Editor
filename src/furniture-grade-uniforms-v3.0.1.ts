@@ -22,7 +22,6 @@ export function nativeGradeWhiteBalance(temperature:number,tint:number):V3{
  const x=sub(f(.31271),mul(t,t<0?f(.1):f(.05)));
  const y=add(sub(sub(mul(f(2.87),x),mul(mul(3,x),x)),f(.2750950753688812)),mul(ti,f(.05)));
  const X=div(x,y),Z=div(sub(sub(1,x),y),y);
- const L=add(add(mul(f(.7328),X),f(.4296)),mul(f(-.1624),Z));
  // The native CIExyToLMS returns L, M, S; recover these directly from
  // its constants rather than using the separate shader RGB-to-LMS matrix.
  const nativeL=add(add(mul(f(.7328),X),f(.4296)),mul(f(-.1624),Z));
