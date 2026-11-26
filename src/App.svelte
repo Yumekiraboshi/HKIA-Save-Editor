@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPaletteVariants,changeInventoryPaletteVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -42,7 +42,7 @@ import {searchAchievementRows} from './achievement-search';
  import DynamicWandSprite from './DynamicWandSprite.svelte';
  import {inventoryWandAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance} from './inventory-chef-display';
- import {CUSTOM_PALETTE_ITEM_ID} from './inventory-palette-display';
+ import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,type PaletteVariant} from './inventory-palette-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {toAchievementDateTimeValue,fromAchievementDateTimeValue} from './achievement-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
@@ -77,6 +77,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  let furnitureDisplay:FurnitureDisplay|null=$state(null);
  let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[];creationOptions:FurnitureVariant[];createOnly:boolean}|null>(null);
  let furnitureSelection=$state(-1);
+ let paletteDialogEl:HTMLDialogElement|undefined=$state();
+ let paletteEdit=$state<{documentId:number;itemId:number;revision:number;before:PaletteVariant;options:PaletteVariant[]}|null>(null);
+ let paletteSlot=$state(0);
+ let paletteSelection=$state(-1);
  let inventoryNativeArt:InventoryNativeArt|null=$state(null);
  let inventoryEditableOnly=$state(false);
  let inventoryAddMode=$state(false);
@@ -745,6 +749,28 @@ import {verifiedFloorplanName} from './floorplan-names';
   }catch(e){error=describeError(e)}
   finally{busy=false}
  }
+ async function openPaletteEditor(row:InventoryEntry){
+  const before=paletteVariantOf(row.unique);
+  if(!snapshot||busy||!row.unique?.paletteEditable||!before)return;
+  const revision=snapshot.revision;busy=true;error='';
+  try{
+   const options=await requestPaletteVariants(row.documentId);
+   if(!snapshot||snapshot.revision!==revision)return;
+   paletteEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options};
+   paletteSlot=0;paletteSelection=-1;await tick();
+   if(paletteDialogEl&&!paletteDialogEl.open)paletteDialogEl.showModal();
+  }catch(e){error=describeError(e)}
+  finally{busy=false}
+ }
+ function closePaletteEditor(){if(paletteDialogEl?.open)paletteDialogEl.close()}
+ async function applyInventoryPaletteVariant(event:SubmitEvent){
+  event.preventDefault();const edit=paletteEdit;
+  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
+  const next=edit.options[paletteSelection];if(!next)return;
+  busy=true;error='';
+  try{update(await changeInventoryPaletteVariant(edit.documentId,edit.before,next));closePaletteEditor();await persistDraft()}
+  catch(e){error=describeError(e)}finally{busy=false}
+ }
  function closeFurnitureEditor(){if(furnitureDialogEl?.open)furnitureDialogEl.close()}
  async function applyInventoryFurnitureVariant(event:SubmitEvent){
   event.preventDefault();
@@ -1346,6 +1372,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
      {@const canFlower=!!item.flower&&!!item.unique?.flowerEditable&&!!flowerDefinitions&&!!flowerLabels[locale]}
      {@const canFurniture=!!item.unique?.furnitureEditable||!!item.furnitureCreatable}
+     {@const canPalette=!!item.unique?.paletteEditable&&!!item.palette}
       <article class="inventory-card" class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!item.flowerCreatable} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
       {#if inventoryBatchMode&&item.editable}
        <input class="inventory-batch-checkbox" type="checkbox" checked={inventoryBatchSelected.has(item.documentId)} aria-label={iBatchCopy+': '+inventoryName(item.itemId)}
@@ -1394,10 +1421,10 @@ import {verifiedFloorplanName} from './floorplan-names';
         <button type="submit" class="primary" disabled={busy||inventoryBatchMode} title={iCopy.apply} aria-label={iCopy.apply}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
         </button>
-        {#if canFlower||canFurniture}
+        {#if canFlower||canFurniture||canPalette}
          <button class="inventory-unique-edit-button inventory-compact-variant" type="button" disabled={busy||inventoryBatchMode}
-          title={canFurniture?furnitureCopy.title:flowerCopy.title} aria-label={(canFurniture?furnitureCopy.title:flowerCopy.title)+': '+inventoryName(item.itemId)}
-          onclick={()=>void (canFurniture?openFurnitureEditor(item):openFlowerEditor(item))}>
+          title={canPalette?flowerCopy.color:canFurniture?furnitureCopy.title:flowerCopy.title} aria-label={(canPalette?flowerCopy.color:canFurniture?furnitureCopy.title:flowerCopy.title)+': '+inventoryName(item.itemId)}
+          onclick={()=>void (canPalette?openPaletteEditor(item):canFurniture?openFurnitureEditor(item):openFlowerEditor(item))}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg>
          </button>
         {/if}
@@ -1568,6 +1595,43 @@ import {verifiedFloorplanName} from './floorplan-names';
    {/if}
   {/if}
  </main>
+ <dialog class="date-dialog" bind:this={paletteDialogEl} aria-labelledby="palette-editor-title" onclose={()=>{paletteEdit=null;paletteSelection=-1}} oncancel={e=>{if(busy)e.preventDefault()}}>
+  {#if paletteEdit}
+   {@const edit=paletteEdit}
+   {@const selected=edit.options[paletteSelection]??edit.before}
+   <form class="date-dialog-inner" onsubmit={applyInventoryPaletteVariant}>
+    <div class="date-dialog-heading">
+     <h2 id="palette-editor-title">{inventoryName(edit.itemId)}</h2>
+     <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closePaletteEditor}>×</button>
+    </div>
+    <div class="inventory-palette-preview" style="display:flex;justify-content:center">
+     <DynamicPaletteSprite itemId={edit.itemId} palette={paletteFromWords(selected)}/>
+    </div>
+    <div class="date-dialog-field">
+     <div style="display:flex;gap:8px">
+      {#each [0,1,2] as slot}
+       <button class="inventory-palette-slot" type="button" data-palette-slot={slot} aria-label={flowerCopy.color+' '+(slot+1)} aria-pressed={paletteSlot===slot} disabled={busy} onclick={()=>{paletteSlot=slot;paletteSelection=-1}} style="min-width:44px;min-height:36px;display:flex;align-items:center;gap:6px">
+        <span style:background-color={paletteColorHex(selected,slot)} style="width:22px;height:22px;border:1px solid currentColor;border-radius:4px" aria-hidden="true"></span>{slot+1}
+       </button>
+      {/each}
+     </div>
+     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(32px,1fr));gap:5px;margin-top:8px">
+      {#each edit.options as option,i}
+       {#if option.slice(paletteSlot*4,paletteSlot*4+4).some((v,j)=>v!==edit.before[paletteSlot*4+j])}
+        <button class="inventory-palette-option" type="button" data-palette-option={i} aria-label={paletteColorHex(option,paletteSlot)} title={paletteColorHex(option,paletteSlot)} aria-pressed={paletteSelection===i} disabled={busy} onclick={()=>paletteSelection=i} style:background-color={paletteColorHex(option,paletteSlot)} style="width:32px;height:32px;border:1px solid currentColor;border-radius:5px" style:outline={paletteSelection===i?'2px solid currentColor':'none'}></button>
+       {/if}
+      {/each}
+     </div>
+     {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
+    </div>
+    <div class="date-dialog-actions">
+     <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closePaletteEditor}>{copy.cancel}</button>
+     <button type="submit" class="primary" disabled={busy||paletteSelection<0}>{copy.apply}</button>
+    </div>
+   </form>
+  {/if}
+ </dialog>
+
  <dialog class="date-dialog" bind:this={furnitureDialogEl} aria-labelledby="furniture-editor-title" onclose={()=>{furnitureEdit=null;furnitureSelection=-1}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if furnitureEdit}
    {@const edit=furnitureEdit}

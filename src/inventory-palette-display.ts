@@ -22,3 +22,26 @@ export function resolvePaletteTints(itemId:number,palette:InventoryPalette):Tint
   !palette.every(c=>c.length===4&&c.every(v=>Number.isFinite(v)&&v>=0&&v<=1)))return null;
  return palette;
 }
+
+/** Exact unsigned words for transport/history. Float conversion is display-only. */
+export type PaletteVariant=number[];
+export function isPaletteVariantWire(value:unknown):value is PaletteVariant{
+ return Array.isArray(value)&&value.length===12&&value.every(n=>Number.isInteger(n)&&n>=0&&n<=4294967295);
+}
+export function paletteVariantOf(unique:{tag:number;words:number[]}|undefined):PaletteVariant|null{
+ return unique?.tag===6&&isPaletteVariantWire(unique.words)?[...unique.words]:null;
+}
+export function decodePaletteVariants(bytes:Uint8Array):PaletteVariant[]{
+ if(bytes.length<4)throw Error('PALETTE_OPTIONS_INVALID');
+ const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),n=v.getUint32(0,true);
+ if(n>438||bytes.length!==4+n*48)throw Error('PALETTE_OPTIONS_INVALID');
+ return Array.from({length:n},(_,i)=>Array.from({length:12},(_,j)=>v.getUint32(4+i*48+j*4,true)));
+}
+export function paletteFromWords(words:PaletteVariant):InventoryPalette{
+ const v=new DataView(new ArrayBuffer(4));
+ const color=(slot:number)=>Array.from({length:4},(_,i)=>{v.setUint32(0,words[4*slot+i],true);return v.getFloat32(0,true)}) as unknown as Rgba;
+ return [color(0),color(1),color(2)];
+}
+export function paletteColorHex(words:PaletteVariant,slot:number):string{
+ return '#'+paletteFromWords(words)[slot].slice(0,3).map(n=>Math.round(Math.max(0,Math.min(1,n))*255).toString(16).padStart(2,'0')).join('');
+}

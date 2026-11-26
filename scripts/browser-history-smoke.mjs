@@ -169,10 +169,25 @@ async function inventoryDynamicPaletteArtSmoke(){
   await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
   await inputs.nth(1).fill('7');await page.locator('.inventory-card button[type="submit"]').nth(1).click();
   await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.locator('.inventory-card .inventory-unique-edit-button').first().click();
+  const editor=page.locator('dialog[aria-labelledby="palette-editor-title"]');
+  await editor.waitFor();await editor.locator('.inventory-palette-option').first().click();
+  await editor.locator('button[type="submit"]:not([disabled])').click();await editor.waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await page.locator('button[title="Redo"]:not([disabled])').click();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
   await inputs.nth(1).waitFor();
   assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.value)),['4','7']);
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_palettes_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(v.getUint32(0,true),2);
+  assert.deepEqual(Array.from({length:4},(_,i)=>v.getUint32(8+i*4,true)),[0x3f41c1c2,0x3e24a4a5,0x3e74f4f5,0x3f800000]);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM DYNAMIC PALETTE PASS: native unique Color1/2/3, independent quantities, draft recovery and local generation');
  }finally{await context.close();}
