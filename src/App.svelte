@@ -10,7 +10,7 @@
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,type FurnitureDisplay} from './inventory-furniture-display';
- import {inventoryCategoryRepresentative,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryRefillable,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,flowerGrowthKind,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
@@ -231,13 +231,15 @@ import {verifiedFloorplanName} from './floorplan-names';
  const groupScopedAchievementRows=$derived(achievementGroupHierarchy&&achievementGroupSelection?
   achievementGroupSelection==='__unmapped'?unmappedAchievementRows:groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows,achievementFacts):
   sourceOrderedAchievementRows);
- const inventoryBrowseRows:InventoryEntry[]=$derived((inventoryAddMode?(snapshot as SaveSnapshot|null)?.inventoryCreatable:(snapshot as SaveSnapshot|null)?.inventory)??[]);
- const inventoryGroupTotals=$derived(inventoryGroupCounts(inventoryBrowseRows,nativeInventoryIndex));
- const inventoryMatchTotals=$derived(inventorySearchGroupCounts(inventoryBrowseRows,inventoryQuery,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName));
+ const inventoryAvailableToAdd=$derived(inventoryAddRows((snapshot as SaveSnapshot|null)?.inventory??[],(snapshot as SaveSnapshot|null)?.inventoryCreatable??[]));
+ const inventoryBrowseRows:InventoryEntry[]=$derived(inventoryAddMode?inventoryAvailableToAdd:(snapshot as SaveSnapshot|null)?.inventory??[]);
+ const inventoryDisplayedRows=$derived(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,inventoryQuery));
+ const inventoryGroupTotals=$derived(inventoryGroupCounts(inventoryDisplayedRows,nativeInventoryIndex));
+ const inventoryMatchTotals=$derived(inventorySearchGroupCounts(inventoryDisplayedRows,inventoryQuery,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName));
  const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
  const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
  const inventoryRows=$derived(browseInventory(
-  inventoryBrowseRows,inventoryQuery,activeInventoryGroup,
+  inventoryDisplayedRows,inventoryQuery,activeInventoryGroup,
   inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale,inventoryVariantSearchName));
  const achievementRows=$derived(searchAchievementRows(achievementQuery,sourceOrderedAchievementRows,
   groupScopedAchievementRows,achievementName,guid=>achievementIndex.get(guid)?.key??''));
@@ -906,7 +908,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const next=(event.currentTarget as HTMLInputElement).value;
   inventoryLimit=BATCH_SIZE;
   if(!next.trim())return;
-  const counts=inventorySearchGroupCounts(inventoryBrowseRows,next,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
+  const counts=inventorySearchGroupCounts(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,next),next,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
   inventoryGroup=inventorySearchTarget(activeInventoryGroup,counts);
  }
  function toggleInventoryBatch(row:InventoryEntry){
@@ -1400,7 +1402,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {iCopy.editableOnly}
     </button>
     <button type="button" class="inventory-editable-filter inventory-add-toggle" class:active={inventoryAddMode}
-     aria-pressed={inventoryAddMode} disabled={busy||(!inventoryAddMode&&snapshot.inventoryCreatable.length===0)}
+     aria-pressed={inventoryAddMode} disabled={busy||(!inventoryAddMode&&inventoryAvailableToAdd.length===0)}
      onclick={()=>{clearInventoryBatch();inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;inventoryLimit=BATCH_SIZE}}>
      {inventoryAddMode?iCopy.tab:'+ '+inventoryAddCopy(locale)}
     </button>
@@ -1474,7 +1476,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const canPalette=!!item.unique?.paletteEditable&&!!item.palette}
      {@const canCafe=!!item.cafe?.editable}
      {@const canBoba=!!item.boba?.editable}
-      <article class="inventory-card" class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!item.flowerCreatable} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
+      <article class="inventory-card" class:inventory-empty-stack={!inventoryAddMode&&inventoryRefillable(item)} class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!item.flowerCreatable} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
       {#if inventoryBatchMode&&item.editable}
        <input class="inventory-batch-checkbox" type="checkbox" checked={inventoryBatchSelected.has(item.documentId)} aria-label={iBatchCopy+': '+inventoryName(item.itemId)}
         disabled={busy||(!inventoryBatchSelected.has(item.documentId)&&inventoryBatchSelected.size>=snapshot.inventoryBatchLimit)} onchange={()=>toggleInventoryBatch(item)}/>

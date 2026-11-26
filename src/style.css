@@ -336,3 +336,5 @@
 .inventory-stack-delete:disabled{opacity:.35;cursor:default}
 .inventory-stack-delete:not(:disabled):hover,.inventory-batch-delete:not(:disabled):hover{color:var(--danger);background:var(--hover)}
 .inventory-batch-delete{display:grid;place-items:center;color:var(--danger)}
+
+.inventory-empty-stack .inventory-card-heading{opacity:.55}
