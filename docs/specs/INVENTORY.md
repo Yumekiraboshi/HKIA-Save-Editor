@@ -129,3 +129,7 @@ For the intersection of the already source-authorized ordinary acquisition candi
 #### Cancel a newly staged unique variant
 
 A flower, flower-crafted clothing or customized furniture record added in the current editing session can be cancelled individually or in a batch by setting its quantity to zero, using the existing confirmation. Rust retains its session-only identity and prior appearance in the bounded undo journal but excludes it from active snapshots, edit choices and native output; no UID or document ID is allocated for a cancelled record. Undo restores the exact quantity and effective appearance, Redo cancels again, and subsequent creation may reuse the appearance with a different session handle. Original saved unique rows remain subject to the existing positive minimum pending verified deletion and reference closure. No new persisted deletion operation is implied.
+
+#### Create further flower variants from newly staged rows
+
+A newly staged flower or flower-crafted clothing row can serve as the source for another distinct same-growth-state variant without an intermediate export/reopen. The same native bounded choices, original/effective tuple reservations, quantity validation, allocator and journal apply; inactive/cancelled source handles are not eligible. The original creation and its dependencies remain in the bounded native journal, including when an earlier staged source is subsequently cancelled; active descendants are independently exported. No growth state conversion or new absent-species seed/root recipe is authorized. 

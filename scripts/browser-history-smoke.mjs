@@ -779,11 +779,17 @@ async function inventoryAbsentFlowerCreationSmoke(){
   await dialog.locator('button[type="submit"]').click();
   await dialog.waitFor({state:'hidden'});
   await card.locator('.inventory-unique-edit-button:not([disabled])').waitFor();
+  await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  const color=await dialog.locator('select optgroup').first().locator('option').first().getAttribute('value');assert.ok(color!==null);
+  await dialog.locator('select').selectOption(color);
+  await dialog.locator('.inventory-create-flower:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await card.nth(1).waitFor();
+  await card.nth(1).locator('.inventory-unique-edit-button:not([disabled])').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('43114910');
-  await card.locator('input[name="quantity"]').waitFor();
-  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'1');
+  await card.nth(1).waitFor();
+  assert.deepEqual(await card.locator('input[name="quantity"]').evaluateAll(rows=>rows.map(r=>r.value)),['1','1']);
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
   const output=readFileSync(await download.path());
@@ -791,8 +797,9 @@ async function inventoryAbsentFlowerCreationSmoke(){
   const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
   assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_flowers_snapshot(),0);
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
-  assert.equal(v.getUint32(0,true),1);assert.equal(v.getUint32(4,true),5);
+  assert.equal(v.getUint32(0,true),2);assert.equal(v.getUint32(4,true),5);assert.equal(v.getUint32(24,true),6);
   assert.deepEqual(Array.from({length:4},(_,i)=>v.getInt32(8+i*4,true)),[6,2,1,16]);
+  assert.notDeepEqual(Array.from({length:4},(_,i)=>v.getInt32(28+i*4,true)),[6,2,1,16]);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM UNOWNED FLOWER PASS: native default choices, staged appearance edit, draft recovery, exported reparse');
  }finally{await context.close();}

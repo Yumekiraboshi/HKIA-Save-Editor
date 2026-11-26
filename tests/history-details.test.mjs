@@ -220,3 +220,12 @@ test('absent furniture creation preserves unsigned source identity and rejects f
  assert.deepEqual(decodeHistoryDetails(log([op(source,[0,0,0])],1),[meta('inventory',source,null)]),[{scope:'inventory',documentId:source,createdHandle:handle,itemId,variant:[0,2,0],quantity:4,furnitureCreated:true}]);
  for(const [id,before] of [[source+1,[0,0,0]],[source,[1,0,0]]])assert.deepEqual(decodeHistoryDetails(log([op(id,before)],1),[meta('inventory',id,null)]),[]);
 });
+
+test('flower creation from a staged source shows both native journal steps',()=>{
+ const a=2147483649,b=2147483650,item=43114910,source=2147483648+item;
+ const op=(handle,id,before,after)=>bytes([u8(11),u32(handle),u32(id),i32(item),...([...before,...after].map(i32)),i32(3)]);
+ const first=op(a,source,[0,0,0,0],[6,2,0,0]),second=op(b,a,[6,2,0,0],[6,1,0,0]);
+ const result=decodeHistoryDetails(log([first,second],2),[meta('inventory',source,null),meta('inventory',a,null)]);
+ assert.equal(result.length,2);assert.equal(result[1].createdHandle,b);assert.equal(result[1].documentId,a);
+ assert.deepEqual(decodeHistoryDetails(log([second],1),[meta('inventory',a,null)]),[]);
+});

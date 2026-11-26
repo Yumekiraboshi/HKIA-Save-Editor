@@ -565,6 +565,10 @@ impl Editor {
  /// On-demand creation choices. Rust alone checks the source species,
  /// allocation budget, identity/reference guards, and original tuple.
  pub fn inventory_flower_creation_variants(&self,id:u32)->Vec<FlowerVariant>{
+  if let Some(f)=self.pending_flowers.get(&id){
+   if !self.inventory_changes.contains_key(&id)||!self.absent_flower_budget_available(){return Vec::new()}
+   return self.inventory_flower_variants(id).into_iter().filter(|&v|v!=f.variant).collect()
+  }
   if id&PENDING_ITEM!=0{return self.absent_flower_options((id&!PENDING_ITEM) as i32)}
   if !self.inventory_creation_source_valid()||!self.unique_quantity_ids.contains(&id)||self.undo.len()+self.redo.len()>=MAX_UNDO||
    crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_unique_count()+1).is_err()||
@@ -579,6 +583,13 @@ impl Editor {
  /// existing validated species row. No persisted UID is assigned until
  /// export. Multiple variants of one species use independent handles.
  pub fn create_inventory_flower_variant(&mut self,source_id:u32,expected:FlowerVariant,next:FlowerVariant,quantity:i32)->Result<u32,Error>{
+  if let Some(f)=self.pending_flowers.get(&source_id).copied(){
+   if quantity<=0||!self.inventory_changes.contains_key(&source_id)||!self.absent_flower_budget_available(){return Err(Error::Schema)}
+   let (patterns,current,reserved)=self.flower_context(source_id).ok_or(Error::Schema)?;
+   if expected!=current||next==current||next==f.variant||next[0]!=current[0]||
+    !valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
+   return self.stage_new_flower(source_id,f.item_id,expected,next,quantity)
+  }
   if source_id&PENDING_ITEM!=0{
    let item_id=(source_id&!PENDING_ITEM) as i32;
    if quantity<=0||expected!=[0;4]||!self.absent_flower_options(item_id).contains(&next){return Err(Error::Schema)}

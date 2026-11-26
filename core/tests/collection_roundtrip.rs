@@ -2132,3 +2132,34 @@ fn cancel_staged_unique_rows_preserves_history_and_never_allocates_deleted_uids(
   assert_eq!(recovered.inventory(),r.inventory());
  }
 }
+
+#[test]
+fn staged_flower_source_can_create_other_variants_and_replay_cancellation(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ for zipped in [false,true]{
+  let raw=slot_from_payload("3.0.1",synthetic_payload("3.0.1"));
+  let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let candidate=(1u32<<31)|43114910;
+  let a=e.create_inventory_flower_variant(candidate,[0;4],[6,2,0,0],3).unwrap();
+  let next=[6,1,0,0];assert!(e.inventory_flower_creation_variants(a).contains(&next));
+  assert!(e.create_inventory_flower_variant(a,[6,5,0,0],next,2).is_err());
+  assert!(e.create_inventory_flower_variant(a,[6,2,0,0],[7,1,0,0],2).is_err());
+  let b=e.create_inventory_flower_variant(a,[6,2,0,0],next,2).unwrap();
+  assert_ne!(a,b);assert!(!e.inventory_flower_creation_variants(a).contains(&next));
+  e.change_inventory_quantity(a,3,0).unwrap();
+  assert!(e.inventory_flower_creation_variants(a).is_empty());
+  assert!(e.create_inventory_flower_variant(a,[6,2,0,0],[6,9,0,0],1).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut r=Editor::open(input.clone()).unwrap();
+  r.restore_history(&cp).unwrap();assert_eq!(r.inventory(),e.inventory());
+  assert!(r.undo_scope(Inventory));assert_eq!(r.inventory().len(),2);
+  assert!(r.undo_scope(Inventory));assert_eq!(r.inventory().len(),1);
+  let cp=r.history_checkpoint().unwrap();let mut r=Editor::open(input).unwrap();r.restore_history(&cp).unwrap();
+  assert!(r.redo_scope(Inventory));assert_eq!(r.inventory().len(),2);
+  assert!(r.redo_scope(Inventory));assert_eq!(r.inventory().len(),1);
+  let reopened=Editor::open(r.export().unwrap()).unwrap();
+  let rows=reopened.inventory();assert_eq!(rows.len(),1);assert_eq!(rows[0].quantity,2);
+  assert_eq!(reopened.inventory_unique_data(rows[0].document_id),e.inventory_unique_data(b));
+  assert_eq!(reopened.inventory_unique_rows().next().unwrap().1,Some(1));
+ }
+}
