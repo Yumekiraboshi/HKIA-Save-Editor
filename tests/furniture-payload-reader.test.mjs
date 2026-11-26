@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {furniturePayloadPlan,packFurniturePayloads} from '../scripts/pack-furniture-native-payloads.mjs';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/furniture-payload-reader.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {createFurniturePayloadReader}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {createFurniturePayloadReader,furniturePayloadReferences}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const data=Uint8Array.of(1,2,3,4),ref={kind:'geometry',sha256:sha(data),bytes:data.length};
 const root=new URL('https://example.test/editor/furniture/');
@@ -51,5 +51,25 @@ test('packer copies only hash-matching bytes, deduplicates and leaves no partial
   assert.throws(()=>packFurniturePayloads([row],out),/OUTPUT_EXISTS/);
   writeFileSync(path,Uint8Array.of(9,2,3,4));
   const bad=join(dir,'bad');assert.throws(()=>packFurniturePayloads([row],bad),/SOURCE_HASH/);assert.equal(existsSync(bad),false);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('browser allowlist matches the offline pack plan, independently of pack index',()=>{
+ const read=p=>JSON.parse(readFileSync(new URL('../data/'+p,import.meta.url),'utf8'));
+ const s={geometry:read('furniture-mesh-source-sample-v3.0.1.json'),base:read('furniture-base-material-source-v3.0.1.json'),patterns:read('furniture-pattern-texture-sample-v3.0.1.json'),additionalPatterns:read('furniture-chair-pattern-sources-v3.0.1.json')};
+ const refs=furniturePayloadReferences(s,Object.values(read('furniture-light-region-source-v3.0.1.json').cubemaps));
+ const plan=furniturePayloadPlan('/stage','/patterns').map(({path,...r})=>r);
+ assert.deepEqual(refs,plan);
+});
+test('verified local pack and browser reader use the same exact path and contents',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'hkia-furniture-read-'));
+ try{
+  const path=join(dir,'original.bin');writeFileSync(path,data);
+  const out=join(dir,'pack');packFurniturePayloads([{...ref,path}],out);
+  const reader=createFurniturePayloadReader(root,[ref],async(url)=>{
+   const rel=new URL(url).pathname.slice(root.pathname.length);
+   return new Response(readFileSync(join(out,rel)));
+  });
+  assert.deepEqual(new Uint8Array(await reader(ref)),data);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
