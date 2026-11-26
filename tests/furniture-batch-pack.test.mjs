@@ -45,6 +45,23 @@ with tempfile.TemporaryDirectory() as td:
  assert not (p/'bad.zip').exists()
  report([{'kind':'geometry','key':1,'status':'extracted'}])
  reject(lambda:m.pack_batches(plan,src,None,p/'bad.zip'),'NO_NEW_COMPLETE_SOURCE')
+ # Geometry is admitted only after the exact material receipt and bytes close.
+ import struct
+ (src/'mesh').mkdir();mat=p/'materials';mat.mkdir();(mat/'items').mkdir();(mat/'texture').mkdir()
+ cab='CAB-'+'a'*32;key=cab+':8';sh=cab+':9';data=bytes(12)+struct.pack('<3H',0,1,2);h=a.sha(data)
+ g={'schema':'HKIA.FurnitureStaticMeshSource.1','version':a.VERSION,'itemId':1,'visualGuid':g3,'bundle':'model','bundleSha256':'b'*64,'cab':cab,'externals':[],'geometrySha256':h,'geometryBytes':len(data),'nodes':[{'rendererPathId':'7','meshPathId':'6','material':'0:8','slot':None}],'materials':{'0:8':{'objectSha256':'c'*64}},'meshes':{'6':{'vertexCount':3,'indexCount':3,'stride':4,'vertexBytes':[0,12,a.sha(data[:12])],'indexBytes':[12,6,a.sha(data[12:])]}}}
+ base={'schema':'HKIA.FurnitureBaseMaterialSource.1','version':a.VERSION,'rows':[{'itemId':1,'bindings':[['7',key,None]]}],'bundles':{cab:['model','b'*64]},'materials':{key:{'objectSha256':'c'*64,'shader':sh,'textures':{}}},'textures':{},'shaders':{sh:{}},'unresolved':[]}
+ dump(src/'mesh'/'1.json',g);(src/'mesh'/'1.geometry.bin').write_bytes(data)
+ dump(mat/'items'/'1.json',base)
+ dump(mat/'report.json',{'schema':'HKIA.FurnitureBatchMaterials.1','version':a.VERSION,'catalogSha256':a.CATALOG,'renderFidelity':'unverified','items':[{'itemId':1,'status':'extracted'}]})
+ report([{'kind':'geometry','key':1,'guid':g3,'bundle':'model','bundleSha256':'b'*64,'status':'extracted','bytes':len(data),'sha256':h}])
+ third=p/'third.zip';v=m.pack_batches(plan,src,mat,third,second,a.sha(second.read_bytes()))
+ assert v['models']==1 and v['patterns']==2 and v['payloads']==2
+ assert not m.batch.remaining_plan(plan,third,a.sha(third.read_bytes()))['models']
+ base['rows'][0]['bindings'][0][1]=cab+':999';dump(mat/'items'/'1.json',base)
+ reject(lambda:m.pack_batches(plan,src,mat,p/'bad.zip'),'MATERIAL_BINDING')
+ assert not (p/'bad.zip').exists()
+
 `;
  execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd,stdio:'pipe'});
 });
