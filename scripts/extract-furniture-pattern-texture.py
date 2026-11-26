@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract exact streamed BC1/BC3 pattern textures by original GUID.
+"""Extract exact streamed RGBA32/BC1/BC3 pattern textures by original GUID.
 Offline output only. Preserve every mip and native sampler/color-space metadata.
 """
 import argparse, hashlib, importlib.util, json, math, re, struct
@@ -26,7 +26,7 @@ def extract(raw,bundle,cab,objects,res,expected):
         require(guid not in found and file==0 and str(pid) in objs,'ambiguous or external pattern texture')
         t=objs[str(pid)];name,at=string(t,0)
         alpha,w,h,size,stripped,fmt,mips=struct.unpack_from('<7I',t,at)
-        require(alpha in (0,1) and 0<w<=8192 and 0<h<=8192 and stripped==0 and fmt in (10,12) and 1<=mips<=max(w,h).bit_length(),'unsupported texture format')
+        require(alpha in (0,1) and 0<w<=8192 and 0<h<=8192 and stripped==0 and fmt in (4,10,12) and 1<=mips<=max(w,h).bit_length(),'unsupported texture format')
         require(t[at+28:at+32] in (b'\0'*4,b'\1\0\0\0'),'unsupported texture flags')
         require(u(t,at+32)==0,'mipmap limit group')
         streaming,priority,images,dim=struct.unpack_from('<4I',t,at+36)
@@ -38,7 +38,7 @@ def extract(raw,bundle,cab,objects,res,expected):
         require(end==len(t) and path==f'archive:/{cab}/{cab}.resS' and length==size and off+length<=len(res),'stream identity/bounds')
         data=res[off:off+length];ranges=[];cursor=0
         for level in range(mips):
-            mw=max(1,w>>level);mh=max(1,h>>level);n=((mw+3)//4)*((mh+3)//4)*(8 if fmt==10 else 16)
+            mw=max(1,w>>level);mh=max(1,h>>level);n=mw*mh*4 if fmt==4 else ((mw+3)//4)*((mh+3)//4)*(8 if fmt==10 else 16)
             require(cursor+n<=length,'mip range');ranges.append([mw,mh,cursor,n,sha(data[cursor:cursor+n])]);cursor+=n
         require(cursor==length,'mip chain length')
         found[guid]={'guid':guid,'name':name,'bundle':bundle,'bundleSha256':sha(raw),'cab':cab,'pathId':str(pid),'objectSha256':sha(t),'width':w,'height':h,'format':fmt,'colorSpace':color,'alphaChannelOptional':bool(alpha),'sampler':[filter_mode,aniso,bias,wrap_u,wrap_v,wrap_w],'streamOffset':off,'bytes':length,'sha256':sha(data),'mips':ranges}
