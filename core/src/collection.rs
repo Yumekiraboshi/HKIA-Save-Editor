@@ -177,6 +177,7 @@ enum Change {
  FlowerCreated{document_id:u32,source_id:u32,expected:FlowerVariant,flower:PendingFlower,quantity:i32},
  FurnitureVariant{document_id:u32,before:Option<FurnitureVariant>,after:Option<FurnitureVariant>},
  PaletteVariant{document_id:u32,before:Option<PaletteVariant>,after:Option<PaletteVariant>},
+ PaletteCreated{document_id:u32,source_id:u32,expected:PaletteVariant,variant:PaletteVariant,quantity:i32},
  FurnitureCreated{document_id:u32,source_id:u32,expected:FurnitureVariant,furniture:PendingFurniture,quantity:i32},
  Achievement{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
  AchievementCreated{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
@@ -199,14 +200,14 @@ pub struct HistoryRecord {
 }
 impl Change {
  fn scope(&self)->HistoryScope{
-  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}|Self::InventoryBatch{..}|Self::FlowerVariant{..}|Self::FlowerCreated{..}|Self::FurnitureCreated{..}|Self::FurnitureVariant{..}|Self::PaletteVariant{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
+  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}|Self::InventoryBatch{..}|Self::FlowerVariant{..}|Self::FlowerCreated{..}|Self::FurnitureCreated{..}|Self::FurnitureVariant{..}|Self::PaletteVariant{..}|Self::PaletteCreated{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
  }
  fn history_record(&self,applied:bool)->HistoryRecord{
   let (item_id,guid,paired)=match self {
    Self::Collection{id,..}=>(*id,[0;4],false),
    Self::Inventory{document_id,..}|Self::FlowerVariant{document_id,..}|Self::FurnitureVariant{document_id,..}|Self::PaletteVariant{document_id,..}=>(*document_id as i32,[0;4],false),
    Self::InventoryBatch{deltas}=>(deltas[0].document_id as i32,[0;4],false),
-   Self::FlowerCreated{source_id,..}|Self::FurnitureCreated{source_id,..}=>(*source_id as i32,[0;4],false),
+   Self::FlowerCreated{source_id,..}|Self::FurnitureCreated{source_id,..}|Self::PaletteCreated{source_id,..}=>(*source_id as i32,[0;4],false),
    Self::Achievement{guid,..}|Self::AchievementCreated{guid,..}=>(0,*guid,false),
    Self::AchievementCreatedPair{guid,..}|Self::AchievementParentNew{child:(guid,..),..}=>(0,*guid,true),
    Self::AchievementPair{first:(guid,..),..}=>(0,*guid,true),
@@ -226,6 +227,7 @@ pub struct Editor {
  inventory_changes:HashMap<u32,i32>,
  pending_flowers:HashMap<u32,PendingFlower>,
  pending_furniture:HashMap<u32,PendingFurniture>,
+ pending_palettes:HashMap<u32,PaletteVariant>,
  inventory_item_rows:HashMap<i32,usize>,
  unique_quantity_ids:HashSet<u32>,
  flower_variant_changes:HashMap<u32,FlowerVariant>,
@@ -261,7 +263,7 @@ impl Editor {
   for row in &slot.index.inventory{
    if let Some(id)=row.item_id{*inventory_item_rows.entry(id).or_insert(0usize)+=1;}
   }
-  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),inventory_item_rows,unique_quantity_ids:HashSet::new(),flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
+  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),inventory_item_rows,unique_quantity_ids:HashSet::new(),flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
   editor.unique_quantity_ids=editor.index_unique_quantity_ids();
   Ok(editor)
  }
@@ -282,7 +284,7 @@ impl Editor {
  fn next_edit_revision(&self)->Result<u32,Error>{
   // A staged unique creation must remain replayable. Never evict its
   // creation record or prerequisites from the bounded native journal.
-  if (self.pending_unique_count()>0||self.redo.iter().any(|c|matches!(c,Change::FlowerCreated{..}|Change::FurnitureCreated{..})))&&self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
+  if (self.pending_unique_count()>0||self.redo.iter().any(|c|matches!(c,Change::FlowerCreated{..}|Change::FurnitureCreated{..}|Change::PaletteCreated{..})))&&self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
   self.revision.checked_add(1).ok_or(Error::Overflow)
  }
  pub fn revision(&self)->u32 {self.revision}
@@ -326,6 +328,7 @@ impl Editor {
  pub fn inventory_unique_data(&self,id:u32)->Option<crate::native::InventoryUniqueData>{
   if self.pending_flowers.contains_key(&id)&&!self.inventory_changes.contains_key(&id){return None}
   if self.pending_furniture.contains_key(&id)&&!self.inventory_changes.contains_key(&id){return None}
+  if let Some(v)=self.pending_palettes.get(&id){return self.inventory_changes.contains_key(&id).then(||InventoryUniqueData::Palette{rgba_bits:self.palette_variant_changes.get(&id).copied().unwrap_or(*v)})}
   if let Some(f)=self.pending_flowers.get(&id){return Some(flower_unique(self.flower_variant_changes.get(&id).copied().unwrap_or(f.variant)))}
   if let Some(f)=self.pending_furniture.get(&id){return Some(InventoryUniqueData::Furniture{materials:self.furniture_variant_changes.get(&id).copied().unwrap_or(f.variant)})}
   let row=self.slot.index.inventory.iter().find(|row|row.id==id)?;
@@ -344,10 +347,10 @@ impl Editor {
  }
  pub fn inventory_unique_rows(&self)->impl Iterator<Item=(u32,Option<i32>,Option<bool>,Option<InventoryUniqueData>,usize)>+'_{
   self.slot.index.inventory.iter().filter(|r|r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,r.unique_is_nil,self.effective_unique(r),r.unique_fields.len()))
-   .chain(self.pending_inventory_rows().into_iter().map(|r|match self.pending_flowers.get(&r.document_id){
+   .chain(self.pending_inventory_rows().into_iter().map(|r|if self.pending_palettes.contains_key(&r.document_id){(r.document_id,None,Some(false),self.inventory_unique_data(r.document_id),3)}else{match self.pending_flowers.get(&r.document_id){
     Some(f)=>(r.document_id,None,Some(false),Some(flower_unique(self.flower_variant_changes.get(&r.document_id).copied().unwrap_or(f.variant))),4),
     None=>match self.pending_furniture.get(&r.document_id){Some(f)=>(r.document_id,None,Some(false),Some(InventoryUniqueData::Furniture{materials:self.furniture_variant_changes.get(&r.document_id).copied().unwrap_or(f.variant)}),3),None=>(r.document_id,Some(0),Some(true),None,0)}
-   }))
+   }}))
  }
  fn unique_row_source(&self,row:&crate::native::InventoryRow,fields:usize)->Option<i32>{
   if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<0||
@@ -489,7 +492,7 @@ impl Editor {
    let item=self.saved_default_furniture_source(r)?;
    (!self.default_furniture_choices(item).is_empty()).then_some(r.id)
   }).chain(self.inventory_changes.iter().filter_map(|(&id,&qty)|{
-   if id&PENDING_ITEM==0||qty<=0||self.pending_flowers.contains_key(&id)||self.pending_furniture.contains_key(&id){return None}
+   if id&PENDING_ITEM==0||qty<=0||self.pending_flowers.contains_key(&id)||self.pending_furniture.contains_key(&id)||self.pending_palettes.contains_key(&id){return None}
    (!self.absent_furniture_choices((id&!PENDING_ITEM) as i32).is_empty()).then_some(id)
   })).collect()
  }
@@ -686,14 +689,14 @@ impl Editor {
    .filter(|&id|!self.absent_flower_choices(id).is_empty()).collect()
  }
  // Retain inactive staged identities for history replay; only active rows are exported.
- fn pending_unique_count(&self)->usize{self.pending_flowers.len()+self.pending_furniture.len()}
- fn active_pending_unique_count(&self)->usize{self.pending_flowers.keys().chain(self.pending_furniture.keys()).filter(|id|self.inventory_changes.contains_key(*id)).count()}
+ fn pending_unique_count(&self)->usize{self.pending_flowers.len()+self.pending_furniture.len()+self.pending_palettes.len()}
+ fn active_pending_unique_count(&self)->usize{self.pending_flowers.keys().chain(self.pending_furniture.keys()).chain(self.pending_palettes.keys()).filter(|id|self.inventory_changes.contains_key(*id)).count()}
  fn allocate_staged_unique_handle(&self)->Result<u32,Error>{
   if self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
   crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_unique_count()+1)?;
   crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1)?;
   (1..=MAX_UNDO as u32+4096).map(|n|PENDING_ITEM|n).find(|id|
-   !self.inventory_changes.contains_key(id)&&!self.pending_flowers.contains_key(id)&&!self.pending_furniture.contains_key(id)&&
+   !self.inventory_changes.contains_key(id)&&!self.pending_flowers.contains_key(id)&&!self.pending_furniture.contains_key(id)&&!self.pending_palettes.contains_key(id)&&
    !crate::inventory_source::ordinary_creation_item((id&!PENDING_ITEM) as i32)&&flower_item_patterns((id&!PENDING_ITEM) as i32,6).is_none()).ok_or(Error::Budget)
  }
  fn stage_new_flower(&mut self,source_id:u32,item_id:i32,expected:FlowerVariant,next:FlowerVariant,quantity:i32)->Result<u32,Error>{
@@ -746,7 +749,7 @@ impl Editor {
     Some(crate::native::InventoryUniqueData::Palette{rgba_bits})=>Some((row.id,rgba_bits)),
     _=>None
    }
-  })
+  }).chain(self.pending_palettes.iter().filter(|(id,_)|self.inventory_changes.contains_key(*id)).map(|(&id,v)|(id,self.palette_variant_changes.get(&id).copied().unwrap_or(*v))))
  }
  // Only verified bag states (seed, plucked, uprooted) of source flower
  // species; exclude planted states, crafted outfits and copied payloads.
@@ -842,10 +845,13 @@ impl Editor {
    .filter_map(move |slot|crate::inventory_palette_source::palette_output_color(color,slot)))
  }
  fn original_palette_variant(&self,id:u32)->Option<PaletteVariant>{
-  Self::palette_identity(self.slot.index.inventory.iter().find(|r|r.id==id)?)
+  self.pending_palettes.get(&id).copied().or_else(||Self::palette_identity(self.slot.index.inventory.iter().find(|r|r.id==id)?))
  }
  fn palette_context(&self,id:u32)->Option<(PaletteVariant,PaletteVariant,Vec<PaletteVariant>)>{
-  if !self.unique_quantity_ids.contains(&id)||self.slot.index.inventory_palette_copies_incomplete{return None}
+  if self.slot.index.inventory_palette_copies_incomplete{return None}
+  if self.pending_palettes.contains_key(&id){
+   if !self.inventory_changes.contains_key(&id){return None}
+  }else if !self.unique_quantity_ids.contains(&id){return None}
   let original=self.original_palette_variant(id)?;
   let current=self.palette_variant_changes.get(&id).copied().unwrap_or(original);
   let mut reserved=self.slot.index.inventory_palette_copies.clone();
@@ -854,6 +860,10 @@ impl Editor {
    let original=Self::palette_identity(other)?;
    reserved.push(original);
    reserved.push(self.palette_variant_changes.get(&other.id).copied().unwrap_or(original));
+  }
+  for (&other,&v) in &self.pending_palettes{
+   if other==id||!self.inventory_changes.contains_key(&other){continue}
+   reserved.push(v);reserved.push(self.palette_variant_changes.get(&other).copied().unwrap_or(v));
   }
   if reserved.iter().any(|&peer|Self::palette_equal(peer,original)||Self::palette_equal(peer,current)){return None}
   Some((original,current,reserved))
@@ -866,7 +876,7 @@ impl Editor {
    if !self.unique_quantity_ids.contains(&r.id)||self.slot.index.inventory_palette_copies_incomplete{return None}
    let original=Self::palette_identity(r)?;
    (!self.slot.index.inventory_palette_copies.iter().any(|&p|Self::palette_equal(p,original))).then_some(r.id)
-  })
+  }).chain(self.pending_palettes.keys().copied().filter(|id|self.inventory_changes.contains_key(id)))
  }
  /// Native one-color choices; complete targets also support atomic net replay.
  pub fn inventory_palette_variants(&self,id:u32)->Vec<PaletteVariant>{
@@ -880,6 +890,29 @@ impl Editor {
    }
   }
   out
+ }
+ // Additional palettes only from already owned, eligible source rows.
+ // Every new channel must be a permitted native output, not an inherited
+ // arbitrary or event-only color. No acquisition or outfit data is written.
+ pub fn inventory_palette_creation_variants(&self,id:u32)->Vec<PaletteVariant>{
+  let item=crate::inventory_source::CUSTOM_PALETTE_ID;
+  if !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
+   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||
+   self.inventory_item_rows.get(&item).copied().unwrap_or(0)+self.pending_palettes.len()>=256{return Vec::new()}
+  let Some((original,current,_))=self.palette_context(id)else{return Vec::new()};
+  self.inventory_palette_variants(id).into_iter().filter(|v|
+   !Self::palette_equal(*v,original)&&!Self::palette_equal(*v,current)&&
+   v.iter().all(|&c|Self::palette_output_choices().any(|x|x==c))).collect()
+ }
+ pub fn create_inventory_palette_variant(&mut self,source_id:u32,expected:PaletteVariant,next:PaletteVariant,quantity:i32)->Result<u32,Error>{
+  if quantity<=0||!self.inventory_palette_creation_variants(source_id).contains(&next){return Err(Error::Schema)}
+  let (_,current,_)=self.palette_context(source_id).ok_or(Error::Schema)?;
+  if expected!=current{return Err(Error::Schema)}
+  let document_id=self.allocate_staged_unique_handle()?;
+  let revision=self.next_edit_revision()?;
+  let change=Change::PaletteCreated{document_id,source_id,expected,variant:next,quantity};
+  self.restore_change(&change,false);self.undo.push(change);
+  self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);self.revision=revision;Ok(document_id)
  }
  pub fn change_inventory_palette_variant(&mut self,id:u32,expected:PaletteVariant,next:PaletteVariant)->Result<(),Error>{
   let (original,current,reserved)=self.palette_context(id).ok_or(Error::Schema)?;
@@ -999,7 +1032,7 @@ impl Editor {
  }
  fn pending_inventory_rows(&self)->Vec<InventoryEntry>{
   let mut rows:Vec<_>=self.inventory_changes.iter().filter(|(&id,_)|id&PENDING_ITEM!=0)
-   .map(|(&document_id,&quantity)|InventoryEntry{document_id,item_id:self.pending_flowers.get(&document_id).map(|f|f.item_id).or_else(||self.pending_furniture.get(&document_id).map(|f|f.item_id)).unwrap_or((document_id&!PENDING_ITEM) as i32),
+   .map(|(&document_id,&quantity)|InventoryEntry{document_id,item_id:self.pending_flowers.get(&document_id).map(|f|f.item_id).or_else(||self.pending_furniture.get(&document_id).map(|f|f.item_id)).or_else(||self.pending_palettes.contains_key(&document_id).then_some(crate::inventory_source::CUSTOM_PALETTE_ID)).unwrap_or((document_id&!PENDING_ITEM) as i32),
     quantity,editable:true,quantity_limit:Some(i32::MAX),quantity_minimum:0}).collect();
   rows.sort_by_key(|r|(r.item_id,r.document_id));rows
  }
@@ -1008,11 +1041,12 @@ impl Editor {
   let mut handles:HashSet<u32>=self.inventory_changes.keys().filter(|&&id|id&PENDING_ITEM!=0).copied().collect();
   handles.extend(self.pending_flowers.keys().copied());
   handles.extend(self.pending_furniture.keys().copied());
+  handles.extend(self.pending_palettes.keys().copied());
   for change in &self.redo{
    match change{
     Change::Inventory{document_id,after:Some(_),..} if document_id&PENDING_ITEM!=0=>{handles.insert(*document_id);}
     Change::InventoryBatch{deltas}=>for d in deltas{if d.document_id&PENDING_ITEM!=0&&d.after.is_some(){handles.insert(d.document_id);}},
-    Change::FlowerCreated{document_id,..}|Change::FurnitureCreated{document_id,..}=>{handles.insert(*document_id);},
+    Change::FlowerCreated{document_id,..}|Change::FurnitureCreated{document_id,..}|Change::PaletteCreated{document_id,..}=>{handles.insert(*document_id);},
     _=>{}
    }
   }
@@ -1053,7 +1087,7 @@ impl Editor {
  }
  fn plan_inventory_quantity(&self,id:u32,expected:i32,next:i32)->Result<InventoryQuantityDelta,Error>{
   if id&PENDING_ITEM!=0{
-   if self.pending_flowers.contains_key(&id)||self.pending_furniture.contains_key(&id){
+   if self.pending_flowers.contains_key(&id)||self.pending_furniture.contains_key(&id)||self.pending_palettes.contains_key(&id){
     let before=self.inventory_changes.get(&id).copied();
     if next<0||expected<=0||before!=Some(expected){return Err(Error::Schema)}
     return Ok(InventoryQuantityDelta{document_id:id,before,after:(next>0).then_some(next)})
@@ -1125,7 +1159,7 @@ impl Editor {
   self.achievement_created.get(&guid).copied().or_else(||self.achievement_changes.get(&guid).copied())
    .or_else(||self.slot.index.achievements.iter().find(|m|m.guid==guid).and_then(|m|achievement::value(m).ok()))
  }
- pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.inventory_changes.is_empty()||self.flower_variant_changes.keys().chain(self.furniture_variant_changes.keys()).any(|id|*id&PENDING_ITEM==0||self.inventory_changes.contains_key(id))||!self.palette_variant_changes.is_empty()||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
+ pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.inventory_changes.is_empty()||self.flower_variant_changes.keys().chain(self.furniture_variant_changes.keys()).any(|id|*id&PENDING_ITEM==0||self.inventory_changes.contains_key(id))||self.palette_variant_changes.keys().any(|id|*id&PENDING_ITEM==0||self.inventory_changes.contains_key(id))||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
  pub fn can_undo(&self)->bool {!self.undo.is_empty()}
  pub fn can_redo(&self)->bool {!self.redo.is_empty()}
  pub fn history(&self)->Vec<HistoryRecord>{
@@ -1481,6 +1515,10 @@ impl Editor {
      None=>{self.furniture_variant_changes.remove(&document_id);}
     }
    }
+   Change::PaletteCreated{document_id,variant,quantity,..}=>{
+    if reverse{self.pending_palettes.remove(&document_id);self.inventory_changes.remove(&document_id);}
+    else{self.pending_palettes.insert(document_id,variant);self.inventory_changes.insert(document_id,quantity);}
+   }
    Change::PaletteVariant{document_id,before,after}=>{
     match if reverse{before}else{after}{
      Some(v)=>{self.palette_variant_changes.insert(document_id,v);},
@@ -1530,7 +1568,7 @@ impl Editor {
   self.restore_change(&change,false);self.undo.push(change);
   self.revision=self.revision.wrapping_add(1);true
  }
- pub fn reset(&mut self){self.changes.clear();self.inventory_changes.clear();self.pending_flowers.clear();self.pending_furniture.clear();self.flower_variant_changes.clear();self.furniture_variant_changes.clear();self.palette_variant_changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
+ pub fn reset(&mut self){self.changes.clear();self.inventory_changes.clear();self.pending_flowers.clear();self.pending_furniture.clear();self.pending_palettes.clear();self.flower_variant_changes.clear();self.furniture_variant_changes.clear();self.palette_variant_changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
  pub fn export(&self)->Result<Vec<u8>,Error>{
   if !self.dirty(){return Err(Error::Schema)}
   let original_payload=&self.slot.envelope.decoded;
@@ -1645,6 +1683,12 @@ impl Editor {
      let uid=unique_ids.next().ok_or(Error::Schema)?;mp_u32(uid as u32,&mut bytes);mp_u32(row.quantity as u32,&mut bytes);
      bytes.extend([0x92,8,0x93]);for n in variant{bytes.push(0xd2);bytes.extend(n.to_be_bytes());}
      (uid,Some(InventoryUniqueData::Furniture{materials:variant}))
+    }else if self.pending_palettes.contains_key(&row.document_id){
+     let (_,variant,_)=self.palette_context(row.document_id).ok_or(Error::Schema)?;
+     if row.item_id!=crate::inventory_source::CUSTOM_PALETTE_ID||!variant.iter().all(|&c|Self::palette_output_choices().any(|x|x==c)){return Err(Error::Schema)}
+     let uid=unique_ids.next().ok_or(Error::Schema)?;mp_u32(uid as u32,&mut bytes);mp_u32(row.quantity as u32,&mut bytes);
+     bytes.extend([0x92,6,0x93]);for color in variant{bytes.push(0x94);for bits in color{bytes.push(0xca);bytes.extend(bits.to_be_bytes());}}
+     (uid,Some(InventoryUniqueData::Palette{rgba_bits:variant}))
     }else{
      if !self.can_create_inventory_item(row.item_id){return Err(Error::Schema)}
      bytes.push(0);mp_u32(row.quantity as u32,&mut bytes);bytes.push(0xc0);
@@ -2095,9 +2139,14 @@ impl Editor {
      for word in before.unwrap_or(original){out.extend(word.to_le_bytes());}
      for word in after.unwrap_or(original){out.extend(word.to_le_bytes());}
     }
+    Change::PaletteCreated{document_id,source_id,expected,variant,quantity}=>{
+     out.push(14);out.extend(document_id.to_le_bytes());out.extend(source_id.to_le_bytes());
+     for bits in expected.into_iter().flatten().chain(variant.into_iter().flatten()){out.extend(bits.to_le_bytes());}
+     out.extend(quantity.to_le_bytes());
+    }
     Change::PaletteVariant{document_id,before,after}=>{
      out.push(13);out.extend(document_id.to_le_bytes());
-     let original=self.original_palette_variant(document_id).ok_or(Error::Schema)?;
+     let original=self.original_palette_variant(document_id).or_else(||self.undo.iter().chain(&self.redo).find_map(|c|match c{Change::PaletteCreated{document_id:id,variant,..} if *id==document_id=>Some(*variant),_=>None})).ok_or(Error::Schema)?;
      for bits in before.unwrap_or(original).into_iter().flatten().chain(after.unwrap_or(original).into_iter().flatten()){out.extend(bits.to_le_bytes());}
     }
     Change::Achievement{guid,before,after}=>{
@@ -2201,6 +2250,13 @@ impl Editor {
      let before=[r.i32()?,r.i32()?,r.i32()?];
      let after=[r.i32()?,r.i32()?,r.i32()?];
      candidate.change_inventory_furniture_variant(id,before,after)?;
+     scopes.push(HistoryScope::Inventory);
+    }
+    14=>{
+     let handle=r.u32()?;let source=r.u32()?;let mut before=[[0u32;4];3];let mut after=[[0u32;4];3];
+     for word in before.iter_mut().flatten().chain(after.iter_mut().flatten()){*word=r.u32()?;}
+     let quantity=r.i32()?;
+     if candidate.create_inventory_palette_variant(source,before,after,quantity)?!=handle{return Err(Error::Schema)}
      scopes.push(HistoryScope::Inventory);
     }
     13=>{
