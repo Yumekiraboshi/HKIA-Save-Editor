@@ -43,7 +43,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const chef=(id,item,unique)=>doc(1,arr([id],u32(item),u32(id),u32(1),unique));
  const cafe=colors=>arr([3],arr(arr(u32(99)),arr(...colors.map(u32))));
  const boba=color=>arr([4],arr(u32(color),u32(6),u32(11),u32(19),u32(99)));
- const model=arr([0],editableFlower?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
+ const model=arr([0],(editableFlower||editableFurniture)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
@@ -790,6 +790,52 @@ async function inventoryFlowerClothingCreationSmoke(){
   assert.equal(iv.getUint32(0,true),2);assert.equal(iv.getInt32(24,true),1120342995);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM FLOWER CLOTHING CREATION PASS: exact crown default, local recovery, output reparse');
+ }finally{await context.close();}
+}
+async function inventoryFurnitureCreationSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-furniture-add.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({editableFurniture:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');await search.fill('61381969');
+  const cards=page.locator('.inventory-card');
+  await cards.first().locator('.inventory-unique-edit-button').click();
+  const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"]');await dialog.waitFor();
+  const value=await dialog.locator('select optgroup option').first().getAttribute('value');assert.ok(value!==null);
+  await dialog.locator('select').selectOption(value);
+  await dialog.locator('.inventory-create-furniture:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  const added=cards.nth(1).locator('input[name="quantity"]');
+  await added.waitFor();assert.equal(await added.inputValue(),'1');
+  assert.equal(await cards.first().locator('input[name="quantity"]').inputValue(),'93');
+  await cards.nth(1).locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  const next=await dialog.locator('select optgroup option').first().getAttribute('value');assert.ok(next!==null);
+  await dialog.locator('select').selectOption(next);
+  await dialog.locator('button[type="submit"]').click();await dialog.waitFor({state:'hidden'});
+  await added.fill('7');await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]').click();
+  await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('61381969');
+  await added.waitFor();assert.equal(await added.inputValue(),'7');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_unique_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());let at=0;
+  const u=()=>{const n=v.getUint32(at,true);at+=4;return n};const count=u(),rows=[];
+  for(let i=0;i<count;i++){const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();const words=Array.from({length:n},()=>u()|0);u();if(tag===8)rows.push({id,present,uid,fields,words});}
+  assert.equal(rows.length,2);assert.deepEqual(rows[0],{id:8,present:1,uid:11,fields:3,words:[13,2,0]});
+  assert.equal(rows[1].id,9);assert.equal(rows[1].uid,12);assert.notDeepEqual(rows[1].words,rows[0].words);
+  assert.equal(e.hkia_inventory_snapshot(),0);
+  const iv=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(iv.getUint32(0,true),3);assert.equal(iv.getUint32(36,true),9);assert.equal(iv.getInt32(44,true),7);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM FURNITURE CREATION PASS: source retained, staged customization, quantity, recovery and native output reparse');
  }finally{await context.close();}
 }
 async function inventoryFurnitureVariantEditSmoke(){
@@ -1654,6 +1700,7 @@ async function run(){
  await inventoryAbsentFlowerCreationSmoke();
  await inventoryFlowerClothingCreationSmoke();
  await inventoryFurnitureVariantEditSmoke();
+ await inventoryFurnitureCreationSmoke();
  await achievementDstFoldExportSmoke();
  await achievementAtlasRetrySmoke();
 }

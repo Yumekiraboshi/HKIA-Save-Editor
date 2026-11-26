@@ -1418,9 +1418,10 @@ fn customized_furniture_creation_and_staged_edits_share_native_uid_allocation(){
   let reopened=Editor::open(restored.export().unwrap()).unwrap();
   assert_eq!(reopened.inventory().len(),4);
   assert_eq!(reopened.inventory_original_unique_payload(4),e.inventory_original_unique_payload(4));
-  assert_eq!(reopened.inventory_unique_data(6),e.inventory_unique_data(a));
-  assert_eq!(reopened.inventory_unique_data(7),e.inventory_unique_data(b));
-  assert_eq!(reopened.inventory()[2].quantity,7);
+  // Pending export is sorted by Item ID: flower precedes furniture.
+  assert_eq!(reopened.inventory_unique_data(6),e.inventory_unique_data(b));
+  assert_eq!(reopened.inventory_unique_data(7),e.inventory_unique_data(a));
+  assert_eq!(reopened.inventory()[3].quantity,7);
   assert_eq!(reopened.inventory_unique_rows().map(|r|r.1).collect::<Vec<_>>(),vec![Some(41),Some(42),Some(43),Some(44)]);
  }
 }
