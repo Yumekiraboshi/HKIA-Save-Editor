@@ -20,3 +20,11 @@ export function materialSwatch(display:FurnitureDisplay|null,itemId:number,slot:
  if(!c||c.length!==4||c.some(n=>!Number.isFinite(n)||n<0||n>1))return 'transparent';
  return 'rgba('+c.slice(0,3).map(n=>Math.round(n*255)).join(',')+','+c[3]+')';
 }
+
+/** Card and search share the dialog's source-backed material labels, in slot order.
+ * Missing definitions remain unknown; never infer an appearance or edit permission. */
+export function furnitureVariantTitle(display:FurnitureDisplay|null,itemId:number,variant:readonly number[]|null,defaultLabel:string):string{
+ const slots=display?.defaults.get(itemId);
+ if(!display||!slots||!variant||variant.length!==3)return '';
+ return variant.flatMap((index,slot)=>slots.has(slot)||index!==0?[materialLabel(display,index,defaultLabel)]:[]).join(' / ');
+}
