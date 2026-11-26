@@ -491,11 +491,13 @@ impl Editor {
  }
  pub fn inventory_furniture_creation_variants(&self,id:u32)->Vec<FurnitureVariant>{
   if !self.absent_flower_budget_available(){return Vec::new()}
-  if id&PENDING_ITEM!=0{return self.absent_furniture_choices((id&!PENDING_ITEM) as i32)}
+  if self.pending_furniture.contains_key(&id){
+   if !self.inventory_changes.contains_key(&id){return Vec::new()}
+  }else if id&PENDING_ITEM!=0{return self.absent_furniture_choices((id&!PENDING_ITEM) as i32)}
   if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|self.saved_default_furniture_source(r)){
    return self.default_furniture_choices(item)
   }
-  if !self.unique_quantity_ids.contains(&id){return Vec::new()}
+  if !self.pending_furniture.contains_key(&id)&&!self.unique_quantity_ids.contains(&id){return Vec::new()}
   let Some((source,original,current,_))=self.furniture_context(id)else{return Vec::new()};
   // No new restricted ownership: only existing, source-validated furniture.
   if self.slot.index.inventory_payload_item_refs.contains(&source.item_id){return Vec::new()}
@@ -508,7 +510,11 @@ impl Editor {
  }
  pub fn create_inventory_furniture_variant(&mut self,source_id:u32,expected:FurnitureVariant,next:FurnitureVariant,quantity:i32)->Result<u32,Error>{
   if quantity<=0||!self.inventory_furniture_creation_variants(source_id).contains(&next){return Err(Error::Schema)}
-  let item_id=if source_id&PENDING_ITEM!=0{
+  let item_id=if self.pending_furniture.contains_key(&source_id){
+   let (source,_,current,_)=self.furniture_context(source_id).ok_or(Error::Schema)?;
+   if current!=expected{return Err(Error::Schema)}
+   source.item_id
+  }else if source_id&PENDING_ITEM!=0{
    if expected!=[0;3]{return Err(Error::Schema)}
    (source_id&!PENDING_ITEM) as i32
   }else if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==source_id).and_then(|r|self.saved_default_furniture_source(r)){
@@ -600,6 +606,10 @@ impl Editor {
  /// On-demand creation choices. Rust alone checks the source species,
  /// allocation budget, identity/reference guards, and original tuple.
  pub fn inventory_flower_creation_variants(&self,id:u32)->Vec<FlowerVariant>{
+  if let Some(f)=self.pending_flowers.get(&id){
+   if !self.inventory_changes.contains_key(&id)||!self.absent_flower_budget_available(){return Vec::new()}
+   return self.inventory_flower_variants(id).into_iter().filter(|&v|v!=f.variant).collect()
+  }
   if id&PENDING_ITEM!=0{return self.absent_flower_options((id&!PENDING_ITEM) as i32)}
   if !self.inventory_creation_source_valid()||!self.unique_quantity_ids.contains(&id)||self.undo.len()+self.redo.len()>=MAX_UNDO||
    crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_unique_count()+1).is_err()||
@@ -614,6 +624,13 @@ impl Editor {
  /// existing validated species row. No persisted UID is assigned until
  /// export. Multiple variants of one species use independent handles.
  pub fn create_inventory_flower_variant(&mut self,source_id:u32,expected:FlowerVariant,next:FlowerVariant,quantity:i32)->Result<u32,Error>{
+  if let Some(f)=self.pending_flowers.get(&source_id).copied(){
+   if quantity<=0||!self.inventory_changes.contains_key(&source_id)||!self.absent_flower_budget_available(){return Err(Error::Schema)}
+   let (patterns,current,reserved)=self.flower_context(source_id).ok_or(Error::Schema)?;
+   if expected!=current||next==current||next==f.variant||next[0]!=current[0]||
+    !valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
+   return self.stage_new_flower(source_id,f.item_id,expected,next,quantity)
+  }
   if source_id&PENDING_ITEM!=0{
    let item_id=(source_id&!PENDING_ITEM) as i32;
    if quantity<=0||expected!=[0;4]||!self.absent_flower_options(item_id).contains(&next){return Err(Error::Schema)}
@@ -728,17 +745,17 @@ impl Editor {
    }
   })
  }
- // A saved plucked species is a verified tag-7 flower, not a seed,
- // a planted/uprooted specimen, a crafted outfit, or a copied payload.
- fn is_plucked_species(r:&crate::native::InventoryRow)->bool{
+ // Only verified bag states (seed, plucked, uprooted) of source flower
+ // species; exclude planted states, crafted outfits and copied payloads.
+ fn is_emptyable_flower_species(r:&crate::native::InventoryRow)->bool{
   r.item_id.is_some_and(|item|FLOWER_SPECIES.iter().any(|&(id,_)|id==item))&&
-   r.unique_data.and_then(flower_variant).is_some_and(|v|v[0]==6)
+   r.unique_data.and_then(flower_variant).is_some_and(|v|matches!(v[0],0|6|7))
  }
  // Only consumable families with the existing source-authorized
  // complete payload and quantity gates. No palette/outfit/layout removal.
  fn is_emptyable_unique_family(r:&crate::native::InventoryRow)->bool{
   use crate::inventory_source::{CAFE_IDS,BOBA_ID};
-  Self::is_plucked_species(r)||match (r.item_id,r.unique_data){
+  Self::is_emptyable_flower_species(r)||match (r.item_id,r.unique_data){
    (Some(item),Some(InventoryUniqueData::CafeAppearance{..}))=>CAFE_IDS.binary_search(&item).is_ok(),
    (Some(item),Some(InventoryUniqueData::BobaAppearance{..}))=>item==BOBA_ID,
    _=>false
