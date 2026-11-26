@@ -26,7 +26,7 @@ export function nativeLinearToSrgb(c:number){
 }
 export function nativeSrgbToLinear(c:number){
  if(!Number.isFinite(c))throw Error('FURNITURE_LUT_INPUT');
- return c<=f(.04045)?c*f(.07739938):Math.pow(Math.abs((c+f(.055))*f(.9478673)),f(2.4));
+ return c<=f(.04045)?c*f(.07739938):Math.pow(Math.abs((c+f(.055))*f(.9478673338890076)),f(2.4));
 }
 export type LdrPostInput={
  color:LutRgba;uv:LutUv;
