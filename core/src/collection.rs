@@ -321,6 +321,8 @@ impl Editor {
  }
  /// Read-only lookup by document identity, never by Item ID alone.
  pub fn inventory_unique_data(&self,id:u32)->Option<crate::native::InventoryUniqueData>{
+  if self.pending_flowers.contains_key(&id)&&!self.inventory_changes.contains_key(&id){return None}
+  if self.pending_furniture.contains_key(&id)&&!self.inventory_changes.contains_key(&id){return None}
   if let Some(f)=self.pending_flowers.get(&id){return Some(flower_unique(self.flower_variant_changes.get(&id).copied().unwrap_or(f.variant)))}
   if let Some(f)=self.pending_furniture.get(&id){return Some(InventoryUniqueData::Furniture{materials:self.furniture_variant_changes.get(&id).copied().unwrap_or(f.variant)})}
   let row=self.slot.index.inventory.iter().find(|row|row.id==id)?;
@@ -372,7 +374,7 @@ impl Editor {
   Some(source)
  }
  pub fn inventory_furniture_edit_hints(&self)->impl Iterator<Item=u32>+'_ {
-  self.slot.index.inventory.iter().filter_map(|r|self.furniture_source(r).map(|_|r.id)).chain(self.pending_furniture.keys().copied())
+  self.slot.index.inventory.iter().filter_map(|r|self.furniture_source(r).map(|_|r.id)).chain(self.pending_furniture.keys().copied().filter(|id|self.inventory_changes.contains_key(id)))
  }
  fn original_furniture_variant(&self,id:u32)->Option<FurnitureVariant>{
   self.pending_furniture.get(&id).map(|f|f.variant)
@@ -396,7 +398,7 @@ impl Editor {
    else{for v in [other.unique_data?,self.effective_unique(other)?]{reserved.insert(furniture_key(source,furniture_variant(v)?)?);}}
   }
   for (&other,f) in &self.pending_furniture{
-   if other==id||f.item_id!=item{continue}
+   if other==id||f.item_id!=item||!self.inventory_changes.contains_key(&other){continue}
    reserved.insert(furniture_key(source,f.variant)?);
    reserved.insert(furniture_key(source,self.furniture_variant_changes.get(&other).copied().unwrap_or(f.variant))?);
   }
@@ -438,7 +440,7 @@ impl Editor {
   let Some(default)=furniture_key(source,[0;3])else{return Vec::new()};
   let mut reserved=HashSet::new();
   for (&id,f) in &self.pending_furniture{
-   if f.item_id!=item_id{continue}
+   if f.item_id!=item_id||!self.inventory_changes.contains_key(&id){continue}
    for v in [f.variant,self.furniture_variant_changes.get(&id).copied().unwrap_or(f.variant)]{
     let Some(key)=furniture_key(source,v)else{return Vec::new()};
     reserved.insert(key);
@@ -505,7 +507,7 @@ impl Editor {
  /// Cheap presentation hint. Actual source/collision check happens on demand,
  /// never an O(inventory squared) scan in the complete inventory snapshot.
  pub fn inventory_flower_edit_hints(&self)->impl Iterator<Item=u32>+'_ {
-  self.slot.index.inventory.iter().filter_map(|r|self.flower_source(r).map(|_|r.id)).chain(self.pending_flowers.keys().copied())
+  self.slot.index.inventory.iter().filter_map(|r|self.flower_source(r).map(|_|r.id)).chain(self.pending_flowers.keys().copied().filter(|id|self.inventory_changes.contains_key(id)))
  }
  fn original_flower_variant(&self,id:u32)->Option<FlowerVariant>{
   self.pending_flowers.get(&id).map(|f|f.variant)
@@ -532,7 +534,7 @@ impl Editor {
    reserved.insert(before);reserved.insert(after);
   }
   for (&other,f) in &self.pending_flowers{
-   if other==id||f.item_id!=item{continue}
+   if other==id||f.item_id!=item||!self.inventory_changes.contains_key(&other){continue}
    reserved.insert(f.variant);
    reserved.insert(self.flower_variant_changes.get(&other).copied().unwrap_or(f.variant));
   }
@@ -618,7 +620,7 @@ impl Editor {
    colors.sort_unstable();colors.dedup();colors
   }else{return Vec::new()};
   let Some(patterns)=flower_item_patterns(item_id,6)else{return Vec::new()};
-  colors.into_iter().map(|color|[6,color,0,0]).filter(|v|valid_flower_variant(patterns,*v)&&!self.pending_flowers.iter().any(|(&id,f)|f.item_id==item_id&&(f.variant==*v||self.flower_variant_changes.get(&id)==Some(v)))).collect()
+  colors.into_iter().map(|color|[6,color,0,0]).filter(|v|valid_flower_variant(patterns,*v)&&!self.pending_flowers.iter().any(|(&id,f)|self.inventory_changes.contains_key(&id)&&f.item_id==item_id&&(f.variant==*v||self.flower_variant_changes.get(&id)==Some(v)))).collect()
  }
  pub fn inventory_absent_flower_ids(&self)->Vec<i32>{
   if !self.absent_flower_budget_available(){return Vec::new()}
@@ -628,7 +630,9 @@ impl Editor {
    .chain(std::iter::once(FLOWER_CLOTHING_NO_PATTERN))
    .filter(|&id|!self.absent_flower_choices(id).is_empty()).collect()
  }
+ // Retain inactive staged identities for history replay; only active rows are exported.
  fn pending_unique_count(&self)->usize{self.pending_flowers.len()+self.pending_furniture.len()}
+ fn active_pending_unique_count(&self)->usize{self.pending_flowers.keys().chain(self.pending_furniture.keys()).filter(|id|self.inventory_changes.contains_key(*id)).count()}
  fn allocate_staged_unique_handle(&self)->Result<u32,Error>{
   if self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
   crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_unique_count()+1)?;
@@ -677,7 +681,7 @@ impl Editor {
     Some(crate::native::InventoryUniqueData::Flower{grow_state,base_color,pattern,pattern_color})=>Some((row.id,grow_state,base_color,pattern,pattern_color)),
     _=>None
    }
-  }).chain(self.pending_flowers.iter().map(|(&id,f)|{let v=self.flower_variant_changes.get(&id).copied().unwrap_or(f.variant);(id,v[0] as u8,v[1],v[2],v[3])}))
+  }).chain(self.pending_flowers.iter().filter(|(id,_)|self.inventory_changes.contains_key(*id)).map(|(&id,f)|{let v=self.flower_variant_changes.get(&id).copied().unwrap_or(f.variant);(id,v[0] as u8,v[1],v[2],v[3])}))
  }
  /// Read-only palette colors from the existing native index, with original
  /// f32 bits intact. No new save rules or write path.
@@ -842,12 +846,14 @@ impl Editor {
  fn pending_inventory_rows(&self)->Vec<InventoryEntry>{
   let mut rows:Vec<_>=self.inventory_changes.iter().filter(|(&id,_)|id&PENDING_ITEM!=0)
    .map(|(&document_id,&quantity)|InventoryEntry{document_id,item_id:self.pending_flowers.get(&document_id).map(|f|f.item_id).or_else(||self.pending_furniture.get(&document_id).map(|f|f.item_id)).unwrap_or((document_id&!PENDING_ITEM) as i32),
-    quantity,editable:true,quantity_limit:Some(i32::MAX),quantity_minimum:i32::from(self.pending_flowers.contains_key(&document_id)||self.pending_furniture.contains_key(&document_id))}).collect();
+    quantity,editable:true,quantity_limit:Some(i32::MAX),quantity_minimum:0}).collect();
   rows.sort_by_key(|r|(r.item_id,r.document_id));rows
  }
  // Include the other scope's redo future in the shared native ID reservation.
  fn reserved_inventory_count(&self)->usize{
   let mut handles:HashSet<u32>=self.inventory_changes.keys().filter(|&&id|id&PENDING_ITEM!=0).copied().collect();
+  handles.extend(self.pending_flowers.keys().copied());
+  handles.extend(self.pending_furniture.keys().copied());
   for change in &self.redo{
    match change{
     Change::Inventory{document_id,after:Some(_),..} if document_id&PENDING_ITEM!=0=>{handles.insert(*document_id);}
@@ -895,8 +901,8 @@ impl Editor {
   if id&PENDING_ITEM!=0{
    if self.pending_flowers.contains_key(&id)||self.pending_furniture.contains_key(&id){
     let before=self.inventory_changes.get(&id).copied();
-    if next<=0||before!=Some(expected){return Err(Error::Schema)}
-    return Ok(InventoryQuantityDelta{document_id:id,before,after:Some(next)})
+    if next<0||expected<=0||before!=Some(expected){return Err(Error::Schema)}
+    return Ok(InventoryQuantityDelta{document_id:id,before,after:(next>0).then_some(next)})
    }
    let item_id=(id&!PENDING_ITEM) as i32;
    let before=self.inventory_changes.get(&id).copied();
@@ -965,7 +971,7 @@ impl Editor {
   self.achievement_created.get(&guid).copied().or_else(||self.achievement_changes.get(&guid).copied())
    .or_else(||self.slot.index.achievements.iter().find(|m|m.guid==guid).and_then(|m|achievement::value(m).ok()))
  }
- pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.inventory_changes.is_empty()||!self.flower_variant_changes.is_empty()||!self.furniture_variant_changes.is_empty()||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
+ pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.inventory_changes.is_empty()||self.flower_variant_changes.keys().chain(self.furniture_variant_changes.keys()).any(|id|*id&PENDING_ITEM==0||self.inventory_changes.contains_key(id))||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
  pub fn can_undo(&self)->bool {!self.undo.is_empty()}
  pub fn can_redo(&self)->bool {!self.redo.is_empty()}
  pub fn history(&self)->Vec<HistoryRecord>{
@@ -1444,8 +1450,9 @@ impl Editor {
    let index=crate::native::index_native(&next_payload,self.slot.envelope.version)?;
    let anchor=index.document_spans.last().ok_or(Error::Schema)?.key;
    let ids=crate::document_membership::allocate_ids(&index,pending.len())?;
-   let mut unique_ids=if self.pending_unique_count()==0{Vec::new()}else{
-    crate::document_membership::allocate_inventory_unique_ids(&index,self.slot.envelope.version,self.pending_unique_count())?
+   let active_unique=self.active_pending_unique_count();
+   let mut unique_ids=if active_unique==0{Vec::new()}else{
+    crate::document_membership::allocate_inventory_unique_ids(&index,self.slot.envelope.version,active_unique)?
    }.into_iter();
    let mut records=Vec::with_capacity(pending.len());
    for (row,id) in pending.iter().zip(ids){

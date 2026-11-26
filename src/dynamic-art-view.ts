@@ -19,13 +19,30 @@ export function watchDynamicArtVisibility(node:HTMLElement,onVisibility:Visibili
   if(!listeners.size){observer?.disconnect();observer=undefined;}
  }};
 }
+// A large inventory can expose many dynamic cards at once. Limit complete
+// render requests (including source loads and partial fallback) rather than
+// starting every visible card's canvas work simultaneously.
+const MAX_ACTIVE_ART_REQUESTS=4;
+type ArtJob=()=>Promise<void>;
+const pending=new Set<ArtJob>();
+let active=0;
+function drainArtQueue(){
+ while(active<MAX_ACTIVE_ART_REQUESTS&&pending.size){
+  const job=pending.values().next().value!;
+  pending.delete(job);active++;
+  void job().finally(()=>{active--;drainArtQueue();});
+ }
+}
 /** A completed old request must never replace a newer appearance or create
- * an object URL after the card leaves the viewport or is destroyed. */
+ * an object URL after the card leaves the viewport or is destroyed.
+ * Canceled waiting jobs never load assets or run the renderer; started jobs
+ * keep their slot until completion, even if their output is no longer needed. */
 export function startDynamicArtRequest(render:()=>Promise<Blob|null>,show:(url:string|null,partial?:boolean)=>void,renderPartial?:()=>Promise<Blob|null>):()=>void{
  let canceled=false,created:string|null=null;
  show(null);
- void (async()=>{
+ const job=async()=>{
   try{
+   if(canceled)return;
    let blob=await render(),partial=false;
    if(canceled)return;
    if(!blob&&renderPartial){blob=await renderPartial();partial=true;}
@@ -33,9 +50,11 @@ export function startDynamicArtRequest(render:()=>Promise<Blob|null>,show:(url:s
    created=URL.createObjectURL(blob);
    show(created,partial);
   }catch{/* An unavailable asset retains the explicitly marked fallback. */}
- })();
+ };
+ pending.add(job);drainArtQueue();
  return ()=>{
   canceled=true;
-  if(created!==null)URL.revokeObjectURL(created);
+  pending.delete(job);
+  if(created!==null){URL.revokeObjectURL(created);created=null;}
  };
 }

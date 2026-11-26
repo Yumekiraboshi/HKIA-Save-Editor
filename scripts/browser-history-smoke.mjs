@@ -872,6 +872,27 @@ async function inventoryAbsentFurnitureCreationSmoke(){
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('61381969');
   await card.locator('input[name="quantity"]').waitFor();assert.equal(await card.locator('input[name="quantity"]').inputValue(),'1');
+  const quantity=card.locator('input[name="quantity"]');
+  assert.equal(await quantity.getAttribute('min'),'0');
+  page.once('dialog',d=>d.dismiss());
+  await quantity.fill('0');await card.locator('.inventory-quantity-form button[type="submit"]').click();
+  assert.equal(await card.count(),1);
+  page.once('dialog',d=>d.accept());
+  await card.locator('.inventory-quantity-form button[type="submit"]').click();
+  await card.waitFor({state:'hidden'});
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('61381969');
+  await card.waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  // A search with no matches retains the previous category after reload.
+  // Undo does not change the selected category; select the restored row's tab.
+  await page.locator('[data-inventory-group="furniture"]').click();
+  await quantity.waitFor();assert.equal(await quantity.inputValue(),'1');
+  await page.locator('button[title="Redo"]:not([disabled])').click();
+  await card.waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await quantity.waitFor();
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
   const output=readFileSync(await download.path());
