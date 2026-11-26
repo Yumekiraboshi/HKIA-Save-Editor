@@ -820,6 +820,49 @@ async function inventoryFlowerClothingCreationSmoke(){
   console.log('CHROMIUM FLOWER CLOTHING CREATION PASS: exact crown default, local recovery, output reparse');
  }finally{await context.close();}
 }
+async function inventoryDefaultFurnitureCreationSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-default-furniture.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-add-toggle').click();
+  const search=page.locator('.inventory-controls input[type="search"]');await search.fill('61381969');
+  const card=page.locator('.inventory-card');
+  await card.locator('input[name="quantity"]').fill('3');
+  await card.locator('.inventory-quantity-form button[type="submit"]').click();
+  await card.waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle:not([disabled])').click();
+  await search.fill('61381969');
+  await card.locator('.inventory-unique-edit-button').click();
+  const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"]');
+  await dialog.waitFor();
+  const value=await dialog.locator('select option').filter({hasText:'Antique Lamp 2'}).getAttribute('value');assert.ok(value!==null);
+  await dialog.locator('select').selectOption(value);
+  await dialog.locator('.inventory-create-furniture:not([disabled])').click();
+  await dialog.waitFor({state:'hidden'});
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('61381969');
+  await card.nth(1).waitFor();
+  assert.deepEqual((await card.locator('input[name="quantity"]').evaluateAll(rows=>rows.map(r=>Number(r.value)))).sort((a,b)=>a-b),[1,3]);
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_unique_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());let at=0;
+  const u=()=>{const n=v.getUint32(at,true);at+=4;return n};const count=u(),rows=[];
+  for(let i=0;i<count;i++){const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();const words=Array.from({length:n},()=>u()|0);u();if(tag===8)rows.push({id,present,uid,fields,words});}
+  assert.equal(count,3);assert.equal(rows.length,1);assert.equal(rows[0].uid,1);assert.deepEqual(rows[0].words,[0,2,0]);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM DEFAULT FURNITURE CREATION PASS: ordinary source retained, draft and native export reparse');
+ }finally{await context.close();}
+}
 async function inventoryAbsentFurnitureCreationSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -1791,6 +1834,7 @@ async function run(){
  await inventoryFurnitureVariantEditSmoke();
  await inventoryFurnitureCreationSmoke();
  await inventoryAbsentFurnitureCreationSmoke();
+ await inventoryDefaultFurnitureCreationSmoke();
  await achievementDstFoldExportSmoke();
  await achievementAtlasRetrySmoke();
 }

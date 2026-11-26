@@ -432,8 +432,24 @@ impl Editor {
  // Only the intersection of verified ordinary acquisition definitions and
  // original non-layout customizable furniture. No inferred ownership.
  fn absent_furniture_choices(&self,item_id:i32)->Vec<FurnitureVariant>{
-  if self.inventory_item_rows.contains_key(&item_id)||self.inventory_changes.contains_key(&(PENDING_ITEM|item_id as u32))||
-   !self.can_create_inventory_item(item_id)||crate::inventory_source::ordinary_quantity_limit(item_id)!=Some(i32::MAX){return Vec::new()}
+  if self.inventory_item_rows.contains_key(&item_id)||!self.can_create_inventory_item(item_id){return Vec::new()}
+  self.default_furniture_choices(item_id)
+ }
+ // A single source-verified ordinary saved stack is sufficient evidence
+ // for its default variant. Do not convert it or consume its quantity.
+ fn saved_default_furniture_source(&self,row:&crate::native::InventoryRow)->Option<i32>{
+  let item=row.item_id?;
+  if row.id==0||row.id>=PENDING_ITEM||row.unique_id!=Some(0)||row.unique_is_nil!=Some(true)||
+   self.inventory_changes.get(&row.id).copied().or(row.quantity)?<=0||
+   !row.fields.iter().all(Option::is_some)||self.inventory_item_rows.get(&item)!=Some(&1)||
+   !crate::inventory_source::ordinary_creation_item(item)||!self.inventory_creation_payload_safe(item)||
+   self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item){return None}
+  let source=furniture_source::item(item)?;
+  if source.is_home_layout||crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX){return None}
+  Some(item)
+ }
+ fn default_furniture_choices(&self,item_id:i32)->Vec<FurnitureVariant>{
+  if crate::inventory_source::ordinary_quantity_limit(item_id)!=Some(i32::MAX){return Vec::new()}
   let Some(source)=furniture_source::item(item_id)else{return Vec::new()};
   if source.is_home_layout{return Vec::new()}
   let Some(default)=furniture_key(source,[0;3])else{return Vec::new()};
@@ -458,11 +474,26 @@ impl Editor {
  }
  pub fn inventory_absent_furniture_ids(&self)->Vec<i32>{
   if !self.absent_flower_budget_available(){return Vec::new()}
-  furniture_source::ITEMS.iter().filter_map(|s|(!self.absent_furniture_choices(s.item_id).is_empty()).then_some(s.item_id)).collect()
+  furniture_source::ITEMS.iter().filter_map(|s|(
+   !self.inventory_changes.contains_key(&(PENDING_ITEM|s.item_id as u32))&&
+   !self.absent_furniture_choices(s.item_id).is_empty()).then_some(s.item_id)).collect()
+ }
+ pub fn inventory_default_furniture_ids(&self)->Vec<u32>{
+  if !self.absent_flower_budget_available(){return Vec::new()}
+  self.slot.index.inventory.iter().filter_map(|r|{
+   let item=self.saved_default_furniture_source(r)?;
+   (!self.default_furniture_choices(item).is_empty()).then_some(r.id)
+  }).chain(self.inventory_changes.iter().filter_map(|(&id,&qty)|{
+   if id&PENDING_ITEM==0||qty<=0||self.pending_flowers.contains_key(&id)||self.pending_furniture.contains_key(&id){return None}
+   (!self.absent_furniture_choices((id&!PENDING_ITEM) as i32).is_empty()).then_some(id)
+  })).collect()
  }
  pub fn inventory_furniture_creation_variants(&self,id:u32)->Vec<FurnitureVariant>{
   if !self.absent_flower_budget_available(){return Vec::new()}
   if id&PENDING_ITEM!=0{return self.absent_furniture_choices((id&!PENDING_ITEM) as i32)}
+  if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|self.saved_default_furniture_source(r)){
+   return self.default_furniture_choices(item)
+  }
   if !self.unique_quantity_ids.contains(&id){return Vec::new()}
   let Some((source,original,current,_))=self.furniture_context(id)else{return Vec::new()};
   // No new restricted ownership: only existing, source-validated furniture.
@@ -479,6 +510,9 @@ impl Editor {
   let item_id=if source_id&PENDING_ITEM!=0{
    if expected!=[0;3]{return Err(Error::Schema)}
    (source_id&!PENDING_ITEM) as i32
+  }else if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==source_id).and_then(|r|self.saved_default_furniture_source(r)){
+   if expected!=[0;3]{return Err(Error::Schema)}
+   item
   }else{
    let (source,_,current,_)=self.furniture_context(source_id).ok_or(Error::Schema)?;
    if current!=expected{return Err(Error::Schema)}
