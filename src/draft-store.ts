@@ -53,8 +53,9 @@ export function safeInventoryPatches(value:unknown):InventoryPatch[]{
   if(ids.has(key))throw Error('DRAFT_INVALID');
   ids.add(key);
   if(p.kind==='flower-create'){
-   if(p.documentId<=2147483647||!Number.isInteger(p.itemId)||p.itemId<=0||p.itemId>2147483647||!isFlowerVariantWire(p.variant)||!Number.isInteger(p.quantity)||p.quantity<=0||p.quantity>2147483647)throw Error('DRAFT_INVALID');
-   result.push({documentId:p.documentId,itemId:p.itemId,variant:[...p.variant],quantity:p.quantity,kind:'flower-create'});
+   const variant:unknown=p.variant;
+   if(p.documentId<=2147483647||!Number.isInteger(p.itemId)||p.itemId<=0||p.itemId>2147483647||!isFlowerVariantWire(variant)||!Number.isInteger(p.quantity)||p.quantity<=0||p.quantity>2147483647)throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,itemId:p.itemId,variant:[...variant],quantity:p.quantity,kind:'flower-create'});
   }else if(p.kind==='flower-variant'){
    const before:unknown=p.before,after:unknown=p.after;
    if(!isFlowerVariantWire(before)||!isFlowerVariantWire(after)||before.every((v,i)=>v===after[i]))throw Error('DRAFT_INVALID');

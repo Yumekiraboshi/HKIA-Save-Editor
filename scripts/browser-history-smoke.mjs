@@ -1348,6 +1348,10 @@ async function run(){
  await item.waitFor();
  await item.click();
  await page.locator('article.item-tile button.item-toggle[aria-pressed="true"]').first().waitFor();
+ // The snapshot can render while the asynchronous history/draft write is
+ // still busy. Wait for the actual enabled Undo control, not a transient
+ // disabled state; missing history still times out and fails the test.
+ await page.locator('.bar-actions button[title="Undo"]:not([disabled])').waitFor({timeout:20_000});
  assert.equal(await page.locator('.bar-actions button[title="Undo"]').isDisabled(),false);
  // The date-dialog delete path must also be gated, with cancel preserving dates.
  await page.locator('article.item-tile button.date-button').first().click();
