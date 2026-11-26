@@ -24,7 +24,7 @@ test('all 649 original customizable items and 1089 slots resolve defaults and ev
    }
   }
  }
- assert.equal(slots,1089);assert.ok(choices>1089);
+ assert.equal(slots,1089);assert.equal(choices,26274);
  console.log('HKIA_FURNITURE_SLOT_SOURCE_COVERAGE '+JSON.stringify({items:649,slots,choices}));
  assert.throws(()=>resolve(32709745,[0,1,0]),/UNASSIGNED_SLOT/);
  assert.throws(()=>resolve(32709745,[1,0,0]),/SLOT_MATERIAL/);
