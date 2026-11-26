@@ -455,6 +455,8 @@ impl<'a> Walk<'a>{
         let item=i32::try_from(fields[0].0.int()?).map_err(|_|Error::Schema)?;
         let uid=i32::try_from(fields[1].0.int()?).map_err(|_|Error::Schema)?;
         self.index.inventory_item_refs.insert((item,uid));
+        // Furniture zero must also deny a same-item reference with a different UID.
+        if item>0{self.index.inventory_furniture_item_refs.insert(item);}
        }else{self.index.inventory_item_refs_incomplete=true;}
       }
       if name==HOME {
