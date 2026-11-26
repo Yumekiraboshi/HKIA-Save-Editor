@@ -1357,8 +1357,8 @@ fn customized_furniture_quantity_uses_normalized_identity_and_native_limits(){
  for zipped in [false,true]{
   let raw=furniture_edit_slot(Some(furniture_payload([502,2,0])));let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
-  assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==1&&r.quantity_limit==Some(i32::MAX)));
-  assert!(e.change_inventory_quantities(&[(4,93,50),(5,2,0)]).is_err());assert!(!e.dirty());
+  assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==0&&r.quantity_limit==Some(i32::MAX)));
+  assert!(e.change_inventory_quantities(&[(4,93,50),(5,3,0)]).is_err());assert!(!e.dirty());
   e.change_inventory_quantities(&[(4,93,50),(5,2,20)]).unwrap();
   let quantities=Editor::open(e.export().unwrap()).unwrap();
   for id in 4..=5{assert_eq!(quantities.inventory_original_unique_payload(id),e.inventory_original_unique_payload(id));}
@@ -2826,6 +2826,55 @@ fn ordinary_furniture_zero_refuses_placement_defaults_legacy_guid_and_opaque_lay
  assert!(e.inventory().iter().all(|r|r.quantity_minimum==1));
  assert!(e.change_inventory_quantity(5,6,0).is_err());assert!(!e.dirty());
 }
+
+#[test]
+fn saved_customized_furniture_zero_refill_and_reference_protection(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=61381969u32;
+ for zipped in [false,true]{
+  let raw=furniture_edit_slot(Some(furniture_payload([502,2,0])));let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  let first=e.inventory_original_unique_payload(4).unwrap().to_vec();
+  let second=e.inventory_original_unique_payload(5).unwrap().to_vec();
+  let identities=e.inventory_unique_rows().map(|r|r.1).collect::<Vec<_>>();
+  assert!(e.inventory().iter().all(|r|r.quantity_minimum==0));
+  e.change_inventory_quantities(&[(4,93,0),(5,2,0)]).unwrap();
+  assert!(e.inventory_furniture_creation_variants(4).is_empty());
+  assert!(e.inventory_furniture_creation_variants(5).is_empty());
+  assert!(e.create_inventory_furniture_variant(4,[13,2,0],[13,3,0],1).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();
+  assert_eq!(restored.inventory(),e.inventory());assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);
+  assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory(),e.inventory());
+  assert_eq!(saved.inventory_unique_rows().map(|r|r.1).collect::<Vec<_>>(),identities);
+  assert_eq!(saved.inventory_original_unique_payload(4),Some(first.as_slice()));
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(second.as_slice()));
+  assert!(saved.inventory_furniture_creation_variants(4).is_empty());
+  saved.change_inventory_quantities(&[(4,0,93),(5,0,2)]).unwrap();
+  let reopened=Editor::open(saved.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory(),original);
+  assert_eq!(reopened.inventory_original_unique_payload(4),Some(first.as_slice()));
+  assert_eq!(reopened.inventory_original_unique_payload(5),Some(second.as_slice()));
+ }
+ // A reference to a different UID of the same Item ID must still block
+ // zeroing this sibling. The ordinary positive quantity gate is unchanged.
+ let make=|wall:u32,placed:Vec<Vec<u8>>|{
+  let mut p=synthetic_payload("3.0.1");p[3]=0x97;
+  p.extend(doc(1,arr(vec![u(4),u(item),u(11),u(93),furniture_payload([13,2,0])])));
+  let home=arr(vec![guid([41,42,43,44]),arr(vec![]),u(wall),u(0),guid([0;4]),l(0),
+   vec![0xc0],vec![0xc2],vec![0xc0],arr(placed),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])]);
+  p.extend(doc(32,arr(vec![u(6),guid([7,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![home])]))])])));
+  slot_from_payload("3.0.1",p)
+ };
+ let placed=arr(vec![u(item),u(0),u(0),u(0),u(0),u(0),furniture_payload([502,2,0]),vec![0xc0],arr(vec![]),arr(vec![]),u(0),arr(vec![]),u(0)]);
+ for raw in [make(item,vec![]),make(0,vec![placed]),make(0,vec![arr(vec![u(item),u(0)])])]{
+  let mut e=Editor::open(raw).unwrap();assert_eq!(e.inventory()[0].quantity_minimum,1);
+  assert!(e.change_inventory_quantity(4,93,0).is_err());assert!(!e.dirty());
+ }
+}
+
 
 #[test]
 fn saved_palette_zero_refill_requires_complete_unreferenced_avatar_context(){
