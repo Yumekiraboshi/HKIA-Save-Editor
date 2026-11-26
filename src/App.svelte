@@ -5,7 +5,7 @@
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
- import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy} from './inventory-copy';
+ import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy,inventoryDeleteCopy} from './inventory-copy';
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,type FurnitureDisplay} from './inventory-furniture-display';
@@ -58,7 +58,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  type ThemePref='system'|'light'|'dark';
  type PendingRemoval=
   | {kind:'collections';id:number;name:string;before:bigint;revision:number;fromDateDialog:boolean}
-  | {kind:'achievements';item:AchievementListRow;name:string;revision:number};
+  | {kind:'achievements';item:AchievementListRow;name:string;revision:number}
+  | {kind:'inventory';requests:InventoryQuantityRequest[];batch:boolean;name:string;revision:number};
  const BATCH_SIZE=40;
  const EPOCH=621355968000000000n;
  const ICONS=import.meta.env.BASE_URL+'icons/';
@@ -102,6 +103,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||inventoryBatchSelected.size===0)return 1;
   return inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantityMinimum!==0)?1:0;
  });
+ const inventoryBatchCanDelete=$derived(!inventoryAddMode&&inventoryBatchSelected.size>0&&inventoryBatchMinimum===0&&inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantity>0));
  const inventoryBatchMaximum=$derived.by(()=>{
   let cap=2147483647;
   if(snapshot)for(const row of inventoryBrowseRows){
@@ -926,6 +928,20 @@ import {verifiedFloorplanName} from './floorplan-names';
   }
   inventoryBatchSelected=next;
  }
+ function requestInventoryDelete(rows:InventoryEntry[],batch:boolean,opener:HTMLElement){
+  if(!snapshot||busy||inventoryAddMode||!rows.length||rows.some(row=>!row.editable||row.quantityMinimum!==0))return;
+  const targets=rows.filter(row=>row.quantity>0);
+  if(!targets.length)return;
+  const requests:InventoryQuantityRequest[]=targets.map(row=>[row.documentId,row.quantity,0]);
+  const name=batch?targets.length.toLocaleString(locale):inventoryName(targets[0].itemId)+(inventoryVariantSearchName(targets[0])?' · '+inventoryVariantSearchName(targets[0]):'')+' × '+targets[0].quantity.toLocaleString(locale);
+  void requestRemoval({kind:'inventory',requests,batch,name,revision:snapshot.revision},opener);
+ }
+ function requestInventoryBatchDelete(opener:HTMLElement){
+  if(!inventoryBatchMode||!inventoryBatchCanDelete)return;
+  const rows=inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId));
+  if(rows.length!==inventoryBatchSelected.size)return;
+  requestInventoryDelete(rows,true,opener);
+ }
  async function applyInventoryBatch(event:SubmitEvent){
   event.preventDefault();
   if(!snapshot||busy||!inventoryBatchMode||!inventoryBatchSelected.size)return;
@@ -991,7 +1007,9 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(snapshot.revision!==target.revision||original!==removalOriginal||
    (target.kind==='collections'
     ?recorded[String(target.id)]!==target.before
-    :snapshot.achievements.find(row=>achievementGuid(row.guid)===target.item.guid)?.value.complete!==true)){
+    :target.kind==='achievements'
+     ?snapshot.achievements.find(row=>achievementGuid(row.guid)===target.item.guid)?.value.complete!==true
+     :target.requests.some(([id,before])=>!snapshot?.inventory.some(row=>row.documentId===id&&row.quantity===before&&row.editable&&row.quantityMinimum===0)))){
    closeRemovalConfirmation();error=removalCopy.stale;return;
   }
   closeRemovalConfirmation();
@@ -1001,7 +1019,16 @@ import {verifiedFloorplanName} from './floorplan-names';
     if(success)closeDateDialog();
     else dateValidation=error||copy.fileError;
    }
-  }else await quickToggleAchievement(target.item,undefined,undefined,true);
+  }else if(target.kind==='achievements')await quickToggleAchievement(target.item,undefined,undefined,true);
+  else{
+   busy=true;error='';
+   try{
+    if(target.batch){update(await changeInventoryQuantities(target.requests));resetInventoryBatchSelection()}
+    else{const [id,before,next]=target.requests[0];update(await changeInventoryQuantity(id,before,next))}
+    await persistDraft();
+   }catch(e){error=describeError(e)}
+   finally{busy=false}
+  }
  }
  async function toggleCollection(id:number,name:string,opener:HTMLElement){
   if(!snapshot||busy||pendingRemoval)return;
@@ -1395,6 +1422,7 @@ import {verifiedFloorplanName} from './floorplan-names';
        <span class="inventory-total" aria-live="polite">{inventoryBatchSelected.size.toLocaleString(locale)} / {snapshot.inventoryBatchLimit.toLocaleString(locale)}</span>
       <input type="number" min={inventoryBatchMinimum} max={inventoryBatchMaximum} step="1" required bind:value={inventoryBatchQuantity} placeholder={iCopy.quantity} aria-label={iCopy.quantity} disabled={busy}/>
       <button type="submit" class="primary" disabled={busy||!inventoryBatchSelected.size||inventoryBatchQuantity===undefined}>{iCopy.apply}</button>
+      {#if !inventoryAddMode}<button type="button" class="inventory-editable-filter inventory-batch-delete" disabled={busy||!inventoryBatchCanDelete} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)} onclick={e=>requestInventoryBatchDelete(e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>{/if}
       <button type="button" class="inventory-editable-filter" disabled={busy} onclick={clearInventoryBatch}>{copy.cancel}</button>
      </form>
     {:else}
@@ -1499,6 +1527,9 @@ import {verifiedFloorplanName} from './floorplan-names';
         <button type="submit" class="primary" disabled={busy||inventoryBatchMode} title={iCopy.apply} aria-label={iCopy.apply}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
         </button>
+        {#if !inventoryAddMode}
+         <button type="button" class="inventory-unique-edit-button inventory-compact-variant inventory-stack-delete" disabled={busy||inventoryBatchMode||item.quantityMinimum!==0||item.quantity<=0} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)+': '+inventoryName(item.itemId)} onclick={e=>requestInventoryDelete([item],false,e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
+        {/if}
         {#if canFlower||canFurniture||canPalette||canBoba||canCafe}
          <button class="inventory-unique-edit-button inventory-compact-variant" type="button" disabled={busy||inventoryBatchMode}
           title={canCafe?inventoryName(item.itemId):canBoba?inventoryName(item.itemId):canPalette?flowerCopy.color:canFurniture?furnitureCopy.title:flowerCopy.title} aria-label={(canCafe?inventoryName(item.itemId):canBoba?inventoryName(item.itemId):canPalette?flowerCopy.color:canFurniture?furnitureCopy.title:flowerCopy.title)+': '+inventoryName(item.itemId)}
@@ -1962,14 +1993,14 @@ import {verifiedFloorplanName} from './floorplan-names';
   {#if pendingRemoval}
    <div class="removal-confirm-inner">
     <div class="date-dialog-heading">
-     <h2 id="removal-confirm-title">{pendingRemoval.kind==='collections'?removalCopy.collectionTitle:removalCopy.achievementTitle}</h2>
+     <h2 id="removal-confirm-title">{pendingRemoval.kind==='inventory'?inventoryDeleteCopy(locale):pendingRemoval.kind==='collections'?removalCopy.collectionTitle:removalCopy.achievementTitle}</h2>
      <button type="button" class="date-dialog-close" aria-label={removalCopy.cancel} disabled={busy} onclick={closeRemovalConfirmation}>×</button>
     </div>
     <strong class="removal-confirm-name">{pendingRemoval.name}</strong>
-    <p class="removal-confirm-warning">{pendingRemoval.kind==='collections'?removalCopy.collectionWarning:removalCopy.achievementWarning}</p>
+    <p class="removal-confirm-warning">{pendingRemoval.kind==='inventory'?inventoryEmptyCopy(locale):pendingRemoval.kind==='collections'?removalCopy.collectionWarning:removalCopy.achievementWarning}</p>
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel removal-cancel" autofocus disabled={busy} onclick={closeRemovalConfirmation}>{removalCopy.cancel}</button>
-     <button type="button" class="removal-confirm-action" disabled={busy} onclick={()=>void confirmRemoval()}>{removalCopy.remove}</button>
+     <button type="button" class="removal-confirm-action" disabled={busy} onclick={()=>void confirmRemoval()}>{pendingRemoval.kind==='inventory'?inventoryDeleteCopy(locale):removalCopy.remove}</button>
     </div>
    </div>
   {/if}
