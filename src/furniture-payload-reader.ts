@@ -40,10 +40,14 @@ async function verifiedBody(response:Response,ref:RugPayload):Promise<Blob>{
 /** One reader per source version. Coalesce in-flight loads and retain only
  * verified immutable blobs within the byte budget. Returned ArrayBuffers
  * are independent copies, so consumers cannot corrupt shared cached bytes. */
-export function createFurniturePayloadReader(root:URL,allowed:readonly RugPayload[],fetchAsset:typeof fetch=fetch):ReadRugPayload{
+export function validateFurniturePayloadRoot(root:URL):URL{
  const base=new URL(root.href);
  if(!['http:','https:'].includes(base.protocol)||!base.pathname.endsWith('/')||base.search||base.hash||base.username||base.password||
   (typeof location!=='undefined'&&base.origin!==location.origin))throw Error('FURNITURE_PAYLOAD_ROOT');
+ return base;
+}
+export function createFurniturePayloadReader(root:URL,allowed:readonly RugPayload[],fetchAsset:typeof fetch=fetch):ReadRugPayload{
+ const base=validateFurniturePayloadRoot(root);
  const allow=new Map<string,number>();
  for(const ref of allowed){
   if(!valid(ref)||(allow.has(key(ref))&&allow.get(key(ref))!==ref.bytes))throw Error('FURNITURE_PAYLOAD_INDEX');
