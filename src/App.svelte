@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPaletteVariants,changeInventoryPaletteVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPaletteVariants,changeInventoryPaletteVariant,requestPaletteCreationVariants,createInventoryPaletteVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -78,7 +78,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[];creationOptions:FurnitureVariant[];createOnly:boolean}|null>(null);
  let furnitureSelection=$state(-1);
  let paletteDialogEl:HTMLDialogElement|undefined=$state();
- let paletteEdit=$state<{documentId:number;itemId:number;revision:number;before:PaletteVariant;options:PaletteVariant[]}|null>(null);
+ let paletteEdit=$state<{documentId:number;itemId:number;revision:number;before:PaletteVariant;options:PaletteVariant[];creationOptions:PaletteVariant[]}|null>(null);
  let paletteSlot=$state(0);
  let paletteSelection=$state(-1);
  let inventoryNativeArt:InventoryNativeArt|null=$state(null);
@@ -754,13 +754,21 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||!row.unique?.paletteEditable||!before)return;
   const revision=snapshot.revision;busy=true;error='';
   try{
-   const options=await requestPaletteVariants(row.documentId);
+   const [options,creationOptions]=await Promise.all([requestPaletteVariants(row.documentId),requestPaletteCreationVariants(row.documentId)]);
    if(!snapshot||snapshot.revision!==revision)return;
-   paletteEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options};
-   paletteSlot=0;paletteSelection=-1;await tick();
+   paletteEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions};
+   paletteSlot=0;paletteSelection=-1;variantAddQuantity=1;await tick();
    if(paletteDialogEl&&!paletteDialogEl.open)paletteDialogEl.showModal();
   }catch(e){error=describeError(e)}
   finally{busy=false}
+ }
+ async function addInventoryPaletteVariant(){
+  const edit=paletteEdit,quantity=variantAddQuantity;
+  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
+  const next=edit.options[paletteSelection];if(!next||!edit.creationOptions.some(v=>v.every((n,i)=>n===next[i])))return;
+  busy=true;error='';
+  try{update(await createInventoryPaletteVariant(edit.documentId,edit.before,next,quantity));closePaletteEditor();await persistDraft()}
+  catch(e){error=describeError(e)}finally{busy=false}
  }
  function closePaletteEditor(){if(paletteDialogEl?.open)paletteDialogEl.close()}
  async function applyInventoryPaletteVariant(event:SubmitEvent){
@@ -1624,9 +1632,18 @@ import {verifiedFloorplanName} from './floorplan-names';
      </div>
      {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
     </div>
+    {#if edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[paletteSelection]?.[i]))}
+     <label class="date-dialog-field">
+      <span>{inventoryAddCopy(locale)} · {iCopy.quantity}</span>
+      <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
+     </label>
+    {/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closePaletteEditor}>{copy.cancel}</button>
-     <button type="submit" class="primary" disabled={busy||paletteSelection<0}>{copy.apply}</button>
+     {#if edit.creationOptions.length}
+      <button type="button" class="inventory-create-palette" disabled={busy||!validVariantAddQuantity||paletteSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[paletteSelection]?.[i]))} onclick={()=>void addInventoryPaletteVariant()}>{inventoryAddCopy(locale)}</button>
+     {/if}
+     <button type="submit" formnovalidate class="primary" disabled={busy||paletteSelection<0}>{copy.apply}</button>
     </div>
    </form>
   {/if}

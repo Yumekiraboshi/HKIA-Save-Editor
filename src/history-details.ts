@@ -1,13 +1,14 @@
 import type {FlowerVariant,FurnitureVariant} from './inventory-unique';
-import {paletteColorHex,type PaletteVariant} from './inventory-palette-display';
+import {CUSTOM_PALETTE_ITEM_ID,paletteColorHex,type PaletteVariant} from './inventory-palette-display';
 import type {AchievementValue,HistoryRecord} from './worker-client';
 import {toDateTimeValue} from './collection-date';
 
 export type InventoryBatchDetail={documentId:number;before:number;after:number};
 export type HistoryDetail =
  | {scope:'inventory';documentId:number;batch:InventoryBatchDetail[]}
- | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FlowerVariant;quantity:number;furnitureCreated?:false}
- | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FurnitureVariant;quantity:number;furnitureCreated:true}
+ | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FlowerVariant;quantity:number;furnitureCreated?:false;paletteCreated?:false}
+ | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FurnitureVariant;quantity:number;furnitureCreated:true;paletteCreated?:false}
+ | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:PaletteVariant;quantity:number;furnitureCreated?:false;paletteCreated:true}
  | {scope:'collections';itemId:number;before:bigint|null;after:bigint|null}
  | {scope:'inventory';documentId:number;before:number;after:number;flowerVariant?:false;furnitureVariant?:false;paletteVariant?:false}
  | {scope:'inventory';documentId:number;before:FlowerVariant;after:FlowerVariant;flowerVariant:true;furnitureVariant?:false;paletteVariant?:false}
@@ -91,7 +92,7 @@ export function decodeHistoryDetails(
     const before:FlowerVariant=[i32(),i32(),i32(),i32()],variant:FlowerVariant=[i32(),i32(),i32(),i32()];
     const quantity=i32();
     const candidate=documentId===2147483648+itemId&&before.every(n=>n===0);
-    const stagedSource=result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&!r.furnitureCreated&&r.createdHandle===documentId&&r.itemId===itemId);
+    const stagedSource=result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&!r.furnitureCreated&&!r.paletteCreated&&r.createdHandle===documentId&&r.itemId===itemId);
     if(createdHandle<=2147483647||createdHandle===documentId||documentId<=0||itemId<=0||quantity<=0||
      (documentId>2147483647&&!candidate&&!stagedSource)||
      (!candidate&&(before[0]!==variant[0]||before.every((v,i)=>v===variant[i]))))return [];
@@ -105,9 +106,14 @@ export function decodeHistoryDetails(
     if(createdHandle<=2147483647||createdHandle===documentId||documentId<=0||itemId<=0||quantity<=0||before.every((v,i)=>v===variant[i])||
      (documentId>2147483647&&!candidate&&!stagedSource))return [];
     result.push({scope:'inventory',documentId,createdHandle,itemId,variant,quantity,furnitureCreated:true});
+   }else if(kind===14){
+    const createdHandle=u32(),documentId=u32(),before=Array.from({length:12},()=>u32()),variant=Array.from({length:12},()=>u32()),quantity=i32();
+    const stagedSource=result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&r.paletteCreated&&r.createdHandle===documentId);
+    if(createdHandle<=2147483647||createdHandle===documentId||documentId<=0||quantity<=0||before.every((v,i)=>v===variant[i])||(documentId>2147483647&&!stagedSource))return [];
+    result.push({scope:'inventory',documentId,createdHandle,itemId:CUSTOM_PALETTE_ITEM_ID,variant,quantity,paletteCreated:true});
    }else if(kind===13){
     const documentId=u32(),before=Array.from({length:12},()=>u32()),after=Array.from({length:12},()=>u32());
-    if(documentId<=0||documentId>2147483647||before.every((v,i)=>v===after[i]))return [];
+    if(documentId<=0||(documentId>2147483647&&!result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&r.paletteCreated&&r.createdHandle===documentId))||before.every((v,i)=>v===after[i]))return [];
     result.push({scope:'inventory',documentId,before,after,paletteVariant:true});
    }else if(kind===8){
     const documentId=u32(),before:FlowerVariant=[i32(),i32(),i32(),i32()],after:FlowerVariant=[i32(),i32(),i32(),i32()];
@@ -184,7 +190,7 @@ export function formatHistoryChange(
 ):string{
  if(!detail)return '';
  if(detail.scope==='inventory'&&'batch' in detail)return detail.batch.map(row=>(inventoryBatchName?.(row.documentId)??String(row.documentId))+': '+row.before+' → '+row.after).join(' · ');
- if(detail.scope==='inventory'&&'createdHandle' in detail)return copy.added+' · '+(detail.furnitureCreated?(furnitureVariantName?.(detail.variant)??String(detail.variant)):(flowerVariantName?.(detail.variant)??String(detail.variant)))+' · '+quantityLabel+': '+detail.quantity;
+ if(detail.scope==='inventory'&&'createdHandle' in detail)return copy.added+' · '+(detail.paletteCreated?[0,1,2].map(i=>paletteColorHex(detail.variant,i)).join(' / '):detail.furnitureCreated?(furnitureVariantName?.(detail.variant)??String(detail.variant)):(flowerVariantName?.(detail.variant)??String(detail.variant)))+' · '+quantityLabel+': '+detail.quantity;
  if(detail.scope==='inventory'&&detail.paletteVariant)return [0,1,2].filter(i=>detail.before.slice(i*4,i*4+4).some((v,j)=>v!==detail.after[i*4+j])).map(i=>(i+1)+': '+paletteColorHex(detail.before,i)+' → '+paletteColorHex(detail.after,i)).join(' · ');
  if(detail.scope==='inventory')return detail.furnitureVariant?(furnitureVariantName?.(detail.before)??String(detail.before))+' → '+(furnitureVariantName?.(detail.after)??String(detail.after)):detail.flowerVariant?(flowerVariantName?.(detail.before)??String(detail.before))+' → '+(flowerVariantName?.(detail.after)??String(detail.after)):quantityLabel+': '+detail.before+' → '+detail.after;
  if(detail.scope==='collections'){
