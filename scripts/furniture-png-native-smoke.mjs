@@ -7,28 +7,19 @@
  * exports diagnostic PNGs and a provenance report only after successful checks.
  */
 import assert from 'node:assert/strict';
-import {readFileSync,writeFileSync,existsSync,realpathSync,mkdtempSync,renameSync,rmSync} from 'node:fs';
-import {join,resolve,dirname,relative,isAbsolute} from 'node:path';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {parseArgs} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
 import {chromium} from 'playwright-core';
+import {furnitureDiagnosticCases,diagnosticOutputPath,exportFurnitureDiagnostic} from './furniture-diagnostic-output.mjs';
 const {values:args}=parseArgs({options:{stage:{type:'string'},patterns:{type:'string'},pack:{type:'string'},item:{type:'string',default:'chair'},'authored-camera':{type:'boolean',default:false},out:{type:'string'}}});
 assert.ok(args.pack||args.stage&&args.patterns,'--pack or --stage and --patterns required');
-assert.ok(['chair','rug'].includes(args.item),'--item must be chair or rug');
-const useAuthored=args['authored-camera']||args.item==='rug';
-const itemId=args.item==='rug'?32709745:90163601;
-const cases=args.item==='rug'?Array.from({length:6},(_,i)=>[207+i,0,0]):[[364,532,0],[366,532,0],[18,532,0],[234,532,0],[235,532,0],[232,532,0],[518,532,0],[518,519,0],[518,520,0],[520,519,0]];
-let target;
-if(args.out){
- const parent=realpathSync(dirname(resolve(args.out)));
- target=join(parent,resolve(args.out).split(/[\\/]/).at(-1));
- assert.ok(!existsSync(target),'output already exists');
- const roots=[fileURLToPath(new URL('../',import.meta.url)),...([args.pack,args.stage,args.patterns].filter(Boolean).map(x=>realpathSync(x)))];
- for(const root of roots){const rel=relative(root,target);assert.ok(rel!==''&&(isAbsolute(rel)||rel==='..'||rel.startsWith('../')||rel.startsWith('..\\')),'output must be outside repo and source directories');}
-}
+const {useAuthored,itemId,cases}=furnitureDiagnosticCases(args.item,args['authored-camera']);
+const target=args.out?diagnosticOutputPath(args.out,[fileURLToPath(new URL('../',import.meta.url)),...([args.pack,args.stage,args.patterns].filter(Boolean))]):undefined;
 const read=p=>JSON.parse(readFileSync(new URL('../'+p,import.meta.url)));
 const sources={catalog:read('public/inventory-ui/furniture-customization-v3.0.1.json'),geometry:read('data/furniture-mesh-source-sample-v3.0.1.json'),base:read('data/furniture-base-material-source-v3.0.1.json'),variants:read('data/furniture-material-render-source-v3.0.1.json'),patterns:read('data/furniture-pattern-texture-sample-v3.0.1.json'),additionalPatterns:read('data/furniture-chair-pattern-sources-v3.0.1.json')};
 const lights=read('data/furniture-light-region-source-v3.0.1.json');
@@ -96,27 +87,13 @@ try{
    firstAlpha??=alpha;
    const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',pixels)),b=>b.toString(16).padStart(2,'0')).join('');
    const png=exportPng?await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(Error('PNG_EXPORT'));reader.readAsDataURL(outcome.blob);}):null;
-   out.push({indices,sha256,visible:alpha.filter(v=>v>0).length,renderers:outcome.renderers,png});
+   out.push({indices,...(itemId===90163601?{seat:indices[0],frame:indices[1]}:{}),sha256,visible:alpha.filter(v=>v>0).length,renderers:outcome.renderers,png});
   }
   if(new Set(out.map(x=>x.sha256)).size!==out.length)throw Error('IDENTICAL_VARIANTS');
   return out;
  },{sources,lights,authored,usePack:!!args.pack,useAuthored,itemId,cases,exportPng:!!target});
  assert.equal(result.length,cases.length);if(args.pack)assert.ok(requests.length>0);
- const report={itemId,transport:args.pack?'content-addressed':'stage',camera:useAuthored?'authored-preview-diagnostic':'synthetic-diagnostic',lighting:'synthetic-diagnostic',cubeOrientation:'unverified',runtimeRoot:'identity-diagnostic',renderFidelity:'unverified',requests:requests.length,result:result.map(({png,...row})=>row)};
- if(target){
-  const temp=mkdtempSync(join(dirname(target),'.furniture-diagnostic-'));
-  try{
-   for(const [i,row] of result.entries()){
-    const bytes=Buffer.from(row.png,'base64');
-    assert.ok(bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])),'PNG signature');
-    const file=itemId+'-'+row.indices.join('-')+'.png';
-    writeFileSync(join(temp,file),bytes,{flag:'wx'});
-    Object.assign(report.result[i],{file,pngSha256:createHash('sha256').update(bytes).digest('hex')});
-   }
-   writeFileSync(join(temp,'report.json'),JSON.stringify(report,null,2)+'\n',{flag:'wx'});
-   assert.ok(!existsSync(target),'output appeared');
-   renameSync(temp,target);
-  }finally{rmSync(temp,{recursive:true,force:true});}
- }
+ let report={itemId,transport:args.pack?'content-addressed':'stage',camera:useAuthored?'authored-preview-diagnostic':'synthetic-diagnostic',lighting:'synthetic-diagnostic',cubeOrientation:'unverified',runtimeRoot:'identity-diagnostic',renderFidelity:'unverified',requests:requests.length,result:result.map(({png,...row})=>row)};
+ if(target)report=exportFurnitureDiagnostic(target,report,result);
  console.log((args.item==='rug'?'HKIA_RUG_PNG_DIAGNOSTIC_OK ':'HKIA_CHAIR_PNG_DIAGNOSTIC_OK ')+JSON.stringify(report));
 }finally{await browser.close();}
