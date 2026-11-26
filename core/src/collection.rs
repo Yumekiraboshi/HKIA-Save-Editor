@@ -165,6 +165,8 @@ pub struct InventoryEntry {pub document_id:u32,pub item_id:i32,pub quantity:i32,
 struct InventoryQuantityDelta{document_id:u32,before:Option<i32>,after:Option<i32>}
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 struct PendingFlower {item_id:i32,variant:FlowerVariant}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+struct PendingFurniture {item_id:i32,variant:FurnitureVariant}
 #[derive(Clone,Debug)]
 enum Change {
  Collection{id:i32,before:Option<Option<i64>>,after:Option<Option<i64>>},
@@ -173,6 +175,7 @@ enum Change {
  FlowerVariant{document_id:u32,before:Option<FlowerVariant>,after:Option<FlowerVariant>},
  FlowerCreated{document_id:u32,source_id:u32,expected:FlowerVariant,flower:PendingFlower,quantity:i32},
  FurnitureVariant{document_id:u32,before:Option<FurnitureVariant>,after:Option<FurnitureVariant>},
+ FurnitureCreated{document_id:u32,source_id:u32,expected:FurnitureVariant,furniture:PendingFurniture,quantity:i32},
  Achievement{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
  AchievementCreated{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
  AchievementCreatedPair{guid:[u32;4],value:AchievementValue,parent:([u32;4],Option<AchievementValue>,Option<AchievementValue>)},
@@ -194,14 +197,14 @@ pub struct HistoryRecord {
 }
 impl Change {
  fn scope(&self)->HistoryScope{
-  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}|Self::InventoryBatch{..}|Self::FlowerVariant{..}|Self::FlowerCreated{..}|Self::FurnitureVariant{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
+  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}|Self::InventoryBatch{..}|Self::FlowerVariant{..}|Self::FlowerCreated{..}|Self::FurnitureCreated{..}|Self::FurnitureVariant{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
  }
  fn history_record(&self,applied:bool)->HistoryRecord{
   let (item_id,guid,paired)=match self {
    Self::Collection{id,..}=>(*id,[0;4],false),
    Self::Inventory{document_id,..}|Self::FlowerVariant{document_id,..}|Self::FurnitureVariant{document_id,..}=>(*document_id as i32,[0;4],false),
    Self::InventoryBatch{deltas}=>(deltas[0].document_id as i32,[0;4],false),
-   Self::FlowerCreated{source_id,..}=>(*source_id as i32,[0;4],false),
+   Self::FlowerCreated{source_id,..}|Self::FurnitureCreated{source_id,..}=>(*source_id as i32,[0;4],false),
    Self::Achievement{guid,..}|Self::AchievementCreated{guid,..}=>(0,*guid,false),
    Self::AchievementCreatedPair{guid,..}|Self::AchievementParentNew{child:(guid,..),..}=>(0,*guid,true),
    Self::AchievementPair{first:(guid,..),..}=>(0,*guid,true),
@@ -220,6 +223,7 @@ pub struct Editor {
  changes:HashMap<i32,Option<i64>>,
  inventory_changes:HashMap<u32,i32>,
  pending_flowers:HashMap<u32,PendingFlower>,
+ pending_furniture:HashMap<u32,PendingFurniture>,
  inventory_item_rows:HashMap<i32,usize>,
  unique_quantity_ids:HashSet<u32>,
  flower_variant_changes:HashMap<u32,FlowerVariant>,
@@ -254,7 +258,7 @@ impl Editor {
   for row in &slot.index.inventory{
    if let Some(id)=row.item_id{*inventory_item_rows.entry(id).or_insert(0usize)+=1;}
   }
-  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),pending_flowers:HashMap::new(),inventory_item_rows,unique_quantity_ids:HashSet::new(),flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
+  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),inventory_item_rows,unique_quantity_ids:HashSet::new(),flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
   editor.unique_quantity_ids=editor.index_unique_quantity_ids();
   Ok(editor)
  }
@@ -275,7 +279,7 @@ impl Editor {
  fn next_edit_revision(&self)->Result<u32,Error>{
   // A staged unique creation must remain replayable. Never evict its
   // creation record or prerequisites from the bounded native journal.
-  if (!self.pending_flowers.is_empty()||self.redo.iter().any(|c|matches!(c,Change::FlowerCreated{..})))&&self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
+  if (self.pending_unique_count()>0||self.redo.iter().any(|c|matches!(c,Change::FlowerCreated{..}|Change::FurnitureCreated{..})))&&self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
   self.revision.checked_add(1).ok_or(Error::Overflow)
  }
  pub fn revision(&self)->u32 {self.revision}
@@ -318,6 +322,7 @@ impl Editor {
  /// Read-only lookup by document identity, never by Item ID alone.
  pub fn inventory_unique_data(&self,id:u32)->Option<crate::native::InventoryUniqueData>{
   if let Some(f)=self.pending_flowers.get(&id){return Some(flower_unique(self.flower_variant_changes.get(&id).copied().unwrap_or(f.variant)))}
+  if let Some(f)=self.pending_furniture.get(&id){return Some(InventoryUniqueData::Furniture{materials:self.furniture_variant_changes.get(&id).copied().unwrap_or(f.variant)})}
   let row=self.slot.index.inventory.iter().find(|row|row.id==id)?;
   self.effective_unique(row)
  }
@@ -335,7 +340,7 @@ impl Editor {
   self.slot.index.inventory.iter().filter(|r|r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,r.unique_is_nil,self.effective_unique(r),r.unique_fields.len()))
    .chain(self.pending_inventory_rows().into_iter().map(|r|match self.pending_flowers.get(&r.document_id){
     Some(f)=>(r.document_id,None,Some(false),Some(flower_unique(self.flower_variant_changes.get(&r.document_id).copied().unwrap_or(f.variant))),4),
-    None=>(r.document_id,Some(0),Some(true),None,0)
+    None=>match self.pending_furniture.get(&r.document_id){Some(f)=>(r.document_id,None,Some(false),Some(InventoryUniqueData::Furniture{materials:self.furniture_variant_changes.get(&r.document_id).copied().unwrap_or(f.variant)}),3),None=>(r.document_id,Some(0),Some(true),None,0)}
    }))
  }
  fn unique_row_source(&self,row:&crate::native::InventoryRow,fields:usize)->Option<i32>{
@@ -366,31 +371,35 @@ impl Editor {
   Some(source)
  }
  pub fn inventory_furniture_edit_hints(&self)->impl Iterator<Item=u32>+'_ {
-  self.slot.index.inventory.iter().filter_map(|r|self.furniture_source(r).map(|_|r.id))
+  self.slot.index.inventory.iter().filter_map(|r|self.furniture_source(r).map(|_|r.id)).chain(self.pending_furniture.keys().copied())
+ }
+ fn original_furniture_variant(&self,id:u32)->Option<FurnitureVariant>{
+  self.pending_furniture.get(&id).map(|f|f.variant)
+   .or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.unique_data).and_then(furniture_variant))
  }
  fn furniture_context(&self,id:u32)->Option<(&'static FurnitureItemSource,FurnitureVariant,FurnitureVariant,HashSet<FurnitureVariant>)>{
-  let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
-  let source=self.furniture_source(row)?;
-  let original=furniture_variant(row.unique_data?)?;
-  let current=furniture_variant(self.effective_unique(row)?)?;
+  let (item,uid,source)=if let Some(f)=self.pending_furniture.get(&id){
+   (f.item_id,None,furniture_source::item(f.item_id)?)
+  }else{
+   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+   (row.item_id?,row.unique_id,self.furniture_source(row)?)
+  };
+  let original=self.original_furniture_variant(id)?;
+  let current=self.inventory_unique_data(id).and_then(furniture_variant)?;
   let mut reserved=HashSet::new();
   for other in &self.slot.index.inventory{
    if other.id==id{continue}
-   if other.unique_id==row.unique_id{return None}
-   if other.item_id!=row.item_id{continue}
-   if other.unique_is_nil==Some(true){
-    reserved.insert(furniture_key(source,[0;3])?);
-   }else{
-    // Never guess a legacy GUID or unresolved unique payload.
-    for v in [other.unique_data?,self.effective_unique(other)?]{
-     reserved.insert(furniture_key(source,furniture_variant(v)?)?);
-    }
-   }
+   if uid.is_some()&&other.unique_id==uid{return None}
+   if other.item_id!=Some(item){continue}
+   if other.unique_is_nil==Some(true){reserved.insert(furniture_key(source,[0;3])?);}
+   else{for v in [other.unique_data?,self.effective_unique(other)?]{reserved.insert(furniture_key(source,furniture_variant(v)?)?);}}
   }
-  // A staged UID-zero ordinary row also owns the source-default identity.
-  if self.inventory_changes.contains_key(&(PENDING_ITEM|source.item_id as u32)){
-   reserved.insert(furniture_key(source,[0;3])?);
+  for (&other,f) in &self.pending_furniture{
+   if other==id||f.item_id!=item{continue}
+   reserved.insert(furniture_key(source,f.variant)?);
+   reserved.insert(furniture_key(source,self.furniture_variant_changes.get(&other).copied().unwrap_or(f.variant))?);
   }
+  if self.inventory_changes.contains_key(&(PENDING_ITEM|item as u32)){reserved.insert(furniture_key(source,[0;3])?);}
   if reserved.contains(&furniture_key(source,current)?)||reserved.contains(&furniture_key(source,original)?){return None}
   Some((source,original,current,reserved))
  }
@@ -412,14 +421,38 @@ impl Editor {
     let mut v=current;v[i]=n;
     if v==current||!Self::valid_furniture_target(source,original,v){continue}
     let key=furniture_key(source,v).unwrap();
-    if key!=current_key&&!reserved.contains(&key)&&!out.contains(&v){out.push(v)}
+    if key!=current_key&&!reserved.contains(&key)&&!out.contains(&v)&&
+     (!self.pending_furniture.contains_key(&id)||Some(key)!=furniture_key(source,[0;3])){out.push(v)}
    }
   }
   out
  }
+ pub fn inventory_furniture_creation_variants(&self,id:u32)->Vec<FurnitureVariant>{
+  if !self.absent_flower_budget_available()||!self.unique_quantity_ids.contains(&id){return Vec::new()}
+  let Some((source,original,current,_))=self.furniture_context(id)else{return Vec::new()};
+  // No new restricted ownership: only existing, source-validated furniture.
+  if self.slot.index.inventory_payload_item_refs.contains(&source.item_id){return Vec::new()}
+  let default=furniture_key(source,[0;3]);
+  let old=furniture_key(source,original);let now=furniture_key(source,current);
+  self.inventory_furniture_variants(id).into_iter().filter(|&v|{
+   let key=furniture_key(source,v);
+   key!=default&&key!=old&&key!=now&&Self::valid_furniture_target(source,[0;3],v)
+  }).collect()
+ }
+ pub fn create_inventory_furniture_variant(&mut self,source_id:u32,expected:FurnitureVariant,next:FurnitureVariant,quantity:i32)->Result<u32,Error>{
+  if quantity<=0||!self.inventory_furniture_creation_variants(source_id).contains(&next){return Err(Error::Schema)}
+  let (source,_,current,_)=self.furniture_context(source_id).ok_or(Error::Schema)?;
+  if current!=expected{return Err(Error::Schema)}
+  let document_id=self.allocate_staged_unique_handle()?;
+  let revision=self.next_edit_revision()?;
+  let change=Change::FurnitureCreated{document_id,source_id,expected,furniture:PendingFurniture{item_id:source.item_id,variant:next},quantity};
+  self.restore_change(&change,false);self.undo.push(change);self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);self.revision=revision;
+  Ok(document_id)
+ }
  pub fn change_inventory_furniture_variant(&mut self,id:u32,expected:FurnitureVariant,next:FurnitureVariant)->Result<(),Error>{
   let (source,original,current,reserved)=self.furniture_context(id).ok_or(Error::Schema)?;
   if current!=expected||current==next||!Self::valid_furniture_target(source,original,next)||
+   (self.pending_furniture.contains_key(&id)&&furniture_key(source,next)==furniture_key(source,[0;3]))||
    reserved.contains(&furniture_key(source,next).ok_or(Error::Schema)?){return Err(Error::Schema)}
   let revision=self.next_edit_revision()?;
   let before=self.furniture_variant_changes.get(&id).copied();
@@ -493,7 +526,7 @@ impl Editor {
  pub fn inventory_flower_creation_variants(&self,id:u32)->Vec<FlowerVariant>{
   if id&PENDING_ITEM!=0{return self.absent_flower_options((id&!PENDING_ITEM) as i32)}
   if !self.inventory_creation_source_valid()||!self.unique_quantity_ids.contains(&id)||self.undo.len()+self.redo.len()>=MAX_UNDO||
-   crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_flowers.len()+1).is_err()||
+   crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_unique_count()+1).is_err()||
    crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
   let Some(row)=self.slot.index.inventory.iter().find(|r|r.id==id)else{return Vec::new()};
   let Some(item)=row.item_id else{return Vec::new()};
@@ -522,7 +555,7 @@ impl Editor {
  }
  fn absent_flower_budget_available(&self)->bool{
   self.inventory_creation_source_valid()&&self.undo.len()+self.redo.len()<MAX_UNDO&&
-   crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_flowers.len()+1).is_ok()&&
+   crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_unique_count()+1).is_ok()&&
    crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_ok()
  }
  fn absent_flower_options(&self,item_id:i32)->Vec<FlowerVariant>{
@@ -555,15 +588,17 @@ impl Editor {
    .chain(std::iter::once(FLOWER_CLOTHING_NO_PATTERN))
    .filter(|&id|!self.absent_flower_choices(id).is_empty()).collect()
  }
- fn stage_new_flower(&mut self,source_id:u32,item_id:i32,expected:FlowerVariant,next:FlowerVariant,quantity:i32)->Result<u32,Error>{
+ fn pending_unique_count(&self)->usize{self.pending_flowers.len()+self.pending_furniture.len()}
+ fn allocate_staged_unique_handle(&self)->Result<u32,Error>{
   if self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
-  crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_flowers.len()+1)?;
+  crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_unique_count()+1)?;
   crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1)?;
-  // The high-bit ordinary handles encode their Item ID. Skip every
-  // source-authorized ordinary creation ID, not just active rows.
-  let document_id=(1..=MAX_UNDO as u32+4096).map(|n|PENDING_ITEM|n).find(|id|
-   !self.inventory_changes.contains_key(id)&&!self.pending_flowers.contains_key(id)&&
-   !crate::inventory_source::ordinary_creation_item((id&!PENDING_ITEM) as i32)).ok_or(Error::Budget)?;
+  (1..=MAX_UNDO as u32+4096).map(|n|PENDING_ITEM|n).find(|id|
+   !self.inventory_changes.contains_key(id)&&!self.pending_flowers.contains_key(id)&&!self.pending_furniture.contains_key(id)&&
+   !crate::inventory_source::ordinary_creation_item((id&!PENDING_ITEM) as i32)&&flower_item_patterns((id&!PENDING_ITEM) as i32,6).is_none()).ok_or(Error::Budget)
+ }
+ fn stage_new_flower(&mut self,source_id:u32,item_id:i32,expected:FlowerVariant,next:FlowerVariant,quantity:i32)->Result<u32,Error>{
+  let document_id=self.allocate_staged_unique_handle()?;
   let revision=self.next_edit_revision()?;
   let change=Change::FlowerCreated{document_id,source_id,expected,flower:PendingFlower{item_id,variant:next},quantity};
   self.restore_change(&change,false);self.undo.push(change);
@@ -759,8 +794,8 @@ impl Editor {
  }
  fn pending_inventory_rows(&self)->Vec<InventoryEntry>{
   let mut rows:Vec<_>=self.inventory_changes.iter().filter(|(&id,_)|id&PENDING_ITEM!=0)
-   .map(|(&document_id,&quantity)|InventoryEntry{document_id,item_id:self.pending_flowers.get(&document_id).map_or((document_id&!PENDING_ITEM) as i32,|f|f.item_id),
-    quantity,editable:true,quantity_limit:Some(i32::MAX),quantity_minimum:i32::from(self.pending_flowers.contains_key(&document_id))}).collect();
+   .map(|(&document_id,&quantity)|InventoryEntry{document_id,item_id:self.pending_flowers.get(&document_id).map(|f|f.item_id).or_else(||self.pending_furniture.get(&document_id).map(|f|f.item_id)).unwrap_or((document_id&!PENDING_ITEM) as i32),
+    quantity,editable:true,quantity_limit:Some(i32::MAX),quantity_minimum:i32::from(self.pending_flowers.contains_key(&document_id)||self.pending_furniture.contains_key(&document_id))}).collect();
   rows.sort_by_key(|r|(r.item_id,r.document_id));rows
  }
  // Include the other scope's redo future in the shared native ID reservation.
@@ -770,7 +805,7 @@ impl Editor {
    match change{
     Change::Inventory{document_id,after:Some(_),..} if document_id&PENDING_ITEM!=0=>{handles.insert(*document_id);}
     Change::InventoryBatch{deltas}=>for d in deltas{if d.document_id&PENDING_ITEM!=0&&d.after.is_some(){handles.insert(d.document_id);}},
-    Change::FlowerCreated{document_id,..}=>{handles.insert(*document_id);},
+    Change::FlowerCreated{document_id,..}|Change::FurnitureCreated{document_id,..}=>{handles.insert(*document_id);},
     _=>{}
    }
   }
@@ -811,7 +846,7 @@ impl Editor {
  }
  fn plan_inventory_quantity(&self,id:u32,expected:i32,next:i32)->Result<InventoryQuantityDelta,Error>{
   if id&PENDING_ITEM!=0{
-   if self.pending_flowers.contains_key(&id){
+   if self.pending_flowers.contains_key(&id)||self.pending_furniture.contains_key(&id){
     let before=self.inventory_changes.get(&id).copied();
     if next<=0||before!=Some(expected){return Err(Error::Schema)}
     return Ok(InventoryQuantityDelta{document_id:id,before,after:Some(next)})
@@ -1229,6 +1264,10 @@ impl Editor {
      None=>{self.flower_variant_changes.remove(&document_id);}
     }
    }
+   Change::FurnitureCreated{document_id,furniture,quantity,..}=>{
+    if reverse{self.pending_furniture.remove(&document_id);self.inventory_changes.remove(&document_id);}
+    else{self.pending_furniture.insert(document_id,furniture);self.inventory_changes.insert(document_id,quantity);}
+   }
    Change::FurnitureVariant{document_id,before,after}=>{
     match if reverse{before}else{after}{
      Some(v)=>{self.furniture_variant_changes.insert(document_id,v);},
@@ -1278,7 +1317,7 @@ impl Editor {
   self.restore_change(&change,false);self.undo.push(change);
   self.revision=self.revision.wrapping_add(1);true
  }
- pub fn reset(&mut self){self.changes.clear();self.inventory_changes.clear();self.pending_flowers.clear();self.flower_variant_changes.clear();self.furniture_variant_changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
+ pub fn reset(&mut self){self.changes.clear();self.inventory_changes.clear();self.pending_flowers.clear();self.pending_furniture.clear();self.flower_variant_changes.clear();self.furniture_variant_changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
  pub fn export(&self)->Result<Vec<u8>,Error>{
   if !self.dirty(){return Err(Error::Schema)}
   let original_payload=&self.slot.envelope.decoded;
@@ -1358,8 +1397,8 @@ impl Editor {
    let index=crate::native::index_native(&next_payload,self.slot.envelope.version)?;
    let anchor=index.document_spans.last().ok_or(Error::Schema)?.key;
    let ids=crate::document_membership::allocate_ids(&index,pending.len())?;
-   let mut unique_ids=if self.pending_flowers.is_empty(){Vec::new()}else{
-    crate::document_membership::allocate_inventory_unique_ids(&index,self.slot.envelope.version,self.pending_flowers.len())?
+   let mut unique_ids=if self.pending_unique_count()==0{Vec::new()}else{
+    crate::document_membership::allocate_inventory_unique_ids(&index,self.slot.envelope.version,self.pending_unique_count())?
    }.into_iter();
    let mut records=Vec::with_capacity(pending.len());
    for (row,id) in pending.iter().zip(ids){
@@ -1371,7 +1410,14 @@ impl Editor {
      let uid=unique_ids.next().ok_or(Error::Schema)?;mp_u32(uid as u32,&mut bytes);mp_u32(row.quantity as u32,&mut bytes);
      bytes.extend([0x92,7,0x94,variant[0] as u8]);
      for n in &variant[1..]{bytes.push(0xd2);bytes.extend(n.to_be_bytes());}
-     (uid,Some(variant))
+     (uid,Some(flower_unique(variant)))
+    }else if let Some(f)=self.pending_furniture.get(&row.document_id){
+     let (source,original,variant,reserved)=self.furniture_context(row.document_id).ok_or(Error::Schema)?;
+     let key=furniture_key(source,variant).ok_or(Error::Schema)?;
+     if row.item_id!=f.item_id||!Self::valid_furniture_target(source,original,variant)||Some(key)==furniture_key(source,[0;3])||reserved.contains(&key){return Err(Error::Schema)}
+     let uid=unique_ids.next().ok_or(Error::Schema)?;mp_u32(uid as u32,&mut bytes);mp_u32(row.quantity as u32,&mut bytes);
+     bytes.extend([0x92,8,0x93]);for n in variant{bytes.push(0xd2);bytes.extend(n.to_be_bytes());}
+     (uid,Some(InventoryUniqueData::Furniture{materials:variant}))
     }else{
      if !self.can_create_inventory_item(row.item_id){return Err(Error::Schema)}
      bytes.push(0);mp_u32(row.quantity as u32,&mut bytes);bytes.push(0xc0);
@@ -1393,7 +1439,7 @@ impl Editor {
   if reread.index.inventory.len()!=self.slot.index.inventory.len()+new_inventory.len(){return Err(Error::Schema)}
   for (row,&(id,item,qty,uid,variant)) in reread.index.inventory.iter().skip(self.slot.index.inventory.len()).zip(&new_inventory){
    if row.id!=id||row.item_id!=Some(item)||row.unique_id!=Some(uid)||row.quantity!=Some(qty)||
-    row.unique_is_nil!=Some(variant.is_none())||row.unique_data!=variant.map(flower_unique)||!row.fields.iter().all(Option::is_some){return Err(Error::Schema)}
+    row.unique_is_nil!=Some(variant.is_none())||row.unique_data!=variant||!row.fields.iter().all(Option::is_some){return Err(Error::Schema)}
   }
   if reread.index.inventory.iter().zip(&self.slot.index.inventory).any(|(a,b)|{
    a.id!=b.id||a.item_id!=b.item_id||a.unique_id!=b.unique_id||
@@ -1808,9 +1854,13 @@ impl Editor {
      for word in before.unwrap_or(original){out.extend(word.to_le_bytes());}
      for word in after.unwrap_or(original){out.extend(word.to_le_bytes());}
     }
+    Change::FurnitureCreated{document_id,source_id,expected,furniture,quantity}=>{
+     out.push(12);out.extend(document_id.to_le_bytes());out.extend(source_id.to_le_bytes());out.extend(furniture.item_id.to_le_bytes());
+     for n in expected.into_iter().chain(furniture.variant){out.extend(n.to_le_bytes());}out.extend(quantity.to_le_bytes());
+    }
     Change::FurnitureVariant{document_id,before,after}=>{
      out.push(9);out.extend(document_id.to_le_bytes());
-     let original=self.slot.index.inventory.iter().find(|r|r.id==document_id).and_then(|r|r.unique_data).and_then(furniture_variant).ok_or(Error::Schema)?;
+     let original=self.original_furniture_variant(document_id).or_else(||self.undo.iter().chain(&self.redo).find_map(|c|match c{Change::FurnitureCreated{document_id:id,furniture,..} if *id==document_id=>Some(furniture.variant),_=>None})).ok_or(Error::Schema)?;
      for word in before.unwrap_or(original){out.extend(word.to_le_bytes());}
      for word in after.unwrap_or(original){out.extend(word.to_le_bytes());}
     }
@@ -1902,6 +1952,12 @@ impl Editor {
      let before=[r.i32()?,r.i32()?,r.i32()?,r.i32()?];
      let after=[r.i32()?,r.i32()?,r.i32()?,r.i32()?];
      candidate.change_inventory_flower_variant(id,before,after)?;
+     scopes.push(HistoryScope::Inventory);
+    }
+    12=>{
+     let handle=r.u32()?;let source=r.u32()?;let item=r.i32()?;
+     let before=[r.i32()?,r.i32()?,r.i32()?];let after=[r.i32()?,r.i32()?,r.i32()?];let quantity=r.i32()?;
+     if candidate.create_inventory_furniture_variant(source,before,after,quantity)?!=handle||candidate.pending_furniture.get(&handle).map(|f|f.item_id)!=Some(item){return Err(Error::Schema)}
      scopes.push(HistoryScope::Inventory);
     }
     9=>{
