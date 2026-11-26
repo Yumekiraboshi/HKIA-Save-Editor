@@ -2,17 +2,18 @@ import type {InventoryPatch,InventoryQuantityRequest} from './worker-client';
 import {decodeInventoryUnique,decodeFlowerVariants,isFlowerVariantWire,decodeFurnitureVariants,isFurnitureVariantWire,type FurnitureVariant,type FlowerVariant,type InventoryUniqueInfo} from './inventory-unique';
 import {decodeInventoryFlowers,type InventoryFlower} from './inventory-flower-display';
 import {decodeInventoryPalettes,decodePaletteVariants,isPaletteVariantWire,type InventoryPalette,type PaletteVariant} from './inventory-palette-display';
-type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'flower-create'|'flower-create-variants'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-variant-change'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+import {decodeBobaRows,decodeBobaVariants,isBobaVariantWire,type InventoryBoba,type BobaVariant} from './inventory-boba-display';
+type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'flower-create'|'flower-create-variants'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-variant-change'|'boba-variants'|'boba-variant-change'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type AchievementValue = {complete:boolean;current:number;completed:[bigint,number]|null};
 type AchievementPatch = {guid:number[];before:AchievementValue;after:AchievementValue};
 type AchievementDraftPatch = {guid:number[];before:AchievementValue|null;after:AchievementValue};
-type Request = { id:number; action:Action; checkpoint?:Uint8Array; scope?:'collections'|'achievements'|'inventory'; target?:number; file?:Uint8Array; itemId?:number;documentId?:number;beforeQuantity?:number;nextQuantity?:number;quantityBatch?:InventoryQuantityRequest[];beforeVariant?:FlowerVariant;nextVariant?:FlowerVariant;beforeFurnitureVariant?:FurnitureVariant;nextFurnitureVariant?:FurnitureVariant;beforePaletteVariant?:PaletteVariant;nextPaletteVariant?:PaletteVariant; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];inventoryPatches?:InventoryPatch[];guid?:number[];nowMs?:number;beforeValue?:AchievementValue|null;afterValue?:AchievementValue };
+type Request = { id:number; action:Action; checkpoint?:Uint8Array; scope?:'collections'|'achievements'|'inventory'; target?:number; file?:Uint8Array; itemId?:number;documentId?:number;beforeQuantity?:number;nextQuantity?:number;quantityBatch?:InventoryQuantityRequest[];beforeVariant?:FlowerVariant;nextVariant?:FlowerVariant;beforeFurnitureVariant?:FurnitureVariant;nextFurnitureVariant?:FurnitureVariant;beforePaletteVariant?:PaletteVariant;nextPaletteVariant?:PaletteVariant;beforeBobaVariant?:BobaVariant;nextBobaVariant?:BobaVariant; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];inventoryPatches?:InventoryPatch[];guid?:number[];nowMs?:number;beforeValue?:AchievementValue|null;afterValue?:AchievementValue };
 type Transport = { postMessage(data:unknown, transfer?:Transferable[]):void; onmessage:((event:MessageEvent<Request>)=>void)|null };
 type Engine = {
  memory:WebAssembly.Memory;
  hkia_stage(n:number):number; hkia_open():number;
  hkia_collection_creatable_snapshot():number;
- hkia_inventory_snapshot():number;hkia_inventory_creatable_snapshot():number;hkia_inventory_quantity_bounds():number;hkia_inventory_flowers_snapshot():number;hkia_inventory_palettes_snapshot():number;hkia_inventory_palette_variants(id:number):number;hkia_inventory_palette_variant_change(id:number,...words:number[]):number;hkia_inventory_unique_snapshot():number;hkia_inventory_flower_variants(id:number):number;hkia_inventory_absent_flower_ids():number;hkia_inventory_absent_furniture_ids():number;hkia_inventory_default_furniture_ids():number;hkia_inventory_flower_creation_variants(id:number):number;hkia_inventory_flower_create(id:number,...values:[...FlowerVariant,...FlowerVariant,number]):number;hkia_inventory_flower_variant_change(id:number,...values:[...FlowerVariant,...FlowerVariant]):number;hkia_inventory_furniture_variants(id:number):number;hkia_inventory_furniture_creation_variants(id:number):number;hkia_inventory_furniture_create(id:number,...values:[...FurnitureVariant,...FurnitureVariant,number]):number;hkia_inventory_furniture_variant_change(id:number,...values:[...FurnitureVariant,...FurnitureVariant]):number;hkia_inventory_change(id:number,before:number,after:number):number;hkia_inventory_batch_limit():number;hkia_inventory_batch_change():number;
+ hkia_inventory_snapshot():number;hkia_inventory_creatable_snapshot():number;hkia_inventory_quantity_bounds():number;hkia_inventory_flowers_snapshot():number;hkia_inventory_palettes_snapshot():number;hkia_inventory_boba_snapshot():number;hkia_inventory_boba_variants(id:number):number;hkia_inventory_boba_variant_change(id:number,...words:number[]):number;hkia_inventory_palette_variants(id:number):number;hkia_inventory_palette_variant_change(id:number,...words:number[]):number;hkia_inventory_unique_snapshot():number;hkia_inventory_flower_variants(id:number):number;hkia_inventory_absent_flower_ids():number;hkia_inventory_absent_furniture_ids():number;hkia_inventory_default_furniture_ids():number;hkia_inventory_flower_creation_variants(id:number):number;hkia_inventory_flower_create(id:number,...values:[...FlowerVariant,...FlowerVariant,number]):number;hkia_inventory_flower_variant_change(id:number,...values:[...FlowerVariant,...FlowerVariant]):number;hkia_inventory_furniture_variants(id:number):number;hkia_inventory_furniture_creation_variants(id:number):number;hkia_inventory_furniture_create(id:number,...values:[...FurnitureVariant,...FurnitureVariant,number]):number;hkia_inventory_furniture_variant_change(id:number,...values:[...FurnitureVariant,...FurnitureVariant]):number;hkia_inventory_change(id:number,before:number,after:number):number;hkia_inventory_batch_limit():number;hkia_inventory_batch_change():number;
  hkia_change(id:number,expectedPresent:number,old:bigint,nextPresent:number,value:bigint):number;
  hkia_achievement_parent_create(...args:[ number,number,number,number, number, number,number,bigint,number,number, number,number,bigint,number,number, number,number,number,number, number,number,bigint,number,number]):number;
  hkia_achievement_create(g0:number,g1:number,g2:number,g3:number,complete:number,progress:number,seconds:bigint,nanos:number,hasDate:number):number;
@@ -82,7 +83,7 @@ function snapshot(e:Engine){
  const iv=new DataView(bytesInv.buffer,bytesInv.byteOffset,bytesInv.byteLength);
  const countInv=iv.getUint32(0,true);
  if(countInv>1_000_000||bytesInv.length!==4+countInv*16)throw Error('INVENTORY_SNAPSHOT_INVALID');
- const inventory:Array<{documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;quantityMinimum:number;flowerCreatable?:boolean;furnitureCreatable?:boolean;flower?:InventoryFlower;palette?:InventoryPalette;unique?:InventoryUniqueInfo}>=[];
+ const inventory:Array<{documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;quantityMinimum:number;flowerCreatable?:boolean;furnitureCreatable?:boolean;flower?:InventoryFlower;palette?:InventoryPalette;boba?:InventoryBoba;unique?:InventoryUniqueInfo}>=[];
  const docIds=new Set<number>();
  for(let i=0;i<countInv;i++){
   const at=4+i*16,documentId=iv.getUint32(at,true),itemId=iv.getInt32(at+4,true),
@@ -158,6 +159,9 @@ function snapshot(e:Engine){
  if(e.hkia_inventory_unique_snapshot()!==0)throw Error('INVENTORY_UNIQUE_INVALID');
  const uniqueRows=decodeInventoryUnique(readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len()),docIds);
  for(const row of inventory)row.unique=uniqueRows.get(row.documentId);
+ if(e.hkia_inventory_boba_snapshot()!==0)throw Error('BOBA_SNAPSHOT_FAILED');
+ const bobaRows=decodeBobaRows(readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len()),docIds);
+ for(const row of inventory){const boba=bobaRows.get(row.documentId);if(boba)row.boba=boba;}
  if(e.hkia_achievement_snapshot()!==0)throw Error('実績の取得に失敗しました。');
  const a=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
  if(a.byteLength<4)throw Error('実績データの形式が不正です。');
@@ -337,6 +341,18 @@ async function execute(r:Request):Promise<unknown>{
    if(e.hkia_inventory_furniture_create(id,...before,...next,quantity)!==0)throw Error('INVENTORY_CONFLICT');
    return snapshot(e);
   }
+  case 'boba-variants':{
+   const id=r.documentId;
+   if(id===undefined||!Number.isInteger(id)||id<1||id>2147483647)throw Error('INVENTORY_INVALID');
+   if(e.hkia_inventory_boba_variants(id)!==0)throw Error('INVENTORY_CONFLICT');
+   return decodeBobaVariants(readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len()));
+  }
+  case 'boba-variant-change':{
+   const id=r.documentId,before=r.beforeBobaVariant,next=r.nextBobaVariant;
+   if(id===undefined||!Number.isInteger(id)||id<1||id>2147483647||!isBobaVariantWire(before)||!isBobaVariantWire(next))throw Error('INVENTORY_INVALID');
+   if(e.hkia_inventory_boba_variant_change(id,...before,...next)!==0)throw Error('INVENTORY_CONFLICT');
+   return snapshot(e);
+  }
   case 'palette-variants':{
    const id=r.documentId;
    if(id===undefined||!Number.isInteger(id)||id<1||id>2147483647)throw Error('INVENTORY_INVALID');
@@ -495,6 +511,7 @@ async function execute(r:Request):Promise<unknown>{
      ?isFlowerVariantWire(p.before)&&isFlowerVariantWire(p.after)&&e.hkia_inventory_flower_variant_change(p.documentId,...p.before,...p.after)===0
      :p.kind==='furniture-variant'?isFurnitureVariantWire(p.before)&&isFurnitureVariantWire(p.after)&&e.hkia_inventory_furniture_variant_change(p.documentId,...p.before,...p.after)===0
       :p.kind==='palette-variant'?isPaletteVariantWire(p.before)&&isPaletteVariantWire(p.after)&&e.hkia_inventory_palette_variant_change(p.documentId,...p.before,...p.after)===0
+      :p.kind==='boba-variant'?isBobaVariantWire(p.before)&&isBobaVariantWire(p.after)&&e.hkia_inventory_boba_variant_change(p.documentId,...p.before,...p.after)===0
       :p.kind===undefined&&Number.isInteger(p.before)&&Number.isInteger(p.after)&&p.before>=0&&p.before<=2147483647&&p.after>=0&&p.after<=2147483647&&e.hkia_inventory_change(p.documentId,p.before,p.after)===0;
     if(!ok){e.hkia_reset();throw Error('DRAFT_CONFLICT');}
    }

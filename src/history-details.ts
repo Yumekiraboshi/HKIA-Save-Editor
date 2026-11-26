@@ -1,5 +1,6 @@
 import type {FlowerVariant,FurnitureVariant} from './inventory-unique';
 import {paletteColorHex,type PaletteVariant} from './inventory-palette-display';
+import {bobaVariantLabel,type BobaVariant} from './inventory-boba-display';
 import type {AchievementValue,HistoryRecord} from './worker-client';
 import {toDateTimeValue} from './collection-date';
 
@@ -9,10 +10,11 @@ export type HistoryDetail =
  | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FlowerVariant;quantity:number;furnitureCreated?:false}
  | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FurnitureVariant;quantity:number;furnitureCreated:true}
  | {scope:'collections';itemId:number;before:bigint|null;after:bigint|null}
- | {scope:'inventory';documentId:number;before:number;after:number;flowerVariant?:false;furnitureVariant?:false;paletteVariant?:false}
- | {scope:'inventory';documentId:number;before:FlowerVariant;after:FlowerVariant;flowerVariant:true;furnitureVariant?:false;paletteVariant?:false}
- | {scope:'inventory';documentId:number;before:FurnitureVariant;after:FurnitureVariant;flowerVariant?:false;furnitureVariant:true;paletteVariant?:false}
- | {scope:'inventory';documentId:number;before:PaletteVariant;after:PaletteVariant;flowerVariant?:false;furnitureVariant?:false;paletteVariant:true}
+ | {scope:'inventory';documentId:number;before:number;after:number;flowerVariant?:false;furnitureVariant?:false;paletteVariant?:false;bobaVariant?:false}
+ | {scope:'inventory';documentId:number;before:FlowerVariant;after:FlowerVariant;flowerVariant:true;furnitureVariant?:false;paletteVariant?:false;bobaVariant?:false}
+ | {scope:'inventory';documentId:number;before:FurnitureVariant;after:FurnitureVariant;flowerVariant?:false;furnitureVariant:true;paletteVariant?:false;bobaVariant?:false}
+ | {scope:'inventory';documentId:number;before:PaletteVariant;after:PaletteVariant;flowerVariant?:false;furnitureVariant?:false;paletteVariant:true;bobaVariant?:false}
+ | {scope:'inventory';documentId:number;before:BobaVariant;after:BobaVariant;flowerVariant?:false;furnitureVariant?:false;paletteVariant?:false;bobaVariant:true}
  | {scope:'achievements';guid:[number,number,number,number];before:AchievementValue|null;after:AchievementValue;parentGuid:[number,number,number,number]|null;parentBefore:AchievementValue|null;parentAfter:AchievementValue|null};
 
 const MAGIC='HKIAHS01';
@@ -105,6 +107,10 @@ export function decodeHistoryDetails(
     if(createdHandle<=2147483647||createdHandle===documentId||documentId<=0||itemId<=0||quantity<=0||before.every((v,i)=>v===variant[i])||
      (documentId>2147483647&&!candidate&&!stagedSource))return [];
     result.push({scope:'inventory',documentId,createdHandle,itemId,variant,quantity,furnitureCreated:true});
+   }else if(kind===15){
+    const documentId=u32(),before=Array.from({length:5},()=>i32()) as BobaVariant,after=Array.from({length:5},()=>i32()) as BobaVariant;
+    if(documentId<=0||documentId>2147483647||before.every((v,i)=>v===after[i]))return [];
+    result.push({scope:'inventory',documentId,before,after,bobaVariant:true});
    }else if(kind===13){
     const documentId=u32(),before=Array.from({length:12},()=>u32()),after=Array.from({length:12},()=>u32());
     if(documentId<=0||documentId>2147483647||before.every((v,i)=>v===after[i]))return [];
@@ -185,6 +191,7 @@ export function formatHistoryChange(
  if(!detail)return '';
  if(detail.scope==='inventory'&&'batch' in detail)return detail.batch.map(row=>(inventoryBatchName?.(row.documentId)??String(row.documentId))+': '+row.before+' → '+row.after).join(' · ');
  if(detail.scope==='inventory'&&'createdHandle' in detail)return copy.added+' · '+(detail.furnitureCreated?(furnitureVariantName?.(detail.variant)??String(detail.variant)):(flowerVariantName?.(detail.variant)??String(detail.variant)))+' · '+quantityLabel+': '+detail.quantity;
+ if(detail.scope==='inventory'&&detail.bobaVariant)return bobaVariantLabel(detail.before,locale)+' → '+bobaVariantLabel(detail.after,locale);
  if(detail.scope==='inventory'&&detail.paletteVariant)return [0,1,2].filter(i=>detail.before.slice(i*4,i*4+4).some((v,j)=>v!==detail.after[i*4+j])).map(i=>(i+1)+': '+paletteColorHex(detail.before,i)+' → '+paletteColorHex(detail.after,i)).join(' · ');
  if(detail.scope==='inventory')return detail.furnitureVariant?(furnitureVariantName?.(detail.before)??String(detail.before))+' → '+(furnitureVariantName?.(detail.after)??String(detail.after)):detail.flowerVariant?(flowerVariantName?.(detail.before)??String(detail.before))+' → '+(flowerVariantName?.(detail.after)??String(detail.after)):quantityLabel+': '+detail.before+' → '+detail.after;
  if(detail.scope==='collections'){
