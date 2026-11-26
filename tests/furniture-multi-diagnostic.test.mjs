@@ -4,8 +4,8 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-const {outputFiles}=await build({stdin:{contents:"export * from './src/furniture-multi-diagnostic';export * from './src/native-texture-upload';",resolveDir:fileURLToPath(new URL('../',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {resolveFurnitureMultiDiagnostic,drawFurnitureMultiDiagnostic,nativeBaseIsOpaque,verifyNativeTexturePayload,validateNativeTextureLayout}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {outputFiles}=await build({stdin:{contents:"export * from './src/furniture-multi-diagnostic';export * from './src/native-texture-upload';export * from './src/furniture-renderer-bounds';",resolveDir:fileURLToPath(new URL('../',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+const {resolveFurnitureMultiDiagnostic,fitFurnitureMultiStaticBounds,mergeStaticRendererBounds,drawFurnitureMultiDiagnostic,nativeBaseIsOpaque,verifyNativeTexturePayload,validateNativeTextureLayout}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const read=p=>JSON.parse(readFileSync(new URL('../'+p,import.meta.url)));
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const additionalPath='data/furniture-chair-pattern-sources-v3.0.1.json';
@@ -79,4 +79,41 @@ test('geometry reader rejection and corrupt equal-length payload never touch GPU
  const error=new Error('ORIGINAL_SOURCE_UNAVAILABLE');
  await assert.rejects(drawFurnitureMultiDiagnostic(gpu,d,r,async()=>{throw error;}),e=>e===error);
  await assert.rejects(drawFurnitureMultiDiagnostic(gpu,d,r,async ref=>new ArrayBuffer(ref.bytes)),/NATIVE_MESH_HASH/);
+});
+
+test('static fit includes the fixed chair feet and uses source bounds instead of guessed extents',()=>{
+ const d=sources(),r=request(d),result=fitFurnitureMultiStaticBounds(d,r);
+ const [x,y,z]=result.bounds.extents;
+ const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,JSON.stringify({a,b}));
+ const s=1.356777548789978;
+ near(x,.25681284070014954*s);
+ near(y,((.4151645004749298+.22238728404045105)-(.030684608966112137-.03068464621901512))*s/2);
+ near(z,((-.06262940913438797+.30255961418151855)-(-.10265617072582245-.3110705018043518))*s/2);
+ assert.deepEqual(result.request.fit.extents,result.bounds.extents);
+ assert.deepEqual(r.fit.extents,[.4,.5,.4]);
+ const rug=fitFurnitureMultiStaticBounds(d,request(d,32709745,[207,0,0]));
+ near(rug.bounds.extents[0],3.024627208709717);
+ near(rug.bounds.extents[2],3.0246262550354004);
+ const fitted=resolveFurnitureMultiDiagnostic(d,rug.request);
+ assert.ok(Math.abs(fitted.plans[0].scene.model[0])<.3);
+ assert.equal(result.renderFidelity,'unverified');
+});
+
+test('world bounds union preserves rotation, translation and mirrored axes; rejects invalid inputs',()=>{
+ const first={model:identity,localBounds:[0,0,0,1,2,3]};
+ const second={model:[0,-2,0,0,-1,0,0,0,0,0,1,0,5,4,0,1],localBounds:[0,0,0,1,2,1]};
+ assert.deepEqual(mergeStaticRendererBounds([first,second]),{center:[3,2,0],extents:[4,4,3]});
+ assert.throws(()=>mergeStaticRendererBounds([]),/STATIC_BOUNDS/);
+ assert.throws(()=>mergeStaticRendererBounds([{...first,localBounds:[0,0,0,-1,2,3]}]),/STATIC_BOUNDS/);
+ assert.throws(()=>mergeStaticRendererBounds([{...first,model:[...identity.slice(0,15),2]}]),/STATIC_BOUNDS/);
+});
+test('the extracted podium GUID matches the authored camera mount without inferring item placement',()=>{
+ const mount=read('data/furniture-preview-mount-v3.0.1.json'),camera=read('data/furniture-preview-camera-v3.0.1.json');
+ assert.equal(mount.guid,camera.mountGuid);
+ assert.equal(mount.bundleSha256,'0ac369f7549cf6ed5f410b9a4fb3e2a479b7725f34ffdfda571f3fa4a327ed1a');
+ const [a,b,c]=mount.nodes;
+ assert.equal(a.gameObjectPathId,mount.rootGameObjectPathId);
+ assert.equal(a.parent,null);assert.equal(b.parent,a.pathId);assert.equal(c.parent,b.pathId);
+ assert.deepEqual(a.position,[0,0,0]);assert.deepEqual(a.rotation,[0,0,0,1]);assert.deepEqual(a.scale,[1,1,1]);
+ assert.equal(c.rendererPathId,'4695806416409439665');assert.equal(c.meshFilterPathId,'-1995439662326436431');
 });
