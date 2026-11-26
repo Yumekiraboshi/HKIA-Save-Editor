@@ -100,7 +100,7 @@ def audit(ui_path,global_path):
         ins=list(instructions(w))
         require(ins[-2]==(0x05000036,0x102082,0,0x10003a,0),"UberPost output alpha")
         writes=[i for i in ins if len(i)>2 and (i[0]&2047)<88 and ((i[1]>>12)&255)==0 and i[1]&0x80 and i[2]==0]
-        require(len(writes)==1 and (writes[0][0]&2047)==74 and writes[0][1:3]==(0x1000f2,0) and writes[0][6:8]==(0x107e46,0),"UberPost sampled alpha")
+        require(len(writes)==1 and (writes[0][0]&2047)==74 and writes[0][1:3]==(0x1000f2,0) and writes[0][5:7]==(0x107e46,0),"UberPost sampled alpha")
     for _,w in final.values():
         require(list(instructions(w))[-2]==(0x05000036,0x102082,0,0x4001,0x3f800000),"FinalPost output alpha")
     return {"schema":"HKIA.FurniturePreviewOutputAudit.1","version":"3.0.1","uiDefaultProgram":ui[7][0],"uberPostPreservesSampledAlpha":len(uber),"finalPostWritesOne":len(final),"runtimePassSelectionVerified":False,"nativeIconRenderVerified":False}
