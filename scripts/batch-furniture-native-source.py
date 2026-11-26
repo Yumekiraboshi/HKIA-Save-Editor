@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import tempfile
+import zipfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -69,6 +70,32 @@ def make_plan():
         models.append({'itemId':item_id,'detailsType':x[2],'guid':guid,'customizerOverride':x[6] is not None,'bundles':candidates(a,locations[guid]),'slots':slots})
     pats=[{'guid':g,'materialIndices':sorted(indices),'bundles':candidates(m,patterns[g])} for g,indices in sorted(used_patterns.items())]
     return {'schema':'HKIA.FurnitureBatchSourcePlan.1','version':'3.0.1','catalogSha256':a['catalogSha256'],'definitionsSha256':v['definitionsSha256'],'models':models,'patterns':pats,'counts':{'models':len(models),'ordinaryFurniture':sum(x['detailsType']==0 for x in models),'homeCustomization':sum(x['detailsType']==1 for x in models),'customizerOverrides':sum(x['customizerOverride'] for x in models),'modelFirstBundles':len({x['bundles'][0] for x in models}),'patternFirstBundles':len({x['bundles'][0] for x in pats}),'patterns':len(pats),'materials':len(used_materials),'slotChoices':choice_count}}
+def remaining_plan(plan,pack,expected_sha):
+    """Exclude only exact source identities in an independently pinned prior pack.
+    This is a scheduling filter, not proof of shader or final image fidelity.
+    The final assembler independently validates every merged payload again.
+    """
+    require(re.fullmatch('[0-9a-f]{64}',expected_sha),'prior pack hash pin')
+    with pack.open('rb') as f:
+        require(hashlib.file_digest(f,'sha256').hexdigest()==expected_sha,'prior pack hash mismatch')
+        f.seek(0)
+        with zipfile.ZipFile(f) as z:
+            m=module('assemble-furniture-source-pack').json_entry(z,'sources.json')
+    require(m['schema']=='HKIA.FurnitureSourcePack.1' and m['version']==plan['version'] and m['catalogSha256']==plan['catalogSha256'] and m['renderFidelity']=='unverified','prior pack identity')
+    models=unique(plan['models'],lambda r:r['itemId']);patterns=unique(plan['patterns'],lambda r:r['guid'])
+    gs=unique(m['geometry']['rows'],lambda r:r['itemId'])
+    bs=unique(m['base']['rows'],lambda r:r['itemId'])
+    ps=unique(m['patterns']['rows']+m['additionalPatterns']['rows'],lambda r:r['guid'])
+    require(m['geometry']['schema']=='HKIA.FurnitureStaticMeshSamples.1' and m['base']['schema']=='HKIA.FurnitureBaseMaterialSource.1' and m['patterns']['schema']=='HKIA.FurniturePatternTextureSamples.1' and m['additionalPatterns']['schema']=='HKIA.FurniturePatternTextureSources.1','prior pack sections')
+    require(all(m[k]['version']==plan['version'] for k in ('geometry','base','patterns','additionalPatterns')) and not m['base']['unresolved'] and set(gs)==set(bs),'prior pack material closure')
+    for id,g in gs.items():
+        require(id in models and g['visualGuid']==models[id]['guid'] and g['bundle'] in models[id]['bundles'],'prior model source')
+    for guid,t in ps.items():
+        require(guid in patterns and t['bundle'] in patterns[guid]['bundles'],'prior pattern source')
+    return {**plan,'models':[r for r in plan['models'] if r['itemId'] not in gs],
+            'patterns':[r for r in plan['patterns'] if r['guid'] not in ps],
+            'priorPack':{'sha256':expected_sha,'models':len(gs),'patterns':len(ps)}}
+
 def locate(root,names):
     found=defaultdict(list)
     for directory,dirs,files in os.walk(root,followlinks=False):
@@ -151,7 +178,11 @@ def main():
     p.add_argument('--root',type=Path);p.add_argument('--catalog',type=Path);p.add_argument('--out',type=Path)
     p.add_argument('--kind',choices=('all','geometry','pattern'),default='all')
     p.add_argument('--limit',type=int,help='optional per-kind limit for local smoke')
+    p.add_argument('--remaining-from',type=Path,help='previous independently pinned unified source pack')
+    p.add_argument('--remaining-sha256',help='independent SHA-256 of previous ZIP')
     a=p.parse_args();plan=make_plan()
+    require(bool(a.remaining_from)==bool(a.remaining_sha256),'prior pack and pin required together')
+    if a.remaining_from:plan=remaining_plan(plan,a.remaining_from,a.remaining_sha256)
     if a.plan:
         print(json.dumps(plan,separators=(',',':')));return
     require(a.root and a.catalog and a.out,'--root --catalog --out required')
@@ -167,7 +198,7 @@ def main():
         counts={typ:{status:sum(x['kind']==typ and x['status']==status for x in results) for status in ('extracted','unresolved')} for typ in ('geometry','pattern')}
         # Exact known sample hashes are checked. Other extracted bundle hashes
         # are observed receipts, not pre-pinned v3.0.1 authenticity guarantees.
-        report={'schema':'HKIA.FurnitureBatchExtraction.1','version':'3.0.1','catalogSha256':plan['catalogSha256'],'sourcePlanCounts':plan['counts'],'counts':counts,'results':results,'renderFidelity':'unverified'}
+        report={'schema':'HKIA.FurnitureBatchExtraction.1','version':'3.0.1','catalogSha256':plan['catalogSha256'],'sourcePlanCounts':plan['counts'],'priorPack':plan.get('priorPack'),'counts':counts,'results':results,'renderFidelity':'unverified'}
         (tmp/'report.json').write_text(json.dumps(report,separators=(',',':'))+'\n',encoding='utf-8')
         require(not out.exists(),'output exists');tmp.rename(out)
         print(json.dumps(counts),flush=True)
