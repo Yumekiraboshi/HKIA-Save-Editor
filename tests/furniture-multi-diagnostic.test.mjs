@@ -134,3 +134,33 @@ test('UV1 is optional only for world UV, exact original white pattern or proven-
  assert.throws(()=>furnitureForwardAttributeLocations(mesh,{...p.material,baseColor:[1,1,1,0]},null),/MESH_CHANNEL/);
  mesh.channels[4]=[0,0,0,0];assert.throws(()=>furnitureForwardAttributeLocations(mesh,p.material,white),/MESH_CHANNEL/);
 });
+
+test('combined plans preflight all three fixed/customized material ranges and refuse an unsupported fixed shader',()=>{
+ const d=sources(),id=90163601,g=d.geometry.rows.find(x=>x.itemId===id),b=d.base.rows.find(x=>x.itemId===id),n=g.nodes.find(x=>x.rendererPathId&&!x.slot),mesh=g.meshes[n.meshPathId],old=b.bindings.find(x=>x[0]===n.rendererPathId),other=g.nodes.find(x=>x.rendererPathId&&x.slot),second=b.bindings.find(x=>x[0]===other.rendererPathId);
+ // Synthetic split of existing geometry: tests only the mixed preflight,
+ // never claim these synthetic material hashes/geometry are an actual item.
+ const materialId=old[1],base=d.base.materials[materialId],originalTexture=base.textures._BaseMap.texture;
+ const shader='CAB-46b8f8fe122147493b3113f7c1c8cd0f:-6681258383375895387';
+ const sparkShader='CAB-2b27edbfe7f08bad1cd631865ee4eb15:-2527260696058741820';
+ const nativeHash='14c115bce50ad2c24a5372fd37abebc9f6fb2c535a5216685a79335b75a8c61d',sparkHash='6f14880f811a3c74f9b44374a5482e1652849144b672c43b14623ccd47dfd6c6';
+ const newRef='0:9999999',newId=g.cab+':9999999';
+ g.materials[n.material].objectSha256=nativeHash;g.materials[newRef]={objectSha256:sparkHash};
+ n.materialSlots=[newRef,n.material];delete n.material;
+ mesh.submeshes=[{firstByte:0,indexCount:3,firstVertex:0,vertexCount:mesh.vertexCount,bounds:mesh.bounds[0]},{firstByte:6,indexCount:mesh.indexCount-3,firstVertex:0,vertexCount:mesh.vertexCount,bounds:mesh.bounds[0]}];
+ b.bindings=b.bindings.filter(x=>x[0]!==n.rendererPathId);b.submeshBindings=[{rendererPathId:n.rendererPathId,materials:[newId,materialId],slot:null}];
+ const link=texture=>({texture,scale:[1,1],offset:[0,0]});
+ const common={...base,validKeywords:['CUSTOM_RIMLIGHT_ON'],floats:{...base.floats,CUSTOM_RIMLIGHT:1,GLIMMER:0,UV_WORLD:0,_Lighting_Fog:1,_Lighting_Medium_Underwater:0,_Material_VertexAnimation:0,_Clip_Offset:0,_Lighting_RimPower:1,_Lighting_RimFeathering:.1,_Lighting_RimIntensity:1,_Lighting_RimColoring:1,_Cull:2,_Material_Alpha:0,_AlphaClip:0,_ZWrite:1,_Surface_Effect:0},colors:{...base.colors,_BaseColor:[1,1,1,1],_EmissionColor:[0,0,0,1],_SparkleTint:[1,1,1,1]},textures:{_BaseMap:link(originalTexture),_BumpMap:link(base.textures._BumpMap.texture),_MetallicGlossMap:link(base.textures._MetallicGlossMap.texture),_Surface_EffectMap:link(null),_AnimTex:link(null)}};
+ d.base.materials[materialId]={...common,objectSha256:nativeHash,shader};
+ d.base.shaders[shader]={objectSha256:'7c32f4b3f7c0c0d580af1e22584952aa29d266dfbe98de3b916c3fecb7339931'};
+ d.base.shaders[sparkShader]={objectSha256:'1d7fcbcf451083bffb545d5490fa8a894cf373f0f7b03dd834a89f21e07e7e9a'};
+ const noiseKey='synthetic-noise',noiseHash='32a69f4556559ad246668292638068e0e352cfe2415c4314df9778c352573c20';
+ d.base.textures[noiseKey]={...d.base.textures[originalTexture],sha256:noiseHash};
+ d.base.materials[newId]={...common,objectSha256:sparkHash,shader:sparkShader,floats:{...common.floats,_Cull:0,_NoiseIntensity:.717,_NoiseScale:5.28,_NoiseRoughness:.091,_NoiseMetal:.403,_NoiseReflectionStrength:.17},textures:{...common.textures,_NoiseMap:link(noiseKey)}};
+ for(const row of b.bindings)d.base.materials[row[1]].floats._Cull=0;
+ const p=resolveFurnitureMultiDiagnostic(d,request(d,id)),parts=p.plans.filter(x=>x.rendererPathId===n.rendererPathId);
+ assert.equal(p.mixed,true);assert.deepEqual(parts.map(x=>[x.kind,x.submeshIndex,x.cull]),[['sparkle',0,0],['forward',1,2]]);
+ assert.equal(parts[1].material.customLit.materialAlpha,0);assert.equal(parts[0].noiseMap.sha256,noiseHash);
+ assert.equal(p.locations[n.meshPathId][0],0);
+ d.base.materials[materialId].floats._Lighting_Medium_Underwater=1;
+ assert.throws(()=>resolveFurnitureMultiDiagnostic(d,request(d,id)),/SHADER_UNSUPPORTED/);
+});
