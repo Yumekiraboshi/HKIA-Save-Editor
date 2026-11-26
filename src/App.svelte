@@ -1946,7 +1946,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          <optgroup label={furnitureCopy.part+' '+String.fromCharCode(65+slot)}>
           {#each edit.options as v,i}
            {#if v[slot]!==edit.before[slot]}
-            <option value={i}>{materialLabel(furnitureDisplay,v[slot],furnitureCopy.defaultMaterial)}</option>
+            <option value={i} data-material-index={v[slot]}>{materialLabel(furnitureDisplay,v[slot],furnitureCopy.defaultMaterial)}</option>
            {/if}
           {/each}
          </optgroup>
@@ -1963,6 +1963,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
      </label>
     {/if}
+    {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFurnitureEditor}>{copy.cancel}</button>
      {#if edit.creationOptions.length}
