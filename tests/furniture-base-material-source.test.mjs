@@ -1,4 +1,6 @@
 import test from 'node:test';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -41,4 +43,30 @@ test('base material and texture dependencies retain original renderer identities
  const s=d.shaders[rug.shader];assert.equal(s.name,'Sunblink/Lynx/CustomLitFurniture');assert.equal(s.properties.length,42);assert.equal(s.segments.length,4);
  const programs=s.segments.flatMap(s=>s.programs);assert.equal(programs.filter(p=>p.stage==='vertex').length,22);assert.equal(programs.filter(p=>p.stage==='pixel').length,123);
  for(const seg of s.segments){for(const p of seg.programs){assert.ok(p.offset>=0&&p.offset+p.bytes<=seg.bytes);assert.match(p.sha256,/^[a-f0-9]{64}$/);}}
+});
+
+test('additional furniture shader sources are keyed by exact CAB, signed Path ID and original hash',()=>{
+ const py=String.raw`
+import importlib.util
+spec=importlib.util.spec_from_file_location('base','scripts/extract-furniture-base-material-source.py')
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+assert len(m.SHADER_SOURCES)==6
+for key,source in m.SHADER_SOURCES.items():
+    assert m.shader_source(key,source[0])==source
+    try:
+        m.shader_source(key,'0'*64)
+        raise AssertionError('modified shader accepted')
+    except ValueError:
+        pass
+    try:
+        m.shader_source(key+':1',source[0])
+        raise AssertionError('wrong object accepted')
+    except ValueError:
+        pass
+assert sorted((v[2],v[3],v[4]) for v in m.SHADER_SOURCES.values())==[
+    ('Shader Graphs/FluidStream',34,1),('Shader Graphs/Standard Vertex Color',6,1),('Sunblink/Lynx/CustomLit',47,42),
+    ('Sunblink/Lynx/CustomLitFurniture',42,4),('Sunblink/Lynx/Fluid',24,1),
+    ('Sunblink/Lynx/Terrain/Custom Lit Terrain Simple',31,4)]
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:fileURLToPath(new URL('../',import.meta.url))});
 });
