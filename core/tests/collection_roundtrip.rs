@@ -1392,6 +1392,40 @@ fn customized_furniture_quantity_uses_normalized_identity_and_native_limits(){
  assert!(!referenced.inventory()[0].editable);assert!(referenced.change_inventory_quantity(4,93,1).is_err());
 }
 #[test]
+fn customized_furniture_creation_and_staged_edits_share_native_uid_allocation(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ for zipped in [false,true]{
+  let mut payload=synthetic_payload("3.0.1");payload[2]=5;payload[3]=0x97;
+  payload.extend(doc(1,arr(vec![u(4),u(61381969),u(41),u(2),furniture_payload([13,2,0])])));
+  payload.extend(doc(1,arr(vec![u(5),u(43114910),u(42),u(3),plain_flower(6)])));
+  let raw=slot_from_payload("3.0.1",payload);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let before=[13,2,0];let target=[502,2,0];
+  assert!(e.inventory_furniture_creation_variants(4).contains(&target));
+  assert!(e.create_inventory_furniture_variant(4,before,[503,1,0],1).is_err());
+  let a=e.create_inventory_furniture_variant(4,before,target,5).unwrap();
+  assert!(!e.inventory_furniture_creation_variants(4).contains(&target));
+  assert!(e.change_inventory_furniture_variant(4,before,target).is_err());
+  assert!(e.change_inventory_furniture_variant(a,target,[503,1,0]).is_err());
+  e.change_inventory_furniture_variant(a,target,[502,3,0]).unwrap();
+  e.change_inventory_quantity(a,5,7).unwrap();
+  let b=e.create_inventory_flower_variant(5,[6,6,0,0],[6,9,0,0],4).unwrap();
+  assert_ne!(a,b);
+  let checkpoint=e.history_checkpoint().unwrap();let mut restored=Editor::open(input.clone()).unwrap();restored.restore_history(&checkpoint).unwrap();
+  assert_eq!(restored.inventory(),e.inventory());
+  for _ in 0..4{assert!(restored.undo_scope(Inventory));}
+  let redo=restored.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&redo).unwrap();
+  for _ in 0..4{assert!(restored.redo_scope(Inventory));}
+  let reopened=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory().len(),4);
+  assert_eq!(reopened.inventory_original_unique_payload(4),e.inventory_original_unique_payload(4));
+  // Pending export is sorted by Item ID: flower precedes furniture.
+  assert_eq!(reopened.inventory_unique_data(6),e.inventory_unique_data(b));
+  assert_eq!(reopened.inventory_unique_data(7),e.inventory_unique_data(a));
+  assert_eq!(reopened.inventory()[3].quantity,7);
+  assert_eq!(reopened.inventory_unique_rows().map(|r|r.1).collect::<Vec<_>>(),vec![Some(41),Some(42),Some(43),Some(44)]);
+ }
+}
+#[test]
 fn ordinary_default_furniture_can_be_added_alongside_verified_customized_variants(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let item=61381969i32;let handle=(1u32<<31)|item as u32;
@@ -1462,7 +1496,7 @@ fn inventory_quantity_batch_is_atomic_and_recovers_one_history_step(){
   let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();
   let original=e.inventory();
-  for request in [vec![(4,6,20),(5,8,20)],vec![(4,6,20),(6,2,0)],
+  for request in [vec![(4,6,20),(5,8,20)],vec![(4,6,20),(6,2,-1)],
     vec![(4,6,20),(4,6,21)],vec![(4,6,0),(5,9,20)],vec![(4,6,20),(5,9,-1)],vec![(4,6,20),(99,1,20)]]{
    assert!(e.change_inventory_quantities(&request).is_err());
    assert_eq!(e.inventory(),original);

@@ -205,3 +205,11 @@ test('native unique flower creation history shows its source, staged handle, app
  assert.match(formatHistoryChange(detail,'en',historyDetailCopy('en'),'','Quantity',()=> 'Blue'),/Blue · Quantity: 7$/);
  assert.deepEqual(decodeHistoryDetails(log([op],1),[meta('inventory',handle,null)]),[]);
 });
+
+test('native furniture creation history retains the material tuple and staged identity',()=>{
+ const handle=2147483649,source=8,itemId=61381969;
+ const op=bytes([u8(12),u32(handle),u32(source),i32(itemId),...([13,2,0,502,2,0].map(i32)),i32(7)]);
+ const [detail]=decodeHistoryDetails(log([op],1),[meta('inventory',source,null)]);
+ assert.deepEqual(detail,{scope:'inventory',documentId:source,createdHandle:handle,itemId,variant:[502,2,0],quantity:7,furnitureCreated:true});
+ assert.match(formatHistoryChange(detail,'en',historyDetailCopy('en'),'','Quantity',undefined,()=> 'Material'),/Material · Quantity: 7$/);
+});

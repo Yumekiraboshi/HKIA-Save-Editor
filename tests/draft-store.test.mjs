@@ -79,3 +79,11 @@ test('staged unique flower patches preserve identity, appearance and quantity on
  assert.deepEqual(store.safeInventoryPatches(patches),patches);
  for(const bad of [{...patches[0],documentId:8},{...patches[0],quantity:0},{...patches[0],variant:[6,9,0]},{...patches[0],itemId:0}])assert.throws(()=>store.safeInventoryPatches([bad]));
 });
+
+test('staged furniture creation retains the native tuple in the recovery comparison',()=>{
+ const row={documentId:2147483649,itemId:61381969,quantity:7,unique:{uniqueId:null,tag:8,fieldCount:3,words:[502,3,0],flowerEditable:false,furnitureEditable:true}};
+ const patches=store.diffInventory([], [row]);
+ assert.deepEqual(patches,[{documentId:2147483649,itemId:61381969,variant:[502,3,0],quantity:7,kind:'furniture-create'}]);
+ assert.deepEqual(store.safeInventoryPatches(patches),patches);
+ for(const bad of [{...patches[0],documentId:8},{...patches[0],quantity:0},{...patches[0],variant:[502,3]}])assert.throws(()=>store.safeInventoryPatches([bad]));
+});
