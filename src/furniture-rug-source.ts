@@ -14,7 +14,7 @@ type MaterialRow=readonly [number,string,string,Vec4,boolean,string|null,Vec2,Ve
 type SlotLink={slot:number;displayedDefinitionGuid:string|null};
 type MeshRow=NativeGeometrySource&{schema:string;version:string;itemId:number;cab:string;nodes:readonly {rendererPathId?:string;meshPathId?:string;material?:string;materialSlots?:readonly string[];slot?:SlotLink|null;active:boolean;enabled?:boolean}[];materials:Readonly<Record<string,{objectSha256:string}>>};
 type TextureLink={texture:string|null;scale:Vec2;offset:Vec2};
-type BaseMaterial={objectSha256:string;shader:string;validKeywords:readonly string[];textures:Readonly<Record<string,TextureLink>>;floats:Readonly<Record<string,number>>;colors:Readonly<Record<string,Vec4>>};
+type BaseMaterial={objectSha256:string;shader:string;renderQueue?:number;validKeywords:readonly string[];textures:Readonly<Record<string,TextureLink>>;floats:Readonly<Record<string,number>>;colors:Readonly<Record<string,Vec4>>};
 type Pattern=NativeTextureSource&{materialIndex:number;guid:string};
 export type RugNativeSources={
  catalog:{schema:string;gameVersion:string;source:{definitionSha256:string;payloadPathId:string};items:readonly Item[];sets:readonly SetRow[];materials:readonly CatalogMaterial[]};
