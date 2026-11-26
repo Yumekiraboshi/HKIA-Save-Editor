@@ -110,7 +110,7 @@ export async function drawFlowerSurfaceDiagnostic(gl:WebGL2RenderingContext,s:Fl
  if(!draws.length||draws.length>256)fail('BATCH');
  for(const d of draws)validateFlowerSurfaceDraw(d);
  const m=s.geometry.meshes[s.meshId];
- if(!m||Object.keys(s.geometry.meshes).length!==1||[0,4,5].some(i=>!(m.channels[i]?.[3]&15)))fail('MESH_UV');
+ if(!m||Object.keys(s.geometry.meshes).length!==1||[0,4,5].some(i=>!m.channels[i]||!(m.channels[i][3]&15)))fail('MESH_UV');
  let geometry:Awaited<ReturnType<typeof uploadNativeGeometry>>|undefined;
  let renderer:ReturnType<typeof createFlowerSurfaceRenderer>|undefined;
  const owned:WebGLTexture[]=[];
