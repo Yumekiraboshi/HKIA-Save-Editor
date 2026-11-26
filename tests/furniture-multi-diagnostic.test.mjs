@@ -73,3 +73,10 @@ test('preflight refuses incomplete geometry payload before GPU work',async()=>{
  await assert.rejects(drawFurnitureMultiDiagnostic({},d,r,async ref=>{requests.push(ref);return new ArrayBuffer(0);}),/PAYLOAD_LENGTH/);
  assert.deepEqual(requests,[{kind:'geometry',sha256:'61dc9dd44080824cccfd2966032eb21db1ada7d141418a4a590e0e58cc7c0810',bytes:64436}]);
 });
+
+test('geometry reader rejection and corrupt equal-length payload never touch GPU',async()=>{
+ const d=sources(),r=request(d),gpu=new Proxy({},{get(_target,key){throw Error('UNEXPECTED_GPU_ACCESS '+String(key));}});
+ const error=new Error('ORIGINAL_SOURCE_UNAVAILABLE');
+ await assert.rejects(drawFurnitureMultiDiagnostic(gpu,d,r,async()=>{throw error;}),e=>e===error);
+ await assert.rejects(drawFurnitureMultiDiagnostic(gpu,d,r,async ref=>new ArrayBuffer(ref.bytes)),/NATIVE_MESH_HASH/);
+});
