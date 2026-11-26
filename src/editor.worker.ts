@@ -12,7 +12,7 @@ type Engine = {
  memory:WebAssembly.Memory;
  hkia_stage(n:number):number; hkia_open():number;
  hkia_collection_creatable_snapshot():number;
- hkia_inventory_snapshot():number;hkia_inventory_creatable_snapshot():number;hkia_inventory_quantity_bounds():number;hkia_inventory_flowers_snapshot():number;hkia_inventory_palettes_snapshot():number;hkia_inventory_unique_snapshot():number;hkia_inventory_flower_variants(id:number):number;hkia_inventory_absent_flower_ids():number;hkia_inventory_flower_creation_variants(id:number):number;hkia_inventory_flower_create(id:number,...values:[...FlowerVariant,...FlowerVariant,number]):number;hkia_inventory_flower_variant_change(id:number,...values:[...FlowerVariant,...FlowerVariant]):number;hkia_inventory_furniture_variants(id:number):number;hkia_inventory_furniture_creation_variants(id:number):number;hkia_inventory_furniture_create(id:number,...values:[...FurnitureVariant,...FurnitureVariant,number]):number;hkia_inventory_furniture_variant_change(id:number,...values:[...FurnitureVariant,...FurnitureVariant]):number;hkia_inventory_change(id:number,before:number,after:number):number;hkia_inventory_batch_limit():number;hkia_inventory_batch_change():number;
+ hkia_inventory_snapshot():number;hkia_inventory_creatable_snapshot():number;hkia_inventory_quantity_bounds():number;hkia_inventory_flowers_snapshot():number;hkia_inventory_palettes_snapshot():number;hkia_inventory_unique_snapshot():number;hkia_inventory_flower_variants(id:number):number;hkia_inventory_absent_flower_ids():number;hkia_inventory_absent_furniture_ids():number;hkia_inventory_flower_creation_variants(id:number):number;hkia_inventory_flower_create(id:number,...values:[...FlowerVariant,...FlowerVariant,number]):number;hkia_inventory_flower_variant_change(id:number,...values:[...FlowerVariant,...FlowerVariant]):number;hkia_inventory_furniture_variants(id:number):number;hkia_inventory_furniture_creation_variants(id:number):number;hkia_inventory_furniture_create(id:number,...values:[...FurnitureVariant,...FurnitureVariant,number]):number;hkia_inventory_furniture_variant_change(id:number,...values:[...FurnitureVariant,...FurnitureVariant]):number;hkia_inventory_change(id:number,before:number,after:number):number;hkia_inventory_batch_limit():number;hkia_inventory_batch_change():number;
  hkia_change(id:number,expectedPresent:number,old:bigint,nextPresent:number,value:bigint):number;
  hkia_achievement_parent_create(...args:[ number,number,number,number, number, number,number,bigint,number,number, number,number,bigint,number,number, number,number,number,number, number,number,bigint,number,number]):number;
  hkia_achievement_create(g0:number,g1:number,g2:number,g3:number,complete:number,progress:number,seconds:bigint,nanos:number,hasDate:number):number;
@@ -82,7 +82,7 @@ function snapshot(e:Engine){
  const iv=new DataView(bytesInv.buffer,bytesInv.byteOffset,bytesInv.byteLength);
  const countInv=iv.getUint32(0,true);
  if(countInv>1_000_000||bytesInv.length!==4+countInv*16)throw Error('INVENTORY_SNAPSHOT_INVALID');
- const inventory:Array<{documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;quantityMinimum:number;flowerCreatable?:boolean;flower?:InventoryFlower;palette?:InventoryPalette;unique?:InventoryUniqueInfo}>=[];
+ const inventory:Array<{documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;quantityMinimum:number;flowerCreatable?:boolean;furnitureCreatable?:boolean;flower?:InventoryFlower;palette?:InventoryPalette;unique?:InventoryUniqueInfo}>=[];
  const docIds=new Set<number>();
  for(let i=0;i<countInv;i++){
   const at=4+i*16,documentId=iv.getUint32(at,true),itemId=iv.getInt32(at+4,true),
@@ -115,6 +115,17 @@ function snapshot(e:Engine){
   if(itemId<=0||documentId!==2147483648+itemId||cap<1||docIds.has(documentId)||candidateIds.has(documentId))throw Error('INVENTORY_SNAPSHOT_INVALID');
   candidateIds.add(documentId);
   inventoryCreatable.push({documentId,itemId,quantity:0,editable:true,quantityLimit:cap,quantityMinimum:1});
+ }
+ if(e.hkia_inventory_absent_furniture_ids()!==0)throw Error('INVENTORY_SNAPSHOT_INVALID');
+ const furnitureBytes=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+ if(furnitureBytes.length<4)throw Error('INVENTORY_SNAPSHOT_INVALID');
+ const furnitureView=new DataView(furnitureBytes.buffer,furnitureBytes.byteOffset,furnitureBytes.byteLength),furnitureCount=furnitureView.getUint32(0,true);
+ if(furnitureCount>cn||furnitureBytes.length!==4+4*furnitureCount)throw Error('INVENTORY_SNAPSHOT_INVALID');
+ const furnitureCandidates=new Map(inventoryCreatable.map(row=>[row.itemId,row]));
+ for(let i=0;i<furnitureCount;i++){
+  const itemId=furnitureView.getInt32(4+4*i,true),row=furnitureCandidates.get(itemId);
+  if(!row||row.furnitureCreatable)throw Error('INVENTORY_SNAPSHOT_INVALID');
+  row.furnitureCreatable=true;
  }
  if(e.hkia_inventory_absent_flower_ids()!==0)throw Error('INVENTORY_SNAPSHOT_INVALID');
  const fb=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
@@ -311,7 +322,7 @@ async function execute(r:Request):Promise<unknown>{
   }
   case 'furniture-create':{
    const id=r.documentId,before=r.beforeFurnitureVariant,next=r.nextFurnitureVariant,quantity=r.nextQuantity;
-   if(id===undefined||!Number.isInteger(id)||id<1||id>2147483647||!isFurnitureVariantWire(before)||!isFurnitureVariantWire(next)||quantity===undefined||!Number.isInteger(quantity)||quantity<1||quantity>2147483647)throw Error('INVENTORY_INVALID');
+   if(id===undefined||!Number.isInteger(id)||id<1||id>4294967295||!isFurnitureVariantWire(before)||!isFurnitureVariantWire(next)||quantity===undefined||!Number.isInteger(quantity)||quantity<1||quantity>2147483647)throw Error('INVENTORY_INVALID');
    if(e.hkia_inventory_furniture_create(id,...before,...next,quantity)!==0)throw Error('INVENTORY_CONFLICT');
    return snapshot(e);
   }
