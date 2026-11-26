@@ -18,13 +18,13 @@ def string(b,p=0):
     return b[p+4:p+4+n].decode(),align(p+4+n)
 def ptr(b,p=0):
     f,i=struct.unpack_from('<iq',b,p);return [f,str(i)]
-def type_trees(b):
+def type_trees(b,indexed=False):
     if len(b)<48 or struct.unpack_from('>I',b,8)[0]!=22 or b[16]!=0:raise ValueError('serialized file format')
     _,p=cs(b,48);p+=4
     if b[p]!=1:raise ValueError('original type tree required')
     p+=1;n=u(b,p);p+=4;out={}
     if n>512:raise ValueError('type count')
-    for _ in range(n):
+    for type_index in range(n):
         c=struct.unpack_from('<i',b,p)[0];p+=7+(16 if c==114 or c<0 else 0)+16
         n,s=struct.unpack_from('<II',b,p);p+=8
         if n>100000 or s>10000000 or p+32*n+s>len(b):raise ValueError('tree bounds')
@@ -40,15 +40,23 @@ def type_trees(b):
             elif root is None:root=node
             else:raise ValueError('tree root')
             stack.append(node)
-        if c in out:raise ValueError('multiple class schemas; use a supported static bundle')
-        out[c]=root;p+=32*n+s;d=u(b,p);p+=4+4*d
-    count=u(b,p);p=align(p+4)+count*24
+        key=type_index if indexed else c
+        if key in out:raise ValueError('multiple class schemas; use a supported static bundle')
+        out[key]=root;p+=32*n+s;d=u(b,p);p+=4+4*d
+    count=u(b,p);p=align(p+4);object_types={}
+    if count>2000000 or p+count*24>len(b):raise ValueError('object table bounds')
+    if indexed:
+        for j in range(count):
+            pid,_,_,idx=struct.unpack_from('<qqIi',b,p+j*24)
+            if idx not in out or str(pid) in object_types:raise ValueError('invalid object type')
+            object_types[str(pid)]=idx
+    p+=count*24
     scripts=u(b,p);p+=4+scripts*12
     ext=u(b,p);p+=4;external=[]
     if ext>1024:raise ValueError('external count')
     for _ in range(ext):
         _,p=cs(b,p);p+=20;path,p=cs(b,p);external.append(path)
-    return out,external
+    return (out,external,object_types) if indexed else (out,external)
 
 def walk(no,b,p=0,depth=0):
     _,ty,na,bs,meta,ch=no
@@ -85,13 +93,17 @@ def extract(raw, bundle_name, guid, item_id, audit):
     _,pairs=audit.auditor.extract_nodes(raw);nodes=dict(pairs)
     cabs=[n for n in nodes if re.fullmatch('CAB-[0-9a-f]{32}',n)]
     if len(cabs)!=1:raise ValueError('one CAB required')
-    cab=cabs[0];b=nodes[cab];stream=nodes[cab+'.resS'];trees,externals=type_trees(b)
+    cab=cabs[0];b=nodes[cab];stream=nodes.get(cab+'.resS',b'');trees,externals,object_types=type_trees(b,indexed=True)
     objects={pid:(c,o) for c,pid,o,e in audit.serialized_objects(b,classes=(1,4,21,23,28,33,43,114,142)) if e=='<'}
     def obj(pid,cls):
         c,o=objects[pid]
         if c!=cls:raise ValueError('object type mismatch')
         return o
-    def f(pid,cls):return fields(trees[cls],obj(pid,cls))
+    def f(pid,cls):return fields(trees[object_types[pid]],obj(pid,cls))
+    def component_class(ref):
+        if ref[0]!=0:return None
+        if ref[1] not in object_types:raise ValueError('missing component object')
+        return objects.get(ref[1],(None,None))[0]
     def local(ref,cls):
         if ref[0]!=0:raise ValueError('external object not supported')
         obj(ref[1],cls);return ref[1]
@@ -100,7 +112,8 @@ def extract(raw, bundle_name, guid, item_id, audit):
         key,p=string(container,p);first,n=struct.unpack_from('<ii',container,p);ref=ptr(container,p+8);p+=20
         if key==guid:matches.append(local(ref,1))
     if len(matches)!=1:raise ValueError('missing or ambiguous native prefab key')
-    root=matches[0];root_fields=f(root,1);root_comps=array_ptr(root_fields['m_Component']);root_tr=[ref[1] for ref in root_comps if ref[0]==0 and objects[ref[1]][0]==4];scripts=[ref[1] for ref in root_comps if ref[0]==0 and objects[ref[1]][0]==114]
+    root=matches[0];root_fields=f(root,1);root_comps=array_ptr(root_fields['m_Component']);root_tr=[ref[1] for ref in root_comps if component_class(ref)==4];scripts=[ref[1] for ref in root_comps if component_class(ref)==114]
+    scripts=[pid for pid in scripts if ptr(f(pid,114)['m_Script'])==[1,'-4647883882007958521']]
     if len(root_tr)!=1 or len(scripts)!=1:raise ValueError('unsupported root components')
     sf=f(scripts[0],114);script=ptr(sf['m_Script']);
     if script!=[1,'-4647883882007958521'] or not externals[0].endswith('CAB-2383a36f15413272ed26f383f73f6431'):raise ValueError('unknown visual slot script')
@@ -138,7 +151,7 @@ def extract(raw, bundle_name, guid, item_id, audit):
         seen.add(tid);tr=f(tid,4);go=local(ptr(tr['m_GameObject']),1);gf=f(go,1)
         if ptr(tr['m_Father'])!=[0,parent or '0']:raise ValueError('transform parent')
         row={'transformPathId':tid,'parentPathId':parent,'gameObjectPathId':go,'name':string(gf['m_Name'])[0],'active':bool(gf['m_IsActive'][0]),'rotation':list(struct.unpack('<4f',tr['m_LocalRotation'])),'position':list(struct.unpack('<3f',tr['m_LocalPosition'])),'scale':list(struct.unpack('<3f',tr['m_LocalScale']))}
-        comps=array_ptr(gf['m_Component']);mf=[r[1] for r in comps if r[0]==0 and objects[r[1]][0]==33];rr=[r[1] for r in comps if r[0]==0 and objects[r[1]][0]==23]
+        comps=array_ptr(gf['m_Component']);mf=[r[1] for r in comps if component_class(r)==33];rr=[r[1] for r in comps if component_class(r)==23]
         if len(mf)!=len(rr) or len(rr)>1:raise ValueError('unsupported renderer pairing')
         if rr:
             rid=rr[0];m=f(mf[0],33);r=f(rid,23);mid=local(ptr(m['m_Mesh']),43);mesh(mid);refs=array_ptr(r['m_Materials'])
