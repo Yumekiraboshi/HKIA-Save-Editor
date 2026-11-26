@@ -1,6 +1,7 @@
 /** Source-bound diagnostic selection for the first completely extracted rug.
  * This is display-only. No native save eligibility or mutation is determined here.
  * Raw material values are not proof of runtime color conversion or camera parity. */
+import {nativeFurnitureTreatment} from './furniture-material-treatment';
 import type {Vec2,Vec4} from './furniture-surface-v3.0.1';
 import type {NativeGeometrySource} from './native-furniture-mesh';
 import type {NativeTextureSource} from './native-texture-upload';
@@ -71,9 +72,10 @@ export function resolveNativeRugMaterial(d:RugNativeSources,requestedItemId:numb
  const pattern=one(d.patterns.rows,p=>p.materialIndex===materialIndex&&p.guid===v[5],'PATTERN');
  const worldUV=base.floats._Pattern_WorldUV;
  if(worldUV!==0&&worldUV!==1)throw Error('RUG_SOURCE_WORLD_UV');
+ const t=nativeFurnitureTreatment(v,pattern.guid);
  const material:FurnitureForwardMaterial={
-  baseColor:v[3],patternTint:v[8],useBaseMapMask:v[4],baseST:st(b.link),patternST:[v[6][0],v[6][1],v[7][0],v[7][1]],
-  rotationTurns:v[9],rotationCenter:[v[10][0],v[10][1]],smoothnessShift:v[13],metallicShift:v[14],patternSmoothnessShift:v[11],patternMetallicShift:v[12],
+  baseColor:t.baseColor,patternTint:t.patternTint,useBaseMapMask:t.useBaseMapMask,baseST:st(b.link),patternST:t.patternST,
+  rotationTurns:t.rotationTurns,rotationCenter:t.rotationCenter,smoothnessShift:t.smoothnessShift,metallicShift:t.metallicShift,patternSmoothnessShift:t.patternSmoothnessShift,patternMetallicShift:t.patternMetallicShift,
   occlusionStrength:base.floats._OcclusionStrength,worldUV:worldUV===1
  };
  const reflectionStrength=base.floats._ReflectionStrength,emissionColor=requireValue(base.colors._EmissionColor,'EMISSION');

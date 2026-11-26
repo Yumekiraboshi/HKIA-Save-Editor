@@ -226,6 +226,7 @@ async function inventoryChefQuantitySmoke(){
   assert.equal(await (await inputFor(1798633565)).inputValue(),'1');
   await page.locator('button[title="Redo"]:not([disabled])').click();
   await page.locator('button[title="Redo"]:disabled').waitFor();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
   assert.equal(await (await inputFor(1798633565)).inputValue(),'0');
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
@@ -625,17 +626,39 @@ async function inventoryFlowerGrowthDisplaySmoke(){
   const cards=page.locator('.inventory-card');
   await cards.nth(2).waitFor();
   assert.equal(await cards.count(),3);
+  const growthCells=[];
   for(const [kind,label] of [['seed','Seed'],['plucked','Flower'],['uprooted','Uprooted plant']]){
    const card=cards.filter({has:page.locator('[data-flower-growth="'+kind+'"]')});
    await card.locator('.inventory-flower-variant-name').filter({hasText:label+' · Red'}).waitFor({timeout:30_000});
-   if(kind!=='plucked')assert.equal(await card.locator('[data-flower-state-art="species-reference"]').count(),1);
+   if(kind!=='plucked'){
+    const sprite=card.locator('[data-flower-state-art="native-state-sprite"]');
+    await sprite.waitFor({timeout:30_000});
+    assert.equal(await sprite.count(),1);
+    assert.equal(await card.locator('[data-flower-state-art="species-reference"]').count(),0);
+    const art=await sprite.evaluate(async el=>{
+     const css=getComputedStyle(el),url=css.backgroundImage.match(/^url\("?(blob:[^")]+)"?\)$/)?.[1];
+     if(!url)throw Error('Expected verified shared blob');
+     const bitmap=await createImageBitmap(await (await fetch(url)).blob());
+     try{
+      const canvas=document.createElement('canvas');canvas.width=96;canvas.height=96;
+      const ctx=canvas.getContext('2d'),x=0-parseFloat(css.backgroundPositionX),y=0-parseFloat(css.backgroundPositionY);
+      ctx.drawImage(bitmap,x,y,96,96,0,0,96,96);
+      const pixels=ctx.getImageData(0,0,96,96).data;
+      return {url,x,y,width:bitmap.width,height:bitmap.height,visible:pixels.filter((v,i)=>i%4===3&&v>0).length};
+     }finally{bitmap.close();}
+    });
+    assert.equal(art.width,960);assert.equal(art.height,480);assert.ok(art.visible>0);
+    assert.equal(art.x,kind==='seed'?0:96);assert.equal(art.y,0);
+    growthCells.push(art);
+   }else assert.equal(await card.locator('[data-flower-state-art="native-state-sprite"]').count(),0);
   }
+  assert.equal(growthCells.length,2);assert.equal(growthCells[0].url,growthCells[1].url);
   await search.fill('43114910 Seed Red');
   await page.waitForFunction(()=>document.querySelectorAll('.inventory-card').length===1&&document.querySelector('[data-flower-growth="seed"]'));
   await search.fill('43114910 Uprooted plant Red');
   await page.waitForFunction(()=>document.querySelectorAll('.inventory-card').length===1&&document.querySelector('[data-flower-growth="uprooted"]'));
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM FLOWER GROWTH PASS: separate native states, localized search, honest reference artwork');
+  console.log('CHROMIUM FLOWER GROWTH PASS: separate original seed and troweled pixels, shared sheet, localized search');
  }finally{await context.close();}
 }
 async function inventoryFlowerVariantEditSmoke(){
