@@ -1,0 +1,235 @@
+{
+  "schema": "HKIA.FlowerPatternSourceIndex.1",
+  "version": "3.0.1",
+  "definitionsSha256": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0",
+  "catalogSha256": "555a82bf7e8a6f0b6c9fee7d179988f54015e7b354902f13937198115e9ff52a",
+  "patternMetadataSha256": "88e186b5e3e39941d7969ea72e6c257b3586045234c992de84dcaa353d7d11f4",
+  "textureMetadataSha256": "1d0b80d4cf07d268a25282d178a5a5ed2a93f9fe2f35756f439da3a2f1793865",
+  "patternColumns": [
+    "index",
+    "name",
+    "overrideCount",
+    "surfaceEffect"
+  ],
+  "patterns": [
+    [
+      1,
+      "Alternate",
+      17,
+      0
+    ],
+    [
+      2,
+      "Confetti",
+      22,
+      0
+    ],
+    [
+      3,
+      "Cosmic",
+      7,
+      4
+    ],
+    [
+      4,
+      "Crystal",
+      15,
+      5
+    ],
+    [
+      5,
+      "Frost",
+      0,
+      3
+    ],
+    [
+      6,
+      "Glitter",
+      2,
+      6
+    ],
+    [
+      7,
+      "Glow",
+      0,
+      2
+    ],
+    [
+      8,
+      "Iridescent",
+      0,
+      1
+    ],
+    [
+      9,
+      "Molten",
+      11,
+      4
+    ],
+    [
+      10,
+      "Ombre",
+      28,
+      0
+    ],
+    [
+      11,
+      "Patch",
+      21,
+      0
+    ],
+    [
+      12,
+      "Ring",
+      24,
+      0
+    ],
+    [
+      13,
+      "Speckled",
+      18,
+      0
+    ],
+    [
+      14,
+      "Striped",
+      23,
+      0
+    ],
+    [
+      15,
+      "Sunbeam",
+      0,
+      4
+    ],
+    [
+      16,
+      "Trim",
+      30,
+      0
+    ]
+  ],
+  "overrideCount": 218,
+  "textureCount": 77,
+  "textureBytes": 17174204,
+  "formatCounts": {
+    "4": 2,
+    "5": 1,
+    "10": 74
+  },
+  "duplicateOverride": {
+    "patternIndex": 14,
+    "itemId": 228573412,
+    "rows": [
+      [
+        228573412,
+        null,
+        [
+          4,
+          1
+        ],
+        0,
+        1
+      ],
+      [
+        228573412,
+        "543bc492e6cd892439694185f6a4e4bc",
+        null,
+        1,
+        0
+      ]
+    ]
+  },
+  "bundleColumns": [
+    "name",
+    "textureCount",
+    "payloadBytes",
+    "sha256"
+  ],
+  "bundles": [
+    [
+      "ga_art_flowers_flower_dreampuff",
+      1,
+      174776,
+      "c246b63f05c69937a30945917817dd4d2c38046bb5862d66efc07252253c4596"
+    ],
+    [
+      "ga_art_flowers_flower_wheatflower",
+      1,
+      174776,
+      "75fc32e050e838fe24b975484f8e917536a9548e23c94dd5759fec7e9d438154"
+    ],
+    [
+      "ga_art_flowers_shared_surfaceeffectmaps",
+      1,
+      2760,
+      "08a18c52618f6d885c9000940a5faf0331e493a8219a953764b788c7e22a7017"
+    ],
+    [
+      "gal_main_l0_-45_-2",
+      1,
+      20,
+      "348a4463ab4fd5557f963022ba5c8f198f831249842041ff616a70f5db189c67"
+    ],
+    [
+      "gal_main_l2_3_1",
+      1,
+      20,
+      "0af8ebf89f5495651e23396eeed18c874388240436b054e5ef4b9cdca93d8880"
+    ],
+    [
+      "l_flowers_pattern_ombre",
+      1,
+      174776,
+      "4f86fd798c374653c8f33a54aa0f1d9a78379a6e947c84cf28f999599166040c"
+    ],
+    [
+      "l_glitter",
+      1,
+      43704,
+      "be6a7dfa7cbf783961098b720bd01047829552c5bdfd42ad04829eb3d091376a"
+    ],
+    [
+      "p_assets_art_environment_substance_patt_fd979e44",
+      1,
+      5592404,
+      "a7ad7cdd853f23c0780c0547d3741a746aa6fdfd55ad81be3ffb35dd7206ed0a"
+    ],
+    [
+      "p_assets_art_flowers_patterns_84222325_29e34618",
+      8,
+      1267136,
+      "a50ec43ba8b0d6bb41f6d9535f301685cb9785b83fa3a60ae49ee841fa516367"
+    ],
+    [
+      "p_assets_art_flowers_patterns_84222325_2ae347ab",
+      12,
+      1835168,
+      "9c1dae4ec9152d9f3aa2898fcfde34fa8013caca4a62b86b069649c4e8549b1f"
+    ],
+    [
+      "p_assets_art_flowers_patterns_84222325_2be3493e",
+      17,
+      2840120,
+      "855d23c9a8b1dc995f861b8c648455d69ebc019abdd05293ad546a92ef868da7"
+    ],
+    [
+      "p_assets_art_flowers_patterns_84222325_2ce34ad1",
+      14,
+      2184720,
+      "c5513f1921b634b8cd89298ba08631eba7fccb6385ea6bf2abe583b5654eb1b2"
+    ],
+    [
+      "p_assets_art_flowers_patterns_clothing_35271ea5",
+      14,
+      2315792,
+      "823dd1476f3817f05c298270748518247ac82dfc5e145c8ecb0fde57959393c8"
+    ],
+    [
+      "p_assets_art_flowers_shared_surfaceeffe_d0522230",
+      4,
+      568032,
+      "7432fe5bee52b08c86debd28d6502b887420252b67324e405d008fb36f778e40"
+    ]
+  ]
+}
