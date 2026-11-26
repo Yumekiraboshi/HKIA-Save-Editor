@@ -431,6 +431,10 @@ async function inventoryCafeEditSmoke(){
   const option=select.locator('option[data-ingredient-id="1622861092"]');
   const value=await option.getAttribute('value');assert.ok(value!==null);
   await select.selectOption(value);
+  await dialog.locator('[data-cafe-slot="1"]').click();
+  const second=await select.locator('option[data-ingredient-id]:not([data-ingredient-id="0"])').first().getAttribute('value');assert.ok(second!==null);
+  await select.selectOption(second);
+  await dialog.locator('[data-cafe-slot="0"]').click();assert.equal(await select.inputValue(),value);
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await page.locator('button[title="Redo"]:not([disabled])').click();
@@ -445,7 +449,8 @@ async function inventoryCafeEditSmoke(){
   const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
   assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_cafe_snapshot(),0);
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
-  assert.equal(v.getUint32(0,true),1);assert.deepEqual(Array.from({length:6},(_,i)=>v.getInt32(12+i*4,true)),[48,49,48,9,46,9]);
+  assert.equal(v.getUint32(0,true),1);const final=Array.from({length:6},(_,i)=>v.getInt32(12+i*4,true));
+  assert.equal(final[0],48);assert.equal(final[3],9);assert.notDeepEqual([final[1],final[4]],[49,46]);assert.equal(final[2],48);assert.equal(final[5],9);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM CAFE VARIANT PASS: native ingredient pair, history, recovery and export');
  }finally{await context.close()}
