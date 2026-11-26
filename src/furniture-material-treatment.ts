@@ -62,27 +62,43 @@ export function bindFurnitureRendererTreatments(d:RugNativeSources,itemId:number
  const choices=createFurnitureTreatmentResolver(d.catalog,d.variants)(itemId,indices);
  const geo=d.geometry.rows.filter(r=>r.itemId===itemId),base=d.base.rows.filter(r=>r.itemId===itemId);
  if(geo.length!==1||base.length!==1||d.geometry.version!=='3.0.1'||d.base.version!=='3.0.1')fail('RENDER_SOURCE');
- const geometry=geo[0],bindings=unique(base[0].bindings,x=>x[0]);
+ const geometry=geo[0],bindings=unique(base[0].bindings,x=>x[0]),submeshBindings=unique(base[0].submeshBindings??[],x=>x.rendererPathId);
  const used=new Set<number>();
- const plans=geometry.nodes.filter(n=>n.rendererPathId!==undefined).map(n=>{
-  const id=n.rendererPathId!,binding=bindings.get(id),materialKey=n.material;
-  if(!binding||!materialKey||!n.meshPathId||!geometry.meshes[n.meshPathId]||
-   !n.active||n.enabled!==true)throw Error('FURNITURE_TREATMENT_RENDERER');
+ type Plan={rendererPathId:string;meshPathId:string;submeshIndex:number|undefined;baseMaterialId:string;baseMaterial:RugNativeSources['base']['materials'][string];choice:(typeof choices)[number]|null};
+ const plans=geometry.nodes.filter(n=>n.rendererPathId!==undefined).flatMap<Plan>(n=>{
+  const id=n.rendererPathId!,meshId=n.meshPathId,mesh=meshId&&geometry.meshes[meshId];
+  if(!meshId||!mesh||!n.active||n.enabled!==true)throw Error('FURNITURE_TREATMENT_RENDERER');
+  const materialFor=(materialKey:string,materialId:string)=>{
+   const ref=geometry.materials[materialKey] as {objectSha256?:string;externalCab?:string;pathId?:string}|undefined;
+   const material=d.base.materials[materialId];
+   if(!ref||!material)throw Error('FURNITURE_TREATMENT_BASE');
+   const [file,pid]=materialKey.split(':');
+   if(file==='0'){
+    if(materialId!==geometry.cab+':'+pid||material.objectSha256!==ref.objectSha256)fail('BASE_LINK');
+   }else if(!ref.externalCab||ref.pathId!==pid||materialId!==ref.externalCab.split('/').at(-1)+':'+pid)fail('BASE_LINK');
+   return material;
+  };
+  if(n.materialSlots!==undefined||mesh.submeshes!==undefined){
+   const binding=submeshBindings.get(id);
+   // Fixed renderer slots only. Native customization of a multi-material
+   // renderer is not inferred from the renderer-level VisualSlot reference.
+   if(n.slot!=null||binding?.slot!=null)fail('SUBMESH_TREATMENT_UNVERIFIED');
+   if(n.material!==undefined||bindings.has(id)||!n.materialSlots||!mesh.submeshes||!binding||
+    mesh.submeshes.length<2||mesh.submeshes.length!==n.materialSlots.length||binding.materials.length!==n.materialSlots.length)throw Error('FURNITURE_TREATMENT_SUBMESH_COVERAGE');
+   submeshBindings.delete(id);
+   return n.materialSlots.map((key,submeshIndex)=>({rendererPathId:id,meshPathId:meshId,submeshIndex,baseMaterialId:binding.materials[submeshIndex],baseMaterial:materialFor(key,binding.materials[submeshIndex]),choice:null}));
+  }
+  const binding=bindings.get(id),materialKey=n.material;
+  if(!binding||!materialKey||submeshBindings.has(id))throw Error('FURNITURE_TREATMENT_RENDERER');
   bindings.delete(id);
-  const ref=geometry.materials[materialKey] as {objectSha256?:string;externalCab?:string;pathId?:string}|undefined;
-  const material=d.base.materials[binding[1]];
-  if(!ref||!material)throw Error('FURNITURE_TREATMENT_BASE');
-  const [file,pid]=materialKey.split(':');
-  if(file==='0'){
-   if(binding[1]!==geometry.cab+':'+pid||material.objectSha256!==ref.objectSha256)fail('BASE_LINK');
-  }else if(!ref.externalCab||ref.pathId!==pid||binding[1]!==ref.externalCab.split('/').at(-1)+':'+pid)fail('BASE_LINK');
+  const material=materialFor(materialKey,binding[1]);
   if((n.slot?.slot??null)!==(binding[2]?.slot??null)||(n.slot?.displayedDefinitionGuid??null)!==(binding[2]?.displayedDefinitionGuid??null))fail('SLOT_LINK');
   if(n.slot?.displayedDefinitionGuid!=null)fail('AUTHORED_OVERRIDE_UNRESOLVED');
   const choice=n.slot?choices.find(x=>x.slot===n.slot!.slot):null;
   if(n.slot&&!choice)fail('SLOT_MISSING');
   if(choice)used.add(choice.slot);
-  return {rendererPathId:id,meshPathId:n.meshPathId,baseMaterialId:binding[1],baseMaterial:material,choice:choice??null};
+  return [{rendererPathId:id,meshPathId:meshId,submeshIndex:undefined as number|undefined,baseMaterialId:binding[1],baseMaterial:material,choice:choice??null}];
  });
- if(bindings.size||choices.some(x=>!used.has(x.slot)))fail('RENDERER_COVERAGE');
+ if(bindings.size||submeshBindings.size||choices.some(x=>!used.has(x.slot)))fail('RENDERER_COVERAGE');
  return {geometry,plans,fidelity:'source-binding-only' as const};
 }

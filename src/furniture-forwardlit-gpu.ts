@@ -3,7 +3,7 @@
  * Camera, tangent basis, lights, emission mask, fog and ambient varyings are
  * explicit caller inputs: this is not the native scene selection or final icon. */
 import type {Vec2,Vec3,Vec4,FurnitureSurfaceUniforms} from './furniture-surface-v3.0.1';
-import type {UploadedNativeMesh} from './native-furniture-mesh';
+import {nativeMeshDrawRange,type UploadedNativeMesh} from './native-furniture-mesh';
 export const furnitureForwardVertex=`#version 300 es
 precision highp float;
 layout(location=0) in vec3 position;
@@ -142,10 +142,11 @@ export function createFurnitureForwardRenderer(gl:WebGL2RenderingContext){
  finally{if(vs)gl.deleteShader(vs);if(fs)gl.deleteShader(fs);}
  const u=(name:string)=>uniforms.get(name)!;let disposed=false;
  return {
-  draw(mesh:UploadedNativeMesh,textures:FurnitureForwardTextures,s:FurnitureForwardScene,m:FurnitureForwardMaterial){
+  draw(mesh:UploadedNativeMesh,textures:FurnitureForwardTextures,s:FurnitureForwardScene,m:FurnitureForwardMaterial,submeshIndex?:number){
    if(disposed)throw Error('FURNITURE_FORWARD_DISPOSED');
    validateFurnitureForwardInputs(s,m);
    if(!Number.isInteger(mesh.indexCount)||mesh.indexCount<=0||mesh.indexCount%3||!gl.isVertexArray(mesh.vao)||textureNames.some(k=>!gl.isTexture(textures[k])))throw Error('FURNITURE_FORWARD_RESOURCES');
+   const range=nativeMeshDrawRange(mesh,submeshIndex);
    if(gl.getError()!==gl.NO_ERROR)throw Error('FURNITURE_FORWARD_GPU_DIRTY');
    gl.useProgram(program);gl.bindVertexArray(mesh.vao);
    gl.uniformMatrix4fv(u('model'),false,new Float32Array(s.model));gl.uniformMatrix4fv(u('viewProjection'),false,new Float32Array(s.viewProjection));gl.uniformMatrix3fv(u('normalMatrix'),false,new Float32Array(s.normalMatrix));
@@ -158,7 +159,7 @@ export function createFurnitureForwardRenderer(gl:WebGL2RenderingContext){
    for(const [i,k] of textureNames.entries()){
     gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(i<4?gl.TEXTURE_2D:gl.TEXTURE_CUBE_MAP,textures[k]);gl.uniform1i(u(k),i);
    }
-   gl.drawElements(gl.TRIANGLES,mesh.indexCount,gl.UNSIGNED_SHORT,0);
+   gl.drawElements(gl.TRIANGLES,range.indexCount,gl.UNSIGNED_SHORT,range.firstByte);
    if(gl.getError()!==gl.NO_ERROR)throw Error('FURNITURE_FORWARD_DRAW');
   },
   dispose(){if(!disposed){disposed=true;gl.deleteProgram(program);}}

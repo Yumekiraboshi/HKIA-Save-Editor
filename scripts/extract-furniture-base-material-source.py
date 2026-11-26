@@ -16,6 +16,7 @@ def sha(b):return hashlib.sha256(b).hexdigest()
 # Original PC v3.0.1 Shader object identities. Extraction support does not
 # imply WebGL rendering support. Offsets refer to each exact hashed object.
 SHADER_SOURCES={
+    'CAB-2b27edbfe7f08bad1cd631865ee4eb15:-2527260696058741820':('1d7fcbcf451083bffb545d5490fa8a894cf373f0f7b03dd834a89f21e07e7e9a',19752,'Sunblink/Lynx/CustomLitSparkle',36,3),
     'CAB-6ef5e40a482b00b1d462fae2060592ab:8125211537628429288':('d1e8f28824efdf877dae5004d5ae5ea98823893b62f137d6fc37dfb44f5d91a8',19860,'Shader Graphs/Standard Vertex Color',6,1),
     'CAB-2b27edbfe7f08bad1cd631865ee4eb15:7085089958137184873':('6417c4faa59950760b14de6ae5ff53c646f780c24ac4c9b316ca2120863a5414',20820,'Sunblink/Lynx/Terrain/Custom Lit Terrain Simple',31,4),
     'CAB-2b27edbfe7f08bad1cd631865ee4eb15:-6806329374484566350':('cdb64e92e92cbc2b88b3ce48c8a3ed302a16972a23528c27e766b7a646d852d0',20904,'Sunblink/Lynx/CustomLitFurniture',42,4),
@@ -110,12 +111,20 @@ def extract(bundles,scene,mesh,audit,shader_audit,out=None,resolve_cab=None):
         materials[key]={'name':name,'bundle':entry['bundle'],'objectSha256':sha(b),'shader':sh,'validKeywords':strings(f['m_ValidKeywords']),'invalidKeywords':strings(f['m_InvalidKeywords']),'renderQueue':struct.unpack('<i',f['m_CustomRenderQueue'])[0],**groups}
     for row in scene['rows']:
         cab=row['cab'];entry=entry_for(cab);require(entry is not None and entry['sha256']==row['bundleSha256'],'scene bundle hash')
-        bindings=[]
+        bindings=[];submesh_bindings=[]
+        def resolve_material(value):
+            file,pid=value.split(':');key=ref(cab,[int(file),pid]);require(key is not None,'renderer material missing');material(key);return key
         for node in row['nodes']:
-            if 'material' not in node:continue
-            file,pid=node['material'].split(':');key=ref(cab,[int(file),pid]);require(key is not None,'renderer material missing');material(key)
-            bindings.append([node['rendererPathId'],key,node['slot']])
-        rows.append({'itemId':row['itemId'],'bindings':bindings})
+            if 'materialSlots' in node:
+                require('material' not in node and len(node['materialSlots'])==len(row['meshes'][node['meshPathId']]['submeshes'])>=2,'submesh material coverage')
+                submesh_bindings.append({'rendererPathId':node['rendererPathId'],'materials':[resolve_material(x) for x in node['materialSlots']],'slot':node['slot']})
+            elif 'material' in node:
+                bindings.append([node['rendererPathId'],resolve_material(node['material']),node['slot']])
+            else:
+                require('rendererPathId' not in node,'renderer material missing')
+        result={'itemId':row['itemId'],'bindings':bindings}
+        if submesh_bindings:result['submeshBindings']=submesh_bindings
+        rows.append(result)
     return {'schema':'HKIA.FurnitureBaseMaterialSource.1','version':'3.0.1','bundles':{c:[v['bundle'],v['sha256']] for c,v in sorted(loaded.items())},'rows':rows,'materials':materials,'textures':textures,'shaders':shaders,'unresolved':sorted(unresolved),'renderFidelity':'unverified'}
 
 def main():
