@@ -1484,6 +1484,9 @@ import {verifiedFloorplanName} from './floorplan-names';
        <input class="inventory-batch-checkbox" type="checkbox" checked={inventoryBatchSelected.has(item.documentId)} aria-label={iBatchCopy+': '+inventoryName(item.itemId)}
         disabled={busy||(!inventoryBatchSelected.has(item.documentId)&&inventoryBatchSelected.size>=snapshot.inventoryBatchLimit)} onchange={()=>toggleInventoryBatch(item)}/>
       {/if}
+        {#if !inventoryAddMode&&!inventoryBatchMode&&item.editable}
+         <button type="button" class="inventory-stack-delete" disabled={busy||item.quantityMinimum!==0||item.quantity<=0} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)+': '+inventoryName(item.itemId)} onclick={e=>requestInventoryDelete([item],false,e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
+        {/if}
       <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
        <span class="inventory-item-art" class:flower-variant={!!flower} aria-hidden="true">
         {#if wand&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
@@ -1527,9 +1530,6 @@ import {verifiedFloorplanName} from './floorplan-names';
         <button type="submit" class="primary" disabled={busy||inventoryBatchMode} title={iCopy.apply} aria-label={iCopy.apply}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
         </button>
-        {#if !inventoryAddMode}
-         <button type="button" class="inventory-unique-edit-button inventory-compact-variant inventory-stack-delete" disabled={busy||inventoryBatchMode||item.quantityMinimum!==0||item.quantity<=0} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)+': '+inventoryName(item.itemId)} onclick={e=>requestInventoryDelete([item],false,e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
-        {/if}
         {#if canFlower||canFurniture||canPalette||canBoba||canCafe}
          <button class="inventory-unique-edit-button inventory-compact-variant" type="button" disabled={busy||inventoryBatchMode}
           title={canCafe?inventoryName(item.itemId):canBoba?inventoryName(item.itemId):canPalette?flowerCopy.color:canFurniture?furnitureCopy.title:flowerCopy.title} aria-label={(canCafe?inventoryName(item.itemId):canBoba?inventoryName(item.itemId):canPalette?flowerCopy.color:canFurniture?furnitureCopy.title:flowerCopy.title)+': '+inventoryName(item.itemId)}
