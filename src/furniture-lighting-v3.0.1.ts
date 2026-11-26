@@ -2,12 +2,13 @@
  * All scene lighting, shader-space samples and varyings are supplied by the caller.
  * No guessed default light, texture lookup, shadow, interior, rim or post-process. */
 import type {Vec3} from './furniture-surface-v3.0.1';
+import {furnitureRimLighting,type FurnitureRimParameters} from './furniture-rim-v3.0.1';
 const f=Math.fround;
 const sat=(x:number)=>Math.min(1,Math.max(0,x));
 const dot=(a:Vec3,b:Vec3)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const map=(fn:(i:number)=>number):Vec3=>[fn(0),fn(1),fn(2)];
 function unit(v:Vec3):Vec3{const d=Math.sqrt(dot(v,v));if(!Number.isFinite(d)||d===0)throw Error('FURNITURE_LIGHTING_DIRECTION');return map(i=>v[i]/d);}
-export type FurnitureLightingInput={albedo:Vec3;perceptualRoughness:number;metallic:number;occlusion:number;emissionColor:Vec3;emissionMask:number;normal:Vec3;view:Vec3;mainLightDirection:Vec3;mainLightColor:Vec3;ambient:Vec3;screenOcclusion:number;screenOcclusionStrength:number;reflectionPrimary:Vec3;reflectionSecondary:Vec3;reflectionBlendWeight:number;reflectionIntensity:number;reflectionStrength:number;ambientMain:Vec3;ambientFill:Vec3;fogVarying:number;fogMultiplier:number};
+export type FurnitureLightingInput={albedo:Vec3;perceptualRoughness:number;metallic:number;occlusion:number;emissionColor:Vec3;emissionMask:number;normal:Vec3;view:Vec3;mainLightDirection:Vec3;mainLightColor:Vec3;ambient:Vec3;screenOcclusion:number;screenOcclusionStrength:number;reflectionPrimary:Vec3;reflectionSecondary:Vec3;reflectionBlendWeight:number;reflectionIntensity:number;reflectionStrength:number;ambientMain:Vec3;ambientFill:Vec3;fogVarying:number;fogMultiplier:number;rim?:FurnitureRimParameters};
 export function furnitureReflectionCoordinates(normal:Vec3,view:Vec3,perceptualRoughness:number){
  if(![...normal,...view,perceptualRoughness].every(Number.isFinite)||perceptualRoughness<0||perceptualRoughness>1)throw Error('FURNITURE_LIGHTING_INPUT');
  const n=unit(normal),v=unit(view),r=Math.max(perceptualRoughness**2,0.0078125),nv=dot(n,v);
@@ -26,7 +27,8 @@ export function furnitureLighting(u:FurnitureLightingInput){
  const ndh=sat(dot(n,h)),ldh=sat(dot(l,h)),den=(ndh*ndh*(r2-1)+f(1.00001))**2*Math.max(ldh*ldh,f(.1))*(4*r+2);
  const spec=Math.min(100,Math.max(0,r2/den-0.00006103515625));
  const ndl=sat(dot(n,l));
- const lit=map(i=>(diffuse[i]+spec*specular[i])*ndl*u.mainLightColor[i]+ambient[i]*(diffuse[i]+refl[i]*u.reflectionIntensity*u.reflectionStrength*reflectionBRDF[i])*u.occlusion+u.albedo[i]*u.emissionColor[i]*u.emissionMask);
+ const baseLit=map(i=>(diffuse[i]+spec*specular[i])*ndl*u.mainLightColor[i]+ambient[i]*(diffuse[i]+refl[i]*u.reflectionIntensity*u.reflectionStrength*reflectionBRDF[i])*u.occlusion+u.albedo[i]*u.emissionColor[i]*u.emissionMask);
+ const lit=u.rim?furnitureRimLighting(u.albedo,u.perceptualRoughness,dot(n,v),u.occlusion,u.ambient,baseLit,u.rim):baseLit;
  const ldv=-dot(l,v),wm=sat(f(.6)*ldv+f(.4)),wf=sat(-f(.6)*ldv+f(.4)),fog=u.fogVarying*u.fogMultiplier;
  return {color:map(i=>lit[i]+fog*(wm*u.ambientMain[i]+wf*u.ambientFill[i]-lit[i])),reflection:furnitureReflectionCoordinates(n,v,u.perceptualRoughness)};
 }

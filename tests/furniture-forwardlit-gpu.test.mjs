@@ -36,3 +36,11 @@ test('program cleanup on compile, link or missing uniforms and explicit GPU draw
  }
  const a=fake({drawError:true}),renderer=createFurnitureForwardRenderer(a.gl);assert.throws(()=>renderer.draw(mesh,textures,s,m),/FURNITURE_FORWARD_DRAW/);renderer.dispose();
 });
+
+test('rim uniforms reset on each draw, invalid parameters refuse',()=>{
+ const a=fake(),r=createFurnitureForwardRenderer(a.gl),rim={power:1.5,feathering:.167,intensity:1,coloring:0};
+ r.draw(mesh,textures,s,{...m,rim});r.draw(mesh,textures,s,m);
+ assert.deepEqual(a.calls.filter(x=>x[0]==='int'&&x[1]==='rimEnabled'),[['int','rimEnabled',1],['int','rimEnabled',0]]);
+ assert.throws(()=>r.draw(mesh,textures,s,{...m,rim:{...rim,power:NaN}}),/FURNITURE_RIM_PARAMETERS/);
+ r.dispose();
+});
