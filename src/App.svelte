@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,changeInventoryFlowerVariant,requestFurnitureVariants,changeInventoryFurnitureVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,changeInventoryFurnitureVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -69,7 +69,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let flowerDefinitions:FlowerDisplayDefinitions|null=$state(null);
  let flowerLabels:FlowerLabels=$state({});
  let flowerDialogEl:HTMLDialogElement|undefined=$state();
- let flowerEdit=$state<{documentId:number;itemId:number;revision:number;before:FlowerVariant;options:FlowerVariant[]}|null>(null);
+ let flowerEdit=$state<{documentId:number;itemId:number;revision:number;before:FlowerVariant;options:FlowerVariant[];creationOptions:FlowerVariant[]}|null>(null);
  let flowerSelection=$state(-1);
  let furnitureDialogEl:HTMLDialogElement|undefined=$state();
  let furnitureDisplay:FurnitureDisplay|null=$state(null);
@@ -196,7 +196,11 @@ import {verifiedFloorplanName} from './floorplan-names';
  const historyDetails=$derived(decodeHistoryDetails((snapshot as SaveSnapshot|null)?.historyCheckpoint??null,(snapshot as SaveSnapshot|null)?.history??[]));
  const tabHistoryDetails=$derived(historyDetails.filter(entry=>entry.scope===activeTool));
  const historyItems=$derived(new Map(((catalog as Catalog|null)?.items??[]).map(item=>[item[0],item])));
- const inventoryHistoryItems=$derived(new Map(((snapshot as SaveSnapshot|null)?.inventory??[]).map(item=>[item.documentId,item.itemId])));
+ const inventoryHistoryItems=$derived.by(()=>{
+  const result=new Map(((snapshot as SaveSnapshot|null)?.inventory??[]).map(item=>[item.documentId,item.itemId]));
+  for(const detail of historyDetails)if(detail.scope==='inventory'&&'createdHandle' in detail)result.set(detail.createdHandle,detail.itemId);
+  return result;
+ });
  // Item IDs and category-to-art mappings are original Steam v3.0.1
  // collection catalog data, NOT inferred inventory ownership/categories.
  const inventorySourceItems=$derived(new Map(((catalog as Catalog|null)?.items??[]).map(item=>[item[0],item])));
@@ -537,7 +541,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
  function historyEntryChange(i:number):string{
-  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerVariantName,v=>v.map(n=>materialLabel(furnitureDisplay,n,furnitureCopy.defaultMaterial)).join(' / '),id=>inventoryName(id>2147483647?id-2147483648:inventoryHistoryItems.get(id)??0))||
+  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerVariantName,v=>v.map(n=>materialLabel(furnitureDisplay,n,furnitureCopy.defaultMaterial)).join(' / '),id=>inventoryName(inventoryHistoryItems.get(id)??(id>2147483647?id-2147483648:0)))||
    (tabHistory[i]?.paired?hCopy.paired:'');
  }
  function historyEntryLabel(entry:HistoryRecord,i:number):string{
@@ -547,7 +551,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const item=historyItems.get(entry.itemId??0);
    return item?nameFor(item):'#'+String(entry.itemId);
   }
-  if(entry.scope==='inventory')return inventoryName((entry.itemId??0)>2147483647?entry.itemId!-2147483648:inventoryHistoryItems.get(entry.itemId??0)??0);
+  if(entry.scope==='inventory')return inventoryName(inventoryHistoryItems.get(entry.itemId??0)??((entry.itemId??0)>2147483647?entry.itemId!-2147483648:0));
   if(!entry.guid)return hCopy.title;
   return achievementName(achievementGuid(entry.guid),0);
  }
@@ -690,9 +694,9 @@ import {verifiedFloorplanName} from './floorplan-names';
   const revision=snapshot.revision,before=flowerVariantOf(row.flower);
   busy=true;error='';
   try{
-   const options=await requestFlowerVariants(row.documentId);
+   const [options,creationOptions]=await Promise.all([requestFlowerVariants(row.documentId),requestFlowerCreationVariants(row.documentId)]);
    if(!snapshot||snapshot.revision!==revision)return;
-   flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options};
+   flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions};
    flowerSelection=-1;await tick();
    if(flowerDialogEl&&!flowerDialogEl.open)flowerDialogEl.showModal();
   }catch(e){error=describeError(e)}
@@ -735,6 +739,18 @@ import {verifiedFloorplanName} from './floorplan-names';
   busy=true;error='';
   try{
    update(await changeInventoryFlowerVariant(selected.documentId,selected.before,next));
+   closeFlowerEditor();await persistDraft();
+  }catch(e){error=describeError(e)}
+  finally{busy=false}
+ }
+ async function addInventoryFlowerVariant(){
+  const selected=flowerEdit;
+  if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
+  const next=selected.options[flowerSelection];
+  if(!next||!selected.creationOptions.some(v=>v.every((n,i)=>n===next[i])))return;
+  busy=true;error='';
+  try{
+   update(await createInventoryFlowerVariant(selected.documentId,selected.before,next,1));
    closeFlowerEditor();await persistDraft();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -1593,6 +1609,9 @@ import {verifiedFloorplanName} from './floorplan-names';
     {/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFlowerEditor}>{copy.cancel}</button>
+     {#if edit.creationOptions.length}
+      <button type="button" class="inventory-create-flower" disabled={busy||flowerSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[flowerSelection]?.[i]))} onclick={()=>void addInventoryFlowerVariant()}>{inventoryAddCopy(locale)}</button>
+     {/if}
      <button type="submit" class="primary" disabled={busy||flowerSelection<0}>{copy.apply}</button>
     </div>
    </form>

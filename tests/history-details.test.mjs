@@ -196,3 +196,12 @@ test('unsigned pending inventory handles retain their native history labels',()=
  const op=bytes([u8(6),u32(id),i32(0),i32(6)]);
  assert.deepEqual(decodeHistoryDetails(log([op],1),[meta('inventory',id,null)]),[{scope:'inventory',documentId:id,before:0,after:6}]);
 });
+
+test('native unique flower creation history shows its source, staged handle, appearance and quantity',()=>{
+ const handle=2147483649,source=8,itemId=43114910;
+ const op=bytes([u8(11),u32(handle),u32(source),i32(itemId),...([6,1,0,0,6,9,0,0].map(i32)),i32(7)]);
+ const [detail]=decodeHistoryDetails(log([op],1),[meta('inventory',source,null)]);
+ assert.deepEqual(detail,{scope:'inventory',documentId:source,createdHandle:handle,itemId,variant:[6,9,0,0],quantity:7});
+ assert.match(formatHistoryChange(detail,'en',historyDetailCopy('en'),'','Quantity',()=> 'Blue'),/Blue · Quantity: 7$/);
+ assert.deepEqual(decodeHistoryDetails(log([op],1),[meta('inventory',handle,null)]),[]);
+});
