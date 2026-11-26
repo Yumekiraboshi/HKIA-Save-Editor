@@ -777,7 +777,10 @@ impl Editor {
   if Self::is_emptyable_unique_family(r)&&self.unique_quantity_ids.contains(&r.id){return true}
   let Some(item_id)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
-   crate::inventory_source::ordinary_membership_item(item_id)&&
+   (crate::inventory_source::ordinary_membership_item(item_id)||
+    (crate::inventory_source::existing_currency_item(item_id)&&
+     !self.slot.index.inventory_payload_refs_incomplete&&
+     !self.slot.index.inventory_payload_item_refs.contains(&item_id)))&&
    r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.quantity.is_some_and(|q|q>=0)&&
    r.fields.iter().all(Option::is_some)&&self.inventory_item_rows.get(&item_id)==Some(&1)&&
    !self.slot.index.inventory_item_refs_incomplete&&

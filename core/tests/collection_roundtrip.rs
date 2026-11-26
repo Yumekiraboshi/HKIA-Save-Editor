@@ -2558,3 +2558,36 @@ fn add_custom_palette_variants_from_owned_source_and_cancel_staged(){
  let e=Editor::open(make(invalid)).unwrap();
  assert!(e.inventory_palette_creation_variants(4).is_empty());
 }
+
+#[test]
+fn existing_currency_zero_and_refill_preserve_identity_and_reject_event_or_absent_generation(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let make=|duplicate:bool|{
+  let mut payload=synthetic_payload("3.0.1");payload[2]=8;payload[3]=if duplicate{0x9a}else{0x99};
+  for (id,item,qty) in [(4,348154640,6),(5,1774854033,0),(6,484139114,8),(7,615026760,3)]{
+   payload.extend(doc(1,arr(vec![u(id),u(item),u(0),u(qty),vec![0xc0]])));
+  }
+  if duplicate{payload.extend(doc(1,arr(vec![u(8),u(348154640),u(0),u(1),vec![0xc0]])));}
+  slot_from_payload("3.0.1",payload)
+ };
+ for zipped in [false,true]{
+  let raw=make(false);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert_eq!(original.iter().map(|r|r.quantity_minimum).collect::<Vec<_>>(),vec![0,0,1,1]);
+  assert!(original[1].editable);
+  assert!(!e.inventory_creatable().iter().any(|r|r.item_id==833471261));
+  assert!(e.change_inventory_quantity((1u32<<31)|833471261,0,1).is_err());
+  assert!(e.change_inventory_quantities(&[(4,6,0),(6,8,0)]).is_err());
+  assert!(e.change_inventory_quantity(7,3,0).is_err());assert_eq!(e.inventory(),original);
+  e.change_inventory_quantities(&[(4,6,0),(5,0,12)]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert_eq!(restored.inventory(),e.inventory());assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);
+  assert!(restored.redo_scope(Inventory));let mut reopened=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory(),e.inventory());assert_eq!(reopened.inventory().len(),4);
+  assert!(reopened.inventory_unique_rows().all(|(_,uid,nil,_,_)|uid==Some(0)&&nil==Some(true)));
+  reopened.change_inventory_quantity(4,0,50).unwrap();
+  let refill=Editor::open(reopened.export().unwrap()).unwrap();assert_eq!(refill.inventory()[0].quantity,50);
+ }
+ let mut dup=Editor::open(make(true)).unwrap();
+ assert!(dup.change_inventory_quantity(4,6,0).is_err());assert!(!dup.dirty());
+}
