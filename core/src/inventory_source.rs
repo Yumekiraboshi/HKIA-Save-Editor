@@ -31,6 +31,29 @@ pub(crate) fn ordinary_membership_item(item_id:i32)->bool{
 pub(crate) fn ordinary_membership_ids()->impl Iterator<Item=i32>{
  RULES.iter().filter_map(|&(id,flags)|(flags&8!=0).then_some(id)).chain(GATHERED_IDS.iter().copied()).chain(FOOD_BAIT_IDS.iter().copied())
 }
+/// The 12 Currency-rarity source definitions with native ownership flags
+/// Tradable|DevInboxGiftable, Stackable, no required payload/custom cap.
+/// Authorizes only existing-row zero/refill, not absent-item generation.
+const EXISTING_CURRENCY_IDS:&[i32]=&[
+ 348154640,391038680,460708033,483381991,646065996,833471261,
+ 1205887707,1486918074,1763799360,1774854033,1956968187,2079616823,
+];
+pub(crate) fn existing_currency_item(item_id:i32)->bool{
+ EXISTING_CURRENCY_IDS.binary_search(&item_id).is_ok()&&ordinary_quantity_limit(item_id)==Some(i32::MAX)
+}
+#[cfg(test)]
+mod currency_source_tests{
+ use super::*;
+ #[test]fn existing_currency_allowlist_is_pinned_and_does_not_authorize_absent_creation(){
+  assert_eq!(EXISTING_CURRENCY_IDS.len(),12);
+  assert!(EXISTING_CURRENCY_IDS.windows(2).all(|w|w[0]<w[1]));
+  let bytes:Vec<_>=EXISTING_CURRENCY_IDS.iter().flat_map(|id|id.to_le_bytes()).collect();
+  let hash:String=crate::digest::sha256(&bytes).iter().map(|b|format!("{b:02x}")).collect();
+  assert_eq!(hash,"c8a8cb3f726e288d4662d8c90b53b8f60b14a58ec35bca22fc8c8797aabf4b3a");
+  assert!(EXISTING_CURRENCY_IDS.iter().all(|&id|existing_currency_item(id)&&!ordinary_creation_item(id)));
+  for id in [484139114,2092387705,615026760,709633628,1141761080]{assert!(!existing_currency_item(id));}
+ }
+}
 /// Creation is independent of removing the last saved copy: cosmetic
 /// definitions may be added but persisted cosmetic zero remains gated
 /// until equip/placement references have been verified.
