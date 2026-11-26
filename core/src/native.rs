@@ -139,6 +139,10 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
  /// presets, placed items, mail and wand sources), separate from UID refs.
  pub inventory_payload_item_refs:HashSet<i32>,
  pub inventory_payload_refs_incomplete:bool,
+ /// Additional original furniture ID/GUID references in layouts and legacy models.
+ pub inventory_furniture_item_refs:HashSet<i32>,
+ pub inventory_furniture_guid_refs:HashSet<u32>,
+ pub inventory_furniture_refs_incomplete:bool,
  /// Exact tag-6 copies outside inventory, including unkeyed outfit snapshots.
  pub inventory_palette_copies:Vec<[[u32;4];3]>,
  pub inventory_palette_copies_incomplete:bool,
@@ -362,6 +366,44 @@ impl<'a> Walk<'a>{
        _=>&[],
       };
       if payload_ref_keys.iter().any(|&key|key>=n){self.index.inventory_payload_refs_incomplete=true;}
+      // Native metadata v3.0.1: HomeModel WallpaperId/FloorId/FloorPlanId,
+      // PocketHomeModel FloorPlanId, remote home equivalents, layout defaults,
+      // and the stand's worn item ID. Keep this extra guard separate from
+      // existing source gates for ordinary consumables and unique variants.
+      let furniture_ref_keys:&[usize]=match name{
+       HOME=>&[2,3,12],
+       "Sunblink.UserData.PocketHomeModel"=>&[4],
+       "Sunblink.Game.OwnedRemoteHomeClientModel"=>&[3,4,9],
+       "Sunblink.UserData.HomeLayoutModel"=>&[2,4,5],
+       "Sunblink.Game.ClothingStandTraitModel"=>&[0],
+       _=>&[],
+      };
+      let furniture_guid_key=match name{
+       "Sunblink.UserData.HomeObjectModelDeprecatedV71"|"Sunblink.Game.WandUniqueDataDeprecatedV75"|
+       "Sunblink.UserData.Types.CollectionBoxItemModel"=>Some(0),
+       "Sunblink.UserData.MermaidifierOutfitModel"=>Some(1),
+       _=>None,
+      };
+      // Truncated reference-bearing models may omit nested placement or
+      // associated items; fail closed for this new furniture endpoint only.
+      let furniture_min_fields=match name{
+       HOME=>15,
+       "Sunblink.UserData.HomeObjectModel"=>10,
+       "Sunblink.UserData.HomeObjectModelDeprecatedV71"=>14,
+       "Sunblink.Game.OwnedRemoteCabinHomeObjectClientModel"=>6,
+       "Sunblink.Game.OwnedRemoteCabinHomeObjectClientModelDeprecatedV71"=>10,
+       "Sunblink.Game.OwnedRemoteHomeClientModel"=>10,
+       "Sunblink.UserData.PocketHomeModel"=>5,
+       "Sunblink.UserData.HomeLayoutModel"=>6,
+       "Sunblink.UserData.HomeKitModel"=>2,
+       "Sunblink.UserData.HomeWallpaperModel"|"Sunblink.UserData.HomeFloorModel"|
+       "Sunblink.UserData.UniqueItemModel"|"Sunblink.Game.TableTraitModel"|
+       "Sunblink.Game.WandUniqueData"|"Sunblink.Game.WandUniqueDataDeprecatedV75"=>2,
+       _=>0,
+      };
+      if n<furniture_min_fields||furniture_ref_keys.iter().any(|&key|key>=n)||furniture_guid_key.is_some_and(|key|key>=n){
+       self.index.inventory_furniture_refs_incomplete=true;
+      }
       if short=="OutfitAvatarSnapshotModel"&&n<4{self.index.inventory_palette_copies_incomplete=true;}
       // Historical GUID-based flower outfit/wand payloads cannot safely
       // be joined by integer ID here; fail closed for that domain.
@@ -376,6 +418,14 @@ impl<'a> Walk<'a>{
        if payload_ref_keys.contains(&i){
         let item=i32::try_from(value.int()?).map_err(|_|Error::Schema)?;
         if item>0{self.index.inventory_payload_item_refs.insert(item);}
+       }
+       if furniture_ref_keys.contains(&i){
+        let item=i32::try_from(value.int()?).map_err(|_|Error::Schema)?;
+        if item>0{self.index.inventory_furniture_item_refs.insert(item);}
+       }
+       if furniture_guid_key==Some(i){
+        let words=value.guid()?;
+        if words!=[0;4]{self.index.inventory_furniture_guid_refs.insert(crate::inventory_source::furniture_guid_fingerprint(words));}
        }
        if opaque_flower_ref==Some(i)&&!matches!(&value,Value::Nil){
         let mut c=Cursor::new(&self.c.bytes[at..self.c.pos]);

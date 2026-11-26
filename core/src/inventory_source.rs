@@ -1,5 +1,6 @@
 //! Source-defined v3.0.1 item quantity semantics. No entitlement inference.
 use crate::inventory_source_data::{RULES,CUSTOM_CAPS};
+use crate::inventory_furniture_reference_data::FURNITURE_REFERENCE_KEYS;
 use crate::inventory_gathered_data::{GATHERED_IDS,FOOD_BAIT_IDS};
 /// Maximum from InventoryItemExtensions.MaxCount(IInventoryItemData):
 /// !Stackable -> 1; HasCustomMaxCount -> CustomMaxCount; otherwise Int32.MaxValue.
@@ -54,9 +55,35 @@ mod currency_source_tests{
   for id in [484139114,2092387705,615026760,709633628,1141761080]{assert!(!existing_currency_item(id));}
  }
 }
+/// FNV-1a of the four native little-endian Hash128 words. Only a denial key:
+/// collisions conservatively refuse deletion; they never identify or create items.
+pub(crate) fn furniture_guid_fingerprint(words:[u32;4])->u32{
+ words.into_iter().flat_map(u32::to_le_bytes).fold(2166136261u32,|h,b|(h^u32::from(b)).wrapping_mul(16777619))
+}
+pub(crate) fn ordinary_furniture_guid_fingerprint(item_id:i32)->Option<u32>{
+ FURNITURE_REFERENCE_KEYS.binary_search_by_key(&item_id,|r|r.0).ok().map(|i|FURNITURE_REFERENCE_KEYS[i].1)
+}
+#[cfg(test)]
+mod furniture_reference_tests{
+ use super::*;
+ #[test]fn exact_original_furniture_subset_and_denial_fingerprints(){
+  assert_eq!(FURNITURE_REFERENCE_KEYS.len(),1114);
+  assert!(FURNITURE_REFERENCE_KEYS.windows(2).all(|w|w[0].0<w[1].0));
+  let ids:Vec<_>=FURNITURE_REFERENCE_KEYS.iter().flat_map(|r|r.0.to_le_bytes()).collect();
+  let keys:Vec<_>=FURNITURE_REFERENCE_KEYS.iter().flat_map(|r|r.1.to_le_bytes()).collect();
+  let hex=|b:&[u8]|crate::digest::sha256(b).iter().map(|x|format!("{x:02x}")).collect::<String>();
+  assert_eq!(hex(&ids),"8fbdf8f0b216c3513b9526cf9ce0f201cab30ce97ada1b2b6d4137f4edc4715b");
+  assert_eq!(hex(&keys),"703d7d7a46cf57bad14b9f6212a3a72ee9e25af8a6d8f5ad1f67b95de50e6235");
+  assert_eq!(FURNITURE_REFERENCE_KEYS.iter().map(|r|r.1).collect::<std::collections::HashSet<_>>().len(),1114);
+  assert!(FURNITURE_REFERENCE_KEYS.iter().all(|&(id,_)|ordinary_creation_item(id)&&ordinary_quantity_limit(id)==Some(i32::MAX)));
+  assert_eq!(ordinary_furniture_guid_fingerprint(427689),Some(furniture_guid_fingerprint([0x17fc7530,0x48eebd45,0x68b373b0,0xa7812c9b])));
+  assert!(ordinary_furniture_guid_fingerprint(286009791).is_some());
+  assert_eq!(ordinary_furniture_guid_fingerprint(315822),None);
+ }
+}
 /// Creation is independent of removing the last saved copy: cosmetic
-/// definitions may be added but persisted cosmetic zero remains gated
-/// until equip/placement references have been verified.
+/// definitions may be added; persisted zero is separately gated in the editor
+/// by its source family and original placement/equipment reference index.
 pub(crate) fn ordinary_creation_item(item_id:i32)->bool{
  ordinary_membership_item(item_id)||RULES.binary_search_by_key(&item_id,|row|row.0).ok().is_some_and(|i|RULES[i].1&16!=0)
 }
