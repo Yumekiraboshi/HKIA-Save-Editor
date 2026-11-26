@@ -177,6 +177,7 @@ pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
   let hints:std::collections::HashSet<_>=editor.inventory_flower_edit_hints().collect();
   let furniture_hints:std::collections::HashSet<_>=editor.inventory_furniture_edit_hints().collect();
   let palette_hints:std::collections::HashSet<_>=editor.inventory_palette_edit_hints().collect();
+  let wand_hints:std::collections::HashSet<_>=editor.inventory_wand_edit_hints().collect();
   for (id,uid,nil,data,fields) in editor.inventory_unique_rows(){
    if count>=1_000_000||out.len()>32*1024*1024{return 1}
    count+=1;
@@ -188,7 +189,7 @@ pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
    out.extend(uid.unwrap_or(0).to_le_bytes());out.extend(tag.to_le_bytes());
    out.extend((fields as u32).to_le_bytes());out.extend((words.len() as u32).to_le_bytes());
    for word in words{out.extend(word.to_le_bytes());}
-   let hint=if hints.contains(&id){1u32}else if furniture_hints.contains(&id){2}else if palette_hints.contains(&id){3}else{0};
+   let hint=if hints.contains(&id){1u32}else if furniture_hints.contains(&id){2}else if palette_hints.contains(&id){3}else if wand_hints.contains(&id){4}else{0};
    out.extend(hint.to_le_bytes());
   }
   out[..4].copy_from_slice(&count.to_le_bytes());a.reply=out;0
@@ -903,6 +904,51 @@ pub extern "C" fn hkia_inventory_cafe_create(id:u32,b0:i32,b1:i32,b2:i32,b3:i32,
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
   match a.editor.as_mut().map(|e|e.create_inventory_cafe_variant(id,[b0,b1,b2,b3,b4,b5],[a0,a1,a2,a3,a4,a5],quantity)){
+   Some(Ok(_))=>0,_=>1
+  }
+ })
+}
+
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_variants(id:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_wand_variants(id);
+  if rows.len()>35{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*8);
+  out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for word in row{out.extend(word.to_le_bytes());}}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_variant_change(id:u32,b0:i32,b1:i32,a0:i32,a1:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.change_inventory_wand_variant(id,[b0,b1],[a0,a1])){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_creation_variants(id:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_wand_creation_variants(id);
+  if rows.len()>35{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*8);out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for word in row{out.extend(word.to_le_bytes());}}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_create(id:u32,b0:i32,b1:i32,a0:i32,a1:i32,quantity:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.create_inventory_wand_variant(id,[b0,b1],[a0,a1],quantity)){
    Some(Ok(_))=>0,_=>1
   }
  })

@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPaletteVariants,changeInventoryPaletteVariant,requestPaletteCreationVariants,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafeVariants,changeInventoryCafeVariant,requestCafeCreationVariants,createInventoryCafeVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPaletteVariants,changeInventoryPaletteVariant,requestPaletteCreationVariants,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafeVariants,changeInventoryCafeVariant,requestCafeCreationVariants,createInventoryCafeVariant,requestWandVariants,changeInventoryWandVariant,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,inventoryPatchesEqual,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -41,7 +41,7 @@ import {searchAchievementRows} from './achievement-search';
  import DynamicPaletteSprite from './DynamicPaletteSprite.svelte';
  import DynamicChefSprite from './DynamicChefSprite.svelte';
  import DynamicWandSprite from './DynamicWandSprite.svelte';
- import {inventoryWandAppearance} from './inventory-wand-display';
+ import {inventoryWandAppearance,wandVariantOf,wandVariantLabel,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance} from './inventory-chef-display';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteSelectChannel,paletteChannelEqual,paletteCreationSelection,type PaletteVariant} from './inventory-palette-display';
  import {cafeSlotLabel,cafeVariantLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
@@ -60,7 +60,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  type PendingRemoval=
   | {kind:'collections';id:number;name:string;before:bigint;revision:number;fromDateDialog:boolean}
   | {kind:'achievements';item:AchievementListRow;name:string;revision:number}
-  | {kind:'inventory';requests:InventoryQuantityRequest[];batch:boolean;name:string;revision:number};
+  | {kind:'inventory';requests:InventoryQuantityRequest[];batch:boolean;name:string;targets:{documentId:number;name:string;quantity:number}[];revision:number};
  const BATCH_SIZE=40;
  const EPOCH=621355968000000000n;
  const ICONS=import.meta.env.BASE_URL+'icons/';
@@ -87,6 +87,9 @@ import {verifiedFloorplanName} from './floorplan-names';
  let cafeEdit=$state<{documentId:number;itemId:number;revision:number;before:CafeVariant;options:CafeOption[];creationOptions:CafeOption[]}|null>(null);
  let cafeSelection=$state(-1);
  let cafeSlot=$state(0);
+ let wandDialogEl:HTMLDialogElement|undefined=$state();
+ let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[]}|null>(null);
+ let wandSelection=$state(-1);
  let bobaDialogEl:HTMLDialogElement|undefined=$state();
  let bobaEdit=$state<{documentId:number;itemId:number;revision:number;before:BobaVariant;options:BobaVariant[];creationOptions:BobaVariant[]}|null>(null);
  let bobaSelection=$state(-1);
@@ -452,7 +455,9 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function bobaName(v:BobaVariant):string{return fullBobaLabel(v,locale,snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}
  function cafeName(v:CafeVariant):string{return cafeVariantLabel(v,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}
+ function wandName(v:WandVariant):string{return wandVariantLabel(v,id=>sourceNames[String(id)]??'—')}
  function inventoryVariantSearchName(row:InventoryEntry):string{
+  const w=wandVariantOf(row.unique);if(w)return wandName(w);
   if(row.boba)return bobaName(row.boba.variant);
   if(row.cafe)return cafeName(row.cafe.variant);
   const furniture=furnitureVariantOf(row.unique);
@@ -569,7 +574,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
  function historyEntryChange(i:number):string{
-  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerVariantName,v=>v.map(n=>materialLabel(furnitureDisplay,n,furnitureCopy.defaultMaterial)).join(' / '),id=>inventoryName(inventoryHistoryItems.get(id)??(id>2147483647?id-2147483648:0)),bobaName,cafeName)||
+  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerVariantName,v=>v.map(n=>materialLabel(furnitureDisplay,n,furnitureCopy.defaultMaterial)).join(' / '),id=>inventoryName(inventoryHistoryItems.get(id)??(id>2147483647?id-2147483648:0)),bobaName,cafeName,wandName)||
    (tabHistory[i]?.paired?hCopy.paired:'');
  }
  function historyEntryLabel(entry:HistoryRecord,i:number):string{
@@ -795,6 +800,34 @@ import {verifiedFloorplanName} from './floorplan-names';
   try{update(await changeInventoryCafeVariant(edit.documentId,edit.before,next.variant));closeCafeEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
  }
+ async function openWandEditor(row:InventoryEntry){
+  const before=wandVariantOf(row.unique),appearance=inventoryWandAppearance(row.itemId,row.unique);
+  if(!snapshot||busy||!row.unique?.wandEditable||!before||!appearance)return;
+  const revision=snapshot.revision;busy=true;error='';
+  try{
+   const [options,creationOptions]=await Promise.all([requestWandVariants(row.documentId),requestWandCreationVariants(row.documentId)]);
+   if(!snapshot||snapshot.revision!==revision)return;
+   wandEdit={documentId:row.documentId,itemId:row.itemId,revision,before,appearance,options,creationOptions};wandSelection=-1;variantAddQuantity=1;await tick();
+   if(wandDialogEl&&!wandDialogEl.open)wandDialogEl.showModal();
+  }catch(e){error=describeError(e)}finally{busy=false}
+ }
+ async function addInventoryWandVariant(){
+  const edit=wandEdit,quantity=variantAddQuantity;
+  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
+  const next=edit.options[wandSelection];if(!next||!edit.creationOptions.some(v=>v.every((n,i)=>n===next[i])))return;
+  busy=true;error='';
+  try{update(await createInventoryWandVariant(edit.documentId,edit.before,next,quantity));closeWandEditor();await persistDraft()}
+  catch(e){error=describeError(e)}finally{busy=false}
+ }
+ function closeWandEditor(){if(wandDialogEl?.open)wandDialogEl.close()}
+ async function applyInventoryWandVariant(event:SubmitEvent){
+  event.preventDefault();const edit=wandEdit;
+  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
+  const next=edit.options[wandSelection];if(!next)return;
+  busy=true;error='';
+  try{update(await changeInventoryWandVariant(edit.documentId,edit.before,next));closeWandEditor();await persistDraft()}
+  catch(e){error=describeError(e)}finally{busy=false}
+ }
  async function openBobaEditor(row:InventoryEntry){
   if(!snapshot||busy||!row.boba?.editable)return;
   const before=row.boba.variant,revision=snapshot.revision;busy=true;error='';
@@ -930,8 +963,9 @@ import {verifiedFloorplanName} from './floorplan-names';
   const targets=rows.filter(row=>row.quantity>0);
   if(!targets.length)return;
   const requests:InventoryQuantityRequest[]=targets.map(row=>[row.documentId,row.quantity,0]);
-  const name=batch?targets.length.toLocaleString(locale):inventoryName(targets[0].itemId)+(inventoryVariantSearchName(targets[0])?' · '+inventoryVariantSearchName(targets[0]):'')+' × '+targets[0].quantity.toLocaleString(locale);
-  void requestRemoval({kind:'inventory',requests,batch,name,revision:snapshot.revision},opener);
+  const details=targets.map(row=>({documentId:row.documentId,name:[inventoryName(row.itemId),inventoryVariantSearchName(row)].filter(Boolean).join(' · '),quantity:row.quantity}));
+  const name=batch?targets.length.toLocaleString(locale):details[0].name+' × '+details[0].quantity.toLocaleString(locale);
+  void requestRemoval({kind:'inventory',requests,batch,name,targets:details,revision:snapshot.revision},opener);
  }
  function requestInventoryBatchDelete(opener:HTMLElement){
   if(!inventoryBatchMode||!inventoryBatchCanDelete)return;
@@ -1475,6 +1509,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const canFurniture=!!item.unique?.furnitureEditable||!!item.furnitureCreatable}
      {@const canPalette=!!item.unique?.paletteEditable&&!!item.palette}
      {@const canCafe=!!item.cafe?.editable}
+     {@const canWand=!!item.unique?.wandEditable&&!!wand}
      {@const canBoba=!!item.boba?.editable}
       <article class="inventory-card" class:inventory-empty-stack={!inventoryAddMode&&inventoryRefillable(item)} class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!item.flowerCreatable} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
       {#if inventoryBatchMode&&item.editable}
@@ -1527,10 +1562,10 @@ import {verifiedFloorplanName} from './floorplan-names';
         <button type="submit" class="primary" disabled={busy||inventoryBatchMode} title={iCopy.apply} aria-label={iCopy.apply}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
         </button>
-        {#if canFlower||canFurniture||canPalette||canBoba||canCafe}
+        {#if canFlower||canFurniture||canPalette||canBoba||canCafe||canWand}
          <button class="inventory-unique-edit-button inventory-compact-variant" type="button" disabled={busy||inventoryBatchMode}
-          title={canCafe?inventoryName(item.itemId):canBoba?inventoryName(item.itemId):canPalette?flowerCopy.color:canFurniture?furnitureCopy.title:flowerCopy.title} aria-label={(canCafe?inventoryName(item.itemId):canBoba?inventoryName(item.itemId):canPalette?flowerCopy.color:canFurniture?furnitureCopy.title:flowerCopy.title)+': '+inventoryName(item.itemId)}
-          onclick={()=>void (canCafe?openCafeEditor(item):canBoba?openBobaEditor(item):canPalette?openPaletteEditor(item):canFurniture?openFurnitureEditor(item):openFlowerEditor(item))}>
+          title={canWand||canCafe?inventoryName(item.itemId):canBoba?inventoryName(item.itemId):canPalette?flowerCopy.color:canFurniture?furnitureCopy.title:flowerCopy.title} aria-label={(canWand||canCafe?inventoryName(item.itemId):canBoba?inventoryName(item.itemId):canPalette?flowerCopy.color:canFurniture?furnitureCopy.title:flowerCopy.title)+': '+inventoryName(item.itemId)}
+          onclick={()=>void (canWand?openWandEditor(item):canCafe?openCafeEditor(item):canBoba?openBobaEditor(item):canPalette?openPaletteEditor(item):canFurniture?openFurnitureEditor(item):openFlowerEditor(item))}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg>
          </button>
         {/if}
@@ -1744,6 +1779,41 @@ import {verifiedFloorplanName} from './floorplan-names';
   {/if}
  </dialog>
 
+ <dialog class="date-dialog" bind:this={wandDialogEl} aria-labelledby="wand-editor-title" onclose={()=>{wandEdit=null;wandSelection=-1}} oncancel={e=>{if(busy)e.preventDefault()}}>
+  {#if wandEdit}
+   {@const edit=wandEdit}
+   {@const selected=edit.options[wandSelection]??edit.before}
+   <form class="date-dialog-inner" onsubmit={applyInventoryWandVariant}>
+    <div class="date-dialog-heading">
+     <h2 id="wand-editor-title">{inventoryName(edit.itemId)}</h2>
+     <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeWandEditor}>×</button>
+    </div>
+    <div style="display:flex;justify-content:center"><DynamicWandSprite itemId={edit.itemId} appearance={{...edit.appearance,magicCharacteristicId:selected[0],fleckCharacteristicId:selected[1]}}/></div>
+    <label class="date-dialog-field">
+     <span>{wandName(edit.before)}</span>
+     <select name="wand-variant" aria-label={inventoryName(edit.itemId)} bind:value={wandSelection} disabled={busy}>
+      <option value={-1}>{wandName(edit.before)}</option>
+      {#each edit.options as option,i}<option value={i} data-wand-variant={option.join(':')}>{wandName(option)}</option>{/each}
+     </select>
+    </label>
+    {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
+    {#if edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[wandSelection]?.[i]))}
+     <label class="date-dialog-field">
+      <span>{inventoryAddCopy(locale)} · {iCopy.quantity}</span>
+      <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
+     </label>
+    {/if}
+    <div class="date-dialog-actions">
+     <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeWandEditor}>{copy.cancel}</button>
+     {#if edit.creationOptions.length}
+      <button type="button" class="inventory-create-wand" disabled={busy||!validVariantAddQuantity||wandSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[wandSelection]?.[i]))} onclick={()=>void addInventoryWandVariant()}>{inventoryAddCopy(locale)}</button>
+     {/if}
+     <button type="submit" formnovalidate class="primary" disabled={busy||wandSelection<0}>{copy.apply}</button>
+    </div>
+   </form>
+  {/if}
+ </dialog>
+
  <dialog class="date-dialog" bind:this={bobaDialogEl} aria-labelledby="boba-editor-title" onclose={()=>{bobaEdit=null;bobaSelection=-1}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if bobaEdit}
    {@const edit=bobaEdit}
@@ -1814,7 +1884,7 @@ import {verifiedFloorplanName} from './floorplan-names';
        {/if}
       {/each}
       {#if !paletteChannelEqual(selected,edit.before,paletteSlot)}
-       <button class="inventory-palette-reset" type="button" title={paletteColorHex(edit.before,paletteSlot)} aria-label={paletteColorHex(edit.before,paletteSlot)} disabled={busy} onclick={()=>paletteDraft=paletteSelectChannel(selected,edit.before,paletteSlot)} style:background-color={paletteColorHex(edit.before,paletteSlot)} style="width:32px;height:32px;border:1px dashed currentColor;border-radius:5px">↶</button>
+       <button class="inventory-palette-reset" type="button" title={paletteColorHex(edit.before,paletteSlot)} aria-label={paletteColorHex(edit.before,paletteSlot)} disabled={busy} onclick={()=>paletteDraft=paletteSelectChannel(selected,edit.before,paletteSlot)} style:background-color={paletteColorHex(edit.before,paletteSlot)} style="width:32px;height:32px;border:1px dashed currentColor;border-radius:5px"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>
       {/if}
      </div>
      {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
@@ -1999,6 +2069,13 @@ import {verifiedFloorplanName} from './floorplan-names';
      <button type="button" class="date-dialog-close" aria-label={removalCopy.cancel} disabled={busy} onclick={closeRemovalConfirmation}>×</button>
     </div>
     <strong class="removal-confirm-name">{pendingRemoval.name}</strong>
+    {#if pendingRemoval.kind==='inventory'&&pendingRemoval.batch}
+     <ul class="inventory-removal-targets">
+      {#each pendingRemoval.targets as target (target.documentId)}
+       <li><span>{target.name}</span><span class="inventory-removal-quantity">× {target.quantity.toLocaleString(locale)}</span></li>
+      {/each}
+     </ul>
+    {/if}
     <p class="removal-confirm-warning">{pendingRemoval.kind==='inventory'?inventoryEmptyCopy(locale):pendingRemoval.kind==='collections'?removalCopy.collectionWarning:removalCopy.achievementWarning}</p>
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel removal-cancel" autofocus disabled={busy} onclick={closeRemovalConfirmation}>{removalCopy.cancel}</button>

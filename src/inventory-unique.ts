@@ -1,5 +1,5 @@
 /** Typed view of Rust-owned native unique-data snapshot; no save rules. */
-export type InventoryUniqueInfo={uniqueId:number|null;tag:number;fieldCount:number;words:number[];flowerEditable:boolean;furnitureEditable?:boolean;paletteEditable?:boolean};
+export type InventoryUniqueInfo={uniqueId:number|null;tag:number;fieldCount:number;words:number[];flowerEditable:boolean;furnitureEditable?:boolean;paletteEditable?:boolean;wandEditable?:boolean};
 function validSimpleAppearanceWords(tag:number,words:readonly number[]):boolean{
  if(words.length===0)return true; // opaque, partial or absent
  return tag===3?words.length<=4&&words[0]===words.length-1:
@@ -22,8 +22,8 @@ export function decodeInventoryUnique(bytes:Uint8Array,docIds:ReadonlySet<number
    if(fieldCount!==5||n<6||sourceTag< -1||sourceTag>11||sourceCount!==n-6||sourceCount>12||
      !validSimpleAppearanceWords(sourceTag,words.slice(6)))throw Error('INVENTORY_UNIQUE_INVALID');
   }else if(!validSimpleAppearanceWords(tag,words)||(n!==0&&((tag===3&&fieldCount!==2)||(tag===4&&fieldCount!==5))))throw Error('INVENTORY_UNIQUE_INVALID');
-  const editable=u();if(editable>3||(editable===1&&(tag!==7||n!==4))||(editable===2&&(tag!==8||n!==3))||(editable===3&&(tag!==6||n!==12||fieldCount!==3)))throw Error('INVENTORY_UNIQUE_INVALID');
-  rows.set(id,{uniqueId:present?uid:null,tag,fieldCount,words,flowerEditable:editable===1,...(editable===2?{furnitureEditable:true}:{}),...(editable===3?{paletteEditable:true}:{})});
+  const editable=u();if(editable>4||(editable===4&&(tag!==9||n!==6||fieldCount!==5||words[0]!==0||words[4]!==4294967295||words[5]!==0))||(editable===1&&(tag!==7||n!==4))||(editable===2&&(tag!==8||n!==3))||(editable===3&&(tag!==6||n!==12||fieldCount!==3)))throw Error('INVENTORY_UNIQUE_INVALID');
+  rows.set(id,{uniqueId:present?uid:null,tag,fieldCount,words,flowerEditable:editable===1,...(editable===2?{furnitureEditable:true}:{}),...(editable===3?{paletteEditable:true}:{}),...(editable===4?{wandEditable:true}:{})});
  }
  if(at!==v.byteLength)throw Error('INVENTORY_UNIQUE_INVALID');
  return rows;

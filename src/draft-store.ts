@@ -2,6 +2,7 @@ import {HISTORY_MAX_BYTES,HISTORY_MAX_ROWS,MAX_INVENTORY_DRAFT_PATCHES} from './
 import {flowerVariantOf,isFlowerVariantWire,furnitureVariantOf,isFurnitureVariantWire} from './inventory-unique';
 import {paletteVariantOf,isPaletteVariantWire} from './inventory-palette-display';
 import {isCafeVariantWire} from './inventory-cafe-display';
+import {isWandVariantWire,wandVariantOf} from './inventory-wand-display';
 import {isBobaVariantWire} from './inventory-boba-display';
 import {cloneStoredAchievementPatches,type StoredPatch} from './achievement-draft';
 import type {InventoryEntry,InventoryPatch} from './worker-client';
@@ -40,12 +41,16 @@ export function diffInventory(before:readonly InventoryEntry[],after:readonly In
    }
    const cafeBefore=source.cafe?.variant,cafeAfter=row.cafe?.variant;
    if(cafeBefore&&cafeAfter&&cafeBefore.some((v,i)=>v!==cafeAfter[i]))result.push({documentId:row.documentId,before:cafeBefore,after:cafeAfter,kind:'cafe-variant'});
+   const wandBefore=wandVariantOf(source.unique),wandAfter=wandVariantOf(row.unique);
+   if(wandBefore&&wandAfter&&wandBefore.some((v,i)=>v!==wandAfter[i]))result.push({documentId:row.documentId,kind:'wand-variant',before:wandBefore,after:wandAfter});
    const bobaBefore=source.boba?.variant,bobaAfter=row.boba?.variant;
    if(bobaBefore&&bobaAfter&&bobaBefore.some((v,i)=>v!==bobaAfter[i]))result.push({documentId:row.documentId,before:bobaBefore,after:bobaAfter,kind:'boba-variant'});
    const paletteBefore=paletteVariantOf(source.unique),paletteAfter=paletteVariantOf(row.unique);
    if(paletteBefore&&paletteAfter&&paletteBefore.some((v,i)=>v!==paletteAfter[i]))result.push({documentId:row.documentId,before:paletteBefore,after:paletteAfter,kind:'palette-variant'});
    const furnitureBefore=furnitureVariantOf(source.unique),furnitureAfter=furnitureVariantOf(row.unique);
    if(furnitureBefore&&furnitureAfter&&furnitureBefore.some((v,i)=>v!==furnitureAfter[i]))result.push({documentId:row.documentId,before:furnitureBefore,after:furnitureAfter,kind:'furniture-variant'});
+  }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===9&&row.unique.uniqueId===null&&wandVariantOf(row.unique)){
+   result.push({documentId:row.documentId,itemId:row.itemId,variant:wandVariantOf(row.unique)!,quantity:row.quantity,kind:'wand-create'});
   }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===3&&row.unique.uniqueId===null&&row.cafe){
    result.push({documentId:row.documentId,itemId:row.itemId,variant:row.cafe.variant,quantity:row.quantity,kind:'cafe-create'});
   }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===4&&row.unique.uniqueId===null&&row.boba){
@@ -74,11 +79,15 @@ export function safeInventoryPatches(value:unknown):InventoryPatch[]{
  if(!Array.isArray(value)||value.length>MAX_INVENTORY_DRAFT_PATCHES)throw Error('DRAFT_INVALID');
  const ids=new Set<string>(),result:InventoryPatch[]=[];
  for(const p of value){
-  if(!p||typeof p!=='object'||!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>4294967295||(p.documentId>2147483647&&p.kind!=='flower-create'&&p.kind!=='furniture-create'&&p.kind!=='palette-create'&&p.kind!=='boba-create'&&p.kind!=='cafe-create'&&(p.kind!==undefined||p.before!==0||p.after<=0)))throw Error('DRAFT_INVALID');
+  if(!p||typeof p!=='object'||!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>4294967295||(p.documentId>2147483647&&p.kind!=='flower-create'&&p.kind!=='furniture-create'&&p.kind!=='palette-create'&&p.kind!=='boba-create'&&p.kind!=='cafe-create'&&p.kind!=='wand-create'&&(p.kind!==undefined||p.before!==0||p.after<=0)))throw Error('DRAFT_INVALID');
   const key=p.documentId+':'+(p.kind??'quantity');
   if(ids.has(key))throw Error('DRAFT_INVALID');
   ids.add(key);
-  if(p.kind==='cafe-create'){
+  if(p.kind==='wand-create'){
+   const variant:unknown=p.variant;
+   if(p.documentId<=2147483647||!Number.isInteger(p.itemId)||p.itemId<=0||p.itemId>2147483647||!isWandVariantWire(variant)||!Number.isInteger(p.quantity)||p.quantity<=0||p.quantity>2147483647)throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,itemId:p.itemId,variant:[...variant],quantity:p.quantity,kind:'wand-create'});
+  }else if(p.kind==='cafe-create'){
    const variant:unknown=p.variant;
    if(p.documentId<=2147483647||!Number.isInteger(p.itemId)||p.itemId<=0||p.itemId>2147483647||!isCafeVariantWire(variant)||!Number.isInteger(p.quantity)||p.quantity<=0||p.quantity>2147483647)throw Error('DRAFT_INVALID');
    result.push({documentId:p.documentId,itemId:p.itemId,variant:[...variant],quantity:p.quantity,kind:'cafe-create'});
@@ -105,6 +114,10 @@ export function safeInventoryPatches(value:unknown):InventoryPatch[]{
   }else if(p.kind==='cafe-variant'){
    const before:unknown=p.before,after:unknown=p.after;
    if(!isCafeVariantWire(before)||!isCafeVariantWire(after)||before.every((v,i)=>v===after[i]))throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,kind:p.kind,before:[...before],after:[...after]});
+  }else if(p.kind==='wand-variant'){
+   const before:unknown=p.before,after:unknown=p.after;
+   if(!isWandVariantWire(before)||!isWandVariantWire(after)||before.every((v,i)=>v===after[i]))throw Error('DRAFT_INVALID');
    result.push({documentId:p.documentId,kind:p.kind,before:[...before],after:[...after]});
   }else if(p.kind==='boba-variant'){
    const before:unknown=p.before,after:unknown=p.after;
