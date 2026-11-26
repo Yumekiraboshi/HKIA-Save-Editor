@@ -26,7 +26,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -50,6 +50,9 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const furnitureHomeObject=doc(32,arr([10],hash(10,0,0,0),[0],arr(doc(8,arr(arr(furnitureHome))))));
  const model=arr([0],cafeCreateInventory?[10]:(editableFlower||editableFurniture||paletteCreationInventory||bobaCreateInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
+  ...(paletteRemovalInventory?[doc(10,arr([8],hash(1,2,3,4),arr(),arr(),arr(),hash(1,2,3,4),[0xc3],
+   paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
+   doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
   ...(ordinaryFurnitureInventory?[doc(1,arr([8],u32(427689),[0],u32(5),[0xc0])),doc(1,arr([9],u32(3202680),[0],u32(6),[0xc0])),furnitureHomeObject]:[]),
@@ -202,6 +205,39 @@ async function inventoryDynamicPaletteArtSmoke(){
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM DYNAMIC PALETTE PASS: native unique Color1/2/3, independent quantities, draft recovery and local generation');
  }finally{await context.close();}
+}
+async function inventoryPaletteRemovalSmoke(){
+ for(const state of [true,'copied']){
+  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+  try{
+   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+   await page.goto(origin+base,{waitUntil:'networkidle'});
+   await page.locator('input[type="file"]').setInputFiles({name:'synthetic-palette-removal.save',mimeType:'application/octet-stream',
+    buffer:Buffer.from(createSyntheticSlot({artInventory:true,paletteInventory:true,paletteRemovalInventory:state}))});
+   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+   await chooseTab(page,'inventory');
+   const search=page.locator('.inventory-controls input[type="search"]');
+   await search.fill('1835273963');
+   const cards=page.locator('.inventory-card');
+   await page.waitForFunction(()=>document.querySelectorAll('.inventory-card input[name="quantity"]').length===2);
+   assert.equal(await cards.locator('input[name="quantity"][min="0"]').count(),state===true?2:1);
+   assert.equal(await cards.locator('.inventory-stack-delete:not([disabled])').count(),state===true?2:1);
+   await cards.locator('.inventory-stack-delete:not([disabled])').first().click();
+   const modal=page.locator('.removal-confirm-dialog');await modal.waitFor({state:'visible'});
+   await modal.locator('.removal-confirm-action').click();
+   await page.locator('.inventory-empty-stack').waitFor();
+   assert.equal(await page.locator('.inventory-empty-stack input[name="quantity"]').inputValue(),'0');
+   await page.reload({waitUntil:'networkidle'});
+   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+   await chooseTab(page,'inventory');await search.fill('1835273963');
+   await page.locator('.inventory-empty-stack').waitFor();
+   await page.locator('button[title="Undo"]:not([disabled])').click();
+   await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});
+   assert.equal(await cards.locator('.inventory-stack-delete:not([disabled])').count(),state===true?2:1);
+   assert.deepEqual(errors,[]);
+  }finally{await context.close()}
+ }
+ console.log('CHROMIUM PALETTE REMOVAL PASS: copied avatar palette protected; zero, recovery and undo');
 }
 async function inventoryPaletteCreationSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
@@ -2300,6 +2336,7 @@ async function run(){
  await achievementExportReopenRoundtrip();
  await inventoryDynamicPaletteArtSmoke();
  await inventoryPaletteCreationSmoke();
+ await inventoryPaletteRemovalSmoke();
  await chefRuntimeSmoke(browser,origin,base);
  await inventoryChefArtSmoke();
  await inventoryBobaEditSmoke();
