@@ -92,7 +92,7 @@ export function decodeHistoryDetails(
     result.push({scope:'inventory',documentId,createdHandle,itemId,variant,quantity});
    }else if(kind===8){
     const documentId=u32(),before:FlowerVariant=[i32(),i32(),i32(),i32()],after:FlowerVariant=[i32(),i32(),i32(),i32()];
-    if(documentId<=0||documentId>2147483647||before.every((v,i)=>v===after[i]))return [];
+    if(documentId<=0||before.every((v,i)=>v===after[i]))return [];
     result.push({scope:'inventory',documentId,before,after,flowerVariant:true});
    }else if(kind===9){
      const documentId=u32(),before:FurnitureVariant=[i32(),i32(),i32()],after:FurnitureVariant=[i32(),i32(),i32()];

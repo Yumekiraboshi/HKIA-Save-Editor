@@ -748,6 +748,15 @@ async function inventoryAbsentFlowerCreationSmoke(){
   await search.fill('43114910');
   await card.locator('input[name="quantity"]').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'1');
+  // Customize immediately, without a save/export round trip.
+  await card.locator('.inventory-unique-edit-button').click();
+  await dialog.waitFor();
+  const pattern=dialog.locator('select optgroup').nth(1).locator('option').first();
+  const value=await pattern.getAttribute('value');assert.ok(value!==null);
+  await dialog.locator('select').selectOption(value);
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.waitFor({state:'hidden'});
+  await card.locator('.inventory-unique-edit-button:not([disabled])').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('43114910');
@@ -761,9 +770,9 @@ async function inventoryAbsentFlowerCreationSmoke(){
   assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_flowers_snapshot(),0);
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
   assert.equal(v.getUint32(0,true),1);assert.equal(v.getUint32(4,true),5);
-  assert.deepEqual(Array.from({length:4},(_,i)=>v.getInt32(8+i*4,true)),[6,2,0,0]);
+  assert.deepEqual(Array.from({length:4},(_,i)=>v.getInt32(8+i*4,true)),[6,2,1,16]);
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM UNOWNED FLOWER PASS: native default choices, draft recovery, exported reparse');
+  console.log('CHROMIUM UNOWNED FLOWER PASS: native default choices, staged appearance edit, draft recovery, exported reparse');
  }finally{await context.close();}
 }
 async function inventoryFlowerClothingCreationSmoke(){

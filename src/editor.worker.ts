@@ -281,7 +281,7 @@ async function execute(r:Request):Promise<unknown>{
   }
   case 'flower-variants':{
    const id=r.documentId;
-   if(id===undefined||!Number.isInteger(id)||id<1||id>2147483647)throw Error('INVENTORY_INVALID');
+   if(id===undefined||!Number.isInteger(id)||id<1||id>4294967295)throw Error('INVENTORY_INVALID');
    if(e.hkia_inventory_flower_variants(id)!==0)throw Error('INVENTORY_CONFLICT');
    return decodeFlowerVariants(readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len()));
   }
@@ -299,7 +299,7 @@ async function execute(r:Request):Promise<unknown>{
   }
   case 'flower-variant-change':{
    const id=r.documentId,before=r.beforeVariant,next=r.nextVariant;
-   if(id===undefined||!Number.isInteger(id)||id<1||id>2147483647||!isFlowerVariantWire(before)||!isFlowerVariantWire(next))throw Error('INVENTORY_INVALID');
+   if(id===undefined||!Number.isInteger(id)||id<1||id>4294967295||!isFlowerVariantWire(before)||!isFlowerVariantWire(next))throw Error('INVENTORY_INVALID');
    if(e.hkia_inventory_flower_variant_change(id,...before,...next)!==0)throw Error('INVENTORY_CONFLICT');
    return snapshot(e);
   }

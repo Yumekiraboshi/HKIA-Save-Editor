@@ -317,7 +317,7 @@ impl Editor {
  }
  /// Read-only lookup by document identity, never by Item ID alone.
  pub fn inventory_unique_data(&self,id:u32)->Option<crate::native::InventoryUniqueData>{
-  if let Some(f)=self.pending_flowers.get(&id){return Some(flower_unique(f.variant))}
+  if let Some(f)=self.pending_flowers.get(&id){return Some(flower_unique(self.flower_variant_changes.get(&id).copied().unwrap_or(f.variant)))}
   let row=self.slot.index.inventory.iter().find(|row|row.id==id)?;
   self.effective_unique(row)
  }
@@ -334,7 +334,7 @@ impl Editor {
  pub fn inventory_unique_rows(&self)->impl Iterator<Item=(u32,Option<i32>,Option<bool>,Option<InventoryUniqueData>,usize)>+'_{
   self.slot.index.inventory.iter().filter(|r|r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,r.unique_is_nil,self.effective_unique(r),r.unique_fields.len()))
    .chain(self.pending_inventory_rows().into_iter().map(|r|match self.pending_flowers.get(&r.document_id){
-    Some(f)=>(r.document_id,None,Some(false),Some(flower_unique(f.variant)),4),
+    Some(f)=>(r.document_id,None,Some(false),Some(flower_unique(self.flower_variant_changes.get(&r.document_id).copied().unwrap_or(f.variant))),4),
     None=>(r.document_id,Some(0),Some(true),None,0)
    }))
  }
@@ -432,27 +432,37 @@ impl Editor {
  /// Cheap presentation hint. Actual source/collision check happens on demand,
  /// never an O(inventory squared) scan in the complete inventory snapshot.
  pub fn inventory_flower_edit_hints(&self)->impl Iterator<Item=u32>+'_ {
-  self.slot.index.inventory.iter().filter_map(|r|self.flower_source(r).map(|_|r.id))
+  self.slot.index.inventory.iter().filter_map(|r|self.flower_source(r).map(|_|r.id)).chain(self.pending_flowers.keys().copied())
+ }
+ fn original_flower_variant(&self,id:u32)->Option<FlowerVariant>{
+  self.pending_flowers.get(&id).map(|f|f.variant)
+   .or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.unique_data).and_then(flower_variant))
  }
  fn flower_context(&self,id:u32)->Option<(&'static [i32],FlowerVariant,HashSet<FlowerVariant>)>{
-  let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
-  let patterns=self.flower_source(row)?;
-  let current=flower_variant(self.effective_unique(row)?)?;
-  let original=flower_variant(row.unique_data?)?;
+  let (item,uid,patterns)=if let Some(f)=self.pending_flowers.get(&id){
+   (f.item_id,None,flower_item_patterns(f.item_id,f.variant[0])?)
+  }else{
+   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+   (row.item_id?,row.unique_id,self.flower_source(row)?)
+  };
+  let original=self.original_flower_variant(id)?;
+  let current=self.inventory_unique_data(id).and_then(flower_variant)?;
   let mut reserved=HashSet::new();
   for other in &self.slot.index.inventory{
    if other.id==id{continue}
-   if other.unique_id==row.unique_id{return None}
-   if other.item_id!=row.item_id{continue}
+   if uid.is_some()&&other.unique_id==uid{return None}
+   if other.item_id!=Some(item){continue}
    // A legacy or incomplete payload might be semantically equal.
    let before=flower_variant(other.unique_data?)?;
    let after=flower_variant(self.effective_unique(other)?)?;
-   // Restricted but known saved colors/patterns still participate in equality;
-   // only unresolved indices might alias through native null GUID fallback.
    for v in [before,after]{if !(0..=7).contains(&v[0])||!(1..=30).contains(&v[1])||!(0..=16).contains(&v[2])||!(0..=30).contains(&v[3]){return None}}
    reserved.insert(before);reserved.insert(after);
   }
-  for f in self.pending_flowers.values().filter(|f|Some(f.item_id)==row.item_id){reserved.insert(f.variant);}
+  for (&other,f) in &self.pending_flowers{
+   if other==id||f.item_id!=item{continue}
+   reserved.insert(f.variant);
+   reserved.insert(self.flower_variant_changes.get(&other).copied().unwrap_or(f.variant));
+  }
   if reserved.contains(&current)||reserved.contains(&original){return None}
   Some((patterns,current,reserved))
  }
@@ -535,7 +545,7 @@ impl Editor {
    colors.sort_unstable();colors.dedup();colors
   }else{return Vec::new()};
   let Some(patterns)=flower_item_patterns(item_id,6)else{return Vec::new()};
-  colors.into_iter().map(|color|[6,color,0,0]).filter(|v|valid_flower_variant(patterns,*v)&&!self.pending_flowers.values().any(|f|f.item_id==item_id&&f.variant==*v)).collect()
+  colors.into_iter().map(|color|[6,color,0,0]).filter(|v|valid_flower_variant(patterns,*v)&&!self.pending_flowers.iter().any(|(&id,f)|f.item_id==item_id&&(f.variant==*v||self.flower_variant_changes.get(&id)==Some(v)))).collect()
  }
  pub fn inventory_absent_flower_ids(&self)->Vec<i32>{
   if !self.absent_flower_budget_available(){return Vec::new()}
@@ -570,8 +580,7 @@ impl Editor {
  pub fn change_inventory_flower_variant(&mut self,id:u32,expected:FlowerVariant,next:FlowerVariant)->Result<(),Error>{
   let (patterns,current,reserved)=self.flower_context(id).ok_or(Error::Schema)?;
   if current!=expected||current==next||current[0]!=next[0]||!valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
-  let row=self.slot.index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
-  let original=flower_variant(row.unique_data.ok_or(Error::Schema)?).ok_or(Error::Schema)?;
+  let original=self.original_flower_variant(id).ok_or(Error::Schema)?;
   let revision=self.next_edit_revision()?;
   let before=self.flower_variant_changes.get(&id).copied();
   let after=if original==next{None}else{Some(next)};
@@ -593,7 +602,7 @@ impl Editor {
     Some(crate::native::InventoryUniqueData::Flower{grow_state,base_color,pattern,pattern_color})=>Some((row.id,grow_state,base_color,pattern,pattern_color)),
     _=>None
    }
-  }).chain(self.pending_flowers.iter().map(|(&id,f)|(id,f.variant[0] as u8,f.variant[1],f.variant[2],f.variant[3])))
+  }).chain(self.pending_flowers.iter().map(|(&id,f)|{let v=self.flower_variant_changes.get(&id).copied().unwrap_or(f.variant);(id,v[0] as u8,v[1],v[2],v[3])}))
  }
  /// Read-only palette colors from the existing native index, with original
  /// f32 bits intact. No new save rules or write path.
@@ -1357,12 +1366,12 @@ impl Editor {
     if row.quantity<=0{return Err(Error::Schema)}
     let mut bytes=vec![0x92,1,0x95];mp_u32(id,&mut bytes);mp_u32(row.item_id as u32,&mut bytes);
     let (uid,variant)=if let Some(f)=self.pending_flowers.get(&row.document_id){
-     let patterns=flower_item_patterns(f.item_id,f.variant[0]).ok_or(Error::Schema)?;
-     if row.item_id!=f.item_id||!valid_flower_variant(patterns,f.variant){return Err(Error::Schema)}
+     let (patterns,variant,reserved)=self.flower_context(row.document_id).ok_or(Error::Schema)?;
+     if row.item_id!=f.item_id||!valid_flower_variant(patterns,variant)||reserved.contains(&variant){return Err(Error::Schema)}
      let uid=unique_ids.next().ok_or(Error::Schema)?;mp_u32(uid as u32,&mut bytes);mp_u32(row.quantity as u32,&mut bytes);
-     bytes.extend([0x92,7,0x94,f.variant[0] as u8]);
-     for n in &f.variant[1..]{bytes.push(0xd2);bytes.extend(n.to_be_bytes());}
-     (uid,Some(f.variant))
+     bytes.extend([0x92,7,0x94,variant[0] as u8]);
+     for n in &variant[1..]{bytes.push(0xd2);bytes.extend(n.to_be_bytes());}
+     (uid,Some(variant))
     }else{
      if !self.can_create_inventory_item(row.item_id){return Err(Error::Schema)}
      bytes.push(0);mp_u32(row.quantity as u32,&mut bytes);bytes.push(0xc0);
@@ -1795,7 +1804,7 @@ impl Editor {
     }
     Change::FlowerVariant{document_id,before,after}=>{
      out.push(8);out.extend(document_id.to_le_bytes());
-     let original=self.slot.index.inventory.iter().find(|r|r.id==document_id).and_then(|r|r.unique_data).and_then(flower_variant).ok_or(Error::Schema)?;
+     let original=self.original_flower_variant(document_id).or_else(||self.undo.iter().chain(&self.redo).find_map(|c|match c{Change::FlowerCreated{document_id:id,flower,..} if *id==document_id=>Some(flower.variant),_=>None})).ok_or(Error::Schema)?;
      for word in before.unwrap_or(original){out.extend(word.to_le_bytes());}
      for word in after.unwrap_or(original){out.extend(word.to_le_bytes());}
     }
