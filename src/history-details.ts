@@ -1,5 +1,6 @@
 import type {FlowerVariant,FurnitureVariant} from './inventory-unique';
 import {CUSTOM_PALETTE_ITEM_ID,paletteColorHex,type PaletteVariant} from './inventory-palette-display';
+import type {CafeVariant} from './inventory-cafe-display';
 import type {WandVariant} from './inventory-wand-display';
 import {bobaVariantLabel,type BobaVariant} from './inventory-boba-display';
 import type {AchievementValue,HistoryRecord} from './worker-client';
@@ -8,16 +9,19 @@ import {toDateTimeValue} from './collection-date';
 export type InventoryBatchDetail={documentId:number;before:number;after:number};
 export type HistoryDetail =
  | {scope:'inventory';documentId:number;batch:InventoryBatchDetail[]}
- | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FlowerVariant;quantity:number;furnitureCreated?:false;paletteCreated?:false}
- | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FurnitureVariant;quantity:number;furnitureCreated:true;paletteCreated?:false}
- | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:PaletteVariant;quantity:number;furnitureCreated?:false;paletteCreated:true}
+ | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FlowerVariant;quantity:number;furnitureCreated?:false;paletteCreated?:false;bobaCreated?:false;cafeCreated?:false}
+ | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FurnitureVariant;quantity:number;furnitureCreated:true;paletteCreated?:false;bobaCreated?:false;cafeCreated?:false}
+ | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:PaletteVariant;quantity:number;furnitureCreated?:false;paletteCreated:true;bobaCreated?:false;cafeCreated?:false}
+ | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:BobaVariant;quantity:number;furnitureCreated?:false;paletteCreated?:false;bobaCreated:true;cafeCreated?:false}
+ | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:CafeVariant;quantity:number;furnitureCreated?:false;paletteCreated?:false;bobaCreated?:false;cafeCreated:true}
  | {scope:'collections';itemId:number;before:bigint|null;after:bigint|null}
- | {scope:'inventory';documentId:number;before:number;after:number;flowerVariant?:false;furnitureVariant?:false;paletteVariant?:false;bobaVariant?:false;wandVariant?:false}
- | {scope:'inventory';documentId:number;before:FlowerVariant;after:FlowerVariant;flowerVariant:true;furnitureVariant?:false;paletteVariant?:false;bobaVariant?:false;wandVariant?:false}
- | {scope:'inventory';documentId:number;before:FurnitureVariant;after:FurnitureVariant;flowerVariant?:false;furnitureVariant:true;paletteVariant?:false;bobaVariant?:false;wandVariant?:false}
- | {scope:'inventory';documentId:number;before:PaletteVariant;after:PaletteVariant;flowerVariant?:false;furnitureVariant?:false;paletteVariant:true;bobaVariant?:false;wandVariant?:false}
- | {scope:'inventory';documentId:number;before:BobaVariant;after:BobaVariant;flowerVariant?:false;furnitureVariant?:false;paletteVariant?:false;bobaVariant:true;wandVariant?:false}
- | {scope:'inventory';documentId:number;before:WandVariant;after:WandVariant;flowerVariant?:false;furnitureVariant?:false;paletteVariant?:false;bobaVariant?:false;wandVariant:true}
+ | {scope:'inventory';documentId:number;before:number;after:number;flowerVariant?:false;furnitureVariant?:false;paletteVariant?:false;bobaVariant?:false;cafeVariant?:false;wandVariant?:false}
+ | {scope:'inventory';documentId:number;before:FlowerVariant;after:FlowerVariant;flowerVariant:true;furnitureVariant?:false;paletteVariant?:false;bobaVariant?:false;cafeVariant?:false;wandVariant?:false}
+ | {scope:'inventory';documentId:number;before:FurnitureVariant;after:FurnitureVariant;flowerVariant?:false;furnitureVariant:true;paletteVariant?:false;bobaVariant?:false;cafeVariant?:false;wandVariant?:false}
+ | {scope:'inventory';documentId:number;before:PaletteVariant;after:PaletteVariant;flowerVariant?:false;furnitureVariant?:false;paletteVariant:true;bobaVariant?:false;cafeVariant?:false;wandVariant?:false}
+ | {scope:'inventory';documentId:number;before:BobaVariant;after:BobaVariant;flowerVariant?:false;furnitureVariant?:false;paletteVariant?:false;bobaVariant:true;cafeVariant?:false;wandVariant?:false}
+ | {scope:'inventory';documentId:number;before:CafeVariant;after:CafeVariant;flowerVariant?:false;furnitureVariant?:false;paletteVariant?:false;bobaVariant?:false;cafeVariant:true;wandVariant?:false}
+ | {scope:'inventory';documentId:number;before:WandVariant;after:WandVariant;flowerVariant?:false;furnitureVariant?:false;paletteVariant?:false;bobaVariant?:false;cafeVariant?:false;wandVariant:true}
  | {scope:'achievements';guid:[number,number,number,number];before:AchievementValue|null;after:AchievementValue;parentGuid:[number,number,number,number]|null;parentBefore:AchievementValue|null;parentAfter:AchievementValue|null};
 
 const MAGIC='HKIAHS01';
@@ -96,7 +100,7 @@ export function decodeHistoryDetails(
     const before:FlowerVariant=[i32(),i32(),i32(),i32()],variant:FlowerVariant=[i32(),i32(),i32(),i32()];
     const quantity=i32();
     const candidate=documentId===2147483648+itemId&&before.every(n=>n===0);
-    const stagedSource=result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&!r.furnitureCreated&&!r.paletteCreated&&r.createdHandle===documentId&&r.itemId===itemId);
+    const stagedSource=result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&!r.furnitureCreated&&!r.paletteCreated&&!r.bobaCreated&&!r.cafeCreated&&r.createdHandle===documentId&&r.itemId===itemId);
     if(createdHandle<=2147483647||createdHandle===documentId||documentId<=0||itemId<=0||quantity<=0||
      (documentId>2147483647&&!candidate&&!stagedSource)||
      (!candidate&&(before[0]!==variant[0]||before.every((v,i)=>v===variant[i]))))return [];
@@ -115,13 +119,27 @@ export function decodeHistoryDetails(
     const stagedSource=result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&r.paletteCreated&&r.createdHandle===documentId);
     if(createdHandle<=2147483647||createdHandle===documentId||documentId<=0||quantity<=0||before.every((v,i)=>v===variant[i])||(documentId>2147483647&&!stagedSource))return [];
     result.push({scope:'inventory',documentId,createdHandle,itemId:CUSTOM_PALETTE_ITEM_ID,variant,quantity,paletteCreated:true});
+   }else if(kind===17){
+    const createdHandle=u32(),documentId=u32(),itemId=i32(),before=Array.from({length:6},()=>i32()) as CafeVariant,variant=Array.from({length:6},()=>i32()) as CafeVariant,quantity=i32();
+    const stagedSource=result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&r.cafeCreated&&r.createdHandle===documentId&&r.itemId===itemId);
+    if(createdHandle<=2147483647||createdHandle===documentId||documentId<=0||itemId<=0||quantity<=0||before.every((v,i)=>v===variant[i])||(documentId>2147483647&&!stagedSource))return [];
+    result.push({scope:'inventory',documentId,createdHandle,itemId,variant,quantity,cafeCreated:true});
+   }else if(kind===16){
+    const documentId=u32(),before=Array.from({length:6},()=>i32()) as CafeVariant,after=Array.from({length:6},()=>i32()) as CafeVariant;
+    if(documentId<=0||(documentId>2147483647&&!result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&r.cafeCreated&&r.createdHandle===documentId))||before.every((v,i)=>v===after[i]))return [];
+    result.push({scope:'inventory',documentId,before,after,cafeVariant:true});
+   }else if(kind===18){
+    const createdHandle=u32(),documentId=u32(),before=Array.from({length:5},()=>i32()) as BobaVariant,variant=Array.from({length:5},()=>i32()) as BobaVariant,quantity=i32();
+    const stagedSource=result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&r.bobaCreated&&r.createdHandle===documentId);
+    if(createdHandle<=2147483647||createdHandle===documentId||documentId<=0||quantity<=0||before.every((v,i)=>v===variant[i])||(documentId>2147483647&&!stagedSource))return [];
+    result.push({scope:'inventory',documentId,createdHandle,itemId:1798633565,variant,quantity,bobaCreated:true});
    }else if(kind===19){
     const documentId=u32(),before=[i32(),i32()] as WandVariant,after=[i32(),i32()] as WandVariant;
     if(documentId<=0||documentId>2147483647||before.every((v,i)=>v===after[i]))return [];
     result.push({scope:'inventory',documentId,before,after,wandVariant:true});
    }else if(kind===15){
     const documentId=u32(),before=Array.from({length:5},()=>i32()) as BobaVariant,after=Array.from({length:5},()=>i32()) as BobaVariant;
-    if(documentId<=0||documentId>2147483647||before.every((v,i)=>v===after[i]))return [];
+    if(documentId<=0||(documentId>2147483647&&!result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&r.bobaCreated&&r.createdHandle===documentId))||before.every((v,i)=>v===after[i]))return [];
     result.push({scope:'inventory',documentId,before,after,bobaVariant:true});
    }else if(kind===13){
     const documentId=u32(),before=Array.from({length:12},()=>u32()),after=Array.from({length:12},()=>u32());
@@ -198,13 +216,14 @@ function achievementChanges(
 /** Details derive only from the native Rust history journal, including
  * category side effects within a single atomic achievement transaction. */
 export function formatHistoryChange(
- detail:HistoryDetail|undefined,locale:string,copy:HistoryChangeCopy,pairedLabel='',quantityLabel='Quantity',flowerVariantName?:(value:FlowerVariant)=>string,furnitureVariantName?:(value:FurnitureVariant)=>string,inventoryBatchName?:(documentId:number)=>string,wandVariantName?:(value:WandVariant)=>string
+ detail:HistoryDetail|undefined,locale:string,copy:HistoryChangeCopy,pairedLabel='',quantityLabel='Quantity',flowerVariantName?:(value:FlowerVariant)=>string,furnitureVariantName?:(value:FurnitureVariant)=>string,inventoryBatchName?:(documentId:number)=>string,bobaVariantName?:(value:BobaVariant)=>string,cafeVariantName?:(value:CafeVariant)=>string,wandVariantName?:(value:WandVariant)=>string
 ):string{
  if(!detail)return '';
  if(detail.scope==='inventory'&&'batch' in detail)return detail.batch.map(row=>(inventoryBatchName?.(row.documentId)??String(row.documentId))+': '+row.before+' → '+row.after).join(' · ');
- if(detail.scope==='inventory'&&'createdHandle' in detail)return copy.added+' · '+(detail.paletteCreated?[0,1,2].map(i=>paletteColorHex(detail.variant,i)).join(' / '):detail.furnitureCreated?(furnitureVariantName?.(detail.variant)??String(detail.variant)):(flowerVariantName?.(detail.variant)??String(detail.variant)))+' · '+quantityLabel+': '+detail.quantity;
+ if(detail.scope==='inventory'&&'createdHandle' in detail)return copy.added+' · '+(detail.cafeCreated?(cafeVariantName?.(detail.variant)??'—'):detail.bobaCreated?(bobaVariantName?.(detail.variant)??bobaVariantLabel(detail.variant,locale)):detail.paletteCreated?[0,1,2].map(i=>paletteColorHex(detail.variant,i)).join(' / '):detail.furnitureCreated?(furnitureVariantName?.(detail.variant)??String(detail.variant)):(flowerVariantName?.(detail.variant)??String(detail.variant)))+' · '+quantityLabel+': '+detail.quantity;
+ if(detail.scope==='inventory'&&detail.cafeVariant)return (cafeVariantName?.(detail.before)??'—')+' → '+(cafeVariantName?.(detail.after)??'—');
  if(detail.scope==='inventory'&&detail.wandVariant)return (wandVariantName?.(detail.before)??'—')+' → '+(wandVariantName?.(detail.after)??'—');
- if(detail.scope==='inventory'&&detail.bobaVariant)return bobaVariantLabel(detail.before,locale)+' → '+bobaVariantLabel(detail.after,locale);
+ if(detail.scope==='inventory'&&detail.bobaVariant)return (bobaVariantName?.(detail.before)??bobaVariantLabel(detail.before,locale))+' → '+(bobaVariantName?.(detail.after)??bobaVariantLabel(detail.after,locale));
  if(detail.scope==='inventory'&&detail.paletteVariant)return [0,1,2].filter(i=>detail.before.slice(i*4,i*4+4).some((v,j)=>v!==detail.after[i*4+j])).map(i=>(i+1)+': '+paletteColorHex(detail.before,i)+' → '+paletteColorHex(detail.after,i)).join(' · ');
  if(detail.scope==='inventory')return detail.furnitureVariant?(furnitureVariantName?.(detail.before)??String(detail.before))+' → '+(furnitureVariantName?.(detail.after)??String(detail.after)):detail.flowerVariant?(flowerVariantName?.(detail.before)??String(detail.before))+' → '+(flowerVariantName?.(detail.after)??String(detail.after)):quantityLabel+': '+detail.before+' → '+detail.after;
  if(detail.scope==='collections'){

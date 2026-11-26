@@ -73,7 +73,7 @@ export function defaultInventoryGroup(counts:ReadonlyMap<InventoryGroupKey,numbe
 /** Shared presentation predicate for browsing and per-category search counts. */
 function matchesInventorySearch(row:InventoryEntry,q:string,editableOnly:boolean,
  localizedNames:Readonly<Record<string,string>>,sourceItems:ReadonlyMap<number,CollectionItem>,variantName?:(row:InventoryEntry)=>string):boolean{
- if(editableOnly&&!row.editable&&!row.unique?.flowerEditable&&!row.unique?.furnitureEditable&&!row.unique?.wandEditable&&!row.flowerCreatable)return false;
+ if(editableOnly&&!row.editable&&!row.unique?.flowerEditable&&!row.unique?.furnitureEditable&&!row.unique?.paletteEditable&&!row.unique?.wandEditable&&!row.cafe?.editable&&!row.boba?.editable&&!row.flowerCreatable&&!row.furnitureCreatable)return false;
  if(!q)return true;
  const source=sourceItems.get(row.itemId);
  const fields=[String(row.itemId),localizedNames[String(row.itemId)]??'',source?.[5]??'',source?.[6]??'',variantName?.(row)??''].map(v=>v.toLocaleLowerCase());

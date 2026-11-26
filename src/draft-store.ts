@@ -1,5 +1,6 @@
 import {flowerVariantOf,isFlowerVariantWire,furnitureVariantOf,isFurnitureVariantWire} from './inventory-unique';
 import {paletteVariantOf,isPaletteVariantWire} from './inventory-palette-display';
+import {isCafeVariantWire} from './inventory-cafe-display';
 import {isWandVariantWire,wandVariantOf} from './inventory-wand-display';
 import {isBobaVariantWire} from './inventory-boba-display';
 import {cloneStoredAchievementPatches,type StoredPatch} from './achievement-draft';
@@ -37,6 +38,8 @@ export function diffInventory(before:readonly InventoryEntry[],after:readonly In
     const before=flowerVariantOf(source.flower),after=flowerVariantOf(row.flower);
     if(before.some((x,i)=>x!==after[i]))result.push({documentId:row.documentId,before,after,kind:'flower-variant'});
    }
+   const cafeBefore=source.cafe?.variant,cafeAfter=row.cafe?.variant;
+   if(cafeBefore&&cafeAfter&&cafeBefore.some((v,i)=>v!==cafeAfter[i]))result.push({documentId:row.documentId,before:cafeBefore,after:cafeAfter,kind:'cafe-variant'});
    const wandBefore=wandVariantOf(source.unique),wandAfter=wandVariantOf(row.unique);
    if(wandBefore&&wandAfter&&wandBefore.some((v,i)=>v!==wandAfter[i]))result.push({documentId:row.documentId,kind:'wand-variant',before:wandBefore,after:wandAfter});
    const bobaBefore=source.boba?.variant,bobaAfter=row.boba?.variant;
@@ -45,6 +48,10 @@ export function diffInventory(before:readonly InventoryEntry[],after:readonly In
    if(paletteBefore&&paletteAfter&&paletteBefore.some((v,i)=>v!==paletteAfter[i]))result.push({documentId:row.documentId,before:paletteBefore,after:paletteAfter,kind:'palette-variant'});
    const furnitureBefore=furnitureVariantOf(source.unique),furnitureAfter=furnitureVariantOf(row.unique);
    if(furnitureBefore&&furnitureAfter&&furnitureBefore.some((v,i)=>v!==furnitureAfter[i]))result.push({documentId:row.documentId,before:furnitureBefore,after:furnitureAfter,kind:'furniture-variant'});
+  }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===3&&row.unique.uniqueId===null&&row.cafe){
+   result.push({documentId:row.documentId,itemId:row.itemId,variant:row.cafe.variant,quantity:row.quantity,kind:'cafe-create'});
+  }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===4&&row.unique.uniqueId===null&&row.boba){
+   result.push({documentId:row.documentId,itemId:row.itemId,variant:row.boba.variant,quantity:row.quantity,kind:'boba-create'});
   }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===6&&row.unique.uniqueId===null&&paletteVariantOf(row.unique)){
    result.push({documentId:row.documentId,itemId:row.itemId,variant:paletteVariantOf(row.unique)!,quantity:row.quantity,kind:'palette-create'});
   }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===7&&row.unique.uniqueId===null&&row.flower){
@@ -57,15 +64,31 @@ export function diffInventory(before:readonly InventoryEntry[],after:readonly In
  }
  return result.sort((a,b)=>a.documentId-b.documentId);
 }
+/** Compare canonical validated net edits, not incidental property order.
+ * A unique addition must replay the native checkpoint; a false mismatch
+ * cannot safely fall back to the net-only restore path. */
+export function inventoryPatchesEqual(a:readonly InventoryPatch[],b:readonly InventoryPatch[]):boolean{
+ const canonical=(rows:readonly InventoryPatch[])=>safeInventoryPatches(rows).sort((x,y)=>x.documentId-y.documentId||
+  (x.kind??'').localeCompare(y.kind??''));
+ return JSON.stringify(canonical(a))===JSON.stringify(canonical(b));
+}
 export function safeInventoryPatches(value:unknown):InventoryPatch[]{
  if(!Array.isArray(value)||value.length>20000)throw Error('DRAFT_INVALID');
  const ids=new Set<string>(),result:InventoryPatch[]=[];
  for(const p of value){
-  if(!p||typeof p!=='object'||!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>4294967295||(p.documentId>2147483647&&p.kind!=='flower-create'&&p.kind!=='furniture-create'&&p.kind!=='palette-create'&&(p.kind!==undefined||p.before!==0||p.after<=0)))throw Error('DRAFT_INVALID');
+  if(!p||typeof p!=='object'||!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>4294967295||(p.documentId>2147483647&&p.kind!=='flower-create'&&p.kind!=='furniture-create'&&p.kind!=='palette-create'&&p.kind!=='boba-create'&&p.kind!=='cafe-create'&&(p.kind!==undefined||p.before!==0||p.after<=0)))throw Error('DRAFT_INVALID');
   const key=p.documentId+':'+(p.kind??'quantity');
   if(ids.has(key))throw Error('DRAFT_INVALID');
   ids.add(key);
-  if(p.kind==='palette-create'){
+  if(p.kind==='cafe-create'){
+   const variant:unknown=p.variant;
+   if(p.documentId<=2147483647||!Number.isInteger(p.itemId)||p.itemId<=0||p.itemId>2147483647||!isCafeVariantWire(variant)||!Number.isInteger(p.quantity)||p.quantity<=0||p.quantity>2147483647)throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,itemId:p.itemId,variant:[...variant],quantity:p.quantity,kind:'cafe-create'});
+  }else if(p.kind==='boba-create'){
+   const variant:unknown=p.variant;
+   if(p.documentId<=2147483647||!Number.isInteger(p.itemId)||p.itemId<=0||p.itemId>2147483647||!isBobaVariantWire(variant)||!Number.isInteger(p.quantity)||p.quantity<=0||p.quantity>2147483647)throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,itemId:p.itemId,variant:[...variant],quantity:p.quantity,kind:'boba-create'});
+  }else if(p.kind==='palette-create'){
    const variant:unknown=p.variant;
    if(p.documentId<=2147483647||!Number.isInteger(p.itemId)||p.itemId<=0||p.itemId>2147483647||!isPaletteVariantWire(variant)||!Number.isInteger(p.quantity)||p.quantity<=0||p.quantity>2147483647)throw Error('DRAFT_INVALID');
    result.push({documentId:p.documentId,itemId:p.itemId,variant:[...variant],quantity:p.quantity,kind:'palette-create'});
@@ -80,6 +103,10 @@ export function safeInventoryPatches(value:unknown):InventoryPatch[]{
   }else if(p.kind==='flower-variant'){
    const before:unknown=p.before,after:unknown=p.after;
    if(!isFlowerVariantWire(before)||!isFlowerVariantWire(after)||before.every((v,i)=>v===after[i]))throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,kind:p.kind,before:[...before],after:[...after]});
+  }else if(p.kind==='cafe-variant'){
+   const before:unknown=p.before,after:unknown=p.after;
+   if(!isCafeVariantWire(before)||!isCafeVariantWire(after)||before.every((v,i)=>v===after[i]))throw Error('DRAFT_INVALID');
    result.push({documentId:p.documentId,kind:p.kind,before:[...before],after:[...after]});
   }else if(p.kind==='wand-variant'){
    const before:unknown=p.before,after:unknown=p.after;

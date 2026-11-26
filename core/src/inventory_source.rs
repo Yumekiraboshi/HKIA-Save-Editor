@@ -31,6 +31,29 @@ pub(crate) fn ordinary_membership_item(item_id:i32)->bool{
 pub(crate) fn ordinary_membership_ids()->impl Iterator<Item=i32>{
  RULES.iter().filter_map(|&(id,flags)|(flags&8!=0).then_some(id)).chain(GATHERED_IDS.iter().copied()).chain(FOOD_BAIT_IDS.iter().copied())
 }
+/// The 12 Currency-rarity source definitions with native ownership flags
+/// Tradable|DevInboxGiftable, Stackable, no required payload/custom cap.
+/// Authorizes only existing-row zero/refill, not absent-item generation.
+const EXISTING_CURRENCY_IDS:&[i32]=&[
+ 348154640,391038680,460708033,483381991,646065996,833471261,
+ 1205887707,1486918074,1763799360,1774854033,1956968187,2079616823,
+];
+pub(crate) fn existing_currency_item(item_id:i32)->bool{
+ EXISTING_CURRENCY_IDS.binary_search(&item_id).is_ok()&&ordinary_quantity_limit(item_id)==Some(i32::MAX)
+}
+#[cfg(test)]
+mod currency_source_tests{
+ use super::*;
+ #[test]fn existing_currency_allowlist_is_pinned_and_does_not_authorize_absent_creation(){
+  assert_eq!(EXISTING_CURRENCY_IDS.len(),12);
+  assert!(EXISTING_CURRENCY_IDS.windows(2).all(|w|w[0]<w[1]));
+  let bytes:Vec<_>=EXISTING_CURRENCY_IDS.iter().flat_map(|id|id.to_le_bytes()).collect();
+  let hash:String=crate::digest::sha256(&bytes).iter().map(|b|format!("{b:02x}")).collect();
+  assert_eq!(hash,"c8a8cb3f726e288d4662d8c90b53b8f60b14a58ec35bca22fc8c8797aabf4b3a");
+  assert!(EXISTING_CURRENCY_IDS.iter().all(|&id|existing_currency_item(id)&&!ordinary_creation_item(id)));
+  for id in [484139114,2092387705,615026760,709633628,1141761080]{assert!(!existing_currency_item(id));}
+ }
+}
 /// Creation is independent of removing the last saved copy: cosmetic
 /// definitions may be added but persisted cosmetic zero remains gated
 /// until equip/placement references have been verified.
@@ -101,6 +124,98 @@ mod tests{
  }
 }
 
+/// Source witness (ingredient Item ID, flavor characteristic, color characteristic).
+/// Direct chef recipes only, exact original one-flavor/one-color ingredients.
+/// Excludes tag_imagination; the existing ordinary-membership gate further
+/// excludes unverified/restricted acquisition witnesses from NEW choices.
+pub(crate) const CAFE_INGREDIENT_WITNESSES:&[(i32,i32,i32)]=&[
+ (26301889,99,9),
+ (45140131,58,30),
+ (51054568,134,47),
+ (57154195,56,8),
+ (89022446,55,25),
+ (128965606,135,21),
+ (162437313,100,10),
+ (263034389,100,17),
+ (319731107,99,8),
+ (347244458,55,8),
+ (350967404,64,47),
+ (384578569,101,18),
+ (449040119,55,9),
+ (479562317,43,32),
+ (497197619,135,9),
+ (518638500,61,9),
+ (590790304,87,34),
+ (590978630,53,6),
+ (611226733,138,141),
+ (619719355,65,25),
+ (627013240,42,21),
+ (688186817,99,10),
+ (818900842,100,24),
+ (1002666914,54,25),
+ (1008037320,134,140),
+ (1090244985,52,9),
+ (1104825533,59,16),
+ (1141761080,60,13),
+ (1240730051,62,6),
+ (1254065963,50,46),
+ (1300515229,139,23),
+ (1342146402,136,7),
+ (1344087400,39,46),
+ (1350635557,63,25),
+ (1445971409,55,26),
+ (1528707951,57,33),
+ (1552697168,134,6),
+ (1622861092,48,9),
+ (1643431747,137,10),
+ (1663245734,101,6),
+ (1743974962,65,25),
+ (1875946375,41,21),
+ (1877756618,44,6),
+ (1954718636,100,16),
+ (1992279429,135,23),
+ (2044981506,135,142),
+ (2077967286,49,46),
+ (2094826872,41,33),
+];
+pub(crate) fn cafe_slot_count(item:i32)->Option<usize>{
+ match item{203331651|905853141|1061947263|1338995084=>Some(3),
+  406277059|973085470|1053426049|1237708874|1932639321=>Some(1),_=>None}
+}
+pub(crate) fn cafe_pair_allowed(item:i32,flavor:i32,color:i32)->bool{
+ cafe_slot_count(item).is_some()&&is_chef_color(color)&&
+ (!matches!(item,203331651|406277059|973085470|1237708874|1338995084)||!matches!(flavor,134..=136))&&
+ (item!=1932639321||!matches!(flavor,137..=139))&&
+ CAFE_INGREDIENT_WITNESSES.iter().any(|&(_,f,c)|f==flavor&&c==color)
+}
+pub(crate) fn cafe_ingredient_choices(item:i32)->impl Iterator<Item=(i32,i32,i32)>{
+ CAFE_INGREDIENT_WITNESSES.iter().copied().filter(move |&(ingredient,flavor,color)|
+  ordinary_membership_item(ingredient)&&cafe_pair_allowed(item,flavor,color))
+}
+#[cfg(test)]
+mod cafe_source_tests{
+ use super::*;
+ #[test]fn direct_recipe_source_pairs(){
+  assert_eq!(CAFE_INGREDIENT_WITNESSES.len(),48);
+  assert_eq!(cafe_slot_count(203331651),Some(3));assert_eq!(cafe_slot_count(1237708874),Some(1));
+  assert_eq!(cafe_slot_count(1338995084),Some(3));assert_eq!(cafe_slot_count(1932639321),Some(1));
+  assert!(!cafe_pair_allowed(1338995084,134,47));assert!(!cafe_pair_allowed(1932639321,137,10));
+  assert!(NIGIRI_SIDES.contains(&(1643431747,137,10)));
+  assert!(cafe_pair_allowed(203331651,44,6));assert!(!cafe_pair_allowed(203331651,44,9));
+  assert!(!cafe_pair_allowed(203331651,134,47));assert!(cafe_pair_allowed(1061947263,134,47));
+  assert!(cafe_ingredient_choices(1237708874).any(|v|v==(1877756618,44,6)));
+  assert!(!cafe_ingredient_choices(1237708874).any(|v|v.0==1141761080));
+ }
+}
+
+/// Exact optional nigiri side slot, from its explicit AnyItemCondition.
+pub(crate) const NIGIRI_ID:i32=1932639321;
+pub(crate) const DANGO_ID:i32=1338995084;
+pub(crate) const NIGIRI_SIDES:&[(i32,i32,i32)]=&[(1643431747,137,10),(611226733,138,141),(1300515229,139,23)];
+pub(crate) fn cafe_count_allowed(item:i32,count:usize)->bool{
+ cafe_slot_count(item)==Some(count)||(item==NIGIRI_ID&&count==2)
+}
+
 /// Exact (color, flavor, milk) triples of the 23 native Boba
 /// definition assets in the pinned Switch v3.0.1 definitions CAB.
 /// Some authoring names disagree with their flags; use serialized IDs.
@@ -141,5 +256,23 @@ pub(crate) fn magic_wand_choices(v:[i32;2])->bool{
   assert_eq!(WAND_MAGIC.len()*WAND_FLECK.len(),36);
   assert!(WAND_MAGIC.iter().chain(WAND_FLECK).all(|&(_,id)|ordinary_quantity_limit(id)==Some(i32::MAX)));
   assert_eq!(magic_wand_style(1020402601),None);
+ }
+}
+
+/// Display examples only: exact (ingredient ID, flavor, color) from the
+/// original item definitions for all fourteen authored Boba color/flavor pairs.
+pub(crate) const BOBA_WITNESSES:&[(i32,i32,i32)]=&[
+ (1877756618,44,6),(590978630,53,6),(1240730051,62,6),(449040119,55,9),
+ (518638500,61,9),(1104825533,59,16),(818900842,100,24),(1350635557,63,25),
+ (45140131,58,30),(479562317,43,32),(590790304,87,34),(1344087400,39,46),
+ (1254065963,50,46),(350967404,64,47),
+];
+#[cfg(test)]mod boba_source_tests{
+ use super::*;
+ #[test]fn authored_base_combinations_and_display_witnesses(){
+  assert_eq!(BOBA_SOURCE_TRIPLES.len(),19);
+  assert!(BOBA_SOURCE_TRIPLES.windows(2).all(|x|x[0]<x[1]));
+  assert!(BOBA_SOURCE_TRIPLES.iter().all(|&[c,f,_]|BOBA_WITNESSES.iter().any(|&(_,flavor,color)|(flavor,color)==(f,c))));
+  assert_eq!(BOBA_SOURCE_TRIPLES.len()*BOBA_PEARLS.len()*BOBA_SWEETNESS.len(),152);
  }
 }
