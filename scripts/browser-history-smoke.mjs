@@ -26,7 +26,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,paletteInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,quantityBounds=false,emptyMaterialInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,quantityBounds=false,emptyMaterialInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -39,7 +39,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const originalArtItem=paletteInventory?palette(5,[color(1,0,0),color(0,1,0),color(0,0,1)]):doc(1,arr([5],u32(1286846063),[0],u32(3),[0xc0]));
  const sourceFitItem=paletteInventory?palette(6,[color(0,0,1),color(1,0,0),color(0,1,0)]):doc(1,arr([6],u32(54272482),[0],u32(2),[0xc0]));
  const nonCollectionItem=doc(1,arr([7],u32(427689),[0],u32(5),[0xc0]));
- const flower=(id,color,pattern,accent)=>doc(1,arr([id],u32(43114910),u32(id),u32(1),arr([7],arr([6],u32(color),u32(pattern),u32(accent)))));
+ const flower=(id,color,pattern,accent,grow=6)=>doc(1,arr([id],u32(43114910),u32(id),u32(1),arr([7],arr([grow],u32(color),u32(pattern),u32(accent)))));
  const chef=(id,item,unique)=>doc(1,arr([id],u32(item),u32(id),u32(1),unique));
  const cafe=colors=>arr([3],arr(arr(u32(99)),arr(...colors.map(u32))));
  const boba=color=>arr([4],arr(u32(color),u32(6),u32(11),u32(19),u32(99)));
@@ -51,7 +51,8 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
   ...(editableFlower?[flower(8,1,0,0)]:[]),
   ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
   ...(editableFurniture?[doc(1,arr([8],u32(61381969),u32(11),u32(93),arr([8],arr(u32(13),u32(2),u32(0)))))]:[]),
-  ...(flowerInventory?[flower(8,1,0,0),flower(9,9,0,0),flower(10,1,10,16),flower(11,1,3,0),flower(12,1,9999,0)]:[])));
+  ...(flowerInventory?[flower(8,1,0,0),flower(9,9,0,0),flower(10,1,10,16),flower(11,1,3,0),flower(12,1,9999,0)]:[]),
+  ...(flowerGrowthInventory?[flower(8,1,0,0,0),flower(9,1,0,0,6),flower(10,1,0,0,7)]:[])));
  const prefix=Uint8Array.from('135b4aa4f702a45d1cc562aeb5a386ed5d17e1fd588f424dcfc59d2e140cf597'.match(/../g).map(x=>parseInt(x,16)));
  const magic=Uint8Array.from('a1a2f8333c66ec455baa2dfc6325c2437a779c9906eecff0c022e5f6b6ca73b8'.match(/../g).map(x=>parseInt(x,16)));
  const lit=[0xf0];let remain=model.length-15;
@@ -559,6 +560,33 @@ async function inventoryDynamicFlowerArtSmoke(){
   await page.waitForFunction(()=>document.querySelectorAll('.inventory-card').length===5);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM DYNAMIC FLOWER PASS: original source sampling, distinct same-ID appearances, native effect-mask fallback, unknown pattern refusal, local blob generation');
+ }finally{await context.close();}
+}
+async function inventoryFlowerGrowthDisplaySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-flower-growth.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({flowerGrowthInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('43114910');
+  const cards=page.locator('.inventory-card');
+  await cards.nth(2).waitFor();
+  assert.equal(await cards.count(),3);
+  for(const [kind,label] of [['seed','Seed'],['plucked','Flower'],['uprooted','Uprooted plant']]){
+   const card=cards.filter({has:page.locator('[data-flower-growth="'+kind+'"]')});
+   await card.locator('.inventory-flower-variant-name').filter({hasText:label+' · Red'}).waitFor({timeout:30_000});
+   if(kind!=='plucked')assert.equal(await card.locator('[data-flower-state-art="species-reference"]').count(),1);
+  }
+  await search.fill('43114910 Seed Red');
+  await page.waitForFunction(()=>document.querySelectorAll('.inventory-card').length===1&&document.querySelector('[data-flower-growth="seed"]'));
+  await search.fill('43114910 Uprooted plant Red');
+  await page.waitForFunction(()=>document.querySelectorAll('.inventory-card').length===1&&document.querySelector('[data-flower-growth="uprooted"]'));
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM FLOWER GROWTH PASS: separate native states, localized search, honest reference artwork');
  }finally{await context.close();}
 }
 async function inventoryFlowerVariantEditSmoke(){
@@ -1694,6 +1722,7 @@ async function run(){
  await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
  await inventoryDynamicFlowerArtSmoke();
+ await inventoryFlowerGrowthDisplaySmoke();
  await flowerRuntimeCoverage(browser,origin,base);
  await inventoryFlowerVariantEditSmoke();
  await inventoryFlowerCreationSmoke();
