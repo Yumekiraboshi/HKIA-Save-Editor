@@ -347,7 +347,7 @@ impl Editor {
  }
  fn unique_row_source(&self,row:&crate::native::InventoryRow,fields:usize)->Option<i32>{
   if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<0||
-   (row.quantity==Some(0)&&!Self::is_plucked_species(row))||
+   (row.quantity==Some(0)&&!Self::is_emptyable_unique_family(row))||
    row.unique_is_nil!=Some(false)||row.unique_fields.len()!=fields||self.slot.index.inventory_item_refs_incomplete{return None}
   let item=row.item_id?;let uid=row.unique_id?;
   if item<=0||uid<=0||self.slot.index.inventory_item_refs.contains(&(item,uid))||self.slot.index.inventory_legacy_uid_refs.contains(&uid){return None}
@@ -433,8 +433,24 @@ impl Editor {
  // Only the intersection of verified ordinary acquisition definitions and
  // original non-layout customizable furniture. No inferred ownership.
  fn absent_furniture_choices(&self,item_id:i32)->Vec<FurnitureVariant>{
-  if self.inventory_item_rows.contains_key(&item_id)||self.inventory_changes.contains_key(&(PENDING_ITEM|item_id as u32))||
-   !self.can_create_inventory_item(item_id)||crate::inventory_source::ordinary_quantity_limit(item_id)!=Some(i32::MAX){return Vec::new()}
+  if self.inventory_item_rows.contains_key(&item_id)||!self.can_create_inventory_item(item_id){return Vec::new()}
+  self.default_furniture_choices(item_id)
+ }
+ // A single source-verified ordinary saved stack is sufficient evidence
+ // for its default variant. Do not convert it or consume its quantity.
+ fn saved_default_furniture_source(&self,row:&crate::native::InventoryRow)->Option<i32>{
+  let item=row.item_id?;
+  if row.id==0||row.id>=PENDING_ITEM||row.unique_id!=Some(0)||row.unique_is_nil!=Some(true)||
+   self.inventory_changes.get(&row.id).copied().or(row.quantity)?<=0||
+   !row.fields.iter().all(Option::is_some)||self.inventory_item_rows.get(&item)!=Some(&1)||
+   !crate::inventory_source::ordinary_creation_item(item)||!self.inventory_creation_payload_safe(item)||
+   self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item){return None}
+  let source=furniture_source::item(item)?;
+  if source.is_home_layout||crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX){return None}
+  Some(item)
+ }
+ fn default_furniture_choices(&self,item_id:i32)->Vec<FurnitureVariant>{
+  if crate::inventory_source::ordinary_quantity_limit(item_id)!=Some(i32::MAX){return Vec::new()}
   let Some(source)=furniture_source::item(item_id)else{return Vec::new()};
   if source.is_home_layout{return Vec::new()}
   let Some(default)=furniture_key(source,[0;3])else{return Vec::new()};
@@ -459,11 +475,26 @@ impl Editor {
  }
  pub fn inventory_absent_furniture_ids(&self)->Vec<i32>{
   if !self.absent_flower_budget_available(){return Vec::new()}
-  furniture_source::ITEMS.iter().filter_map(|s|(!self.absent_furniture_choices(s.item_id).is_empty()).then_some(s.item_id)).collect()
+  furniture_source::ITEMS.iter().filter_map(|s|(
+   !self.inventory_changes.contains_key(&(PENDING_ITEM|s.item_id as u32))&&
+   !self.absent_furniture_choices(s.item_id).is_empty()).then_some(s.item_id)).collect()
+ }
+ pub fn inventory_default_furniture_ids(&self)->Vec<u32>{
+  if !self.absent_flower_budget_available(){return Vec::new()}
+  self.slot.index.inventory.iter().filter_map(|r|{
+   let item=self.saved_default_furniture_source(r)?;
+   (!self.default_furniture_choices(item).is_empty()).then_some(r.id)
+  }).chain(self.inventory_changes.iter().filter_map(|(&id,&qty)|{
+   if id&PENDING_ITEM==0||qty<=0||self.pending_flowers.contains_key(&id)||self.pending_furniture.contains_key(&id){return None}
+   (!self.absent_furniture_choices((id&!PENDING_ITEM) as i32).is_empty()).then_some(id)
+  })).collect()
  }
  pub fn inventory_furniture_creation_variants(&self,id:u32)->Vec<FurnitureVariant>{
   if !self.absent_flower_budget_available(){return Vec::new()}
   if id&PENDING_ITEM!=0{return self.absent_furniture_choices((id&!PENDING_ITEM) as i32)}
+  if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|self.saved_default_furniture_source(r)){
+   return self.default_furniture_choices(item)
+  }
   if !self.unique_quantity_ids.contains(&id){return Vec::new()}
   let Some((source,original,current,_))=self.furniture_context(id)else{return Vec::new()};
   // No new restricted ownership: only existing, source-validated furniture.
@@ -480,6 +511,9 @@ impl Editor {
   let item_id=if source_id&PENDING_ITEM!=0{
    if expected!=[0;3]{return Err(Error::Schema)}
    (source_id&!PENDING_ITEM) as i32
+  }else if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==source_id).and_then(|r|self.saved_default_furniture_source(r)){
+   if expected!=[0;3]{return Err(Error::Schema)}
+   item
   }else{
    let (source,_,current,_)=self.furniture_context(source_id).ok_or(Error::Schema)?;
    if current!=expected{return Err(Error::Schema)}
@@ -711,11 +745,21 @@ impl Editor {
   r.item_id.is_some_and(|item|FLOWER_SPECIES.iter().any(|&(id,_)|id==item))&&
    r.unique_data.and_then(flower_variant).is_some_and(|v|v[0]==6)
  }
+ // Only consumable families with the existing source-authorized
+ // complete payload and quantity gates. No palette/outfit/layout removal.
+ fn is_emptyable_unique_family(r:&crate::native::InventoryRow)->bool{
+  use crate::inventory_source::{CAFE_IDS,BOBA_ID};
+  Self::is_plucked_species(r)||match (r.item_id,r.unique_data){
+   (Some(item),Some(InventoryUniqueData::CafeAppearance{..}))=>CAFE_IDS.binary_search(&item).is_ok(),
+   (Some(item),Some(InventoryUniqueData::BobaAppearance{..}))=>item==BOBA_ID,
+   _=>false
+  }
+ }
  /// Native subtraction clamps to zero without deleting the saved record.
- /// Existing positive or zero plucked flowers must pass the full original
- /// unique quantity identity/reference index, including copied payloads.
+ /// Existing consumables must pass the full original unique quantity
+ /// identity/reference index, including copied payloads.
  fn inventory_can_empty(&self,r:&crate::native::InventoryRow)->bool{
-  if Self::is_plucked_species(r)&&self.unique_quantity_ids.contains(&r.id){return true}
+  if Self::is_emptyable_unique_family(r)&&self.unique_quantity_ids.contains(&r.id){return true}
   let Some(item_id)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
    crate::inventory_source::ordinary_membership_item(item_id)&&
