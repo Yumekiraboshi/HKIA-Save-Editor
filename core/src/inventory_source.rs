@@ -156,12 +156,13 @@ pub(crate) const CAFE_INGREDIENT_WITNESSES:&[(i32,i32,i32)]=&[
  (2094826872,41,33),
 ];
 pub(crate) fn cafe_slot_count(item:i32)->Option<usize>{
- match item{203331651|905853141|1061947263=>Some(3),
-  406277059|973085470|1053426049|1237708874=>Some(1),_=>None}
+ match item{203331651|905853141|1061947263|1338995084=>Some(3),
+  406277059|973085470|1053426049|1237708874|1932639321=>Some(1),_=>None}
 }
 pub(crate) fn cafe_pair_allowed(item:i32,flavor:i32,color:i32)->bool{
  cafe_slot_count(item).is_some()&&is_chef_color(color)&&
- (!matches!(item,203331651|406277059|973085470|1237708874)||!matches!(flavor,134..=136))&&
+ (!matches!(item,203331651|406277059|973085470|1237708874|1338995084)||!matches!(flavor,134..=136))&&
+ (item!=1932639321||!matches!(flavor,137..=139))&&
  CAFE_INGREDIENT_WITNESSES.iter().any(|&(_,f,c)|f==flavor&&c==color)
 }
 pub(crate) fn cafe_ingredient_choices(item:i32)->impl Iterator<Item=(i32,i32,i32)>{
@@ -174,10 +175,20 @@ mod cafe_source_tests{
  #[test]fn direct_recipe_source_pairs(){
   assert_eq!(CAFE_INGREDIENT_WITNESSES.len(),48);
   assert_eq!(cafe_slot_count(203331651),Some(3));assert_eq!(cafe_slot_count(1237708874),Some(1));
-  assert_eq!(cafe_slot_count(1338995084),None);assert_eq!(cafe_slot_count(1932639321),None);
+  assert_eq!(cafe_slot_count(1338995084),Some(3));assert_eq!(cafe_slot_count(1932639321),Some(1));
+  assert!(!cafe_pair_allowed(1338995084,134,47));assert!(!cafe_pair_allowed(1932639321,137,10));
+  assert!(NIGIRI_SIDES.contains(&(1643431747,137,10)));
   assert!(cafe_pair_allowed(203331651,44,6));assert!(!cafe_pair_allowed(203331651,44,9));
   assert!(!cafe_pair_allowed(203331651,134,47));assert!(cafe_pair_allowed(1061947263,134,47));
   assert!(cafe_ingredient_choices(1237708874).any(|v|v==(1877756618,44,6)));
   assert!(!cafe_ingredient_choices(1237708874).any(|v|v.0==1141761080));
  }
+}
+
+/// Exact optional nigiri side slot, from its explicit AnyItemCondition.
+pub(crate) const NIGIRI_ID:i32=1932639321;
+pub(crate) const DANGO_ID:i32=1338995084;
+pub(crate) const NIGIRI_SIDES:&[(i32,i32,i32)]=&[(1643431747,137,10),(611226733,138,141),(1300515229,139,23)];
+pub(crate) fn cafe_count_allowed(item:i32,count:usize)->bool{
+ cafe_slot_count(item)==Some(count)||(item==NIGIRI_ID&&count==2)
 }
