@@ -68,3 +68,16 @@ test('all four extracted multi-renderer samples retain exact slot and noncustomi
  const stand=bindFurnitureRendererTreatments(d,34770598,[0,214,213]);assert.deepEqual(stand.plans.filter(x=>x.choice).map(x=>x.choice.selectedIndex),[232,214,213]);
  const bad=structuredClone(d);bad.base.rows[1].bindings.pop();assert.throws(()=>bindFurnitureRendererTreatments(bad,34770598,[0,0,0]),/RENDERER/);
 });
+
+test('fixed submesh bindings retain each original material in order; customized multi-material renderers refuse',()=>{
+ const d={catalog,variants,geometry:read('data/furniture-mesh-source-sample-v3.0.1.json'),base:read('data/furniture-base-material-source-v3.0.1.json'),patterns:read('data/furniture-pattern-texture-sample-v3.0.1.json')};
+ const g=d.geometry.rows.find(r=>r.itemId===90163601),b=d.base.rows.find(r=>r.itemId===90163601),n=g.nodes.find(n=>n.rendererPathId&&!n.slot),m=g.meshes[n.meshPathId];
+ const original=b.bindings.find(r=>r[0]===n.rendererPathId),other=g.nodes.find(x=>x.rendererPathId&&x.slot),second=b.bindings.find(r=>r[0]===other.rendererPathId);
+ n.materialSlots=[n.material,other.material];delete n.material;
+ m.submeshes=[{firstByte:0,indexCount:3,firstVertex:0,vertexCount:m.vertexCount,bounds:m.bounds[0]},{firstByte:6,indexCount:m.indexCount-3,firstVertex:0,vertexCount:m.vertexCount,bounds:m.bounds[0]}];
+ b.bindings=b.bindings.filter(r=>r[0]!==n.rendererPathId);b.submeshBindings=[{rendererPathId:n.rendererPathId,materials:[original[1],second[1]],slot:null}];
+ const plans=bindFurnitureRendererTreatments(d,90163601,[0,0,0]).plans.filter(p=>p.rendererPathId===n.rendererPathId);
+ assert.deepEqual(plans.map(p=>[p.submeshIndex,p.baseMaterialId,p.choice]),[[0,original[1],null],[1,second[1],null]]);
+ b.submeshBindings[0].materials.reverse();assert.throws(()=>bindFurnitureRendererTreatments(d,90163601,[0,0,0]),/BASE_LINK/);
+ b.submeshBindings[0].materials.reverse();n.slot=other.slot;assert.throws(()=>bindFurnitureRendererTreatments(d,90163601,[0,0,0]),/SUBMESH_TREATMENT_UNVERIFIED/);
+});

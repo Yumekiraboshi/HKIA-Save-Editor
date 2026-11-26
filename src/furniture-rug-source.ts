@@ -12,14 +12,14 @@ type SetRow=readonly [string,string,readonly number[]];
 type CatalogMaterial=readonly [number,string,string,string,...unknown[]];
 type MaterialRow=readonly [number,string,string,Vec4,boolean,string|null,Vec2,Vec2,Vec4,number,Vec4,number,number,number,number,boolean,string,string];
 type SlotLink={slot:number;displayedDefinitionGuid:string|null};
-type MeshRow=NativeGeometrySource&{schema:string;version:string;itemId:number;cab:string;nodes:readonly {rendererPathId?:string;meshPathId?:string;material?:string;slot?:SlotLink;active:boolean;enabled?:boolean}[];materials:Readonly<Record<string,{objectSha256:string}>>};
+type MeshRow=NativeGeometrySource&{schema:string;version:string;itemId:number;cab:string;nodes:readonly {rendererPathId?:string;meshPathId?:string;material?:string;materialSlots?:readonly string[];slot?:SlotLink|null;active:boolean;enabled?:boolean}[];materials:Readonly<Record<string,{objectSha256:string}>>};
 type TextureLink={texture:string|null;scale:Vec2;offset:Vec2};
 type BaseMaterial={objectSha256:string;shader:string;validKeywords:readonly string[];textures:Readonly<Record<string,TextureLink>>;floats:Readonly<Record<string,number>>;colors:Readonly<Record<string,Vec4>>};
 type Pattern=NativeTextureSource&{materialIndex:number;guid:string};
 export type RugNativeSources={
  catalog:{schema:string;gameVersion:string;source:{definitionSha256:string;payloadPathId:string};items:readonly Item[];sets:readonly SetRow[];materials:readonly CatalogMaterial[]};
  geometry:{schema:string;version:string;rows:readonly MeshRow[]};
- base:{schema:string;version:string;rows:readonly {itemId:number;bindings:readonly (readonly [string,string,SlotLink|null])[]}[];materials:Readonly<Record<string,BaseMaterial>>;textures:Readonly<Record<string,NativeTextureSource>>;shaders:Readonly<Record<string,{objectSha256:string}>>};
+ base:{schema:string;version:string;rows:readonly {itemId:number;bindings:readonly (readonly [string,string,SlotLink|null])[];submeshBindings?:readonly {rendererPathId:string;materials:readonly string[];slot:SlotLink|null}[]}[];materials:Readonly<Record<string,BaseMaterial>>;textures:Readonly<Record<string,NativeTextureSource>>;shaders:Readonly<Record<string,{objectSha256:string}>>};
  variants:{schema:string;version:string;definitionsSha256:string;payloadPathId:string;rows:readonly MaterialRow[]};
  patterns:{schema:string;version:string;itemId:number;rows:readonly Pattern[]};
 };

@@ -55,6 +55,16 @@ def extract_one(row,allowed,index,base,mesh,audit,shader,out):
     require(len(result['rows'])==1 and result['rows'][0]['itemId']==row['itemId'],'material row identity')
     for rid,key,slot in result['rows'][0]['bindings']:
         require(key in result['materials'],'material reference')
+    expected={n['rendererPathId']:n for n in row['nodes'] if 'materialSlots' in n}
+    observed=result['rows'][0].get('submeshBindings',[])
+    require(len(observed)==len(expected) and {r['rendererPathId'] for r in observed}==set(expected),'submesh binding coverage')
+    for r in observed:
+        node=expected[r['rendererPathId']]
+        keys=[]
+        for value in node['materialSlots']:
+            file,pid=value.split(':');file=int(file)
+            keys.append((row['cab'] if file==0 else row['externals'][file-1].split('/')[-1])+':'+pid)
+        require(r['materials']==keys and r['slot']==node['slot'] and all(k in result['materials'] for k in keys),'submesh material order')
     for mat in result['materials'].values():
         require(mat['shader'] in result['shaders'],'shader reference')
         require(all(link['texture'] is None or link['texture'] in result['textures'] for link in mat['textures'].values()),'texture reference')

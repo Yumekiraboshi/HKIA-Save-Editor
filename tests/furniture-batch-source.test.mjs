@@ -45,3 +45,22 @@ assert trees[types['101']][2]=='first' and trees[types['102']][2]=='second'
 `;
  execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
 });
+
+test('original uint16 triangle submeshes preserve ordered ranges and reject gaps, bad topology and out-of-range vertices',()=>{
+ const py=String.raw`
+import struct,importlib.util
+spec=importlib.util.spec_from_file_location('mesh','scripts/extract-furniture-mesh-source.py')
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+def row(first,count,top=0,base=0,fv=0,vc=3):
+    return struct.pack('<6I6f',first,count,top,base,fv,vc,0,0,0,1,1,1)
+indices=struct.pack('<6H',0,1,2,3,4,5)
+def sm(a,b):return struct.pack('<I',2)+a+b
+a=row(0,3);b=row(6,3,fv=3)
+r=m.native_submeshes(sm(a,b),0,6,indices)
+assert [(x['firstByte'],x['indexCount'],x['firstVertex'],x['vertexCount']) for x in r]==[(0,3,0,3),(6,3,3,3)]
+for data,fmt,ib in [(sm(a,row(4,3,fv=3)),0,indices),(sm(a,row(6,3,top=1,fv=3)),0,indices),(sm(a,row(6,3,base=1,fv=3)),0,indices),(sm(a,b),1,indices),(sm(a,b),0,indices[:-2]),(sm(a,b),0,struct.pack('<6H',0,1,2,2,4,5))]:
+    try:m.native_submeshes(data,fmt,6,ib);raise AssertionError('invalid submesh accepted')
+    except ValueError:pass
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
+});

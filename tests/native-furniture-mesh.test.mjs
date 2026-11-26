@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/native-furniture-mesh.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {validateNativeGeometryLayout,verifyNativeGeometry,uploadNativeGeometry}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {validateNativeGeometryLayout,verifyNativeGeometry,uploadNativeGeometry,nativeMeshDrawRange}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const sha=b=>createHash('sha256').update(new Uint8Array(b)).digest('hex');
 function fixture(){
  const bytes=new ArrayBuffer(42),v=new DataView(bytes);v.setFloat32(12,1,true);v.setFloat32(28,1,true);v.setUint16(38,1,true);v.setUint16(40,2,true);
@@ -42,4 +42,29 @@ test('upload binds exact source buffers and releases all resources on failure or
  let f=fake();let h=await uploadNativeGeometry(f.gl,s,bytes,{'1':{0:2}});
  assert.equal(h.meshes.get('1').indexCount,3);assert.deepEqual(f.state.data,[[4,[...new Uint8Array(bytes,0,36)]],[5,[...new Uint8Array(bytes,36,6)]]]);assert.deepEqual(f.state.attrs,[[2,3,7,false,12,0]]);assert.equal(f.state.vao,f.oldVAO);assert.equal(f.state.buffer,f.oldBuffer);h.dispose();h.dispose();assert.deepEqual(f.state.deleted,f.state.created);assert.equal(h.meshes.size,0);
  f=fake(true);await assert.rejects(uploadNativeGeometry(f.gl,s,bytes,{'1':{0:0}}),/NATIVE_MESH_GPU_UPLOAD/);assert.deepEqual(f.state.deleted,f.state.created);assert.equal(f.state.vao,f.oldVAO);assert.equal(f.state.buffer,f.oldBuffer);
+});
+
+test('multi-submesh source cannot be flattened by the single-material GPU path',()=>{
+ const {s}=fixture();s.meshes['1'].submeshes=[{firstByte:0,indexCount:3,firstVertex:0,vertexCount:3,bounds:[0,0,0,1,1,1]}];
+ assert.throws(()=>validateNativeGeometryLayout(s),/NATIVE_MESH_SUBMESH_UNSUPPORTED/);
+});
+
+test('opt-in original submesh ranges validate every vertex window and refuse implicit draw',async()=>{
+ const bytes=new ArrayBuffer(84),v=new DataView(bytes);
+ for(let i=0;i<6;i++)v.setUint16(72+2*i,i,true);
+ const m={vertexCount:6,indexCount:6,stride:12,channels:[[0,0,0,3],...Array.from({length:13},()=>[0,0,0,0])],vertexBytes:[0,72,sha(bytes.slice(0,72))],indexBytes:[72,12,sha(bytes.slice(72))],bounds:[[0,0,0,1,1,1]],submeshes:[{firstByte:0,indexCount:3,firstVertex:0,vertexCount:3,bounds:[0,0,0,1,1,1]},{firstByte:6,indexCount:3,firstVertex:3,vertexCount:3,bounds:[0,0,0,1,1,1]}]};
+ const s={geometryBytes:84,geometrySha256:sha(bytes),meshes:{'1':m}};
+ assert.throws(()=>validateNativeGeometryLayout(s),/SUBMESH_UNSUPPORTED/);
+ await verifyNativeGeometry(s,bytes,true);
+ for(const changed of [{firstByte:4},{indexCount:6},{firstVertex:5},{bounds:[0,0,0,-1,1,1]}]){
+  const x=structuredClone(s);Object.assign(x.meshes['1'].submeshes[1],changed);assert.throws(()=>validateNativeGeometryLayout(x,true),/SUBMESH_/);
+ }
+ const corrupt=bytes.slice(0);new DataView(corrupt).setUint16(78,2,true);
+ const x=structuredClone(s);x.geometrySha256=sha(corrupt);x.meshes['1'].indexBytes[2]=sha(corrupt.slice(72));
+ await assert.rejects(verifyNativeGeometry(x,corrupt,true),/SUBMESH_INDEX/);
+ const mesh={vao:{},indexCount:6,submeshes:m.submeshes};
+ assert.throws(()=>nativeMeshDrawRange(mesh),/DRAW_SUBMESH/);
+ assert.throws(()=>nativeMeshDrawRange(mesh,2),/DRAW_SUBMESH/);
+ assert.equal(nativeMeshDrawRange(mesh,1).firstByte,6);
+ assert.equal(nativeMeshDrawRange(mesh,1).indexCount,3);
 });
