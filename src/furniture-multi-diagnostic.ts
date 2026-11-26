@@ -142,6 +142,9 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
   return {itemId:request.itemId,renderers:draws.length,uniqueTextures:textures.size,fidelity:resolved.fidelity};
  }finally{
   if(renderer){gl.useProgram(null);renderer.dispose();}
-  gl.bindVertexArray(null);geometry?.dispose();for(const t of owned)gl.deleteTexture(t);
+  // A rejected read/hash can occur before the first GPU allocation. Do not
+  // touch the context (or mask the original error) without owned geometry.
+  if(geometry){gl.bindVertexArray(null);geometry.dispose();}
+  for(const t of owned)gl.deleteTexture(t);
  }
 }
