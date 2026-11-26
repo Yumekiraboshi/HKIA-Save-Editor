@@ -2219,3 +2219,42 @@ fn cancel_staged_unique_rows_preserves_history_and_never_allocates_deleted_uids(
   assert_eq!(recovered.inventory(),r.inventory());
  }
 }
+
+#[test]
+fn chef_quantities_distinguish_complete_ordered_native_variant_keys(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let cafe=|flavors:Vec<u32>,colors:Vec<u32>|arr(vec![vec![3],arr(vec![arr(flavors.into_iter().map(u).collect()),arr(colors.into_iter().map(u).collect())])]);
+ let boba=|words:[u32;5]|arr(vec![vec![4],arr(words.into_iter().map(u).collect())]);
+ let a=cafe(vec![99,98],vec![6,14,11,19]);
+ let b=cafe(vec![99,98],vec![6,14,11,20]); // same display prefix
+ let c=cafe(vec![98,99],vec![6,14,11,19]); // same multiset, distinct native Equals
+ let d=boba([14,6,11,19,99]);let e=boba([14,6,11,19,98]); // same display color
+ let make=|rows:Vec<(u32,Vec<u8>)>|{
+  let mut p=synthetic_payload("3.0.1");p[2]=30;p[3]=0x95+rows.len() as u8;
+  for (i,(item,unique)) in rows.into_iter().enumerate(){p.extend(doc(1,arr(vec![u(4+i as u32),u(item),u(21+i as u32),u(2),unique])));}
+  slot_from_payload("3.0.1",p)
+ };
+ let valid=vec![(203331651,a.clone()),(203331651,b.clone()),(203331651,c.clone()),(1798633565,d.clone()),(1798633565,e.clone())];
+ for zipped in [false,true]{
+  let raw=make(valid.clone());let input=if zipped{zip(&raw)}else{raw};
+  let mut ed=Editor::open(input.clone()).unwrap();let before=ed.inventory();
+  assert!(before.iter().all(|r|r.editable&&r.quantity_minimum==0));
+  ed.change_inventory_quantities(&[(4,2,0),(5,2,8),(6,2,9),(7,2,0),(8,2,5)]).unwrap();
+  let cp=ed.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert_eq!(restored.inventory(),ed.inventory());assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),before);
+  assert!(restored.redo_scope(Inventory));
+  let mut reopened=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory().iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![0,8,9,0,5]);
+  for (i,(_,payload)) in valid.iter().enumerate(){assert_eq!(reopened.inventory_original_unique_payload(4+i as u32),Some(payload.as_slice()));}
+  reopened.change_inventory_quantities(&[(4,0,3),(7,0,4)]).unwrap();
+  assert_eq!(Editor::open(reopened.export().unwrap()).unwrap().inventory().iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![3,8,9,4,5]);
+ }
+ for (item,first,peer) in [
+  (203331651,a.clone(),a.clone()),(1798633565,d.clone(),d.clone()),
+  (203331651,a.clone(),cafe(vec![0],vec![6])),(1798633565,d.clone(),boba([14,0,11,19,99])),
+  (203331651,a.clone(),vec![0xc0]),(1798633565,d.clone(),vec![0xc0])
+ ]{
+  let mut ed=Editor::open(make(vec![(item,first),(item,peer)])).unwrap();
+  assert!(!ed.inventory()[0].editable);assert!(ed.change_inventory_quantity(4,2,0).is_err());assert!(!ed.dirty());
+ }
+}

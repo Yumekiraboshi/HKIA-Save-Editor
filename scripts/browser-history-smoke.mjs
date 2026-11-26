@@ -50,7 +50,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
   ...(emptyMaterialInventory?[doc(1,arr([9],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([10],u32(627013240),[0],u32(0),[0xc0]))]:[]),
   ...(editableFlower?[flower(8,1,0,0)]:[]),
   ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
-  ...(chefQuantityInventory?[chef(8,203331651,cafe([6,14,11,19])),chef(9,1798633565,boba(14))]:[]),
+  ...(chefQuantityInventory?[chef(8,203331651,cafe([6,14,11,19])),chef(9,1798633565,boba(14)),chef(10,203331651,cafe([6,14,11,20])),chef(11,1798633565,arr([4],arr(u32(14),u32(6),u32(11),u32(19),u32(98))))]:[]),
   ...(editableFurniture?[doc(1,arr([8],u32(61381969),u32(11),u32(93),arr([8],arr(u32(13),u32(2),u32(0)))))]:[]),
   ...(flowerInventory?[flower(8,1,0,0),flower(9,9,0,0),flower(10,1,10,16),flower(11,1,3,0),flower(12,1,9999,0)]:[]),
   ...(flowerGrowthInventory?[flower(8,1,0,0,0),flower(9,1,0,0,6),flower(10,1,0,0,7)]:[])));
@@ -207,27 +207,33 @@ async function inventoryChefQuantitySmoke(){
   };
   const inputFor=async id=>{
    await page.locator('.inventory-controls input[type="search"]').fill(String(id));
-   const input=page.locator('.inventory-card input[name="quantity"]');await input.waitFor();return input;
+   const inputs=page.locator('.inventory-card input[name="quantity"]');await inputs.nth(1).waitFor();return inputs;
   };
-  const apply=()=>page.locator('.inventory-card button[type="submit"]').click();
+  const apply=(index=0)=>page.locator('.inventory-card button[type="submit"]').nth(index).click();
+  const settled=()=>page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
   await openInventory();
-  let input=await inputFor(203331651);
-  assert.equal(await input.getAttribute('min'),'0');await input.fill('0');
+  let inputs=await inputFor(203331651);
+  assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.min)),['0','0']);
+  await inputs.nth(1).fill('7');await apply(1);await settled();
+  inputs=await inputFor(1798633565);
+  assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.min)),['0','0']);
+  await inputs.nth(1).fill('8');await apply(1);await settled();
+  inputs=await inputFor(203331651);await inputs.first().fill('0');
   page.once('dialog',d=>d.accept());await apply();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
-  input=await inputFor(1798633565);assert.equal(await input.getAttribute('min'),'0');
-  await input.fill('0');page.once('dialog',d=>d.accept());await apply();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  await settled();
+  inputs=await inputFor(1798633565);
+  await inputs.first().fill('0');page.once('dialog',d=>d.accept());await apply();
+  await settled();
   await page.reload({waitUntil:'networkidle'});await openInventory();
-  assert.equal(await (await inputFor(203331651)).inputValue(),'0');
-  assert.equal(await (await inputFor(1798633565)).inputValue(),'0');
+  assert.deepEqual(await (await inputFor(203331651)).evaluateAll(rows=>rows.map(r=>r.value)),['0','7']);
+  assert.deepEqual(await (await inputFor(1798633565)).evaluateAll(rows=>rows.map(r=>r.value)),['0','8']);
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await page.locator('button[title="Redo"]:not([disabled])').waitFor();
-  assert.equal(await (await inputFor(1798633565)).inputValue(),'1');
+  assert.deepEqual(await (await inputFor(1798633565)).evaluateAll(rows=>rows.map(r=>r.value)),['1','8']);
   await page.locator('button[title="Redo"]:not([disabled])').click();
   await page.locator('button[title="Redo"]:disabled').waitFor();
   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
-  assert.equal(await (await inputFor(1798633565)).inputValue(),'0');
+  assert.deepEqual(await (await inputFor(1798633565)).evaluateAll(rows=>rows.map(r=>r.value)),['0','8']);
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
   const output=readFileSync(await download.path());
@@ -237,8 +243,8 @@ async function inventoryChefQuantitySmoke(){
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());let at=0;
   const u=()=>{const n=v.getUint32(at,true);at+=4;return n};const count=u(),rows=[];
   for(let i=0;i<count;i++){const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();const words=Array.from({length:n},()=>u()|0);u();if(tag===3||tag===4)rows.push({id,uid,tag,words});}
-  assert.equal(rows.length,2);assert.deepEqual(rows.map(r=>r.uid),[8,9]);
-  assert.deepEqual(rows.map(r=>r.tag),[3,4]);
+  assert.equal(rows.length,4);assert.deepEqual(rows.map(r=>r.uid),[8,9,10,11]);
+  assert.deepEqual(rows.map(r=>r.tag),[3,4,3,4]);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM CHEF ZERO PASS: confirmed zero, draft, history and native export reparse');
  }finally{await context.close();}
