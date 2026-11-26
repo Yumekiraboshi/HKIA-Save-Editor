@@ -1447,6 +1447,35 @@ async function inventoryFurnitureCreationSmoke(){
   console.log('CHROMIUM FURNITURE CREATION PASS: source retained, staged customization, quantity, recovery and native output reparse');
  }finally{await context.close();}
 }
+async function customizedFurnitureRemovalSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-custom-furniture-zero.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({editableFurniture:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  const card=page.locator('.inventory-card'),input=card.locator('input[name="quantity"]');
+  await search.fill('61381969');await input.waitFor();
+  assert.equal(await input.getAttribute('min'),'0');
+  await card.locator('.inventory-stack-delete').click();
+  const modal=page.locator('.removal-confirm-dialog');await modal.waitFor({state:'visible'});
+  await modal.locator('.removal-confirm-action').click();
+  await page.locator('.inventory-empty-stack').waitFor();assert.equal(await input.inputValue(),'0');
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('61381969');
+  await page.locator('.inventory-empty-stack').waitFor();assert.equal(await input.inputValue(),'0');
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});
+  assert.equal(await input.inputValue(),'93');
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM CUSTOMIZED FURNITURE REMOVAL PASS: zero, reload, undo');
+ }finally{await context.close()}
+}
 async function inventoryFurnitureVariantEditSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -1465,7 +1494,7 @@ async function inventoryFurnitureVariantEditSmoke(){
   await button.waitFor({timeout:30_000});
   const quantity=page.locator('.inventory-card input[name="quantity"]');
   await quantity.waitFor();assert.equal(await quantity.inputValue(),'93');
-  assert.equal(await quantity.getAttribute('min'),'1');
+  assert.equal(await quantity.getAttribute('min'),'0');
   await button.click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"][open]');
   await dialog.waitFor();
@@ -2319,6 +2348,7 @@ async function run(){
  await inventoryAbsentFlowerCreationSmoke();
  await inventoryFlowerClothingCreationSmoke();
  await inventoryFurnitureVariantEditSmoke();
+ await customizedFurnitureRemovalSmoke();
  await inventoryFurnitureCreationSmoke();
  await inventoryAbsentFurnitureCreationSmoke();
  await inventoryDefaultFurnitureCreationSmoke();

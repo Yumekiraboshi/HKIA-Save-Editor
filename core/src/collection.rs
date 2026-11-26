@@ -368,7 +368,7 @@ impl Editor {
  }
  fn unique_row_source(&self,row:&crate::native::InventoryRow,fields:usize)->Option<i32>{
   if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<0||
-   (row.quantity==Some(0)&&!Self::is_emptyable_unique_family(row))||
+   (row.quantity==Some(0)&&!self.is_emptyable_unique_family(row))||
    row.unique_is_nil!=Some(false)||row.unique_fields.len()!=fields||self.slot.index.inventory_item_refs_incomplete{return None}
   let item=row.item_id?;let uid=row.unique_id?;
   if item<=0||uid<=0||self.slot.index.inventory_item_refs.contains(&(item,uid))||self.slot.index.inventory_legacy_uid_refs.contains(&uid){return None}
@@ -515,6 +515,8 @@ impl Editor {
   if self.pending_furniture.contains_key(&id){
    if !self.inventory_changes.contains_key(&id){return Vec::new()}
   }else if id&PENDING_ITEM!=0{return self.absent_furniture_choices((id&!PENDING_ITEM) as i32)}
+  else if !self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|
+   self.inventory_changes.get(&id).copied().or(r.quantity).is_some_and(|q|q>0)){return Vec::new()}
   if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|self.saved_default_furniture_source(r)){
    return self.default_furniture_choices(item)
   }
@@ -771,13 +773,26 @@ impl Editor {
   r.item_id.is_some_and(|item|FLOWER_SPECIES.iter().any(|&(id,_)|id==item))&&
    r.unique_data.and_then(flower_variant).is_some_and(|v|matches!(v[0],0|6|7))
  }
- // Only consumable families with the existing source-authorized
- // complete payload and quantity gates. No palette/outfit/layout removal.
- fn is_emptyable_unique_family(r:&crate::native::InventoryRow)->bool{
+ // Source-bounded furniture removal checks every original placement/copy
+ // reference by Item ID, regardless of material tuple or UID. This is
+ // deliberately conservative: a reference to a sibling also denies zero.
+ fn furniture_zero_reference_safe(&self,item:i32)->bool{
+  crate::inventory_source::ordinary_furniture_guid_fingerprint(item).is_some_and(|key|
+   !self.slot.index.inventory_furniture_refs_incomplete&&
+   !self.slot.index.inventory_item_refs_incomplete&&
+   !self.slot.index.inventory_payload_refs_incomplete&&
+   !self.slot.index.inventory_furniture_item_refs.contains(&item)&&
+   !self.slot.index.inventory_payload_item_refs.contains(&item)&&
+   !self.slot.index.inventory_furniture_guid_refs.contains(&key))
+ }
+ // Family eligibility only; full UID, source tuple and peer validation
+ // is still required in index_unique_quantity_ids before zero/refill.
+ fn is_emptyable_unique_family(&self,r:&crate::native::InventoryRow)->bool{
   use crate::inventory_source::{CAFE_IDS,BOBA_ID};
   Self::is_emptyable_flower_species(r)||match (r.item_id,r.unique_data){
    (Some(item),Some(InventoryUniqueData::CafeAppearance{..}))=>CAFE_IDS.binary_search(&item).is_ok(),
    (Some(item),Some(InventoryUniqueData::BobaAppearance{..}))=>item==BOBA_ID,
+   (Some(item),Some(InventoryUniqueData::Furniture{..}))=>self.furniture_zero_reference_safe(item),
    _=>false
   }
  }
@@ -785,15 +800,12 @@ impl Editor {
  /// Existing consumables must pass the full original unique quantity
  /// identity/reference index, including copied payloads.
  fn inventory_can_empty(&self,r:&crate::native::InventoryRow)->bool{
-  if Self::is_emptyable_unique_family(r)&&self.unique_quantity_ids.contains(&r.id){return true}
+  if self.is_emptyable_unique_family(r)&&self.unique_quantity_ids.contains(&r.id){return true}
   let Some(item_id)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
    (crate::inventory_source::ordinary_membership_item(item_id)||
     ((crate::inventory_source::existing_currency_item(item_id)||
-      crate::inventory_source::ordinary_furniture_guid_fingerprint(item_id).is_some_and(|key|
-       !self.slot.index.inventory_furniture_refs_incomplete&&
-       !self.slot.index.inventory_furniture_item_refs.contains(&item_id)&&
-       !self.slot.index.inventory_furniture_guid_refs.contains(&key)))&&
+      self.furniture_zero_reference_safe(item_id))&&
      !self.slot.index.inventory_payload_refs_incomplete&&
      !self.slot.index.inventory_payload_item_refs.contains(&item_id)))&&
    r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.quantity.is_some_and(|q|q>=0)&&
