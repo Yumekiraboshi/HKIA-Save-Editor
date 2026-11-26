@@ -795,7 +795,10 @@ pub extern "C" fn hkia_inventory_cafe_snapshot()->u32{
    count+=1;out.extend(id.to_le_bytes());out.extend(u32::from(editable).to_le_bytes());
    for word in v{out.extend(word.to_le_bytes());}
   }
-  out[..4].copy_from_slice(&count.to_le_bytes());a.reply=out;0
+  out[..4].copy_from_slice(&count.to_le_bytes());
+  let witnesses=e.inventory_cafe_witnesses();out.extend((witnesses.len() as u32).to_le_bytes());
+  for &(item,flavor,color) in witnesses{for word in [item,flavor,color]{out.extend(word.to_le_bytes());}}
+  a.reply=out;0
  })
 }
 #[no_mangle]

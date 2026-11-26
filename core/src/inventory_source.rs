@@ -105,7 +105,7 @@ mod tests{
 /// Direct chef recipes only, exact original one-flavor/one-color ingredients.
 /// Excludes tag_imagination; the existing ordinary-membership gate further
 /// excludes unverified/restricted acquisition witnesses from NEW choices.
-const CAFE_INGREDIENT_WITNESSES:&[(i32,i32,i32)]=&[
+pub(crate) const CAFE_INGREDIENT_WITNESSES:&[(i32,i32,i32)]=&[
  (26301889,99,9),
  (45140131,58,30),
  (51054568,134,47),

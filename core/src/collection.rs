@@ -846,6 +846,9 @@ impl Editor {
   let Some(n)=crate::inventory_source::cafe_slot_count(item)else{return false};
   (0..3).all(|i|if i<n{crate::inventory_source::cafe_pair_allowed(item,v[i],v[3+i])}else{v[i]==0&&v[3+i]==0})
  }
+ pub fn inventory_cafe_witnesses(&self)->&'static [(i32,i32,i32)]{
+  if self.slot.envelope.version==Version::V301{crate::inventory_source::CAFE_INGREDIENT_WITNESSES}else{&[]}
+ }
  pub fn inventory_cafe_rows(&self)->impl Iterator<Item=(u32,CafeVariant,bool)>+'_{
   self.slot.index.inventory.iter().filter_map(move |r|{
    if self.slot.envelope.version!=Version::V301{return None}
