@@ -60,3 +60,9 @@ export function paletteCreationSelection(before:PaletteVariant,target:PaletteVar
  return options.length>0&&!before.every((word,i)=>word===target[i])&&[0,1,2].every(slot=>
   paletteChannelEqual(before,target,slot)||options.some(option=>paletteChannelEqual(option,target,slot)));
 }
+
+/** Presentation-only swatches for a saved palette in the removal confirmation. */
+export function paletteRemovalSwatches(palette:InventoryPalette|undefined):string[]{
+ if(!palette||palette.length!==3||!palette.every(c=>c.length===4&&c.every(v=>Number.isFinite(v)&&v>=0&&v<=1)))return [];
+ return palette.map(c=>'rgba('+c.slice(0,3).map(n=>Math.round(n*255)).join(',')+','+c[3]+')');
+}

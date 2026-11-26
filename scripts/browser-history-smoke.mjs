@@ -230,6 +230,9 @@ async function inventoryPaletteRemovalSmoke(){
    assert.equal(await cards.locator('.inventory-stack-delete:not([disabled])').count(),state===true?2:1);
    await cards.locator('.inventory-stack-delete:not([disabled])').first().click();
    const modal=page.locator('.removal-confirm-dialog');await modal.waitFor({state:'visible'});
+   assert.equal(await modal.locator('.inventory-removal-swatch').count(),3);
+   const swatches=await modal.locator('.inventory-removal-swatch').evaluateAll(els=>els.map(el=>el.getAttribute('aria-label')));
+   assert.ok(swatches.every(v=>v?.startsWith('rgba(')));
    await modal.locator('.removal-confirm-action').click();
    await page.locator('.inventory-empty-stack').waitFor();
    assert.equal(await page.locator('.inventory-empty-stack input[name="quantity"]').inputValue(),'0');
@@ -295,6 +298,14 @@ async function inventoryWandEditSmoke(){
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1429161083');
   const card=page.locator('.inventory-card').first(),dialog=page.locator('dialog[aria-labelledby="wand-editor-title"]');
+  await card.locator('.inventory-stack-delete:not([disabled])').click();await confirmInventoryRemoval(page,false);
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'1');
+  await card.locator('.inventory-stack-delete:not([disabled])').click();await confirmInventoryRemoval(page);
+  await page.locator('.inventory-empty-stack').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'0');
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'1');
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
   const select=dialog.locator('select[name="wand-variant"]');
   assert.equal(await select.locator('option').count(),36);

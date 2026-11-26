@@ -43,7 +43,7 @@ import {searchAchievementRows} from './achievement-search';
  import DynamicWandSprite from './DynamicWandSprite.svelte';
  import {inventoryWandAppearance,wandVariantOf,wandVariantLabel,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance} from './inventory-chef-display';
- import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteSelectChannel,paletteChannelEqual,paletteCreationSelection,type PaletteVariant} from './inventory-palette-display';
+ import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,paletteCreationSelection,type PaletteVariant} from './inventory-palette-display';
  import {cafeSlotLabel,cafeVariantLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
  import {bobaVariantLabel,bobaBaseKey,bobaBaseChoices,bobaBaseLabel,fullBobaLabel,type BobaVariant} from './inventory-boba-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
@@ -60,7 +60,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  type PendingRemoval=
   | {kind:'collections';id:number;name:string;before:bigint;revision:number;fromDateDialog:boolean}
   | {kind:'achievements';item:AchievementListRow;name:string;revision:number}
-  | {kind:'inventory';requests:InventoryQuantityRequest[];batch:boolean;name:string;targets:{documentId:number;name:string;quantity:number}[];revision:number};
+  | {kind:'inventory';requests:InventoryQuantityRequest[];batch:boolean;name:string;targets:{documentId:number;name:string;quantity:number;paletteColors:string[]}[];revision:number};
  const BATCH_SIZE=40;
  const EPOCH=621355968000000000n;
  const ICONS=import.meta.env.BASE_URL+'icons/';
@@ -963,7 +963,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const targets=rows.filter(row=>row.quantity>0);
   if(!targets.length)return;
   const requests:InventoryQuantityRequest[]=targets.map(row=>[row.documentId,row.quantity,0]);
-  const details=targets.map(row=>({documentId:row.documentId,name:[inventoryName(row.itemId),inventoryVariantSearchName(row)].filter(Boolean).join(' · '),quantity:row.quantity}));
+  const details=targets.map(row=>({documentId:row.documentId,name:[inventoryName(row.itemId),inventoryVariantSearchName(row)].filter(Boolean).join(' · '),quantity:row.quantity,paletteColors:paletteRemovalSwatches(row.palette)}));
   const name=batch?targets.length.toLocaleString(locale):details[0].name+' × '+details[0].quantity.toLocaleString(locale);
   void requestRemoval({kind:'inventory',requests,batch,name,targets:details,revision:snapshot.revision},opener);
  }
@@ -2069,12 +2069,18 @@ import {verifiedFloorplanName} from './floorplan-names';
      <button type="button" class="date-dialog-close" aria-label={removalCopy.cancel} disabled={busy} onclick={closeRemovalConfirmation}>×</button>
     </div>
     <strong class="removal-confirm-name">{pendingRemoval.name}</strong>
-    {#if pendingRemoval.kind==='inventory'&&pendingRemoval.batch}
-     <ul class="inventory-removal-targets">
-      {#each pendingRemoval.targets as target (target.documentId)}
-       <li><span>{target.name}</span><span class="inventory-removal-quantity">× {target.quantity.toLocaleString(locale)}</span></li>
-      {/each}
-     </ul>
+    {#if pendingRemoval.kind==='inventory'}
+     {#if pendingRemoval.batch}
+      <ul class="inventory-removal-targets">
+       {#each pendingRemoval.targets as target (target.documentId)}
+        <li><span>{target.name}
+         {#if target.paletteColors.length}<span class="inventory-removal-palette">{#each target.paletteColors as color}<span class="inventory-removal-swatch" style:background-color={color} title={color} aria-label={color} role="img"></span>{/each}</span>{/if}
+        </span><span class="inventory-removal-quantity">× {target.quantity.toLocaleString(locale)}</span></li>
+       {/each}
+      </ul>
+     {:else if pendingRemoval.targets[0]?.paletteColors.length}
+      <span class="inventory-removal-palette">{#each pendingRemoval.targets[0].paletteColors as color}<span class="inventory-removal-swatch" style:background-color={color} title={color} aria-label={color} role="img"></span>{/each}</span>
+     {/if}
     {/if}
     <p class="removal-confirm-warning">{pendingRemoval.kind==='inventory'?inventoryEmptyCopy(locale):pendingRemoval.kind==='collections'?removalCopy.collectionWarning:removalCopy.achievementWarning}</p>
     <div class="date-dialog-actions">
