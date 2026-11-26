@@ -3,7 +3,7 @@
  * not proof of native scene/shader parity. Unsupported draws still refuse. */
 import type {FurnitureMultiSources} from './furniture-multi-diagnostic';
 import type {NativeCubeSource} from './native-cube-upload';
-import {furniturePayloadReferences,createFurniturePayloadReader} from './furniture-payload-reader';
+import {furniturePayloadReferences,createFurniturePayloadReader,validateFurniturePayloadRoot} from './furniture-payload-reader';
 import {createFurnitureTreatmentResolver} from './furniture-material-treatment';
 type Geometry=FurnitureMultiSources['geometry']['rows'][number]&{visualGuid:string;bundle:string};
 type Pack=Pick<FurnitureMultiSources,'geometry'|'base'|'patterns'|'additionalPatterns'>&{
@@ -55,4 +55,32 @@ export async function openFurnitureSourcePack(
  const refs=furniturePayloadReferences(d,cubes);
  const read=createFurniturePayloadReader(root,refs,fetchAsset);
  return {sources:d,cubemaps:p.cubemaps,read,renderFidelity:'unverified' as const};
+}
+
+/** Fetch only the independently pinned source manifest. Assets remain lazy and
+ * content-addressed; this does not enable unverified artwork in product UI. */
+export async function fetchFurnitureSourcePack(
+ root:URL,expected:{sha256:string;bytes:number},
+ source:Pick<FurnitureMultiSources,'catalog'|'variants'>,
+ visual:Visual,addressables:Addressables,fetchAsset:typeof fetch=fetch
+){
+ const base=validateFurniturePayloadRoot(root),pin={...expected};
+ if(!hex.test(pin.sha256)||!Number.isSafeInteger(pin.bytes)||pin.bytes<=0||pin.bytes>32*1024*1024)fail('LENGTH');
+ const response=await fetchAsset(new URL('sources.json',base),{method:'GET',credentials:'omit',redirect:'error',referrerPolicy:'no-referrer'});
+ if(!response.ok||!response.body)throw Error('FURNITURE_SOURCE_PACK_FETCH');
+ const stream=response.body.getReader(),bytes=new ArrayBuffer(pin.bytes),out=new Uint8Array(bytes);
+ let offset=0;
+ try{
+  for(;;){
+   const {done,value}=await stream.read();
+   if(done)break;
+   if(value.byteLength>out.length-offset)fail('LENGTH');
+   out.set(value,offset);offset+=value.byteLength;
+  }
+  if(offset!==out.length)fail('LENGTH');
+ }finally{
+  try{await stream.cancel();}catch{/* Preserve the original verification error. */}
+  stream.releaseLock();
+ }
+ return openFurnitureSourcePack(bytes,pin,base,source,visual,addressables,fetchAsset);
 }
