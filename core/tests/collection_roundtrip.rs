@@ -2170,3 +2170,49 @@ fn cancel_staged_unique_rows_preserves_history_and_never_allocates_deleted_uids(
   assert_eq!(recovered.inventory(),r.inventory());
  }
 }
+
+#[test]
+fn ordinary_furniture_source_creates_distinct_customized_stack_without_consuming_base(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=61381969;let staged=(1u32<<31)|item as u32;
+ for saved in [false,true]{
+  for zipped in [false,true]{
+   let mut payload=synthetic_payload("3.0.1");
+   if saved{payload[3]=0x96;payload.extend(doc(1,arr(vec![u(4),u(item as u32),u(0),u(3),vec![0xc0]])));}
+   let raw=slot_from_payload("3.0.1",payload);let input=if zipped{zip(&raw)}else{raw};
+   let mut e=Editor::open(input.clone()).unwrap();
+   let source=if saved{4}else{e.change_inventory_quantity(staged,0,3).unwrap();staged};
+   assert!(!e.inventory_absent_furniture_ids().contains(&item));
+   assert!(e.inventory_default_furniture_ids().contains(&source));
+   let choices=e.inventory_furniture_creation_variants(source);
+   assert!(choices.contains(&[0,2,0]));
+   assert!(!choices.contains(&[0,1,0]));
+   assert!(e.create_inventory_furniture_variant(source,[1,0,0],[0,2,0],1).is_err());
+   let handle=e.create_inventory_furniture_variant(source,[0;3],[0,2,0],4).unwrap();
+   assert_ne!(handle,source);
+   assert!(!e.inventory_furniture_creation_variants(source).contains(&[0,2,0]));
+   assert!(e.inventory_furniture_creation_variants(source).contains(&[0,3,0]));
+   let rows=e.inventory();assert_eq!(rows.iter().find(|r|r.document_id==source).unwrap().quantity,3);
+   assert_eq!(e.inventory_unique_data(source),None);
+   let appearance=e.inventory_unique_data(handle);
+   let cp=e.history_checkpoint().unwrap();let mut r=Editor::open(input).unwrap();r.restore_history(&cp).unwrap();
+   assert_eq!(r.inventory(),rows);assert!(r.undo_scope(Inventory));
+   assert_eq!(r.inventory().len(),1);assert!(r.redo_scope(Inventory));
+   let reopened=Editor::open(r.export().unwrap()).unwrap();let rows=reopened.inventory();
+   assert_eq!(rows.len(),2);assert!(rows.iter().all(|r|r.item_id==item));
+   let ordinary=rows.iter().find(|r|r.quantity==3).unwrap();
+   let custom=rows.iter().find(|r|r.quantity==4).unwrap();
+   assert_eq!(reopened.inventory_unique_data(ordinary.document_id),None);
+   assert_eq!(reopened.inventory_unique_data(custom.document_id),appearance);
+   assert!(reopened.inventory_unique_rows().any(|r|r.0==ordinary.document_id&&r.1==Some(0)));
+   assert!(reopened.inventory_unique_rows().any(|r|r.0==custom.document_id&&r.1==Some(1)));
+  }
+ }
+ // Multiple default records are ambiguous: no creation source is offered.
+ let mut payload=synthetic_payload("3.0.1");payload[2]=5;payload[3]=0x97;
+ for id in [4,5]{payload.extend(doc(1,arr(vec![u(id),u(item as u32),u(0),u(3),vec![0xc0]])));}
+ let mut e=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
+ assert!(e.inventory_default_furniture_ids().is_empty());
+ assert!(e.create_inventory_furniture_variant(4,[0;3],[0,2,0],1).is_err());
+ assert!(!e.dirty());
+}
