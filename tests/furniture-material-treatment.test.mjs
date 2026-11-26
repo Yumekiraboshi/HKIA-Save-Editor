@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/furniture-material-treatment.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {nativeFurnitureTreatment,furnitureTreatmentScale,createFurnitureTreatmentResolver}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {nativeFurnitureTreatment,furnitureTreatmentScale,createFurnitureTreatmentResolver,bindFurnitureRendererTreatments}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const read=p=>JSON.parse(readFileSync(new URL('../'+p,import.meta.url)));
 const catalog=read('public/inventory-ui/furniture-customization-v3.0.1.json'),variants=read('data/furniture-material-render-source-v3.0.1.json');
 test('all 649 original customizable items and 1089 slots resolve defaults and every source-defined choice',()=>{
@@ -53,4 +53,18 @@ test('all 877 original material records preserve setter args, except native null
 test('mismatched source crosswalk cannot select materials',()=>{
  const changed=structuredClone(variants);changed.rows[0][1]='0'.repeat(32);
  assert.throws(()=>createFurnitureTreatmentResolver(catalog,changed),/MATERIAL_LINK/);
+});
+
+test('all four extracted multi-renderer samples retain exact slot and noncustomizable mesh bindings',()=>{
+ const d={catalog,variants,geometry:read('data/furniture-mesh-source-sample-v3.0.1.json'),base:read('data/furniture-base-material-source-v3.0.1.json'),patterns:read('data/furniture-pattern-texture-sample-v3.0.1.json')};
+ let total=0,unmodified=0;
+ for(const id of [32709745,34770598,61381969,90163601]){
+  const p=bindFurnitureRendererTreatments(d,id,[0,0,0]);
+  assert.equal(p.plans.length,d.geometry.rows.find(r=>r.itemId===id).nodes.filter(n=>n.rendererPathId).length);
+  assert.deepEqual(p.plans.filter(x=>x.choice).map(x=>x.choice.slot).sort(),catalog.items.find(x=>x[0]===id)[4].map(s=>s[0]).sort());
+  total+=p.plans.length;unmodified+=p.plans.filter(x=>!x.choice).length;
+ }
+ assert.equal(total,11);assert.equal(unmodified,3);
+ const stand=bindFurnitureRendererTreatments(d,34770598,[0,214,213]);assert.deepEqual(stand.plans.filter(x=>x.choice).map(x=>x.choice.selectedIndex),[232,214,213]);
+ const bad=structuredClone(d);bad.base.rows[1].bindings.pop();assert.throws(()=>bindFurnitureRendererTreatments(bad,34770598,[0,0,0]),/RENDERER/);
 });
