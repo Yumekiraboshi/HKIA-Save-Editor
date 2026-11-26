@@ -331,3 +331,5 @@
 .inventory-card.inventory-batch-selected{border-color:var(--accent);background:var(--accent-soft)}
 
 .inventory-quantity-form .inventory-compact-variant{flex:none;display:grid;place-items:center;width:30px;height:30px;padding:0}
+
+.inventory-empty-stack .inventory-card-heading{opacity:.55}
