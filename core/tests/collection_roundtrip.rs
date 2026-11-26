@@ -1556,7 +1556,7 @@ fn unowned_flower_creation_uses_only_source_defaults_and_native_ids(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let input=slot_from_payload("3.0.1",synthetic_payload("3.0.1"));
  let mut e=Editor::open(input.clone()).unwrap();let item=43114910;let candidate=(1u32<<31)|item as u32;
- assert_eq!(e.inventory_absent_flower_ids().len(),23);
+ assert_eq!(e.inventory_absent_flower_ids().len(),50);
  assert_eq!(e.inventory_flower_creation_variants(candidate),vec![[6,2,0,0],[6,5,0,0],[6,10,0,0]]);
  for bad in [[6,1,0,0],[6,14,0,0],[6,2,1,16],[7,2,0,0]]{
   assert!(e.create_inventory_flower_variant(candidate,[0;4],bad,1).is_err());
@@ -1576,6 +1576,50 @@ fn unowned_flower_creation_uses_only_source_defaults_and_native_ids(){
  assert_eq!(reopened.inventory_unique_data(rows[0].document_id),e.inventory_unique_data(a));
  assert_eq!(reopened.inventory_unique_data(rows[1].document_id),e.inventory_unique_data(b));
  assert!(!reopened.inventory_absent_flower_ids().contains(&item));
+}
+#[test]
+fn flower_clothing_creation_reuses_exact_processor_and_uid_rules(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ for zipped in [false,true]{
+  let mut payload=synthetic_payload("3.0.1");payload[2]=6;payload[3]=0x98;
+  for (id,item,uid) in [(4,897617923,21),(5,105502901,22),(6,1482119840,23)]{
+   payload.extend(doc(1,arr(vec![u(id),u(item),u(uid),u(2),plain_flower(6)])));
+  }
+  let raw=slot_from_payload("3.0.1",payload);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let before=[6,6,0,0];
+  let crown=[6,9,12,16];let ribbon=[6,9,14,16];let bow=[6,16,0,0];
+  assert!(e.inventory_flower_creation_variants(4).contains(&[6,6,12,16]));
+  assert!(e.create_inventory_flower_variant(6,before,[6,6,1,16],1).is_err());
+  assert!(e.create_inventory_flower_variant(4,before,[6,9,6,16],1).is_err());
+  let a=e.create_inventory_flower_variant(4,before,crown,3).unwrap();
+  let b=e.create_inventory_flower_variant(5,before,ribbon,4).unwrap();
+  let z=e.create_inventory_flower_variant(6,before,bow,5).unwrap();
+  assert!(e.create_inventory_flower_variant(4,before,crown,1).is_err());
+  assert!(e.change_inventory_flower_variant(4,before,crown).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let reopened=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory().len(),6);
+  for id in 4..=6{assert_eq!(reopened.inventory_original_unique_payload(id),e.inventory_original_unique_payload(id));}
+  for handle in [a,b,z]{
+   let item=e.inventory().into_iter().find(|r|r.document_id==handle).unwrap();
+   let added=reopened.inventory().into_iter().find(|r|r.item_id==item.item_id&&r.quantity==item.quantity).unwrap();
+   assert_eq!(reopened.inventory_unique_data(added.document_id),e.inventory_unique_data(handle));
+  }
+  let uid:Vec<_>=reopened.inventory_unique_rows().map(|r|r.1).collect();
+  assert_eq!(uid,vec![Some(21),Some(22),Some(23),Some(24),Some(25),Some(26)]);
+ }
+ let mut e=Editor::open(slot_from_payload("3.0.1",synthetic_payload("3.0.1"))).unwrap();
+ let crown=(1u32<<31)|1120342995;let bow=(1u32<<31)|1482119840;
+ assert_eq!(e.inventory_flower_creation_variants(crown),vec![[6,2,0,0],[6,5,0,0],[6,10,0,0]]);
+ assert!(e.inventory_flower_creation_variants(bow).iter().all(|v|v[2]==0&&v[3]==0));
+ for id in [1095918548u32,41105179]{assert!(e.inventory_flower_creation_variants((1u32<<31)|id).is_empty());}
+ assert!(e.create_inventory_flower_variant(crown,[0;4],[6,1,0,0],1).is_err());
+ e.create_inventory_flower_variant(crown,[0;4],[6,2,0,0],2).unwrap();
+ e.create_inventory_flower_variant(bow,[0;4],[6,5,0,0],3).unwrap();
+ let reopened=Editor::open(e.export().unwrap()).unwrap();
+ assert_eq!(reopened.inventory().iter().map(|r|r.item_id).collect::<Vec<_>>(),vec![1120342995,1482119840]);
 }
 #[test]
 fn palette_and_chef_quantity_preserves_entire_original_payload(){

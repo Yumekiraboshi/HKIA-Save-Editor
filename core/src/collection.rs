@@ -133,6 +133,17 @@ fn flower_variant(data:InventoryUniqueData)->Option<FlowerVariant>{
 fn flower_unique(v:FlowerVariant)->InventoryUniqueData{
  InventoryUniqueData::Flower{grow_state:v[0] as u8,base_color:v[1],pattern:v[2],pattern_color:v[3]}
 }
+// One source mapping for both existing and newly staged tag-7 records.
+fn flower_item_patterns(item:i32,grow:i32)->Option<&'static [i32]>{
+ if let Some((_,patterns))=FLOWER_SPECIES.iter().find(|(id,_)|*id==item){return Some(*patterns)}
+ if grow!=6{return None}
+ if let Ok(i)=FLOWER_CROWN_SPECIES.binary_search_by_key(&item,|&(id,_)|id){
+  let species=FLOWER_CROWN_SPECIES[i].1;
+  return FLOWER_SPECIES.iter().find(|(id,_)|*id==species).map(|&(_,p)|p)
+ }
+ if FLOWER_CLOTHING_GENERIC.contains(&item){Some(ALL_UNRESTRICTED_FLOWER_PATTERNS)}
+ else if item==FLOWER_CLOTHING_NO_PATTERN{Some(&[])}else{None}
+}
 fn valid_flower_variant(patterns:&[i32],v:FlowerVariant)->bool{
  matches!(v[0],0|6|7)&&FLOWER_COLORS.contains(&v[1])&&
  if v[2]==0{v[3]==0}
@@ -337,20 +348,10 @@ impl Editor {
  fn flower_source(&self,row:&crate::native::InventoryRow)->Option<&'static [i32]>{
   let item=self.unique_row_source(row,4)?;
   let original=flower_variant(row.unique_data?)?;
-  let patterns=if let Some((_,patterns))=FLOWER_SPECIES.iter().find(|(id,_)|*id==item){
-   *patterns
-  }else{
-   // The actual creation processors reuse a flower payload. Do not edit
-   // an equipped, preset, reserved, placed or unresolved legacy reference.
-   if original[0]!=6||self.slot.index.inventory_payload_refs_incomplete||
-    self.slot.index.inventory_payload_item_refs.contains(&item){return None}
-   if let Ok(i)=FLOWER_CROWN_SPECIES.binary_search_by_key(&item,|&(id,_)|id){
-    let species=FLOWER_CROWN_SPECIES[i].1;
-    FLOWER_SPECIES.iter().find(|(id,_)|*id==species)?.1
-   }else if FLOWER_CLOTHING_GENERIC.contains(&item){ALL_UNRESTRICTED_FLOWER_PATTERNS}
-   else if item==FLOWER_CLOTHING_NO_PATTERN{&[]}
-   else{return None}
-  };
+  // Copied outfit/placement payload references also block clothing.
+  if !FLOWER_SPECIES.iter().any(|&(id,_)|id==item)&&
+   (self.slot.index.inventory_payload_refs_incomplete||self.slot.index.inventory_payload_item_refs.contains(&item)){return None}
+  let patterns=flower_item_patterns(item,original[0])?;
   if !valid_flower_variant(patterns,original){return None}
   Some(patterns)
  }
@@ -486,7 +487,7 @@ impl Editor {
    crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
   let Some(row)=self.slot.index.inventory.iter().find(|r|r.id==id)else{return Vec::new()};
   let Some(item)=row.item_id else{return Vec::new()};
-  if !FLOWER_SPECIES.iter().any(|&(id,_)|id==item)||self.slot.index.inventory_payload_item_refs.contains(&item){return Vec::new()}
+  if self.slot.index.inventory_payload_item_refs.contains(&item){return Vec::new()}
   let Some(original)=row.unique_data.and_then(flower_variant)else{return Vec::new()};
   self.inventory_flower_variants(id).into_iter().filter(|&v|v!=original).collect()
  }
@@ -502,8 +503,8 @@ impl Editor {
   if quantity<=0||!self.inventory_creation_source_valid()||!self.unique_quantity_ids.contains(&source_id){return Err(Error::Schema)}
   let row=self.slot.index.inventory.iter().find(|r|r.id==source_id).ok_or(Error::Schema)?;
   let item_id=row.item_id.ok_or(Error::Schema)?;
-  // First slice: actual flower species only; no crafted clothing grants.
-  if !FLOWER_SPECIES.iter().any(|&(id,_)|id==item_id)||self.slot.index.inventory_payload_item_refs.contains(&item_id){return Err(Error::Schema)}
+  // The same exact species/processor source gate and reference index apply.
+  if self.slot.index.inventory_payload_item_refs.contains(&item_id){return Err(Error::Schema)}
   let (patterns,current,reserved)=self.flower_context(source_id).ok_or(Error::Schema)?;
   let original=flower_variant(row.unique_data.ok_or(Error::Schema)?).ok_or(Error::Schema)?;
   if expected!=current||next==current||next==original||next[0]!=current[0]||!valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
@@ -522,13 +523,27 @@ impl Editor {
   if self.inventory_item_rows.contains_key(&item_id)||
    self.slot.index.inventory_payload_item_refs.contains(&item_id)||
    self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item_id){return Vec::new()}
-  let Some((_,colors))=ABSENT_FLOWER_DEFAULTS.iter().find(|&&(id,_)|id==item_id)else{return Vec::new()};
   if !crate::inventory_source::is_uncapped_required_unique_stack(item_id){return Vec::new()}
-  colors.iter().map(|&color|[6,color,0,0]).filter(|v|!self.pending_flowers.values().any(|f|f.item_id==item_id&&f.variant==*v)).collect()
+  // Missing crowns use only their exact source species' original default
+  // colors. Generic processors can use any of the unrestricted source
+  // species; only their actual default colors are offered here.
+  let species=FLOWER_CROWN_SPECIES.iter().find(|&&(id,_)|id==item_id).map_or(item_id,|&(_,species)|species);
+  let colors:Vec<i32>=if let Some((_,colors))=ABSENT_FLOWER_DEFAULTS.iter().find(|&&(id,_)|id==species){
+   colors.to_vec()
+  }else if FLOWER_CLOTHING_GENERIC.contains(&item_id)||item_id==FLOWER_CLOTHING_NO_PATTERN{
+   let mut colors:Vec<i32>=ABSENT_FLOWER_DEFAULTS.iter().flat_map(|&(_,colors)|colors.iter().copied()).collect();
+   colors.sort_unstable();colors.dedup();colors
+  }else{return Vec::new()};
+  let Some(patterns)=flower_item_patterns(item_id,6)else{return Vec::new()};
+  colors.into_iter().map(|color|[6,color,0,0]).filter(|v|valid_flower_variant(patterns,*v)&&!self.pending_flowers.values().any(|f|f.item_id==item_id&&f.variant==*v)).collect()
  }
  pub fn inventory_absent_flower_ids(&self)->Vec<i32>{
   if !self.absent_flower_budget_available(){return Vec::new()}
-  ABSENT_FLOWER_DEFAULTS.iter().filter_map(|&(id,_)|(!self.absent_flower_choices(id).is_empty()).then_some(id)).collect()
+  ABSENT_FLOWER_DEFAULTS.iter().map(|&(id,_)|id)
+   .chain(FLOWER_CROWN_SPECIES.iter().map(|&(id,_)|id))
+   .chain(FLOWER_CLOTHING_GENERIC.iter().copied())
+   .chain(std::iter::once(FLOWER_CLOTHING_NO_PATTERN))
+   .filter(|&id|!self.absent_flower_choices(id).is_empty()).collect()
  }
  fn stage_new_flower(&mut self,source_id:u32,item_id:i32,expected:FlowerVariant,next:FlowerVariant,quantity:i32)->Result<u32,Error>{
   if self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
@@ -1342,7 +1357,7 @@ impl Editor {
     if row.quantity<=0{return Err(Error::Schema)}
     let mut bytes=vec![0x92,1,0x95];mp_u32(id,&mut bytes);mp_u32(row.item_id as u32,&mut bytes);
     let (uid,variant)=if let Some(f)=self.pending_flowers.get(&row.document_id){
-     let patterns=FLOWER_SPECIES.iter().find(|&&(item,_)|item==f.item_id).ok_or(Error::Schema)?.1;
+     let patterns=flower_item_patterns(f.item_id,f.variant[0]).ok_or(Error::Schema)?;
      if row.item_id!=f.item_id||!valid_flower_variant(patterns,f.variant){return Err(Error::Schema)}
      let uid=unique_ids.next().ok_or(Error::Schema)?;mp_u32(uid as u32,&mut bytes);mp_u32(row.quantity as u32,&mut bytes);
      bytes.extend([0x92,7,0x94,f.variant[0] as u8]);
