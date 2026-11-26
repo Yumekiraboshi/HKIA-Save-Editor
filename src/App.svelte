@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,changeInventoryFurnitureVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -73,7 +73,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let flowerSelection=$state(-1);
  let furnitureDialogEl:HTMLDialogElement|undefined=$state();
  let furnitureDisplay:FurnitureDisplay|null=$state(null);
- let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[]}|null>(null);
+ let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[];creationOptions:FurnitureVariant[]}|null>(null);
  let furnitureSelection=$state(-1);
  let inventoryNativeArt:InventoryNativeArt|null=$state(null);
  let inventoryEditableOnly=$state(false);
@@ -721,10 +721,10 @@ import {verifiedFloorplanName} from './floorplan-names';
   const revision=snapshot.revision;
   busy=true;error='';
   try{
-   const [options,display]=await Promise.all([requestFurnitureVariants(row.documentId),furnitureDisplay?Promise.resolve(furnitureDisplay):loadFurnitureDisplay()]);
+   const [options,creationOptions,display]=await Promise.all([requestFurnitureVariants(row.documentId),requestFurnitureCreationVariants(row.documentId),furnitureDisplay?Promise.resolve(furnitureDisplay):loadFurnitureDisplay()]);
    if(!snapshot||snapshot.revision!==revision)return;
    furnitureDisplay=display;
-   furnitureEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options};
+   furnitureEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions};
    furnitureSelection=-1;await tick();
    if(furnitureDialogEl&&!furnitureDialogEl.open)furnitureDialogEl.showModal();
   }catch(e){error=describeError(e)}
@@ -739,6 +739,18 @@ import {verifiedFloorplanName} from './floorplan-names';
   busy=true;error='';
   try{
    update(await changeInventoryFurnitureVariant(selected.documentId,selected.before,next));
+   closeFurnitureEditor();await persistDraft();
+  }catch(e){error=describeError(e)}
+  finally{busy=false}
+ }
+ async function addInventoryFurnitureVariant(){
+  const selected=furnitureEdit;
+  if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
+  const next=selected.options[furnitureSelection];
+  if(!next||!selected.creationOptions.some(v=>v.every((n,i)=>n===next[i])))return;
+  busy=true;error='';
+  try{
+   update(await createInventoryFurnitureVariant(selected.documentId,selected.before,next,1));
    closeFurnitureEditor();await persistDraft();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -1578,6 +1590,9 @@ import {verifiedFloorplanName} from './floorplan-names';
     {/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFurnitureEditor}>{copy.cancel}</button>
+     {#if edit.creationOptions.length}
+      <button type="button" class="inventory-create-furniture" disabled={busy||furnitureSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[furnitureSelection]?.[i]))} onclick={()=>void addInventoryFurnitureVariant()}>{inventoryAddCopy(locale)}</button>
+     {/if}
      <button type="submit" class="primary" disabled={busy||furnitureSelection<0}>{copy.apply}</button>
     </div>
    </form>
