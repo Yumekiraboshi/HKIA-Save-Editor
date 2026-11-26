@@ -560,7 +560,16 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!entry.guid)return hCopy.title;
   return achievementName(achievementGuid(entry.guid),0);
  }
- function update(s:SaveSnapshot){snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));}
+ function update(s:SaveSnapshot){
+  const previousGroup=activeInventoryGroup;
+  snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));
+  // A restored or newly created search match must not remain hidden in a
+  // different category. Keep the current category whenever it still matches.
+  if(activeTool==='inventory'&&inventoryQuery.trim()){
+   const target=inventorySearchTarget(previousGroup,inventoryMatchTotals);
+   if(target!==previousGroup){inventoryGroup=target;inventoryLimit=BATCH_SIZE}
+  }
+ }
  /** Verify a restored native journal reproduces the locally persisted net edits.
   * Canonical comparison retains lossless decimal timestamp strings.
   */
