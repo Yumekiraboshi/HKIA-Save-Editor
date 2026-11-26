@@ -122,6 +122,7 @@ mod inventory_source;
 pub mod inventory_palette_source;
 mod inventory_source_data;
 mod inventory_furniture_reference_data;
+mod inventory_clothing_reference_data;
 mod inventory_gathered_data;
 mod achievement_keys;
 #[derive(Debug)]

@@ -226,6 +226,14 @@ The 1,114 source-verified ordinary furniture definitions are eligible for zero/r
 
 Extend zero/refill to existing tag-8 records in the intersection of the 1,114 ordinary furniture deletion source IDs and verified non-layout, uncapped customizable furniture definitions (295 definitions). Reuse the full source material, distinct normalized peer, positive native UID, complete original payload and reference checks. The ordinary furniture placement/legacy/copied reference gate applies to the entire Item ID regardless of material or UID; an ambiguous or incomplete reference or a reference to another variant prevents deletion. Other customized definitions retain their previous bounds. Preserve exact UID, material tuple and document at zero; refill the same native record after export/reopen. Zero-quantity original rows do not authorize creation of new variants. No placement, unlock or ownership inference. Reuse shared CAS, confirmation, batch history, local recovery and export/reparse. Game acceptance remains unverified.
 
+#### Existing ordinary clothing zero/refill (3.0.1; conservative initial endpoint)
+
+The source-derived 2,435 ordinary clothing definitions are associated with 225 exact OutfitItemDetails.Outfit definitions and 455 distinct normal/water avatar pieces. Existing complete UID-zero nil single stacks may reach zero only with at least one saved avatar species model, exactly one complete avatar general settings model, complete known equipment/placement references, no matching item/outfit/piece GUID fingerprint or direct/copied Item ID reference, and no unresolved nonempty source preset GUID list. All dye siblings of a referenced outfit/piece are conservatively protected. Nonempty body/mouth preset GUID lists are not currently resolved by the pinned original definitions bundle; those saves retain positive-only clothing bounds. Preserve native records, GUIDs, equipment, presets and history; no outfit mutation or entitlement inferred. Reuse shared CAS, confirmation, batch, recovery and reparse. Actual game acceptance remains unverified.
+
+#### Existing flower-crafted clothing zero/refill (v3.0.1)
+
+The 27 original source-authorized flower clothing outputs use OutfitItemDetails, each directly referencing an AvatarOutfitDefinition and one distinct source avatar piece in the union of normal/water lists. Reuse the ordinary clothing complete-avatar, unresolved-preset, item-wide and GUID reference guards plus the existing unique UID/peer/flower tuple gates. Only complete tag-7 Plucked state 6 records are eligible; never infer permission from a similar item name or flower color. Preserve the original UID, native record and entire payload at zero; a zero row cannot authorize creation of another clothing variant. No equipment/preset/collection or entitlement edit. Raw/ZIP CAS, recovery, Undo/Redo, reparse and refill. Game acceptance unverified.
+
 
 #### Existing custom palette zero/refill (v3.0.1)
 

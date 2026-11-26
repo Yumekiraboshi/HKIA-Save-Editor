@@ -639,6 +639,8 @@ impl Editor {
    crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
   let Some(row)=self.slot.index.inventory.iter().find(|r|r.id==id)else{return Vec::new()};
   let Some(item)=row.item_id else{return Vec::new()};
+  if crate::inventory_source::flower_clothing_reference_keys(item).is_some()&&
+   !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return Vec::new()}
   if self.slot.index.inventory_payload_item_refs.contains(&item){return Vec::new()}
   let Some(original)=row.unique_data.and_then(flower_variant)else{return Vec::new()};
   self.inventory_flower_variants(id).into_iter().filter(|&v|v!=original).collect()
@@ -662,6 +664,8 @@ impl Editor {
   if quantity<=0||!self.inventory_creation_source_valid()||!self.unique_quantity_ids.contains(&source_id){return Err(Error::Schema)}
   let row=self.slot.index.inventory.iter().find(|r|r.id==source_id).ok_or(Error::Schema)?;
   let item_id=row.item_id.ok_or(Error::Schema)?;
+  if crate::inventory_source::flower_clothing_reference_keys(item_id).is_some()&&
+   !self.inventory_changes.get(&source_id).copied().or(row.quantity).is_some_and(|q|q>0){return Err(Error::Schema)}
   // The same exact species/processor source gate and reference index apply.
   if self.slot.index.inventory_payload_item_refs.contains(&item_id){return Err(Error::Schema)}
   let (patterns,current,reserved)=self.flower_context(source_id).ok_or(Error::Schema)?;
@@ -793,8 +797,22 @@ impl Editor {
    (Some(item),Some(InventoryUniqueData::CafeAppearance{..}))=>CAFE_IDS.binary_search(&item).is_ok(),
    (Some(item),Some(InventoryUniqueData::BobaAppearance{..}))=>item==BOBA_ID,
    (Some(item),Some(InventoryUniqueData::Furniture{..}))=>self.furniture_zero_reference_safe(item),
+   (Some(item),Some(InventoryUniqueData::Flower{grow_state:6,..}))=>crate::inventory_source::flower_clothing_reference_keys(item).is_some_and(|keys|self.clothing_zero_reference_safe(item,keys.iter())),
    _=>false
   }
+ }
+ fn ordinary_clothing_zero_reference_safe(&self,item:i32)->bool{
+  let Some((own,group))=crate::inventory_source::ordinary_clothing_reference_keys(item)else{return false};
+  self.clothing_zero_reference_safe(item,std::iter::once(&own).chain(group.iter()))
+ }
+ fn clothing_zero_reference_safe<'a>(&self,item:i32,mut keys:impl Iterator<Item=&'a u32>)->bool{
+  let index=&self.slot.index;
+  index.inventory_clothing_avatar_models>0&&index.inventory_clothing_general_models==1&&
+   !index.inventory_clothing_refs_incomplete&&!index.inventory_clothing_unknown_preset&&
+   !index.inventory_furniture_refs_incomplete&&!index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
+   !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
+   keys.all(|k|
+    !index.inventory_clothing_guid_refs.contains(k)&&!index.inventory_furniture_guid_refs.contains(k))
  }
  /// Native subtraction clamps to zero without deleting the saved record.
  /// Existing consumables must pass the full original unique quantity
@@ -805,7 +823,7 @@ impl Editor {
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
    (crate::inventory_source::ordinary_membership_item(item_id)||
     ((crate::inventory_source::existing_currency_item(item_id)||
-      self.furniture_zero_reference_safe(item_id))&&
+      self.furniture_zero_reference_safe(item_id)||self.ordinary_clothing_zero_reference_safe(item_id))&&
      !self.slot.index.inventory_payload_refs_incomplete&&
      !self.slot.index.inventory_payload_item_refs.contains(&item_id)))&&
    r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.quantity.is_some_and(|q|q>=0)&&
