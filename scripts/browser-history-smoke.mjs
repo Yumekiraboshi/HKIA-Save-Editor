@@ -26,7 +26,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,quantityBounds=false,emptyMaterialInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -45,10 +45,14 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const chef=(id,item,unique)=>doc(1,arr([id],u32(item),u32(id),u32(1),unique));
  const cafe=colors=>arr([3],arr(arr(u32(99)),arr(...colors.map(u32))));
  const boba=color=>arr([4],arr(u32(color),u32(6),u32(11),u32(19),u32(99)));
+ const placedFurniture=arr(u32(3202680),u32(0),u32(0),u32(0),u32(0),u32(0),[0xc0],[0xc0],arr(),arr(),u32(0),arr(),u32(0));
+ const furnitureHome=arr(hash(41,42,43,44),arr(),u32(0),u32(0),hash(0,0,0,0),i64(0n),[0xc0],[0xc2],[0xc0],arr(placedFurniture),[0xc0],[0xc0],u32(0),u32(0),arr());
+ const furnitureHomeObject=doc(32,arr([10],hash(10,0,0,0),[0],arr(doc(8,arr(arr(furnitureHome))))));
  const model=arr([0],cafeCreateInventory?[10]:(editableFlower||editableFurniture||paletteCreationInventory||bobaCreateInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
+  ...(ordinaryFurnitureInventory?[doc(1,arr([8],u32(427689),[0],u32(5),[0xc0])),doc(1,arr([9],u32(3202680),[0],u32(6),[0xc0])),furnitureHomeObject]:[]),
   ...(emptyMaterialInventory?[doc(1,arr([9],u32(emptyMaterialInventory==='currency'?348154640:1877756618),[0],u32(6),[0xc0])),doc(1,arr([10],u32(emptyMaterialInventory==='currency'?1774854033:627013240),[0],u32(0),[0xc0]))]:[]),
   ...(editableFlower?[flower(8,1,0,0)]:[]),
   ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
@@ -775,6 +779,35 @@ async function inventoryEmptyMaterialSmoke(currency=false){
   assert.deepEqual(rows,[[4,315822,6],[9,first,0],[10,second,5]]);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM INVENTORY '+(currency?'CURRENCY':'MATERIAL')+' EMPTY PASS: confirmation, empty/refill, reload, undo/redo and preserved native records');
+ }finally{await context.close()}
+}
+async function ordinaryFurnitureRemovalSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-ordinary-furniture.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({ordinaryFurnitureInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  const input=page.locator('.inventory-card input[name="quantity"]');
+  const remove=page.locator('.inventory-card .inventory-stack-delete');
+  await search.fill('3202680');await input.waitFor();
+  assert.equal(await input.getAttribute('min'),'1');assert.equal(await remove.isDisabled(),true);
+  await search.fill('427689');await input.waitFor();
+  assert.equal(await input.getAttribute('min'),'0');assert.equal(await remove.isEnabled(),true);
+  await remove.click();
+  const modal=page.locator('.removal-confirm-dialog');
+  await modal.waitFor({state:'visible'});await modal.locator('.removal-confirm-action').click();
+  await page.locator('.inventory-empty-stack').waitFor();
+  assert.equal(await input.inputValue(),'0');
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});
+  assert.equal(await input.inputValue(),'5');
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: unreferenced stack zero/undo; placed stack protected');
  }finally{await context.close()}
 }
 async function inventoryEmptyBrowseSmoke(){
@@ -2275,6 +2308,7 @@ async function run(){
  await inventoryEmptyMaterialSmoke();
  await inventoryEmptyMaterialSmoke(true);
  await inventoryEmptyBrowseSmoke();
+ await ordinaryFurnitureRemovalSmoke();
  await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
  await inventoryDynamicFlowerArtSmoke();
