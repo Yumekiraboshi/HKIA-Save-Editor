@@ -156,6 +156,8 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
  pub inventory_palette_avatar_models:usize,
  pub inventory_palette_general_models:usize,
  pub inventory_palette_context_incomplete:bool,
+ /// A legacy or modern wand payload outside the bag cannot be safely joined by UID.
+ pub inventory_wand_copies:bool,
  pub(crate) document_spans:Vec<DocumentSpan>,
  /// DbRoot.Key(1), native shared document allocation counter and exact token span.
  pub root_next_id:Option<(i32,Range<usize>)>,
@@ -301,6 +303,7 @@ impl<'a> Walk<'a>{
      Shape::Union(branches)=>{let union_start=self.c.pos;if self.c.array()?!=2{return Err(Error::Schema)}self.budget(depth+1)?;let tag=self.c.int(i32::MIN as i128,i32::MAX as i128)? as i32;let branch=branches.iter().find(|(t,_)|*t==tag).ok_or(Error::Schema)?.1;
       let capture_unique=name==INVENTORY_UNIQUE&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,0));
       let capture_source=name==INVENTORY_UNIQUE&&ctx==Some((WAND_SOURCE_CAPTURE,0));
+      if name==INVENTORY_UNIQUE&&matches!(tag,5|9)&&!capture_unique{self.index.inventory_wand_copies=true;}
       let capture_palette_copy=name==INVENTORY_UNIQUE&&tag==6&&!capture_unique;
       let value=self.read(branch,depth+1,Some((if capture_unique||capture_palette_copy{INVENTORY_UNIQUE_CAPTURE}else if capture_source{WAND_SOURCE_CAPTURE}else{name},tag)),false)?;
       if capture_unique||capture_source||capture_palette_copy {
