@@ -105,3 +105,17 @@ export function browseInventory(
   return an.localeCompare(bn,locale)||a.itemId-b.itemId||a.documentId-b.documentId;
  });
 }
+
+/** A known refillable empty stack is not an owned item for ordinary browsing.
+ * Keep its native row intact and reachable through search and Add. Unknown
+ * or read-only zero records remain visible in owned mode.
+ */
+export function inventoryRefillable(row:InventoryEntry):boolean{
+ return row.quantity===0&&row.editable&&row.quantityMinimum===0;
+}
+export function inventoryAddRows(owned:readonly InventoryEntry[],creatable:readonly InventoryEntry[]):InventoryEntry[]{
+ return [...owned.filter(inventoryRefillable),...creatable];
+}
+export function inventoryDisplayRows(rows:readonly InventoryEntry[],addMode:boolean,query:string):readonly InventoryEntry[]{
+ return addMode||query.trim()?rows:rows.filter(row=>!inventoryRefillable(row));
+}
