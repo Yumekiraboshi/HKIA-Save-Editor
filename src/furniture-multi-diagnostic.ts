@@ -6,7 +6,7 @@ import type {RugNativeSources} from './furniture-rug-source';
 import type {RugCubeRequest,RugPayload,ReadRugPayload} from './furniture-rug-diagnostic';
 import {authoredRendererModel} from './furniture-authored-transforms';
 import {mergeStaticRendererBounds} from './furniture-renderer-bounds';
-import {uploadNativeGeometry,validateNativeGeometryLayout} from './native-furniture-mesh';
+import {uploadNativeGeometry,validateNativeGeometryLayout,type NativeMeshSource,type MeshAttributeLocations} from './native-furniture-mesh';
 import {uploadNativeTexture,validateNativeTextureLayout,type NativeTextureSource,type Bc1Mode} from './native-texture-upload';
 import {uploadNativeCube,validateNativeCubeOrientation} from './native-cube-upload';
 import {createFurnitureForwardRenderer,validateFurnitureForwardInputs,type FurnitureForwardMaterial,type FurnitureForwardScene} from './furniture-forwardlit-gpu';
@@ -42,6 +42,21 @@ export function nativeBaseIsOpaque(s:NativeTextureSource,bytes:ArrayBuffer){
  }
  // No general BC3 alpha proof is inferred.
  return false;
+}
+/** UV1 is not consumed when the authored world-UV branch is selected,
+ * or when the only pattern sample is provably constant/unused. The one
+ * original white ARGB32 texture is verified again at GPU upload. A null
+ * masked pattern still requires the existing payload opacity proof before draw.
+ * Never synthesize UV0 as UV1 or accept a missing UV for a spatial pattern. */
+export function furnitureForwardAttributeLocations(mesh:NativeMeshSource,material:FurnitureForwardMaterial,pattern:NativeTextureSource|null):MeshAttributeLocations{
+ const active=(i:number)=>!!(mesh.channels[i]?.[3]&15);
+ if([0,1,2,4].some(i=>!active(i)))fail('MESH_CHANNEL');
+ const locations:Record<number,number>={0:0,1:1,2:2,4:4};
+ if(active(5)){locations[5]=5;return locations;}
+ const white=pattern!==null&&pattern.format===5&&pattern.sha256==='9a8dcd3f9ff7aa3114e141f03c12989d363ea81fd74c02eea63c5f41489cb17a';
+ if(white)validateNativeTextureLayout(pattern);
+ if(!material.worldUV&&!white&&!(pattern===null&&material.baseColor[3]>0))fail('MESH_CHANNEL');
+ return locations;
 }
 export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:FurnitureMultiRequest){
  const bound=bindFurnitureRendererTreatments(d,request.itemId,request.indices);
@@ -96,9 +111,9 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
    if(t.format===10&&!['rgb','rgba'].includes(request.bc1Modes[t.sha256]))fail('BC1_MODE');
   }
   const mesh=get(bound.geometry.meshes[p.meshPathId],'MESH');
-  if([0,1,2,4,5].some(i=>!mesh.channels[i]||!(mesh.channels[i][3]&15)))fail('MESH_CHANNEL');
+  const attributes=furnitureForwardAttributeLocations(mesh,material,pattern);
   return {rendererPathId:p.rendererPathId,meshPathId:p.meshPathId,slot:p.choice?.slot??null,selectedIndex:p.choice?.selectedIndex??null,
-   material,scene,baseMap:b,normalMap:n,comboMap:x,patternMap:pattern};
+   material,scene,attributes,baseMap:b,normalMap:n,comboMap:x,patternMap:pattern};
  });
  if(new Set(plans.map(p=>p.meshPathId)).size!==Object.keys(bound.geometry.meshes).length)fail('MESH_COVERAGE');
  for(const c of [request.reflectionPrimary,request.reflectionSecondary])validateNativeCubeOrientation(c.source,c.orientation);
@@ -127,7 +142,7 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
  let geometry:Awaited<ReturnType<typeof uploadNativeGeometry>>|undefined,renderer:ReturnType<typeof createFurnitureForwardRenderer>|undefined;
  try{
   geometry=await uploadNativeGeometry(gl,resolved.geometry,await getBytes('geometry',resolved.geometry.geometrySha256,resolved.geometry.geometryBytes),
-   Object.fromEntries(Object.keys(resolved.geometry.meshes).map(id=>[id,{0:0,1:1,2:2,4:4,5:5}])));
+   Object.fromEntries(resolved.plans.map(p=>[p.meshPathId,p.attributes])));
   const texture=async(t:NativeTextureSource)=>{
    const key=t.sha256+':'+t.colorSpace+':'+t.format+':'+JSON.stringify(t.sampler)+':'+(request.bc1Modes[t.sha256]??'');
    const cached=textures.get(key);if(cached)return cached;
@@ -150,7 +165,12 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
    draws.push({p,mesh:get(geometry.meshes.get(p.meshPathId),'GPU_MESH'),textures:{baseMap,normalMap,comboMap,patternMap,reflectionPrimary,reflectionSecondary}});
   }
   renderer=createFurnitureForwardRenderer(gl);
-  for(const draw of draws)renderer.draw(draw.mesh,draw.textures,draw.p.scene,draw.p.material);
+  for(const draw of draws){
+   // Disabled UV1 uses an explicit finite generic value; the preflight above
+   // proved that its value cannot affect this shader path.
+   if(draw.p.attributes[5]===undefined)gl.vertexAttrib2f(5,0,0);
+   renderer.draw(draw.mesh,draw.textures,draw.p.scene,draw.p.material);
+  }
   return {itemId:request.itemId,renderers:draws.length,uniqueTextures:textures.size,fidelity:resolved.fidelity};
  }finally{
   if(renderer){gl.useProgram(null);renderer.dispose();}
