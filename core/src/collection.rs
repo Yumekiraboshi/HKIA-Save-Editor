@@ -826,6 +826,7 @@ impl Editor {
   Self::is_emptyable_flower_species(r)||match (r.item_id,r.unique_data){
    (Some(item),Some(InventoryUniqueData::CafeAppearance{..}))=>CAFE_IDS.binary_search(&item).is_ok(),
    (Some(item),Some(InventoryUniqueData::BobaAppearance{..}))=>item==BOBA_ID,
+   (Some(_),Some(InventoryUniqueData::WandAppearance{..}))=>self.wand_zero_reference_safe(r),
    (Some(item),Some(InventoryUniqueData::Furniture{..}))=>self.furniture_zero_reference_safe(item),
    (Some(item),Some(InventoryUniqueData::Flower{grow_state:6,..}))=>crate::inventory_source::flower_clothing_reference_keys(item).is_some_and(|keys|self.clothing_zero_reference_safe(item,keys.iter())),
    _=>false
@@ -915,6 +916,18 @@ impl Editor {
     if s==style&&row.unique_fields.len()==5&&crate::inventory_source::magic_wand_choices([magic,fleck])=>Some([magic,fleck]),
    _=>None,
   }
+ }
+ // Zero is more restrictive than positive quantity changes. Unknown legacy
+ // GUID targets cannot be joined to these six integer source IDs yet.
+ fn wand_zero_reference_safe(&self,row:&crate::native::InventoryRow)->bool{
+  let Some(item)=row.item_id else{return false};
+  let index=&self.slot.index;
+  Self::wand_words(row).is_some()&&!index.inventory_wand_copies&&
+   !index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
+   !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_refs_incomplete&&
+   !index.inventory_palette_context_incomplete&&!index.inventory_palette_copies_incomplete&&
+   index.inventory_furniture_guid_refs.is_empty()&&
+   !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)
  }
  fn wand_appearance(item:i32,[magic,fleck]:WandVariant)->Option<InventoryUniqueData>{
   let style=crate::inventory_source::magic_wand_style(item)?;

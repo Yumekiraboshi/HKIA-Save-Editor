@@ -341,3 +341,6 @@
 .inventory-batch-delete{display:grid;place-items:center;color:var(--danger)}
 
 .inventory-empty-stack .inventory-card-heading{opacity:.55}
+
+.inventory-removal-palette{display:flex;gap:4px;margin-top:3px;align-items:center}
+.inventory-removal-swatch{width:19px;height:19px;border:1px solid var(--line);border-radius:4px;flex:none}
