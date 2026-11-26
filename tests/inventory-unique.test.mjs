@@ -93,3 +93,20 @@ test('zero source Item ID is the native magic Sprite selector, not absent',async
  const row=decodeInventoryUnique(wire([1,1,1,1,9,5,6,0,104,125,1,-1,0,0]),new Set([1])).get(1);
  assert.equal(inventoryWandAppearance(39246601,row).sourceItemId,0);
 });
+
+test('growth labels distinguish native species states and never describe clothing as a flower',async()=>{
+ const {flowerGrowthKind}=await load('../src/inventory-flower-display.ts');
+ const {flowerGrowthLabel}=await load('../src/inventory-unique-copy.ts');
+ const flower=growState=>({growState,baseColor:1,pattern:0,patternColor:0});
+ for(const [state,kind,label] of [[0,'seed','種'],[6,'plucked','花'],[7,'uprooted','掘り起こした株'],[255,'unknown','状態未確認']]){
+  assert.equal(flowerGrowthKind(43114910,flower(state)),kind);
+  assert.equal(flowerGrowthLabel('ja',kind),label);
+  assert.equal(flowerGrowthKind(1120342995,flower(state)),null);
+ }
+ const {readFileSync}=await import('node:fs');
+ const source=JSON.parse(readFileSync(new URL('../core/data/inventory-flower-definitions-v3.0.1.json',import.meta.url)));
+ for(const row of source.flowers)assert.equal(flowerGrowthKind(row.itemId,flower(0)),'seed');
+ for(const locale of ['ar','de','en','en-GB','es','fr','fr-CA','it','ja','ko','nl','pt-BR','ru','tr','zh-Hans','zh-Hant']){
+  const labels=['seed','plucked','uprooted','unknown'].map(k=>flowerGrowthLabel(locale,k));assert.equal(new Set(labels).size,4);assert.ok(labels.every(Boolean));
+ }
+});
