@@ -259,7 +259,18 @@ async function inventoryWandEditSmoke(){
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1429161083');
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
   assert.equal(await select.locator('option[data-wand-variant="106:127"]').count(),0);
-  await dialog.locator('.date-dialog-close').click();
+  const addValue=await select.locator('option[data-wand-variant="110:126"]').getAttribute('value');assert.ok(addValue!==null);
+  await select.selectOption(addValue);
+  await dialog.locator('input[name="variant-add-quantity"]').fill('3');
+  await dialog.locator('.inventory-create-wand:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  const rows=page.locator('.inventory-card input[name="quantity"]');
+  await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
+  await page.locator('button[title="Undo"]:not([disabled])').click();await rows.nth(1).waitFor({state:'detached'});
+  await page.locator('button[title="Redo"]:not([disabled])').click();await rows.nth(1).waitFor();
+  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1429161083');
+  await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
   const output=readFileSync(await download.path());
@@ -267,10 +278,13 @@ async function inventoryWandEditSmoke(){
   const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
   assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_wand_variants(8),0);
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
-  assert.equal(v.getUint32(0,true),35);
-  const options=Array.from({length:35},(_,i)=>[v.getInt32(4+i*8,true),v.getInt32(8+i*8,true)]);
-  assert.ok(options.some(([m,f])=>m===104&&f===125));assert.ok(!options.some(([m,f])=>m===106&&f===127));
-  assert.deepEqual(errors,[]);console.log('CHROMIUM MAGIC WAND PASS: source material edit, history, recovery and export');
+  assert.equal(v.getUint32(0,true),34);
+  const options=Array.from({length:34},(_,i)=>[v.getInt32(4+i*8,true),v.getInt32(8+i*8,true)]);
+  assert.ok(options.some(([m,f])=>m===104&&f===125));assert.ok(!options.some(([m,f])=>m===106&&f===127));assert.ok(!options.some(([m,f])=>m===110&&f===126));
+  assert.equal(e.hkia_inventory_snapshot(),0);
+  const iv=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(iv.getUint32(0,true),3);
+  assert.equal(iv.getInt32(4+2*16+4,true),1429161083);assert.equal(iv.getInt32(4+2*16+8,true),3);
+  assert.deepEqual(errors,[]);console.log('CHROMIUM MAGIC WAND PASS: source material edit, independent addition, history, recovery and export');
  }finally{await context.close()}
 }
 async function inventoryBobaEditSmoke(){

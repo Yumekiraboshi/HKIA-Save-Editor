@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPaletteVariants,changeInventoryPaletteVariant,requestPaletteCreationVariants,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafeVariants,changeInventoryCafeVariant,requestCafeCreationVariants,createInventoryCafeVariant,requestWandVariants,changeInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPaletteVariants,changeInventoryPaletteVariant,requestPaletteCreationVariants,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafeVariants,changeInventoryCafeVariant,requestCafeCreationVariants,createInventoryCafeVariant,requestWandVariants,changeInventoryWandVariant,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,inventoryPatchesEqual,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -86,7 +86,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let cafeSelection=$state(-1);
  let cafeSlot=$state(0);
  let wandDialogEl:HTMLDialogElement|undefined=$state();
- let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[]}|null>(null);
+ let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[]}|null>(null);
  let wandSelection=$state(-1);
  let bobaDialogEl:HTMLDialogElement|undefined=$state();
  let bobaEdit=$state<{documentId:number;itemId:number;revision:number;before:BobaVariant;options:BobaVariant[];creationOptions:BobaVariant[]}|null>(null);
@@ -800,11 +800,19 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||!row.unique?.wandEditable||!before||!appearance)return;
   const revision=snapshot.revision;busy=true;error='';
   try{
-   const options=await requestWandVariants(row.documentId);
+   const [options,creationOptions]=await Promise.all([requestWandVariants(row.documentId),requestWandCreationVariants(row.documentId)]);
    if(!snapshot||snapshot.revision!==revision)return;
-   wandEdit={documentId:row.documentId,itemId:row.itemId,revision,before,appearance,options};wandSelection=-1;await tick();
+   wandEdit={documentId:row.documentId,itemId:row.itemId,revision,before,appearance,options,creationOptions};wandSelection=-1;variantAddQuantity=1;await tick();
    if(wandDialogEl&&!wandDialogEl.open)wandDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
+ }
+ async function addInventoryWandVariant(){
+  const edit=wandEdit,quantity=variantAddQuantity;
+  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
+  const next=edit.options[wandSelection];if(!next||!edit.creationOptions.some(v=>v.every((n,i)=>n===next[i])))return;
+  busy=true;error='';
+  try{update(await createInventoryWandVariant(edit.documentId,edit.before,next,quantity));closeWandEditor();await persistDraft()}
+  catch(e){error=describeError(e)}finally{busy=false}
  }
  function closeWandEditor(){if(wandDialogEl?.open)wandDialogEl.close()}
  async function applyInventoryWandVariant(event:SubmitEvent){
@@ -1760,9 +1768,18 @@ import {verifiedFloorplanName} from './floorplan-names';
      </select>
     </label>
     {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
+    {#if edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[wandSelection]?.[i]))}
+     <label class="date-dialog-field">
+      <span>{inventoryAddCopy(locale)} · {iCopy.quantity}</span>
+      <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
+     </label>
+    {/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeWandEditor}>{copy.cancel}</button>
-     <button type="submit" class="primary" disabled={busy||wandSelection<0}>{copy.apply}</button>
+     {#if edit.creationOptions.length}
+      <button type="button" class="inventory-create-wand" disabled={busy||!validVariantAddQuantity||wandSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[wandSelection]?.[i]))} onclick={()=>void addInventoryWandVariant()}>{inventoryAddCopy(locale)}</button>
+     {/if}
+     <button type="submit" formnovalidate class="primary" disabled={busy||wandSelection<0}>{copy.apply}</button>
     </div>
    </form>
   {/if}
