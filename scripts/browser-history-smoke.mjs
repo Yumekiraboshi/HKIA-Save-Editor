@@ -163,8 +163,18 @@ async function inventoryDynamicPaletteArtSmoke(){
   })));
   for(const im of images){assert.equal(im.width,96);assert.equal(im.height,96);assert.ok(im.alpha.some(a=>a>200));}
   assert.deepEqual(images[0].alpha,images[1].alpha);assert.notDeepEqual(images[0].rgb,images[1].rgb);
+  const inputs=page.locator('.inventory-card input[name="quantity"]');
+  assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.min)),['1','1']);
+  await inputs.first().fill('4');await page.locator('.inventory-card button[type="submit"]').first().click();
+  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await inputs.nth(1).fill('7');await page.locator('.inventory-card button[type="submit"]').nth(1).click();
+  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
+  await inputs.nth(1).waitFor();
+  assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.value)),['4','7']);
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM DYNAMIC PALETTE PASS: native unique Color1/2/3, original source sampling, local generation');
+  console.log('CHROMIUM DYNAMIC PALETTE PASS: native unique Color1/2/3, independent quantities, draft recovery and local generation');
  }finally{await context.close();}
 }
 async function inventoryChefArtSmoke(){

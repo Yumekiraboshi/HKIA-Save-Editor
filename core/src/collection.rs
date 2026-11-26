@@ -800,15 +800,20 @@ impl Editor {
    _=>None
   }
  }
- // Palette uses a native approximate float comparison, not exact bits.
- // Preserve the existing single-row gate until its peer index is verified.
- fn single_palette_quantity_source(&self,row:&crate::native::InventoryRow)->Option<i32>{
+ // Native Palette.Equals compares each of three RGBA colors using
+ // binary32 squared distance < 0x2edbe6fe, not bit equality. A
+ // malformed peer must block the family; keep all source words intact.
+ fn palette_identity(row:&crate::native::InventoryRow)->Option<[[u32;4];3]>{
   use crate::inventory_source::{CUSTOM_PALETTE_ID,is_uncapped_required_unique_stack};
-  let item=row.item_id?;
-  if item!=CUSTOM_PALETTE_ID||self.inventory_item_rows.get(&item)!=Some(&1)||!is_uncapped_required_unique_stack(item){return None}
-  self.unique_row_source(row,3)?;
+  if row.item_id!=Some(CUSTOM_PALETTE_ID)||!is_uncapped_required_unique_stack(CUSTOM_PALETTE_ID)||row.unique_fields.len()!=3{return None}
   let InventoryUniqueData::Palette{rgba_bits}=row.unique_data? else{return None};
-  rgba_bits.iter().flatten().all(|&bits|(0.0..=1.0).contains(&f32::from_bits(bits))).then_some(item)
+  rgba_bits.iter().flatten().all(|&bits|(0.0..=1.0).contains(&f32::from_bits(bits))).then_some(rgba_bits)
+ }
+ fn palette_equal(a:[[u32;4];3],b:[[u32;4];3])->bool{
+  a.iter().zip(b).all(|(a,b)|{
+   let square=|i:usize|{let d=f32::from_bits(a[i])-f32::from_bits(b[i]);d*d};
+   ((square(0)+square(1))+square(2))+square(3)<f32::from_bits(0x2edbe6fe)
+  })
  }
  fn index_unique_quantity_ids(&self)->HashSet<u32>{
   if self.slot.envelope.version!=Version::V301||self.slot.index.inventory_payload_refs_incomplete{return HashSet::new()}
@@ -816,6 +821,8 @@ impl Editor {
   let mut variant_counts=HashMap::<(i32,FlowerVariant),usize>::new();
   let mut furniture_counts=HashMap::<(i32,FurnitureVariant),usize>::new();
   let mut chef_counts=HashMap::<(i32,Vec<i32>,Vec<i32>),usize>::new();
+  let mut palette_peers=Vec::new();
+  let mut palette_conflicts=HashSet::new();
   let mut ambiguous=HashSet::new();
   for row in &self.slot.index.inventory{
    if let Some(uid)=row.unique_id{*uid_counts.entry(uid).or_default()+=1}
@@ -824,6 +831,15 @@ impl Editor {
     let key=if row.unique_is_nil==Some(true){furniture_key(source,[0;3])}
      else{row.unique_data.and_then(furniture_variant).and_then(|v|furniture_key(source,v))};
     match key{Some(v)=>{*furniture_counts.entry((item,v)).or_default()+=1;},None=>{ambiguous.insert(item);}}
+   }
+   if item==crate::inventory_source::CUSTOM_PALETTE_ID{
+    // Approximate equality is not transitive and cannot use a hash key.
+    // Bound pairwise work even for hostile or unusually large save files.
+    if palette_peers.len()>=256{ambiguous.insert(item);}
+    else if let Some(key)=Self::palette_identity(row){
+     for &(other,peer) in &palette_peers{if Self::palette_equal(key,peer){palette_conflicts.insert(other);palette_conflicts.insert(row.id);}}
+     palette_peers.push((row.id,key));
+    }else{ambiguous.insert(item);}
    }
    if crate::inventory_source::CAFE_IDS.binary_search(&item).is_ok()||item==crate::inventory_source::BOBA_ID{
     match self.chef_identity(row){Some((a,b))=>{*chef_counts.entry((item,a,b)).or_default()+=1;},None=>{ambiguous.insert(item);}}
@@ -840,7 +856,10 @@ impl Editor {
    if ambiguous.contains(&item)||uid_counts.get(&uid)!=Some(&1)||
     self.slot.index.inventory_payload_item_refs.contains(&item)||
     !row.fields.iter().all(Option::is_some){return None}
-   if self.single_palette_quantity_source(row)==Some(item){return Some(row.id)}
+   if Self::palette_identity(row).is_some(){
+    self.unique_row_source(row,3)?;
+    return (!palette_conflicts.contains(&row.id)).then_some(row.id)
+   }
    if let Some((a,b))=self.chef_identity(row){
     self.unique_row_source(row,if item==crate::inventory_source::BOBA_ID{5}else{2})?;
     return (chef_counts.get(&(item,a,b))==Some(&1)).then_some(row.id)
