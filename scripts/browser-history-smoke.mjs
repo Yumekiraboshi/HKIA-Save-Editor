@@ -661,7 +661,12 @@ async function inventoryFlowerVariantEditSmoke(){
   await page.locator('.inventory-controls input[type="search"]').fill('43114910');
   await page.locator('.inventory-card img[src$="pattern-'+patch[0].after[2]+'.webp"]').waitFor();
   const quantity=page.locator('.inventory-card input[name="quantity"]');
-  await quantity.waitFor();assert.equal(await quantity.getAttribute('min'),'1');
+  await quantity.waitFor();assert.equal(await quantity.getAttribute('min'),'0');
+  page.once('dialog',d=>d.accept());
+  await quantity.fill('0');await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]').click();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  assert.equal(await quantity.inputValue(),'0');
   await quantity.fill('25');await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]').click();
   await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
   await page.reload({waitUntil:'networkidle'});
