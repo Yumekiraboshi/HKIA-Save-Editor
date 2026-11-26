@@ -781,11 +781,17 @@ async function inventoryEmptyMaterialSmoke(currency=false){
   input=await inputFor(first);await input.fill('6');await apply();
   await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
   await page.locator('.inventory-batch-toggle').click();
+  const firstName=await page.locator('.inventory-card .inventory-name').innerText();
   await page.locator('.inventory-batch-checkbox').check();
-  await inputFor(second);await page.locator('.inventory-batch-checkbox').check();
+  await inputFor(second);const secondName=await page.locator('.inventory-card .inventory-name').innerText();
+  await page.locator('.inventory-batch-checkbox').check();
   const batchDelete=page.locator('.inventory-batch-delete');
   await batchDelete.click();await removal.waitFor({state:'visible'});
   assert.equal(await removal.locator('.removal-confirm-name').innerText(),'2');
+  const listed=await removal.locator('.inventory-removal-targets li').allTextContents();
+  assert.equal(listed.length,2);
+  assert.ok(listed.some(text=>text.includes(firstName)&&text.includes('× 6')));
+  assert.ok(listed.some(text=>text.includes(secondName)&&text.includes('× 5')));
   await removal.locator('.removal-cancel').click();await removal.waitFor({state:'hidden'});
   assert.equal(await (await inputFor(first)).inputValue(),'6');
   assert.equal(await (await inputFor(second)).inputValue(),'5');
