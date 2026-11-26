@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({stdin:{contents:"export * from './src/furniture-source-pack';export * from './src/furniture-multi-diagnostic';",resolveDir:fileURLToPath(new URL('../',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {openFurnitureSourcePack}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {openFurnitureSourcePack,fetchFurnitureSourcePack}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const read=p=>JSON.parse(readFileSync(new URL('../'+p,import.meta.url)));
 const source={catalog:read('public/inventory-ui/furniture-customization-v3.0.1.json'),variants:read('data/furniture-material-render-source-v3.0.1.json')};
 const visual=read('data/furniture-visual-source-v3.0.1.json'),addressables=read('data/furniture-addressables-v3.0.1.json');
@@ -23,4 +23,21 @@ test('manifest pin and exact native visual/texture crosswalk before payload requ
  const badPattern=structuredClone(p);badPattern.additionalPatterns.rows[0].bundle='not-a-source';await assert.rejects(open(badPattern),/PATTERN_SOURCE/);
  const dup=structuredClone(p);dup.additionalPatterns.rows.push(dup.additionalPatterns.rows[0]);await assert.rejects(open(dup),/DUPLICATE/);
  const pending=openFurnitureSourcePack(bytes,pin,root,source,visual,addressables);new Uint8Array(bytes).fill(0);assert.equal((await pending).sources.geometry.rows.length,4);
+});
+
+test('fetches bounded pinned manifest once and does not request geometry before use',async()=>{
+ const [bytes,pin]=encode(get()),calls=[];
+ const fetcher=async(url,init)=>{calls.push([url.href,init]);return new Response(bytes);};
+ const result=await fetchFurnitureSourcePack(root,pin,source,visual,addressables,fetcher);
+ assert.equal(result.renderFidelity,'unverified');assert.equal(calls.length,1);
+ assert.equal(calls[0][0],new URL('sources.json',root).href);
+ assert.equal(calls[0][1].credentials,'omit');assert.equal(calls[0][1].redirect,'error');
+ const load=(p,body,base=root)=>fetchFurnitureSourcePack(base,p,source,visual,addressables,async()=>new Response(body));
+ await assert.rejects(load({...pin,bytes:pin.bytes-1},bytes),/SOURCE_PACK_LENGTH/);
+ await assert.rejects(load({...pin,bytes:pin.bytes+1},bytes),/SOURCE_PACK_LENGTH/);
+ await assert.rejects(load({...pin,sha256:'0'.repeat(64)},bytes),/SOURCE_PACK_HASH/);
+ await assert.rejects(load(pin,null),/SOURCE_PACK_FETCH/);
+ await assert.rejects(load(pin,bytes,new URL('https://example.invalid/diagnostic/?x=1')),/PAYLOAD_ROOT/);
+ const mutable={...pin};const pending=fetchFurnitureSourcePack(root,mutable,source,visual,addressables,fetcher);
+ mutable.sha256='0'.repeat(64);assert.equal((await pending).renderFidelity,'unverified');
 });
