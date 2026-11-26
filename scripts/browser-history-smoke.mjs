@@ -737,6 +737,46 @@ async function inventoryEmptyMaterialSmoke(currency=false){
   console.log('CHROMIUM INVENTORY '+(currency?'CURRENCY':'MATERIAL')+' EMPTY PASS: confirmation, empty/refill, reload, undo/redo and preserved native records');
  }finally{await context.close()}
 }
+async function inventoryEmptyBrowseSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({
+   name:'synthetic-empty-browse.save',mimeType:'application/octet-stream',
+   buffer:Buffer.from(createSyntheticSlot({emptyMaterialInventory:true}))
+  });
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('[data-inventory-group="items"]').click();
+  const cards=page.locator('.inventory-card'),search=page.locator('.inventory-controls input[type="search"]');
+  await cards.first().waitFor();
+  assert.equal(await cards.count(),1);
+  await search.fill('627013240');
+  await page.locator('.inventory-empty-stack').waitFor();
+  assert.equal(await cards.locator('input[name="quantity"]').inputValue(),'0');
+  await search.clear();
+  await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle').click();
+  await search.fill('627013240');
+  const input=cards.locator('input[name="quantity"]');
+  await input.waitFor();
+  assert.equal(await input.inputValue(),'1');
+  await input.fill('7');
+  await cards.locator('button[type="submit"]').click();
+  await cards.waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle:not([disabled])').click();
+  await search.fill('627013240');
+  await input.waitFor();
+  assert.equal(await input.inputValue(),'7');
+  await page.locator('button[title="Undo"]').click();
+  await page.locator('.inventory-empty-stack').waitFor();
+  assert.equal(await input.inputValue(),'0');
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM INVENTORY EMPTY BROWSE PASS: hide unowned, search, refill, undo');
+ }finally{await context.close()}
+}
 async function inventoryCreateMaterialSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -2194,7 +2234,8 @@ async function run(){
  await inventoryQuantityBoundsSmoke();
  await inventoryEmptyMaterialSmoke();
  await inventoryEmptyMaterialSmoke(true);
- await inventoryCreateMaterialSmoke();
+ await inventoryEmptyBrowseSmoke();
+await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
  await inventoryDynamicFlowerArtSmoke();
  await inventoryFlowerGrowthDisplaySmoke();
