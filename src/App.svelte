@@ -7,10 +7,10 @@
  import {historyCopy,historyDetailCopy} from './history-copy';
  import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy} from './inventory-copy';
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
- import {flowerEditorCopy,furnitureEditorCopy} from './inventory-unique-copy';
+ import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,type FurnitureDisplay} from './inventory-furniture-display';
  import {inventoryCategoryRepresentative,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
- import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
+ import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,flowerGrowthKind,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
  import {inventoryGroupLabel} from './inventory-native-category-copy';
@@ -429,7 +429,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   themePref=v;try{localStorage.setItem('hkia-display-theme',v)}catch{}
  }
  function inventoryVariantSearchName(row:InventoryEntry):string{
-  return flowerDisplay(row.flower,flowerDefinitions,flowerLabels[locale]??{})?.title??'';
+  return [flowerGrowthLabel(locale,flowerGrowthKind(row.itemId,row.flower)),flowerDisplay(row.flower,flowerDefinitions,flowerLabels[locale]??{})?.title].filter(Boolean).join(' · ');
  }
  function flowerVariantName(v:FlowerVariant):string{
   return flowerDisplay({growState:v[0],baseColor:v[1],pattern:v[2],patternColor:v[3]},flowerDefinitions,flowerLabels[locale]??{})?.title||'—';
@@ -1308,6 +1308,8 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const nativeSprite=inventoryNativeArt?.entries.get(item.itemId)}
      {@const sprite=definition&&!inventoryNativeArt?.withheld.has(item.itemId)?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
      {@const flower=flowerDisplay(item.flower,flowerDefinitions,flowerLabels[locale]??{})}
+     {@const growth=flowerGrowthKind(item.itemId,item.flower)}
+     {@const variantTitle=inventoryVariantSearchName(item)}
      {@const chef=inventoryChefAppearance(item.itemId,item.unique)}
      {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
      {@const canFlower=!!item.flower&&!!item.unique?.flowerEditable&&!!flowerDefinitions&&!!flowerLabels[locale]}
@@ -1317,8 +1319,8 @@ import {verifiedFloorplanName} from './floorplan-names';
        <input class="inventory-batch-checkbox" type="checkbox" checked={inventoryBatchSelected.has(item.documentId)} aria-label={iBatchCopy+': '+inventoryName(item.itemId)}
         disabled={busy||(!inventoryBatchSelected.has(item.documentId)&&inventoryBatchSelected.size>=snapshot.inventoryBatchLimit)} onchange={()=>toggleInventoryBatch(item)}/>
       {/if}
-      <div class="inventory-card-heading">
-       <span class="inventory-item-art" class:flower-variant={!!flower} aria-hidden="true">
+      <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
+       <span class="inventory-item-art" class:flower-variant={!!flower} data-flower-state-art={growth&&growth!=='plucked'?'species-reference':undefined} aria-hidden="true">
         {#if wand&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite}/>
          {:else if chef&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
@@ -1348,7 +1350,7 @@ import {verifiedFloorplanName} from './floorplan-names';
         {/if}
        </span>
        <strong class="inventory-name" title={inventoryName(item.itemId)}>{inventoryName(item.itemId)}</strong>
-       {#if flower?.title}<span class="inventory-flower-variant-name" title={flower.title}>{flower.title}</span>{/if}
+       {#if variantTitle}<span class="inventory-flower-variant-name" title={variantTitle}>{variantTitle}</span>{/if}
       </div>
       {#if item.editable}
        <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>
@@ -1589,7 +1591,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    {@const edit=flowerEdit}
    <form class="date-dialog-inner" onsubmit={e=>{if(edit.absent){e.preventDefault();void addInventoryFlowerVariant()}else void applyInventoryFlowerVariant(e)}}>
     <div class="date-dialog-heading">
-     <h2 id="flower-editor-title">{inventoryName(edit.itemId)}</h2>
+     <h2 id="flower-editor-title">{inventoryName(edit.itemId)}{#if flowerGrowthKind(edit.itemId,{growState:(edit.absent?edit.options[0]?.[0]:edit.before[0])??255,baseColor:0,pattern:0,patternColor:0})} · {flowerGrowthLabel(locale,flowerGrowthKind(edit.itemId,{growState:(edit.absent?edit.options[0]?.[0]:edit.before[0])??255,baseColor:0,pattern:0,patternColor:0}))}{/if}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFlowerEditor}>×</button>
     </div>
     <div class="date-dialog-item">
