@@ -13,23 +13,30 @@ def require(ok,msg):
     if not ok:raise ValueError(msg)
 def sha(b):return hashlib.sha256(b).hexdigest()
 
-def extract(bundles,scene,mesh,audit,shader_audit,out=None):
+def extract(bundles,scene,mesh,audit,shader_audit,out=None,resolve_cab=None):
     loaded={}
-    for path in bundles:
+    def load(path,expected_cab=None):
         raw=path.read_bytes();_,pairs=audit.auditor.extract_nodes(raw);nodes=dict(pairs)
         cabs=[x for x in nodes if re.fullmatch('CAB-[0-9a-f]{32}',x)];require(len(cabs)==1,'CAB identity');cab=cabs[0]
+        require(expected_cab is None or cab==expected_cab,'resolved CAB mismatch')
         require(cab not in loaded,'duplicate CAB')
         trees,externals=mesh.type_trees(nodes[cab]);objects={p:(c,b) for c,p,b,e in audit.serialized_objects(nodes[cab],classes=(21,28,48)) if e=='<'}
         loaded[cab]={'bundle':path.name.removesuffix('.bin'),'sha256':sha(raw),'trees':trees,'externals':externals,'objects':objects,'stream':nodes.get(cab+'.resS',b'')}
+    for path in bundles:load(path)
+    def entry_for(cab):
+        if cab not in loaded and resolve_cab is not None:
+            path=resolve_cab(cab)
+            if path is not None:load(path,cab)
+        return loaded.get(cab)
     def ref(cab,p):
         f,pid=p
         if pid=='0':require(f==0,'null external pointer');return None
-        ex=loaded[cab]['externals'];require(0<=f<=len(ex),'file ID bounds')
+        ex=entry_for(cab)['externals'];require(0<=f<=len(ex),'file ID bounds')
         target=cab if f==0 else ex[f-1].split('/')[-1]
         require(re.fullmatch('CAB-[0-9a-f]{32}',target),'external CAB path')
         return target+':'+pid
     def object_for(key,cls):
-        cab,pid=key.split(':');entry=loaded.get(cab)
+        cab,pid=key.split(':');entry=entry_for(cab)
         if entry is None:return None
         require(pid in entry['objects'] and entry['objects'][pid][0]==cls,'object type/identity');return entry,entry['objects'][pid][1]
     textures={};materials={};shaders={};unresolved=set();rows=[]
@@ -87,7 +94,7 @@ def extract(bundles,scene,mesh,audit,shader_audit,out=None):
         require(p==len(q),'property sheet boundary')
         materials[key]={'name':name,'bundle':entry['bundle'],'objectSha256':sha(b),'shader':sh,'validKeywords':strings(f['m_ValidKeywords']),'invalidKeywords':strings(f['m_InvalidKeywords']),'renderQueue':struct.unpack('<i',f['m_CustomRenderQueue'])[0],**groups}
     for row in scene['rows']:
-        cab=row['cab'];entry=loaded[cab];require(entry['sha256']==row['bundleSha256'],'scene bundle hash')
+        cab=row['cab'];entry=entry_for(cab);require(entry is not None and entry['sha256']==row['bundleSha256'],'scene bundle hash')
         bindings=[]
         for node in row['nodes']:
             if 'material' not in node:continue
