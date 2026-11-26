@@ -1224,7 +1224,8 @@ fn positive_seed_troweled_and_crafted_clothing_quantities_preserve_variants(){
   }
   let raw=slot_from_payload("3.0.1",payload);let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();
-  assert!(e.inventory()[..4].iter().all(|r|r.editable&&r.quantity_minimum==1&&r.quantity_limit==Some(i32::MAX)));
+  assert!(e.inventory()[..4].iter().all(|r|r.editable&&r.quantity_limit==Some(i32::MAX)));
+  assert_eq!(e.inventory()[..4].iter().map(|r|r.quantity_minimum).collect::<Vec<_>>(),vec![0,0,1,1]);
   assert!(!e.inventory()[4].editable);
   assert!(e.change_inventory_quantities(&[(4,2,8),(8,2,8)]).is_err());assert!(!e.dirty());
   e.change_inventory_quantities(&[(4,2,8),(5,2,9),(6,2,10),(7,2,11)]).unwrap();
