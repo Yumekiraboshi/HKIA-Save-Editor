@@ -228,8 +228,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  const groupScopedAchievementRows=$derived(achievementGroupHierarchy&&achievementGroupSelection?
   achievementGroupSelection==='__unmapped'?unmappedAchievementRows:groupRows(achievementGroupHierarchy,achievementGroupSelection,sourceAchievementRows,achievementFacts):
   sourceOrderedAchievementRows);
- const inventoryAvailableToAdd=$derived(inventoryAddRows(snapshot?.inventory??[],snapshot?.inventoryCreatable??[]));
- const inventoryBrowseRows:InventoryEntry[]=$derived(inventoryAddMode?inventoryAvailableToAdd:snapshot?.inventory??[]);
+ const inventoryAvailableToAdd=$derived(inventoryAddRows((snapshot as SaveSnapshot|null)?.inventory??[],(snapshot as SaveSnapshot|null)?.inventoryCreatable??[]));
+ const inventoryBrowseRows:InventoryEntry[]=$derived(inventoryAddMode?inventoryAvailableToAdd:(snapshot as SaveSnapshot|null)?.inventory??[]);
  const inventoryDisplayedRows=$derived(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,inventoryQuery));
  const inventoryGroupTotals=$derived(inventoryGroupCounts(inventoryDisplayedRows,nativeInventoryIndex));
  const inventoryMatchTotals=$derived(inventorySearchGroupCounts(inventoryDisplayedRows,inventoryQuery,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName));
