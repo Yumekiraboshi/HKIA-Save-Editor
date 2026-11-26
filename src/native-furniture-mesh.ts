@@ -16,7 +16,7 @@ export function validateNativeSubmeshes(m:NativeMeshSource){
  for(const s of m.submeshes){
   if(!s||!int(s.firstByte,0,m.indexCount*2)||s.firstByte!==end||!int(s.indexCount,3,m.indexCount)||s.indexCount%3||
    !int(s.firstVertex,0,m.vertexCount-1)||!int(s.vertexCount,1,m.vertexCount-s.firstVertex)||
-   !Array.isArray(s.bounds)||s.bounds.length!==6||!s.bounds.every(Number.isFinite)||s.bounds.slice(3).some(x=>x<0))fail('SUBMESH_RANGE');
+   !Array.isArray(s.bounds)||s.bounds.length!==6||!s.bounds.every(Number.isFinite)||s.bounds.slice(3).some((x:number)=>x<0))fail('SUBMESH_RANGE');
   end+=s.indexCount*2;if(end>m.indexCount*2)fail('SUBMESH_RANGE');
  }
  if(end!==m.indexCount*2)fail('SUBMESH_COVERAGE');
