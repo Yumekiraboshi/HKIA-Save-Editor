@@ -35,3 +35,7 @@ Pinned Switch main SHA-256: 64bd5fb69239f57eb0578a1897a45a3c6f5e187480903f83df50
 - 0x378C4E0–0x378C6F0 (AddFlowerIcons): a8c447434dbc26d7b6855e3a5d33d128a76b6c66add27fe5e7880ad604842864
 
 All 425 species/known-pattern display lookups are exercised (161 exact, 264 native fallback, including 200 effect lookups). These are tests of display resolution only; not a declaration that every combination is obtainable, editable, or legal. No additional generated texture assets or save mutation logic. Final in-game screenshot comparison is still outstanding.
+
+## Growth-state display boundary
+
+Native tag-7 states 0 (Seed), 6 (Plucked), and 7 (GrownTroweled) are distinct inventory records even with identical species/color/pattern. The existing extracted 25 species sprites and masks support the plucked branch only. Species-reference art for non-plucked states is not a state-specific sprite, and the editor must not apply the plucked shader to those states. The inventory adds concise localized editor state descriptions to variant labels and search, and marks non-plucked artwork as a species reference. The species ID list is checked against the pinned flower definition projection; tag-7 crafted clothing is not described as a seed/plant. Other state values are not guessed. Exact native growth-state sprite selection, associated localized game strings and assets remain to be recovered. No save fields or mutation permissions are changed.

@@ -1,4 +1,26 @@
 import type {Locale} from './locales';
+import type {FlowerGrowthKind} from './inventory-flower-display';
+type FlowerGrowthCopy=Record<FlowerGrowthKind,string>;
+// Editor descriptions of native state, not claimed original game strings.
+const growthEn:FlowerGrowthCopy={seed:'Seed',plucked:'Flower',uprooted:'Uprooted plant',unknown:'Unknown state'};
+const growth:Partial<Record<Locale,FlowerGrowthCopy>>={
+ ja:{seed:'種',plucked:'花',uprooted:'掘り起こした株',unknown:'状態未確認'},
+ ar:{seed:'بذرة',plucked:'زهرة',uprooted:'نبتة مقتلعة',unknown:'حالة غير معروفة'},
+ de:{seed:'Samen',plucked:'Blüte',uprooted:'Ausgegrabene Pflanze',unknown:'Unbekannter Zustand'},
+ es:{seed:'Semilla',plucked:'Flor',uprooted:'Planta desenterrada',unknown:'Estado desconocido'},
+ fr:{seed:'Graine',plucked:'Fleur',uprooted:'Plante déterrée',unknown:'État inconnu'},
+ it:{seed:'Seme',plucked:'Fiore',uprooted:'Pianta dissotterrata',unknown:'Stato sconosciuto'},
+ ko:{seed:'씨앗',plucked:'꽃',uprooted:'캐낸 식물',unknown:'알 수 없는 상태'},
+ nl:{seed:'Zaad',plucked:'Bloem',uprooted:'Uitgegraven plant',unknown:'Onbekende staat'},
+ 'pt-BR':{seed:'Semente',plucked:'Flor',uprooted:'Planta desenterrada',unknown:'Estado desconhecido'},
+ ru:{seed:'Семя',plucked:'Цветок',uprooted:'Выкопанное растение',unknown:'Неизвестное состояние'},
+ tr:{seed:'Tohum',plucked:'Çiçek',uprooted:'Sökülmüş bitki',unknown:'Bilinmeyen durum'},
+ 'zh-Hans':{seed:'种子',plucked:'花朵',uprooted:'挖出的植株',unknown:'未知状态'},
+ 'zh-Hant':{seed:'種子',plucked:'花朵',uprooted:'挖出的植株',unknown:'未知狀態'}
+};
+export function flowerGrowthLabel(locale:Locale,kind:FlowerGrowthKind|null):string{
+ return kind?(growth[locale]??(locale==='fr-CA'?growth.fr!:growthEn))[kind]:'';
+}
 type FlowerEditorCopy={title:string;color:string;pattern:string;accent:string};
 const en:FlowerEditorCopy={title:'Edit color and pattern',color:'Color',pattern:'Pattern',accent:'Pattern color'};
 const copies:Partial<Record<Locale,FlowerEditorCopy>>={
