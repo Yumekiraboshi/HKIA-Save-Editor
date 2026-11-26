@@ -175,6 +175,7 @@ async function inventoryDynamicPaletteArtSmoke(){
   await editor.locator('button[type="submit"]:not([disabled])').click();await editor.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await page.locator('button[title="Redo"]:not([disabled])').click();
+  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
   await inputs.nth(1).waitFor();

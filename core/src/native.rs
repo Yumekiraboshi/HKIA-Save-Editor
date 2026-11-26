@@ -362,6 +362,7 @@ impl<'a> Walk<'a>{
        _=>&[],
       };
       if payload_ref_keys.iter().any(|&key|key>=n){self.index.inventory_payload_refs_incomplete=true;}
+      if short=="OutfitAvatarSnapshotModel"&&n<4{self.index.inventory_palette_copies_incomplete=true;}
       // Historical GUID-based flower outfit/wand payloads cannot safely
       // be joined by integer ID here; fail closed for that domain.
       let opaque_flower_ref=match name{
