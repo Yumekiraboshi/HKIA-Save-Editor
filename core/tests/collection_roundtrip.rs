@@ -1186,8 +1186,8 @@ fn plucked_flower_quantities_preserve_unique_payload_and_history(){
  for zipped in [false,true]{
   let raw=flower_color_slot("3.0.1",Some(8));let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
-  assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==1&&r.quantity_limit==Some(i32::MAX)));
-  assert!(e.change_inventory_quantity(4,93,0).is_err());
+  assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==0&&r.quantity_limit==Some(i32::MAX)));
+  assert!(e.change_inventory_quantity(4,92,0).is_err());
   assert!(e.change_inventory_quantities(&[(4,93,9),(5,3,7)]).is_err());assert!(!e.dirty());
   e.change_inventory_quantities(&[(4,93,100),(5,2,200)]).unwrap();
   let saved=Editor::open(e.export().unwrap()).unwrap();
@@ -2011,4 +2011,42 @@ fn flower_clothing_refuses_saved_outfit_and_preset_references(){
  let mermaid=arr(vec![u(6),arr(vec![arr(vec![u(0),guid([1,2,3,4]),plain_flower(6)])]),arr(vec![])]);
  let e=Editor::open(make(mermaid)).unwrap();
  assert!(e.inventory_flower_variants(4).is_empty());assert!(e.inventory_flower_variants(5).is_empty());
+}
+
+#[test]
+fn saved_plucked_flower_zero_and_refill_preserve_uid_payload_and_other_rows(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ for zipped in [false,true]{
+  let raw=flower_color_slot("3.0.1",Some(8));let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  let bytes=e.inventory_original_unique_payload(4).unwrap().to_vec();
+  let identity=e.inventory_unique_rows().map(|r|r.1).collect::<Vec<_>>();
+  e.change_inventory_quantity(4,93,0).unwrap();
+  assert_eq!(e.inventory()[0].quantity,0);assert_eq!(e.inventory()[1],original[1]);
+  let cp=e.history_checkpoint().unwrap();let mut r=Editor::open(input).unwrap();r.restore_history(&cp).unwrap();
+  assert_eq!(r.inventory(),e.inventory());assert!(r.undo_scope(Inventory));assert_eq!(r.inventory(),original);
+  assert!(r.redo_scope(Inventory));assert_eq!(r.inventory()[0].quantity,0);
+  let mut saved=Editor::open(r.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity_minimum,0);
+  assert_eq!(saved.inventory()[0].quantity,0);
+  assert_eq!(saved.inventory_original_unique_payload(4),Some(bytes.as_slice()));
+  assert_eq!(saved.inventory_unique_rows().map(|r|r.1).collect::<Vec<_>>(),identity);
+  assert_eq!(saved.inventory()[1],original[1]);
+  saved.change_inventory_quantity(4,0,7).unwrap();
+  let reopened=Editor::open(saved.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory()[0].quantity,7);
+  assert_eq!(reopened.inventory_original_unique_payload(4),Some(bytes.as_slice()));
+  assert_eq!(reopened.inventory_unique_rows().map(|r|r.1).collect::<Vec<_>>(),identity);
+ }
+ let mut duplicate=Editor::open(flower_color_slot("3.0.1",Some(6))).unwrap();
+ assert!(duplicate.change_inventory_quantity(4,93,0).is_err());
+ let mut old=Editor::open(flower_color_slot("3.0.0",None)).unwrap();
+ assert!(old.change_inventory_quantity(4,93,0).is_err());
+ for state in [0,7]{
+  let mut payload=synthetic_payload("3.0.1");payload[3]=0x96;
+  payload.extend(doc(1,arr(vec![u(4),u(1331175279),u(11),u(3),arr(vec![vec![7],arr(vec![vec![state],vec![6],vec![0],vec![0]])])])));
+  let mut e=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
+  assert_eq!(e.inventory()[0].quantity_minimum,1);
+  assert!(e.change_inventory_quantity(4,3,0).is_err());
+ }
 }
