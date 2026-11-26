@@ -50,7 +50,7 @@ test('additional furniture shader sources are keyed by exact CAB, signed Path ID
 import importlib.util
 spec=importlib.util.spec_from_file_location('base','scripts/extract-furniture-base-material-source.py')
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
-assert len(m.SHADER_SOURCES)==4
+assert len(m.SHADER_SOURCES)==5
 for key,source in m.SHADER_SOURCES.items():
     assert m.shader_source(key,source[0])==source
     try:
@@ -65,7 +65,8 @@ for key,source in m.SHADER_SOURCES.items():
         pass
 assert sorted((v[2],v[3],v[4]) for v in m.SHADER_SOURCES.values())==[
     ('Shader Graphs/FluidStream',34,1),('Sunblink/Lynx/CustomLit',47,42),
-    ('Sunblink/Lynx/CustomLitFurniture',42,4),('Sunblink/Lynx/Fluid',24,1)]
+    ('Sunblink/Lynx/CustomLitFurniture',42,4),('Sunblink/Lynx/Fluid',24,1),
+    ('Sunblink/Lynx/Terrain/Custom Lit Terrain Simple',31,4)]
 `;
  execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:fileURLToPath(new URL('../',import.meta.url))});
 });
