@@ -230,6 +230,9 @@ async function inventoryPaletteRemovalSmoke(){
    assert.equal(await cards.locator('.inventory-stack-delete:not([disabled])').count(),state===true?2:1);
    await cards.locator('.inventory-stack-delete:not([disabled])').first().click();
    const modal=page.locator('.removal-confirm-dialog');await modal.waitFor({state:'visible'});
+   assert.equal(await modal.locator('.inventory-removal-swatch').count(),3);
+   const swatches=await modal.locator('.inventory-removal-swatch').evaluateAll(els=>els.map(el=>el.getAttribute('aria-label')));
+   assert.ok(swatches.every(v=>v?.startsWith('rgba(')));
    await modal.locator('.removal-confirm-action').click();
    await page.locator('.inventory-empty-stack').waitFor();
    assert.equal(await page.locator('.inventory-empty-stack input[name="quantity"]').inputValue(),'0');
