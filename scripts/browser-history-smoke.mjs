@@ -673,8 +673,24 @@ async function inventoryFlowerGrowthDisplaySmoke(){
   await page.waitForFunction(()=>document.querySelectorAll('.inventory-card').length===1&&document.querySelector('[data-flower-growth="seed"]'));
   await search.fill('43114910 Uprooted plant Red');
   await page.waitForFunction(()=>document.querySelectorAll('.inventory-card').length===1&&document.querySelector('[data-flower-growth="uprooted"]'));
+  for(const [query,kind] of [['43114910 Seed Red','seed'],['43114910 Uprooted plant Red','uprooted']]){
+   await search.fill(query);
+   await page.waitForFunction(k=>document.querySelectorAll('.inventory-card').length===1&&document.querySelector('[data-flower-growth="'+k+'"]'),kind);
+   const card=cards.first(),quantity=card.locator('input[name="quantity"]'),apply=card.locator('.inventory-quantity-form button[type="submit"]');
+   assert.equal(await quantity.getAttribute('min'),'0');
+   await quantity.fill('0');page.once('dialog',d=>d.accept());await apply.click();
+   await apply.waitFor({state:'visible'});
+   await card.locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+   assert.equal(await quantity.inputValue(),'0');
+   await page.locator('button[title="Undo"]:not([disabled])').click();
+   await page.locator('button[title="Redo"]:not([disabled])').waitFor();
+   await page.waitForFunction(()=>document.querySelector('.inventory-card input[name="quantity"]')?.value==='1');
+   await page.locator('button[title="Redo"]:not([disabled])').click();
+   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+   await page.waitForFunction(()=>document.querySelector('.inventory-card input[name="quantity"]')?.value==='0');
+  }
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM FLOWER GROWTH PASS: separate original seed and troweled pixels, shared sheet, localized search');
+  console.log('CHROMIUM FLOWER GROWTH PASS: native seed/troweled art, localized search, zero and Undo/Redo');
  }finally{await context.close();}
 }
 async function inventoryFlowerVariantEditSmoke(){
@@ -857,11 +873,17 @@ async function inventoryAbsentFlowerCreationSmoke(){
   await dialog.locator('button[type="submit"]').click();
   await dialog.waitFor({state:'hidden'});
   await card.locator('.inventory-unique-edit-button:not([disabled])').waitFor();
+  await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  const color=await dialog.locator('select optgroup').first().locator('option').first().getAttribute('value');assert.ok(color!==null);
+  await dialog.locator('select').selectOption(color);
+  await dialog.locator('.inventory-create-flower:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await card.nth(1).waitFor();
+  await card.nth(1).locator('.inventory-unique-edit-button:not([disabled])').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('43114910');
-  await card.locator('input[name="quantity"]').waitFor();
-  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'1');
+  await card.nth(1).waitFor();
+  assert.deepEqual(await card.locator('input[name="quantity"]').evaluateAll(rows=>rows.map(r=>r.value)),['1','1']);
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
   const output=readFileSync(await download.path());
@@ -869,8 +891,9 @@ async function inventoryAbsentFlowerCreationSmoke(){
   const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
   assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_flowers_snapshot(),0);
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
-  assert.equal(v.getUint32(0,true),1);assert.equal(v.getUint32(4,true),5);
+  assert.equal(v.getUint32(0,true),2);assert.equal(v.getUint32(4,true),5);assert.equal(v.getUint32(24,true),6);
   assert.deepEqual(Array.from({length:4},(_,i)=>v.getInt32(8+i*4,true)),[6,2,1,16]);
+  assert.notDeepEqual(Array.from({length:4},(_,i)=>v.getInt32(28+i*4,true)),[6,2,1,16]);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM UNOWNED FLOWER PASS: native default choices, staged appearance edit, draft recovery, exported reparse');
  }finally{await context.close();}
@@ -944,11 +967,21 @@ async function inventoryDefaultFurnitureCreationSmoke(){
   await dialog.locator('select').selectOption(value);
   await dialog.locator('.inventory-create-furniture:not([disabled])').click();
   await dialog.waitFor({state:'hidden'});
+  await card.nth(1).waitFor();
+  const quantities=await card.locator('input[name="quantity"]').evaluateAll(rows=>rows.map(r=>r.value));
+  const customIndex=quantities.indexOf('1');assert.ok(customIndex>=0);
+  await card.nth(customIndex).locator('.inventory-unique-edit-button').click();
+  await dialog.waitFor();
+  const next=await dialog.locator('select option').filter({hasText:'Antique Lamp 3'}).getAttribute('value');assert.ok(next!==null);
+  await dialog.locator('select').selectOption(next);
+  await dialog.locator('.inventory-create-furniture:not([disabled])').click();
+  await dialog.waitFor({state:'hidden'});
+  await card.nth(2).locator('.inventory-unique-edit-button:not([disabled])').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('61381969');
-  await card.nth(1).waitFor();
-  assert.deepEqual((await card.locator('input[name="quantity"]').evaluateAll(rows=>rows.map(r=>Number(r.value)))).sort((a,b)=>a-b),[1,3]);
+  await card.nth(2).waitFor();
+  assert.deepEqual((await card.locator('input[name="quantity"]').evaluateAll(rows=>rows.map(r=>Number(r.value)))).sort((a,b)=>a-b),[1,1,3]);
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
   const output=readFileSync(await download.path());
@@ -958,7 +991,7 @@ async function inventoryDefaultFurnitureCreationSmoke(){
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());let at=0;
   const u=()=>{const n=v.getUint32(at,true);at+=4;return n};const count=u(),rows=[];
   for(let i=0;i<count;i++){const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();const words=Array.from({length:n},()=>u()|0);u();if(tag===8)rows.push({id,present,uid,fields,words});}
-  assert.equal(count,3);assert.equal(rows.length,1);assert.equal(rows[0].uid,1);assert.deepEqual(rows[0].words,[0,2,0]);
+  assert.equal(count,4);assert.equal(rows.length,2);assert.equal(rows[0].uid,1);assert.equal(rows[1].uid,2);assert.deepEqual(rows[0].words,[0,2,0]);assert.deepEqual(rows[1].words,[0,3,0]);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM DEFAULT FURNITURE CREATION PASS: ordinary source retained, draft and native export reparse');
  }finally{await context.close();}
@@ -1001,10 +1034,9 @@ async function inventoryAbsentFurnitureCreationSmoke(){
   await chooseTab(page,'inventory');await search.fill('61381969');
   await card.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();
-  // A search with no matches retains the previous category after reload.
-  // Undo does not change the selected category; select the restored row's tab.
-  await page.locator('[data-inventory-group="furniture"]').click();
+  // The restored match must be visible without manually switching categories.
   await quantity.waitFor();assert.equal(await quantity.inputValue(),'1');
+  assert.equal(await page.locator('[data-inventory-group="furniture"]').getAttribute('aria-pressed'),'true');
   await page.locator('button[title="Redo"]:not([disabled])').click();
   await card.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();
