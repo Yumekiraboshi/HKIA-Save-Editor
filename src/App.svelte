@@ -889,12 +889,11 @@ import {verifiedFloorplanName} from './floorplan-names';
  function furnitureCreationSelection(before:FurnitureVariant,next:FurnitureVariant,options:readonly FurnitureVariant[]):boolean{
   return options.length>0&&next.some((v,i)=>v!==before[i])&&next.every((v,i)=>v===before[i]||options.some(option=>option[i]===v));
  }
- function selectFurniturePart(){
-  const edit=furnitureEdit,option=edit?.options[furnitureSelection];
+ function selectFurniturePart(index:number){
+  const edit=furnitureEdit,option=edit?.options[index];
   if(edit&&option&&furnitureDraft){const slot=option.findIndex((v,i)=>v!==edit.before[i]);if(slot>=0){const next:FurnitureVariant=[...furnitureDraft];next[slot]=option[slot];furnitureDraft=next}}
-  furnitureSelection=-1;
  }
- function resetFurniturePart(slot:number){if(furnitureEdit&&furnitureDraft){const next:FurnitureVariant=[...furnitureDraft];next[slot]=furnitureEdit.before[slot];furnitureDraft=next}}
+ function resetFurniturePart(slot:number){if(furnitureEdit&&furnitureDraft){const next:FurnitureVariant=[...furnitureDraft];next[slot]=furnitureEdit.before[slot];furnitureDraft=next;furnitureSelection=-1}}
  function closeFurnitureEditor(){if(furnitureDialogEl?.open)furnitureDialogEl.close()}
  async function applyInventoryFurnitureVariant(event:SubmitEvent){
   event.preventDefault();
@@ -1940,7 +1939,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#if edit.options.length}
      <label class="date-dialog-field">
       <span>{furnitureCopy.material}</span>
-      <select bind:value={furnitureSelection} onchange={selectFurniturePart} disabled={busy}>
+      <select bind:value={furnitureSelection} onchange={e=>selectFurniturePart(Number(e.currentTarget.value))} disabled={busy}>
        <option value={-1} disabled>{furnitureCopy.title}</option>
        {#each [0,1,2] as slot}
         {#if edit.options.some(v=>v[slot]!==edit.before[slot])}
