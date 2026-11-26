@@ -8,7 +8,7 @@ export type CounterEntry={guid:[number,number,number,number];current:number;coun
 import type {FlowerVariant,FurnitureVariant,InventoryUniqueInfo} from './inventory-unique';
 import type {InventoryFlower} from './inventory-flower-display';
 import type {InventoryPalette} from './inventory-palette-display';
-export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;quantityMinimum:number;flowerCreatable?:boolean;flower?:InventoryFlower;palette?:InventoryPalette;unique?:InventoryUniqueInfo};
+export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;quantityMinimum:number;flowerCreatable?:boolean;furnitureCreatable?:boolean;flower?:InventoryFlower;palette?:InventoryPalette;unique?:InventoryUniqueInfo};
 export type InventoryQuantityRequest=[documentId:number,before:number,after:number];
 export type InventoryPatch={documentId:number;before:number;after:number;kind?:undefined}|{documentId:number;before:FlowerVariant;after:FlowerVariant;kind:'flower-variant'}|{documentId:number;before:FurnitureVariant;after:FurnitureVariant;kind:'furniture-variant'}|{documentId:number;itemId:number;variant:FlowerVariant;quantity:number;kind:'flower-create'}|{documentId:number;itemId:number;variant:FurnitureVariant;quantity:number;kind:'furniture-create'};
 export type HistoryScope='collections'|'achievements'|'inventory';
