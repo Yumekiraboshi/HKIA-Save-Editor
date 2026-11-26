@@ -866,11 +866,21 @@ async function inventoryDefaultFurnitureCreationSmoke(){
   await dialog.locator('select').selectOption(value);
   await dialog.locator('.inventory-create-furniture:not([disabled])').click();
   await dialog.waitFor({state:'hidden'});
+  await card.nth(1).waitFor();
+  const quantities=await card.locator('input[name="quantity"]').evaluateAll(rows=>rows.map(r=>r.value));
+  const customIndex=quantities.indexOf('1');assert.ok(customIndex>=0);
+  await card.nth(customIndex).locator('.inventory-unique-edit-button').click();
+  await dialog.waitFor();
+  const next=await dialog.locator('select option').filter({hasText:'Antique Lamp 3'}).getAttribute('value');assert.ok(next!==null);
+  await dialog.locator('select').selectOption(next);
+  await dialog.locator('.inventory-create-furniture:not([disabled])').click();
+  await dialog.waitFor({state:'hidden'});
+  await card.nth(2).locator('.inventory-unique-edit-button:not([disabled])').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('61381969');
-  await card.nth(1).waitFor();
-  assert.deepEqual((await card.locator('input[name="quantity"]').evaluateAll(rows=>rows.map(r=>Number(r.value)))).sort((a,b)=>a-b),[1,3]);
+  await card.nth(2).waitFor();
+  assert.deepEqual((await card.locator('input[name="quantity"]').evaluateAll(rows=>rows.map(r=>Number(r.value)))).sort((a,b)=>a-b),[1,1,3]);
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
   const output=readFileSync(await download.path());
@@ -880,7 +890,7 @@ async function inventoryDefaultFurnitureCreationSmoke(){
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());let at=0;
   const u=()=>{const n=v.getUint32(at,true);at+=4;return n};const count=u(),rows=[];
   for(let i=0;i<count;i++){const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();const words=Array.from({length:n},()=>u()|0);u();if(tag===8)rows.push({id,present,uid,fields,words});}
-  assert.equal(count,3);assert.equal(rows.length,1);assert.equal(rows[0].uid,1);assert.deepEqual(rows[0].words,[0,2,0]);
+  assert.equal(count,4);assert.equal(rows.length,2);assert.equal(rows[0].uid,1);assert.equal(rows[1].uid,2);assert.deepEqual(rows[0].words,[0,2,0]);assert.deepEqual(rows[1].words,[0,3,0]);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM DEFAULT FURNITURE CREATION PASS: ordinary source retained, draft and native export reparse');
  }finally{await context.close();}

@@ -490,11 +490,13 @@ impl Editor {
  }
  pub fn inventory_furniture_creation_variants(&self,id:u32)->Vec<FurnitureVariant>{
   if !self.absent_flower_budget_available(){return Vec::new()}
-  if id&PENDING_ITEM!=0{return self.absent_furniture_choices((id&!PENDING_ITEM) as i32)}
+  if self.pending_furniture.contains_key(&id){
+   if !self.inventory_changes.contains_key(&id){return Vec::new()}
+  }else if id&PENDING_ITEM!=0{return self.absent_furniture_choices((id&!PENDING_ITEM) as i32)}
   if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|self.saved_default_furniture_source(r)){
    return self.default_furniture_choices(item)
   }
-  if !self.unique_quantity_ids.contains(&id){return Vec::new()}
+  if !self.pending_furniture.contains_key(&id)&&!self.unique_quantity_ids.contains(&id){return Vec::new()}
   let Some((source,original,current,_))=self.furniture_context(id)else{return Vec::new()};
   // No new restricted ownership: only existing, source-validated furniture.
   if self.slot.index.inventory_payload_item_refs.contains(&source.item_id){return Vec::new()}
@@ -507,7 +509,11 @@ impl Editor {
  }
  pub fn create_inventory_furniture_variant(&mut self,source_id:u32,expected:FurnitureVariant,next:FurnitureVariant,quantity:i32)->Result<u32,Error>{
   if quantity<=0||!self.inventory_furniture_creation_variants(source_id).contains(&next){return Err(Error::Schema)}
-  let item_id=if source_id&PENDING_ITEM!=0{
+  let item_id=if self.pending_furniture.contains_key(&source_id){
+   let (source,_,current,_)=self.furniture_context(source_id).ok_or(Error::Schema)?;
+   if current!=expected{return Err(Error::Schema)}
+   source.item_id
+  }else if source_id&PENDING_ITEM!=0{
    if expected!=[0;3]{return Err(Error::Schema)}
    (source_id&!PENDING_ITEM) as i32
   }else if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==source_id).and_then(|r|self.saved_default_furniture_source(r)){
