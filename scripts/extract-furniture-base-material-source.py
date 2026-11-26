@@ -16,6 +16,7 @@ def sha(b):return hashlib.sha256(b).hexdigest()
 # Original PC v3.0.1 Shader object identities. Extraction support does not
 # imply WebGL rendering support. Offsets refer to each exact hashed object.
 SHADER_SOURCES={
+    'CAB-6ef5e40a482b00b1d462fae2060592ab:8125211537628429288':('d1e8f28824efdf877dae5004d5ae5ea98823893b62f137d6fc37dfb44f5d91a8',19860,'Shader Graphs/Standard Vertex Color',6,1),
     'CAB-2b27edbfe7f08bad1cd631865ee4eb15:7085089958137184873':('6417c4faa59950760b14de6ae5ff53c646f780c24ac4c9b316ca2120863a5414',20820,'Sunblink/Lynx/Terrain/Custom Lit Terrain Simple',31,4),
     'CAB-2b27edbfe7f08bad1cd631865ee4eb15:-6806329374484566350':('cdb64e92e92cbc2b88b3ce48c8a3ed302a16972a23528c27e766b7a646d852d0',20904,'Sunblink/Lynx/CustomLitFurniture',42,4),
     'CAB-46b8f8fe122147493b3113f7c1c8cd0f:-6681258383375895387':('7c32f4b3f7c0c0d580af1e22584952aa29d266dfbe98de3b916c3fecb7339931',90796,'Sunblink/Lynx/CustomLit',47,42),
