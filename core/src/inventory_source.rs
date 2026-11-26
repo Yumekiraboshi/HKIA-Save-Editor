@@ -1,7 +1,7 @@
 //! Source-defined v3.0.1 item quantity semantics. No entitlement inference.
 use crate::inventory_source_data::{RULES,CUSTOM_CAPS};
 use crate::inventory_furniture_reference_data::FURNITURE_REFERENCE_KEYS;
-use crate::inventory_clothing_reference_data::{CLOTHING_REFERENCE_ROWS,CLOTHING_REFERENCE_GROUPS};
+use crate::inventory_clothing_reference_data::{CLOTHING_REFERENCE_ROWS,CLOTHING_REFERENCE_GROUPS,FLOWER_CLOTHING_REFERENCE_KEYS};
 use crate::inventory_gathered_data::{GATHERED_IDS,FOOD_BAIT_IDS};
 /// Maximum from InventoryItemExtensions.MaxCount(IInventoryItemData):
 /// !Stackable -> 1; HasCustomMaxCount -> CustomMaxCount; otherwise Int32.MaxValue.
@@ -285,11 +285,26 @@ pub(crate) fn ordinary_clothing_reference_keys(item:i32)->Option<(u32,&'static [
  let (_,keys)=CLOTHING_REFERENCE_GROUPS[CLOTHING_REFERENCE_GROUPS.binary_search_by_key(&parent,|r|r.0).ok()?];
  Some((key,keys))
 }
+pub(crate) fn flower_clothing_reference_keys(item:i32)->Option<&'static [u32]>{
+ FLOWER_CLOTHING_REFERENCE_KEYS.binary_search_by_key(&item,|r|r.0).ok().map(|i|FLOWER_CLOTHING_REFERENCE_KEYS[i].1)
+}
 #[cfg(test)]
 mod clothing_reference_tests{
  use super::*;
  #[test]fn exact_source_clothing_crosswalk(){
   assert_eq!(CLOTHING_REFERENCE_ROWS.len(),2435);
+  assert_eq!(FLOWER_CLOTHING_REFERENCE_KEYS.len(),27);
+  assert!(FLOWER_CLOTHING_REFERENCE_KEYS.windows(2).all(|w|w[0].0<w[1].0));
+  let mut flower=Vec::new();
+  for &(id,keys) in FLOWER_CLOTHING_REFERENCE_KEYS{
+   assert_eq!(keys.len(),3);
+   assert!(keys.windows(2).all(|w|w[0]<w[1]));
+   assert!(is_uncapped_required_unique_stack(id));
+   flower.extend(id.to_le_bytes());flower.push(keys.len() as u8);
+   for key in keys{flower.extend(key.to_le_bytes());}
+  }
+  let flower_hash=crate::digest::sha256(&flower).iter().map(|x|format!("{x:02x}")).collect::<String>();
+  assert_eq!(flower_hash,"80aa4103198c492cb9e670b21c397e7f94dba77730b99cdf257d8bf46abfc16a");
   assert_eq!(CLOTHING_REFERENCE_GROUPS.len(),225);
   assert!(CLOTHING_REFERENCE_ROWS.windows(2).all(|w|w[0].0<w[1].0));
   assert!(CLOTHING_REFERENCE_GROUPS.windows(2).all(|w|w[0].0<w[1].0));

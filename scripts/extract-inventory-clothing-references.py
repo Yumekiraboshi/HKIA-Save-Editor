@@ -11,6 +11,8 @@ ROOT=Path(__file__).resolve().parents[1]
 SOURCE='ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0'
 ROW_HASH='0fc9bc9ac3d87997801ac7e62127d30a32aebd64843338d7022458c42fa091e6'
 GROUP_HASH='024dc49b7b93e3187e28e25bcee72d510274f0c712625681a055d6a86b062ce5'
+FLOWER_HASH='80aa4103198c492cb9e670b21c397e7f94dba77730b99cdf257d8bf46abfc16a'
+FLOWER_IDS={105502901,108363489,475585922,638410399,644209106,790136191,810330134,833950358,881399767,894396852,897617923,1001954252,1021906725,1048380205,1101281143,1110255162,1120342995,1177909060,1227385139,1423101683,1482119840,1560032168,1607110454,1693955310,1783185900,1861587997,1876646873}
 
 def require(ok,msg):
     if not ok: raise ValueError(msg)
@@ -89,7 +91,7 @@ def extract(source):
     require(all(types[i][0]==114 for i in (3,5,6)),'unexpected script types')
     tt=types[3][1];end,parse=decoder(tt)
     require(tt[131][2]=='Details' and tt[232][2]=='ParentItem' and tt[246][2]=='references','unexpected item tree')
-    by_path={};selected=[]
+    by_path={};selected=[];flower=[]
     for path,(i,raw) in objects.items():
         if i!=3:continue
         d={};j=1;pos=0
@@ -99,7 +101,9 @@ def extract(source):
             j=end[j]
         id=d['Id'];by_path[path]=(id,d['ParentItem'])
         cat=d['ItemCategory']
-        if not(d['ItemOwnership']==18 and d['ItemProperties']&2 and not d['RequiresUniqueData'] and not d['HasCustomMaxCount']
+        if id in FLOWER_IDS:
+            require(d['RequiresUniqueData'] and not d['HasCustomMaxCount'] and d['ItemProperties']&2 and cat&256 and not cat&64,'invalid flower clothing definition')
+        elif not(d['ItemOwnership']==18 and d['ItemProperties']&2 and not d['RequiresUniqueData'] and not d['HasCustomMaxCount']
                and not d['ReleaseVersion'] and d['RequiredDlcContent']=='0'*32 and d['CollectionEventYear']=='0'*32
                and d['Rarity'] in (2,3,4) and not cat&1 and cat&256):continue
         require(not cat&64,'ambiguous clothing category')
@@ -116,7 +120,7 @@ def extract(source):
         require(labels==['OutfitItemDetails','Sunblink.Game','Assembly-CSharp'],'unsupported clothing details')
         file,ptr=s.unpack_from('<iq',raw,pos)
         require(file==0 and objects[ptr][0]==5,'invalid outfit PPtr')
-        selected.append((id,d['SerializedGuid'],path,ptr))
+        (flower if id in FLOWER_IDS else selected).append((id,d['SerializedGuid'],path,ptr))
     require(len(by_path)==12163 and len(selected)==2435,'item coverage')
     def model(path):
         i,raw=objects[path];tt=types[i][1];end,parse=decoder(tt);d={};pos=0;j=1
@@ -146,9 +150,22 @@ def extract(source):
     require(len({x[0] for x in rows})==2435,'duplicate item ID')
     require(hashlib.sha256(b''.join(s.pack('<iiI',*r) for r in rows)).hexdigest()==ROW_HASH,'row fingerprint')
     require(hashlib.sha256(b''.join(s.pack('<iB',p,len(ks))+s.pack('<'+'I'*len(ks),*ks) for p,ks in groups)).hexdigest()==GROUP_HASH,'group fingerprint')
-    return rows,groups
+    flower_rows=[]
+    for id,guid,path,ptr in flower:
+        d=model(ptr);pieces=set()
+        for field in ('Outfits','AlternateWaterOutfits'):
+            for v in d[field]['common:49']:
+                file,q=v['OutfitPiece'];require(file==0 and objects[q][0]==6,'invalid flower piece PPtr')
+                pieces.add(model(q)['SerializedGuid'])
+        keys=sorted(set(map(fingerprint,[guid,d['SerializedGuid'],*pieces])))
+        require(len(keys)==3 and len(pieces)==1,'flower piece coverage')
+        flower_rows.append((id,keys))
+    flower_rows.sort()
+    require({id for id,_ in flower_rows}==FLOWER_IDS and len(flower_rows)==27,'flower clothing coverage')
+    require(hashlib.sha256(b''.join(s.pack('<iB',p,len(ks))+s.pack('<'+'I'*len(ks),*ks) for p,ks in flower_rows)).hexdigest()==FLOWER_HASH,'flower group fingerprint')
+    return rows,groups,flower_rows
 
-def render(rows,groups):
+def render(rows,groups,flower_rows):
     header=("// Generated from pinned Steam v3.0.1 definitions, exact OutfitItemDetails.Outfit and BodyStyleOutfit.OutfitPiece PPtrs.\n"
             "// FNV-1a fingerprints of native Hash128 words are denial-only; never authority to identify or grant items.\n"
             f"// Row LE (i32 ItemId, i32 parent, u32 item GUID fingerprint) SHA256 {ROW_HASH}\n"
@@ -157,7 +174,11 @@ def render(rows,groups):
     fmt=[f'({id},{p},0x{k:08x})' for id,p,k in rows]
     return (header+''.join(' '+','.join(fmt[i:i+3])+',\n' for i in range(0,len(fmt),3))+
             '];\npub(super) const CLOTHING_REFERENCE_GROUPS:&[(i32,&[u32])]=&[\n'+
-            ''.join(f' ({p},&['+','.join(f'0x{k:08x}' for k in ks)+']),\n' for p,ks in groups)+'];\n')
+            ''.join(f' ({p},&['+','.join(f'0x{k:08x}' for k in ks)+']),\n' for p,ks in groups)+'];\n'+
+            '// Flower-crafted clothing: original item, outfit and normal/water piece fingerprints.\n'+
+            f'// Sorted LE (i32 ItemId, u8 count, u32 keys...) SHA256 {FLOWER_HASH}\n'+
+            'pub(super) const FLOWER_CLOTHING_REFERENCE_KEYS:&[(i32,&[u32])]=&[\n'+
+            ''.join(f' ({p},&['+','.join(f'0x{k:08x}' for k in ks)+']),\n' for p,ks in flower_rows)+'];\n')
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('source',type=Path);parser.add_argument('--check',action='store_true');args=parser.parse_args()
