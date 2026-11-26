@@ -368,7 +368,7 @@ impl Editor {
  }
  fn unique_row_source(&self,row:&crate::native::InventoryRow,fields:usize)->Option<i32>{
   if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<0||
-   (row.quantity==Some(0)&&!self.is_emptyable_unique_family(row))||
+   (row.quantity==Some(0)&&!self.is_emptyable_unique_family(row)&&!self.palette_zero_reference_safe(row))||
    row.unique_is_nil!=Some(false)||row.unique_fields.len()!=fields||self.slot.index.inventory_item_refs_incomplete{return None}
   let item=row.item_id?;let uid=row.unique_id?;
   if item<=0||uid<=0||self.slot.index.inventory_item_refs.contains(&(item,uid))||self.slot.index.inventory_legacy_uid_refs.contains(&uid){return None}
@@ -800,7 +800,7 @@ impl Editor {
  /// Existing consumables must pass the full original unique quantity
  /// identity/reference index, including copied payloads.
  fn inventory_can_empty(&self,r:&crate::native::InventoryRow)->bool{
-  if self.is_emptyable_unique_family(r)&&self.unique_quantity_ids.contains(&r.id){return true}
+  if (self.is_emptyable_unique_family(r)||self.palette_zero_reference_safe(r))&&self.unique_quantity_ids.contains(&r.id){return true}
   let Some(item_id)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
    (crate::inventory_source::ordinary_membership_item(item_id)||
@@ -1107,6 +1107,17 @@ impl Editor {
   let InventoryUniqueData::Palette{rgba_bits}=row.unique_data? else{return None};
   rgba_bits.iter().flatten().all(|&bits|(0.0..=1.0).contains(&f32::from_bits(bits))).then_some(rgba_bits)
  }
+ // A palette may be copied into an avatar snapshot or wand instead of
+ // referenced by Item ID/UID. Compare the original full RGBA tuple using
+ // native approximate equality, with a complete original context only.
+ fn palette_zero_reference_safe(&self,row:&crate::native::InventoryRow)->bool{
+  let Some(original)=Self::palette_identity(row)else{return false};
+  let index=&self.slot.index;
+  index.inventory_palette_avatar_models>0&&index.inventory_palette_general_models==1&&
+   !index.inventory_palette_context_incomplete&&!index.inventory_palette_copies_incomplete&&
+   !index.inventory_payload_refs_incomplete&&!index.inventory_item_refs_incomplete&&
+   !index.inventory_palette_copies.iter().any(|&copy|Self::palette_equal(copy,original))
+ }
  fn palette_equal(a:[[u32;4];3],b:[[u32;4];3])->bool{
   a.iter().zip(b).all(|(a,b)|{
    let square=|i:usize|{let d=f32::from_bits(a[i])-f32::from_bits(b[i]);d*d};
@@ -1170,6 +1181,8 @@ impl Editor {
  // Every new channel must be a permitted native output, not an inherited
  // arbitrary or event-only color. No acquisition or outfit data is written.
  pub fn inventory_palette_creation_variants(&self,id:u32)->Vec<PaletteVariant>{
+  if !self.pending_palettes.contains_key(&id)&&!self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|
+   self.inventory_changes.get(&id).copied().or(r.quantity).is_some_and(|q|q>0)){return Vec::new()}
   let item=crate::inventory_source::CUSTOM_PALETTE_ID;
   if !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
    self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||

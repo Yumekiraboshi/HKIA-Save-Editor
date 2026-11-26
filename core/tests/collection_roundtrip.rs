@@ -2874,3 +2874,50 @@ fn saved_customized_furniture_zero_refill_and_reference_protection(){
   assert!(e.change_inventory_quantity(4,93,0).is_err());assert!(!e.dirty());
  }
 }
+
+
+#[test]
+fn saved_palette_zero_refill_requires_complete_unreferenced_avatar_context(){
+ use hkia_save_core::collection::{HistoryScope::Inventory,PaletteVariant};
+ let color=|r:f32|[r.to_bits(),0.5f32.to_bits(),(-0.0f32).to_bits(),1.0f32.to_bits()];
+ let a=[color(0.25);3];let b=[color(0.75);3];let near=[color(0.250001);3];
+ let encode=|v:PaletteVariant|arr(vec![vec![6],arr(v.into_iter().map(|c|arr(c.into_iter().map(|w|f(f32::from_bits(w))).collect())).collect())]);
+ let avatar=|copy:Option<PaletteVariant>|arr(vec![u(6),guid([1,2,3,4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([1,2,3,4]),vec![0xc3],copy.map(encode).unwrap_or(vec![0xc0])]);
+ let general=|copy:Option<PaletteVariant>|{
+  let presets=copy.map(|v|arr(vec![arr(vec![guid([2,3,4,5]),arr(vec![]),vec![0xc2],vec![0xc2],vec![0xc2],arr(vec![guid([1,2,3,4]),arr(vec![]),arr(vec![]),encode(v)])])])).unwrap_or(arr(vec![]));
+  arr(vec![u(7),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],presets])
+ };
+ let make=|av:Option<Vec<u8>>,ge:Option<Vec<u8>>|{
+  let mut p=synthetic_payload("3.0.1");p[3]=0x97+u8::from(av.is_some())+u8::from(ge.is_some());
+  for (id,v) in [(4,a),(5,b)]{p.extend(doc(1,arr(vec![u(id),u(1835273963),u(20+id),u(2),encode(v)])))}
+  if let Some(av)=av{p.extend(doc(10,av));}if let Some(ge)=ge{p.extend(doc(22,ge));}
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(Some(avatar(None)),Some(general(None)));let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==0));
+  e.change_inventory_quantities(&[(4,2,0),(5,2,0)]).unwrap();
+  assert!(e.inventory_palette_creation_variants(4).is_empty());
+  let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();recovered.restore_history(&cp).unwrap();
+  assert_eq!(recovered.inventory(),e.inventory());assert!(recovered.undo_scope(Inventory));assert_eq!(recovered.inventory(),original);
+  assert!(recovered.redo_scope(Inventory));let mut saved=Editor::open(recovered.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory(),e.inventory());assert_eq!(saved.inventory_original_unique_payload(4),Some(encode(a).as_slice()));
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(encode(b).as_slice()));
+  assert_eq!(saved.inventory_unique_rows().next().unwrap().1,Some(24));
+  saved.change_inventory_quantities(&[(4,0,2),(5,0,2)]).unwrap();
+  assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),original);
+ }
+ for raw in [make(Some(avatar(Some(near))),Some(general(None))),make(Some(avatar(None)),Some(general(Some(a))))]{
+  let mut e=Editor::open(raw).unwrap();
+  assert_eq!(e.inventory().iter().map(|r|r.quantity_minimum).collect::<Vec<_>>(),vec![1,0]);
+  assert!(e.change_inventory_quantities(&[(5,2,0),(4,2,0)]).is_err());assert!(!e.dirty());
+  e.change_inventory_quantity(5,2,0).unwrap();
+  assert_eq!(Editor::open(e.export().unwrap()).unwrap().inventory()[1].quantity,0);
+ }
+ for raw in [make(None,Some(general(None))),make(Some(avatar(None)),None),
+  make(Some(arr(vec![u(6),guid([1,2,3,4]),arr(vec![]),arr(vec![]),arr(vec![])])),Some(general(None)))]{
+  let mut e=Editor::open(raw).unwrap();assert!(e.inventory().iter().all(|r|r.quantity_minimum==1));
+  assert!(e.change_inventory_quantity(4,2,0).is_err());assert!(!e.dirty());
+ }
+}
