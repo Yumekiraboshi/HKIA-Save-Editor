@@ -1323,7 +1323,7 @@ import {verifiedFloorplanName} from './floorplan-names';
         disabled={busy||(!inventoryBatchSelected.has(item.documentId)&&inventoryBatchSelected.size>=snapshot.inventoryBatchLimit)} onchange={()=>toggleInventoryBatch(item)}/>
       {/if}
       <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
-       <span class="inventory-item-art" class:flower-variant={!!flower} data-flower-state-art={growth&&growth!=='plucked'?'species-reference':undefined} aria-hidden="true">
+       <span class="inventory-item-art" class:flower-variant={!!flower} aria-hidden="true">
         {#if wand&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite}/>
          {:else if chef&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
