@@ -106,6 +106,7 @@ const FLOWER_CLOTHING_GENERIC:&[i32]=&[105502901,1110255162,1227385139];
 const FLOWER_CLOTHING_NO_PATTERN:i32=1482119840;
 const ALL_UNRESTRICTED_FLOWER_PATTERNS:&[i32]=&[1,2,3,4,5,7,8,9,10,11,12,13,14,16];
 pub type BobaVariant=[i32;5];
+pub type WandVariant=[i32;2];
 pub type PaletteVariant=[[u32;4];3]; // exact IEEE-754 bits
 pub type FurnitureVariant=[i32;3];
 fn furniture_variant(data:InventoryUniqueData)->Option<FurnitureVariant>{
@@ -179,6 +180,7 @@ enum Change {
  FurnitureVariant{document_id:u32,before:Option<FurnitureVariant>,after:Option<FurnitureVariant>},
  PaletteVariant{document_id:u32,before:Option<PaletteVariant>,after:Option<PaletteVariant>},
  BobaVariant{document_id:u32,before:Option<BobaVariant>,after:Option<BobaVariant>},
+ WandVariant{document_id:u32,before:Option<WandVariant>,after:Option<WandVariant>},
  PaletteCreated{document_id:u32,source_id:u32,expected:PaletteVariant,variant:PaletteVariant,quantity:i32},
  FurnitureCreated{document_id:u32,source_id:u32,expected:FurnitureVariant,furniture:PendingFurniture,quantity:i32},
  Achievement{guid:[u32;4],before:Option<AchievementValue>,after:Option<AchievementValue>},
@@ -202,12 +204,12 @@ pub struct HistoryRecord {
 }
 impl Change {
  fn scope(&self)->HistoryScope{
-  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}|Self::InventoryBatch{..}|Self::FlowerVariant{..}|Self::FlowerCreated{..}|Self::FurnitureCreated{..}|Self::FurnitureVariant{..}|Self::PaletteVariant{..}|Self::PaletteCreated{..}|Self::BobaVariant{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
+  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}|Self::InventoryBatch{..}|Self::FlowerVariant{..}|Self::FlowerCreated{..}|Self::FurnitureCreated{..}|Self::FurnitureVariant{..}|Self::PaletteVariant{..}|Self::PaletteCreated{..}|Self::BobaVariant{..}|Self::WandVariant{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
  }
  fn history_record(&self,applied:bool)->HistoryRecord{
   let (item_id,guid,paired)=match self {
    Self::Collection{id,..}=>(*id,[0;4],false),
-   Self::Inventory{document_id,..}|Self::FlowerVariant{document_id,..}|Self::FurnitureVariant{document_id,..}|Self::PaletteVariant{document_id,..}|Self::BobaVariant{document_id,..}=>(*document_id as i32,[0;4],false),
+   Self::Inventory{document_id,..}|Self::FlowerVariant{document_id,..}|Self::FurnitureVariant{document_id,..}|Self::PaletteVariant{document_id,..}|Self::BobaVariant{document_id,..}|Self::WandVariant{document_id,..}=>(*document_id as i32,[0;4],false),
    Self::InventoryBatch{deltas}=>(deltas[0].document_id as i32,[0;4],false),
    Self::FlowerCreated{source_id,..}|Self::FurnitureCreated{source_id,..}|Self::PaletteCreated{source_id,..}=>(*source_id as i32,[0;4],false),
    Self::Achievement{guid,..}|Self::AchievementCreated{guid,..}=>(0,*guid,false),
@@ -236,6 +238,7 @@ pub struct Editor {
  furniture_variant_changes:HashMap<u32,FurnitureVariant>,
  palette_variant_changes:HashMap<u32,PaletteVariant>,
  boba_variant_changes:HashMap<u32,BobaVariant>,
+ wand_variant_changes:HashMap<u32,WandVariant>,
  achievement_changes:HashMap<[u32;4],AchievementValue>,
  achievement_created:HashMap<[u32;4],AchievementValue>,
  undo:Vec<Change>,
@@ -266,7 +269,7 @@ impl Editor {
   for row in &slot.index.inventory{
    if let Some(id)=row.item_id{*inventory_item_rows.entry(id).or_insert(0usize)+=1;}
   }
-  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),inventory_item_rows,unique_quantity_ids:HashSet::new(),flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),boba_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
+  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),inventory_item_rows,unique_quantity_ids:HashSet::new(),flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),boba_variant_changes:HashMap::new(),wand_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
   editor.unique_quantity_ids=editor.index_unique_quantity_ids();
   Ok(editor)
  }
@@ -344,6 +347,11 @@ impl Editor {
   self.slot.envelope.decoded.get(row.fields[3].clone()?)
  }
  fn effective_unique(&self,row:&crate::native::InventoryRow)->Option<InventoryUniqueData>{
+  if let Some(&[magic,fleck])=self.wand_variant_changes.get(&row.id){
+   if let Some(InventoryUniqueData::WandAppearance{source_item_id,style,source_tag,source_count,source_words,..})=row.unique_data{
+    return Some(InventoryUniqueData::WandAppearance{source_item_id,magic,fleck,style,source_tag,source_count,source_words})
+   }
+  }
   self.flower_variant_changes.get(&row.id).copied().map(flower_unique)
    .or_else(||self.furniture_variant_changes.get(&row.id).copied().map(|materials|InventoryUniqueData::Furniture{materials}))
    .or_else(||self.palette_variant_changes.get(&row.id).copied().map(|rgba_bits|InventoryUniqueData::Palette{rgba_bits})).or(row.unique_data)
@@ -828,6 +836,61 @@ impl Editor {
  }
  // Full native Boba payload, separate from the existing appearance-only
  // display words. Never infer a flavor or normalize an untouched field.
+ // Only source-free, shaped magic wands are authorized.
+ fn wand_words(row:&crate::native::InventoryRow)->Option<WandVariant>{
+  let item=row.item_id?;
+  let style=crate::inventory_source::magic_wand_style(item)?;
+  match row.unique_data?{
+   InventoryUniqueData::WandAppearance{source_item_id:0,magic,fleck,style:s,source_tag:-1,source_count:0,..}
+    if s==style&&row.unique_fields.len()==5&&crate::inventory_source::magic_wand_choices([magic,fleck])=>Some([magic,fleck]),
+   _=>None,
+  }
+ }
+ fn original_wand_variant(&self,id:u32)->Option<WandVariant>{
+  Self::wand_words(self.slot.index.inventory.iter().find(|r|r.id==id)?)
+ }
+ fn wand_context(&self,id:u32)->Option<(WandVariant,WandVariant,HashSet<WandVariant>)>{
+  if !self.unique_quantity_ids.contains(&id)||self.slot.index.inventory_wand_copies{return None}
+  let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+  let item=row.item_id?;
+  if self.inventory_item_rows.get(&item).copied().unwrap_or(0)>256{return None}
+  let original=Self::wand_words(row)?;let current=self.wand_variant_changes.get(&id).copied().unwrap_or(original);
+  let mut reserved=HashSet::new();
+  for peer in &self.slot.index.inventory{
+   if peer.id==id||peer.item_id!=Some(item){continue}
+   let v=Self::wand_words(peer)?;
+   reserved.insert(v);reserved.insert(self.wand_variant_changes.get(&peer.id).copied().unwrap_or(v));
+  }
+  if reserved.contains(&original)||reserved.contains(&current){return None}
+  Some((original,current,reserved))
+ }
+ pub fn inventory_wand_edit_hints(&self)->impl Iterator<Item=u32>+'_{
+  self.slot.index.inventory.iter().filter_map(move |r|{
+   let item=r.item_id?;
+   (Self::wand_words(r).is_some()&&self.unique_quantity_ids.contains(&r.id)&&
+    !self.slot.index.inventory_wand_copies&&self.inventory_item_rows.get(&item).copied().unwrap_or(0)<=256).then_some(r.id)
+  })
+ }
+ pub fn inventory_wand_variants(&self,id:u32)->Vec<WandVariant>{
+  let Some((_,current,reserved))=self.wand_context(id)else{return Vec::new()};
+  let mut out=Vec::new();
+  for &(magic,_) in crate::inventory_source::WAND_MAGIC{
+   for &(fleck,_) in crate::inventory_source::WAND_FLECK{
+    let v=[magic,fleck];if v!=current&&!reserved.contains(&v){out.push(v)}
+   }
+  }
+  out
+ }
+ pub fn change_inventory_wand_variant(&mut self,id:u32,expected:WandVariant,next:WandVariant)->Result<(),Error>{
+  let (original,current,reserved)=self.wand_context(id).ok_or(Error::Schema)?;
+  if expected!=current||next==current||!crate::inventory_source::magic_wand_choices(next)||reserved.contains(&next){return Err(Error::Schema)}
+  let revision=self.next_edit_revision()?;
+  let before=self.wand_variant_changes.get(&id).copied();let after=(next!=original).then_some(next);
+  if let Some(v)=after{self.wand_variant_changes.insert(id,v);}else{self.wand_variant_changes.remove(&id);}
+  self.undo.push(Change::WandVariant{document_id:id,before,after});
+  if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
+  self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);self.revision=revision;Ok(())
+ }
  fn boba_words(raw:&[u8],row:&crate::native::InventoryRow)->Option<BobaVariant>{
   if row.item_id!=Some(crate::inventory_source::BOBA_ID)||!matches!(row.unique_data,Some(InventoryUniqueData::BobaAppearance{..}))||row.unique_fields.len()!=5{return None}
   let mut words=[0;5];
@@ -997,6 +1060,7 @@ impl Editor {
   let mut variant_counts=HashMap::<(i32,FlowerVariant),usize>::new();
   let mut furniture_counts=HashMap::<(i32,FurnitureVariant),usize>::new();
   let mut chef_counts=HashMap::<(i32,Vec<i32>,Vec<i32>),usize>::new();
+  let mut wand_counts=HashMap::<(i32,WandVariant),usize>::new();
   let mut palette_peers=Vec::new();
   let mut palette_conflicts=HashSet::new();
   let mut ambiguous=HashSet::new();
@@ -1020,6 +1084,9 @@ impl Editor {
    if crate::inventory_source::CAFE_IDS.binary_search(&item).is_ok()||item==crate::inventory_source::BOBA_ID{
     match self.chef_identity(row){Some((a,b))=>{*chef_counts.entry((item,a,b)).or_default()+=1;},None=>{ambiguous.insert(item);}}
    }
+   if crate::inventory_source::magic_wand_style(item).is_some(){
+    match Self::wand_words(row){Some(v)=>{*wand_counts.entry((item,v)).or_default()+=1;},None=>{ambiguous.insert(item);}}
+   }
    if !Self::is_flower_quantity_definition(item){continue}
    let Some(v)=row.unique_data.and_then(flower_variant)else{ambiguous.insert(item);continue};
    if !(0..=7).contains(&v[0])||!(1..=30).contains(&v[1])||!(0..=16).contains(&v[2])||!(0..=30).contains(&v[3]){
@@ -1035,6 +1102,11 @@ impl Editor {
    if Self::palette_identity(row).is_some(){
     self.unique_row_source(row,3)?;
     return (!palette_conflicts.contains(&row.id)).then_some(row.id)
+   }
+   if let Some(v)=Self::wand_words(row){
+    self.unique_row_source(row,5)?;
+    return (!self.slot.index.inventory_wand_copies&&wand_counts.get(&(item,v))==Some(&1)&&
+     self.inventory_item_rows.get(&item).copied().unwrap_or(0)<=256&&crate::inventory_source::is_uncapped_required_unique_stack(item)).then_some(row.id)
    }
    if let Some((a,b))=self.chef_identity(row){
     self.unique_row_source(row,if item==crate::inventory_source::BOBA_ID{5}else{2})?;
@@ -1224,7 +1296,7 @@ impl Editor {
   self.achievement_created.get(&guid).copied().or_else(||self.achievement_changes.get(&guid).copied())
    .or_else(||self.slot.index.achievements.iter().find(|m|m.guid==guid).and_then(|m|achievement::value(m).ok()))
  }
- pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.inventory_changes.is_empty()||self.flower_variant_changes.keys().chain(self.furniture_variant_changes.keys()).any(|id|*id&PENDING_ITEM==0||self.inventory_changes.contains_key(id))||self.palette_variant_changes.keys().any(|id|*id&PENDING_ITEM==0||self.inventory_changes.contains_key(id))||!self.boba_variant_changes.is_empty()||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
+ pub fn dirty(&self)->bool {!self.changes.is_empty()||!self.inventory_changes.is_empty()||self.flower_variant_changes.keys().chain(self.furniture_variant_changes.keys()).any(|id|*id&PENDING_ITEM==0||self.inventory_changes.contains_key(id))||self.palette_variant_changes.keys().any(|id|*id&PENDING_ITEM==0||self.inventory_changes.contains_key(id))||!self.boba_variant_changes.is_empty()||!self.wand_variant_changes.is_empty()||!self.achievement_changes.is_empty()||!self.achievement_created.is_empty()}
  pub fn can_undo(&self)->bool {!self.undo.is_empty()}
  pub fn can_redo(&self)->bool {!self.redo.is_empty()}
  pub fn history(&self)->Vec<HistoryRecord>{
@@ -1584,6 +1656,9 @@ impl Editor {
     if reverse{self.pending_palettes.remove(&document_id);self.inventory_changes.remove(&document_id);}
     else{self.pending_palettes.insert(document_id,variant);self.inventory_changes.insert(document_id,quantity);}
    }
+   Change::WandVariant{document_id,before,after}=>{
+    match if reverse{before}else{after}{Some(v)=>{self.wand_variant_changes.insert(document_id,v);},None=>{self.wand_variant_changes.remove(&document_id);}}
+   }
    Change::BobaVariant{document_id,before,after}=>{
     match if reverse{before}else{after}{
      Some(v)=>{self.boba_variant_changes.insert(document_id,v);},
@@ -1639,7 +1714,7 @@ impl Editor {
   self.restore_change(&change,false);self.undo.push(change);
   self.revision=self.revision.wrapping_add(1);true
  }
- pub fn reset(&mut self){self.changes.clear();self.inventory_changes.clear();self.pending_flowers.clear();self.pending_furniture.clear();self.pending_palettes.clear();self.flower_variant_changes.clear();self.furniture_variant_changes.clear();self.palette_variant_changes.clear();self.boba_variant_changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
+ pub fn reset(&mut self){self.changes.clear();self.inventory_changes.clear();self.pending_flowers.clear();self.pending_furniture.clear();self.pending_palettes.clear();self.flower_variant_changes.clear();self.furniture_variant_changes.clear();self.palette_variant_changes.clear();self.boba_variant_changes.clear();self.wand_variant_changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
  pub fn export(&self)->Result<Vec<u8>,Error>{
   if !self.dirty(){return Err(Error::Schema)}
   let original_payload=&self.slot.envelope.decoded;
@@ -1700,6 +1775,15 @@ impl Editor {
    }
   }
   for row in &self.slot.index.inventory{
+   if let Some(v)=self.wand_variant_changes.get(&row.id){
+    let (original,current,reserved)=self.wand_context(row.id).ok_or(Error::Schema)?;
+    if current!=*v||!crate::inventory_source::magic_wand_choices(*v)||reserved.contains(v){return Err(Error::Schema)}
+    for i in 0..2{
+     if original[i]==v[i]{continue}
+     let span=row.unique_fields.get(i+2).cloned().ok_or(Error::Schema)?;
+     let mut encoded=vec![0xd2];encoded.extend(v[i].to_be_bytes());patches.push((span,encoded));
+    }
+   }
    if let Some(v)=self.boba_variant_changes.get(&row.id){
     let (original,current,reserved)=self.boba_context(row.id).ok_or(Error::Schema)?;
     if current!=*v||!Self::valid_boba_target(original,*v)||reserved.contains(v){return Err(Error::Schema)}
@@ -1810,6 +1894,12 @@ impl Editor {
     a.unique_fields.len()!=3||b.unique_fields.len()!=3||
     b.unique_data.and_then(furniture_variant).is_none_or(|original|(0..3).any(|i|
      original[i]==next[i]&&reread.envelope.decoded[a.unique_fields[i].clone()]!=original_payload[b.unique_fields[i].clone()]))
+   }else if let Some(next)=self.wand_variant_changes.get(&b.id){
+    Self::wand_words(a)!=Some(*next)||Self::wand_words(b).is_none_or(|original|{
+     a.unique_fields.len()!=5||b.unique_fields.len()!=5||(0usize..5).any(|i|
+      (i==0||i==1||i==4||original[i-2]==next[i-2])&&
+      reread.envelope.decoded[a.unique_fields[i].clone()]!=original_payload[b.unique_fields[i].clone()])
+    })
    }else if let Some(next)=self.boba_variant_changes.get(&b.id){
     Self::boba_words(&reread.envelope.decoded,a)!=Some(*next)||
     Self::boba_words(original_payload,b).is_none_or(|original|(0..5).any(|i|
@@ -2230,6 +2320,11 @@ impl Editor {
      for bits in expected.into_iter().flatten().chain(variant.into_iter().flatten()){out.extend(bits.to_le_bytes());}
      out.extend(quantity.to_le_bytes());
     }
+    Change::WandVariant{document_id,before,after}=>{
+     out.push(19);out.extend(document_id.to_le_bytes());
+     let original=self.original_wand_variant(document_id).ok_or(Error::Schema)?;
+     for word in before.unwrap_or(original).into_iter().chain(after.unwrap_or(original)){out.extend(word.to_le_bytes());}
+    }
     Change::BobaVariant{document_id,before,after}=>{
      out.push(15);out.extend(document_id.to_le_bytes());
      let original=self.original_boba_variant(document_id).ok_or(Error::Schema)?;
@@ -2349,6 +2444,10 @@ impl Editor {
      let quantity=r.i32()?;
      if candidate.create_inventory_palette_variant(source,before,after,quantity)?!=handle{return Err(Error::Schema)}
      scopes.push(HistoryScope::Inventory);
+    }
+    19=>{
+     let id=r.u32()?;let before=[r.i32()?,r.i32()?];let after=[r.i32()?,r.i32()?];
+     candidate.change_inventory_wand_variant(id,before,after)?;scopes.push(HistoryScope::Inventory);
     }
     15=>{
      let id=r.u32()?;let mut before=[0i32;5];let mut after=[0i32;5];

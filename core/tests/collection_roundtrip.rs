@@ -2558,3 +2558,35 @@ fn add_custom_palette_variants_from_owned_source_and_cancel_staged(){
  let e=Editor::open(make(invalid)).unwrap();
  assert!(e.inventory_palette_creation_variants(4).is_empty());
 }
+
+#[test]
+fn native_magic_wand_edits_quantity_and_reserves_peer_identity(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let make=|duplicate:bool,opaque:bool|{
+  let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=0x97;
+  let payload=|magic:u32,fleck:u32,style:u32|arr(vec![vec![9],arr(vec![u(0),vec![0xc0],u(magic),u(fleck),u(style)])]);
+  p.extend(doc(1,arr(vec![u(4),u(1429161083),u(21),u(1),payload(104,125,118)])));
+  p.extend(doc(1,arr(vec![u(5),u(1429161083),u(22),u(2),payload(if duplicate{104}else{105},125,if opaque{119}else{118})])));
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(false,false);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert_eq!(e.inventory_wand_variants(4).len(),34);assert_eq!(e.inventory_wand_edit_hints().count(),2);
+  assert!(e.change_inventory_wand_variant(4,[104,125],[105,125]).is_err());
+  assert!(e.change_inventory_wand_variant(4,[104,125],[116,125]).is_err());
+  assert!(e.change_inventory_wand_variant(4,[104,126],[106,127]).is_err());assert!(!e.dirty());
+  e.change_inventory_wand_variant(4,[104,125],[106,127]).unwrap();
+  e.change_inventory_quantity(4,1,3).unwrap();
+  assert!(e.change_inventory_wand_variant(5,[105,125],[104,125]).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert_eq!(restored.inventory(),e.inventory());assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity,3);
+  assert_eq!(saved.inventory_unique_data(4).unwrap().display_words().1,[0,106,127,118,u32::MAX,0]);
+  assert_eq!(saved.inventory_unique_data(5).unwrap().display_words().1,[0,105,125,118,u32::MAX,0]);
+ }
+ for (dup,opaque) in [(true,false),(false,true)]{
+  let e=Editor::open(make(dup,opaque)).unwrap();assert!(e.inventory_wand_variants(4).is_empty());
+ }
+}

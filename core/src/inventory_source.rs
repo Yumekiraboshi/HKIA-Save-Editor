@@ -116,3 +116,30 @@ pub(crate) fn supported_boba_base(v:[i32;5])->bool{
  BOBA_SOURCE_TRIPLES.binary_search(&[v[0],v[1],v[3]]).is_ok()&&
  BOBA_PEARLS.contains(&v[2])&&BOBA_SWEETNESS.contains(&v[4])
 }
+
+/// Original magic-wand instruction 815177131, paired style keys and output PPtrs.
+pub(crate) const MAGIC_WAND_STYLES:&[(i32,i32)]=&[
+ (39246601,120),(671373939,119),(1233735197,123),(1429161083,118),(1853305820,122),(2096979038,121),
+];
+pub(crate) const WAND_MAGIC:&[(i32,i32)]=&[
+ (104,1500751315),(105,1878586865),(106,28996718),(107,216828669),
+ (108,167866479),(109,1944158148),(110,1549110704),(111,698751747),
+ (112,1864047568),(113,1334678426),(114,558340471),(115,392876538),
+];
+pub(crate) const WAND_FLECK:&[(i32,i32)]=&[(125,494126928),(126,119953162),(127,1435772717)];
+pub(crate) fn magic_wand_style(item:i32)->Option<i32>{
+ MAGIC_WAND_STYLES.binary_search_by_key(&item,|&(id,_)|id).ok().map(|i|MAGIC_WAND_STYLES[i].1)
+}
+pub(crate) fn magic_wand_choices(v:[i32;2])->bool{
+ WAND_MAGIC.iter().any(|&(id,_)|id==v[0])&&WAND_FLECK.iter().any(|&(id,_)|id==v[1])
+}
+#[cfg(test)]mod wand_source_tests{
+ use super::*;
+ #[test]fn source_magic_wand_shapes_and_ingredients(){
+  assert!(MAGIC_WAND_STYLES.windows(2).all(|w|w[0].0<w[1].0));
+  assert!(MAGIC_WAND_STYLES.iter().all(|&(id,_)|is_uncapped_required_unique_stack(id)));
+  assert_eq!(WAND_MAGIC.len()*WAND_FLECK.len(),36);
+  assert!(WAND_MAGIC.iter().chain(WAND_FLECK).all(|&(_,id)|ordinary_quantity_limit(id)==Some(i32::MAX)));
+  assert_eq!(magic_wand_style(1020402601),None);
+ }
+}
