@@ -257,6 +257,8 @@ async function inventoryPaletteCreationSmoke(){
   await rows.first().waitFor();assert.equal(await rows.count(),1);
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();
   await dialog.waitFor();await dialog.locator('.inventory-palette-option').first().click();
+  await dialog.locator('[data-palette-slot="1"]').click();await dialog.locator('.inventory-palette-option').first().click();
+  await dialog.locator('[data-palette-slot="0"]').click();assert.equal(await dialog.locator('.inventory-palette-option[aria-pressed="true"]').count(),1);
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-palette:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
@@ -277,7 +279,8 @@ async function inventoryPaletteCreationSmoke(){
   const words=at=>Array.from({length:12},(_,i)=>v.getUint32(at+i*4,true));
   assert.deepEqual(words(8),[0x3f41c1c2,0x3e24a4a5,0x3e74f4f5,0x3f800000,0x3f6cade3,0x3eb8b8b9,0x3ecacacb,0x3f800000,0x3f73f3f4,0x3f20dbbe,0x3dd6adba,0x3f800000]);
   assert.notDeepEqual(words(60).slice(0,4),words(8).slice(0,4));
-  assert.deepEqual(words(60).slice(4),words(8).slice(4));
+  assert.notDeepEqual(words(60).slice(4,8),words(8).slice(4,8));
+  assert.deepEqual(words(60).slice(8),words(8).slice(8));
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM PALETTE ADD PASS: independent stack, quantity, history, draft and export reparse');
  }finally{await context.close()}

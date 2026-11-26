@@ -45,3 +45,18 @@ export function paletteFromWords(words:PaletteVariant):InventoryPalette{
 export function paletteColorHex(words:PaletteVariant,slot:number):string{
  return '#'+paletteFromWords(words)[slot].slice(0,3).map(n=>Math.round(Math.max(0,Math.min(1,n))*255).toString(16).padStart(2,'0')).join('');
 }
+
+/** Display-only composition of user-selected native color options. No edit authorization. */
+export function paletteSelectChannel(current:PaletteVariant,option:PaletteVariant,slot:number):PaletteVariant{
+ if(!isPaletteVariantWire(current)||!isPaletteVariantWire(option)||!Number.isInteger(slot)||slot<0||slot>2)return [...current];
+ return current.map((word,i)=>Math.floor(i/4)===slot?option[i]:word);
+}
+export function paletteChannelEqual(a:PaletteVariant,b:PaletteVariant,slot:number):boolean{
+ return a.slice(slot*4,slot*4+4).every((word,i)=>word===b[slot*4+i]);
+}
+/** UI hint: each selected channel was offered for this same source. The native
+ * full-tuple CAS independently decides eligibility, equality and collisions. */
+export function paletteCreationSelection(before:PaletteVariant,target:PaletteVariant,options:readonly PaletteVariant[]):boolean{
+ return options.length>0&&!before.every((word,i)=>word===target[i])&&[0,1,2].every(slot=>
+  paletteChannelEqual(before,target,slot)||options.some(option=>paletteChannelEqual(option,target,slot)));
+}
