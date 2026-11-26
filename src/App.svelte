@@ -950,7 +950,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const rows=inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId));
   if(rows.length!==inventoryBatchSelected.size||rows.some(row=>!row.editable))return;
   if(rows.every(row=>row.quantity===next)){resetInventoryBatchSelection();return}
-  if(next===0&&!confirm(inventoryEmptyCopy(locale)))return;
+  if(next===0){requestInventoryDelete(rows,true,(event.submitter??event.currentTarget) as HTMLElement);return;}
   const requests:InventoryQuantityRequest[]=rows.map(row=>[row.documentId,row.quantity,next]);
   busy=true;error='';
   try{
@@ -970,7 +970,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const next=Number(value);
   if(!Number.isSafeInteger(next)||row.quantityLimit===null||next<row.quantityMinimum||next>row.quantityLimit){error=copy.fileError;return}
   if(next===row.quantity)return;
-  if(next===0&&!confirm(inventoryEmptyCopy(locale)))return;
+  if(next===0){requestInventoryDelete([row],false,(event.submitter??event.currentTarget) as HTMLElement);return;}
   busy=true;error='';
   try{
    update(await changeInventoryQuantity(row.documentId,row.quantity,next));
