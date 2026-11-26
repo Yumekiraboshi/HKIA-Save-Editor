@@ -591,7 +591,7 @@ async function inventoryFlowerGrowthDisplaySmoke(){
      const bitmap=await createImageBitmap(await (await fetch(url)).blob());
      try{
       const canvas=document.createElement('canvas');canvas.width=96;canvas.height=96;
-      const ctx=canvas.getContext('2d'),x=-parseFloat(css.backgroundPositionX),y=-parseFloat(css.backgroundPositionY);
+      const ctx=canvas.getContext('2d'),x=0-parseFloat(css.backgroundPositionX),y=0-parseFloat(css.backgroundPositionY);
       ctx.drawImage(bitmap,x,y,96,96,0,0,96,96);
       const pixels=ctx.getImageData(0,0,96,96).data;
       return {url,x,y,width:bitmap.width,height:bitmap.height,visible:pixels.filter((v,i)=>i%4===3&&v>0).length};
