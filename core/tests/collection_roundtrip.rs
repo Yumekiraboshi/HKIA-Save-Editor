@@ -2558,3 +2558,35 @@ fn add_custom_palette_variants_from_owned_source_and_cancel_staged(){
  let e=Editor::open(make(invalid)).unwrap();
  assert!(e.inventory_palette_creation_variants(4).is_empty());
 }
+
+#[test]
+fn all_authored_boba_base_choices_and_new_stacks_roundtrip(){
+ use hkia_save_core::collection::{HistoryScope::Inventory,BobaVariant};
+ let original=[6,44,76,75,73];let changed=[46,39,79,78,71];let added=[9,55,76,78,72];let child=[32,43,76,75,74];
+ let encode=|v:BobaVariant|arr(vec![vec![4],arr(v.into_iter().map(|w|u(w as u32)).collect())]);
+ let make=||{let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=0x96;
+  p.extend(doc(1,arr(vec![u(4),u(1798633565),u(21),u(2),encode(original)])));
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make();let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert_eq!(e.inventory_boba_variants(4).len(),151);
+  assert!(e.inventory_boba_variants(4).contains(&changed));
+  let mut bad=changed;bad[0]=6;assert!(e.change_inventory_boba_variant(4,original,bad).is_err());
+  e.change_inventory_boba_variant(4,original,changed).unwrap();
+  assert!(e.inventory_boba_creation_variants(4).contains(&added));
+  let a=e.create_inventory_boba_variant(4,changed,added,3).unwrap();
+  assert!(e.create_inventory_boba_variant(4,changed,added,1).is_err());
+  let b=e.create_inventory_boba_variant(a,added,child,7).unwrap();
+  e.change_inventory_quantity(a,3,0).unwrap();assert!(e.inventory_boba_creation_variants(a).is_empty());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert_eq!(restored.inventory(),e.inventory());assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let reopened=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory_boba_rows().next(),Some((4,changed,true)));
+  let row=reopened.inventory().last().unwrap().clone();assert_eq!(row.quantity,7);
+  assert_eq!(reopened.inventory_boba_rows().find(|(id,_,_)|*id==row.document_id).unwrap().1,child);
+  assert_eq!(reopened.inventory_unique_rows().last().unwrap().1,Some(22));
+  assert_eq!(restored.inventory_boba_rows().find(|(id,_,_)|*id==b).unwrap().1,child);
+ }
+}
