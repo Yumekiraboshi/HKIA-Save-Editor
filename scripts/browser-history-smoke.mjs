@@ -26,7 +26,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,cafeEditInventory=false,quantityBounds=false,emptyMaterialInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,cafeEditInventory=false,cafeCreateInventory=false,quantityBounds=false,emptyMaterialInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -45,13 +45,14 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const chef=(id,item,unique)=>doc(1,arr([id],u32(item),u32(id),u32(1),unique));
  const cafe=colors=>arr([3],arr(arr(u32(99)),arr(...colors.map(u32))));
  const boba=color=>arr([4],arr(u32(color),u32(6),u32(11),u32(19),u32(99)));
- const model=arr([0],(editableFlower||editableFurniture||paletteCreationInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
+ const model=arr([0],(editableFlower||editableFurniture||paletteCreationInventory||cafeCreateInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
   ...(emptyMaterialInventory?[doc(1,arr([9],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([10],u32(627013240),[0],u32(0),[0xc0]))]:[]),
   ...(editableFlower?[flower(8,1,0,0)]:[]),
   ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
+  ...(cafeCreateInventory?[chef(8,1338995084,arr([3],arr(arr(u32(44),u32(49),u32(48)),arr(u32(6),u32(46),u32(9))))),chef(9,1932639321,arr([3],arr(arr(u32(44),u32(137)),arr(u32(6),u32(10))))),doc(1,arr([10],u32(1643431747),[0],u32(1),[0xc0]))]:[]),
   ...(cafeEditInventory?[chef(8,203331651,arr([3],arr(arr(u32(44),u32(49),u32(48)),arr(u32(6),u32(46),u32(9)))))]:[]),
   ...(chefQuantityInventory?[chef(8,203331651,cafe([6,14,11,19])),chef(9,1798633565,boba(14)),chef(10,203331651,cafe([6,14,11,20])),chef(11,1798633565,arr([4],arr(u32(14),u32(6),u32(11),u32(19),u32(98))))]:[]),
   ...(editableFurniture?[doc(1,arr([8],u32(61381969),u32(11),u32(93),arr([8],arr(u32(13),u32(2),u32(0)))))]:[]),
@@ -265,6 +266,50 @@ async function inventoryCafeEditSmoke(){
   assert.equal(v.getUint32(0,true),1);assert.deepEqual(Array.from({length:6},(_,i)=>v.getInt32(12+i*4,true)),[48,49,48,9,46,9]);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM CAFE VARIANT PASS: native ingredient pair, history, recovery and export');
+ }finally{await context.close()}
+}
+async function inventoryCafeCreationAndOptionalSideSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-cafe-create.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({cafeCreateInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('1338995084');
+  const rows=page.locator('.inventory-card input[name="quantity"]'),dialog=page.locator('dialog[aria-labelledby="cafe-editor-title"]');
+  await rows.first().waitFor();assert.equal(await rows.count(),1);
+  await page.locator('.inventory-card .inventory-unique-edit-button').first().click();await dialog.waitFor();
+  const select=dialog.locator('select[name="cafe-variant"]');
+  await select.selectOption(await select.locator('option[data-ingredient-id="1240730051"]').getAttribute('value'));
+  await dialog.locator('input[name="variant-add-quantity"]').fill('3');
+  await dialog.locator('.inventory-create-cafe:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
+  await page.locator('button[title="Undo"]:not([disabled])').click();await rows.nth(1).waitFor({state:'detached'});
+  await page.locator('button[title="Redo"]:not([disabled])').click();await rows.nth(1).waitFor();
+  await search.fill('1932639321');await page.locator('.inventory-card .inventory-unique-edit-button').first().click();await dialog.waitFor();
+  await dialog.locator('[data-cafe-slot="1"]').click();
+  const none=select.locator('option[data-ingredient-id="0"]');
+  await select.selectOption(await none.getAttribute('value'));
+  await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await page.locator('.inventory-card button[type="submit"]:not([disabled])').first().waitFor();
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('1338995084');await rows.nth(1).waitFor();
+  assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_cafe_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(v.getUint32(0,true),3);
+  const words=at=>Array.from({length:6},(_,i)=>v.getInt32(at+i*4,true));
+  assert.deepEqual(words(12),[44,49,48,6,46,9]);
+  assert.deepEqual(words(44),[44,0,0,6,0,0]);
+  assert.deepEqual(words(76),[62,49,48,6,46,9]);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM CAFE ADD AND NIGIRI SIDE PASS: source preserved, staged stack, optional native list, reload, reparse');
  }finally{await context.close()}
 }
 async function inventoryChefArtSmoke(){
@@ -2062,6 +2107,7 @@ async function run(){
  await chefRuntimeSmoke(browser,origin,base);
  await inventoryChefArtSmoke();
  await inventoryCafeEditSmoke();
+ await inventoryCafeCreationAndOptionalSideSmoke();
  await inventoryChefQuantitySmoke();
  await wandRuntimeSmoke(browser,origin,base);
  await inventoryEditExportSmoke();

@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPaletteVariants,changeInventoryPaletteVariant,requestPaletteCreationVariants,createInventoryPaletteVariant,requestCafeVariants,changeInventoryCafeVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPaletteVariants,changeInventoryPaletteVariant,requestPaletteCreationVariants,createInventoryPaletteVariant,requestCafeVariants,changeInventoryCafeVariant,requestCafeCreationVariants,createInventoryCafeVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -81,7 +81,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let paletteDialogEl:HTMLDialogElement|undefined=$state();
  let paletteEdit=$state<{documentId:number;itemId:number;revision:number;before:PaletteVariant;options:PaletteVariant[];creationOptions:PaletteVariant[]}|null>(null);
  let cafeDialogEl:HTMLDialogElement|undefined=$state();
- let cafeEdit=$state<{documentId:number;itemId:number;revision:number;before:CafeVariant;options:CafeOption[]}|null>(null);
+ let cafeEdit=$state<{documentId:number;itemId:number;revision:number;before:CafeVariant;options:CafeOption[];creationOptions:CafeOption[]}|null>(null);
  let cafeSelection=$state(-1);
  let cafeSlot=$state(0);
  let paletteSlot=$state(0);
@@ -760,11 +760,19 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||!row.cafe?.editable)return;
   const before=row.cafe.variant,revision=snapshot.revision;busy=true;error='';
   try{
-   const options=await requestCafeVariants(row.documentId);
+   const [options,creationOptions]=await Promise.all([requestCafeVariants(row.documentId),requestCafeCreationVariants(row.documentId)]);
    if(!snapshot||snapshot.revision!==revision)return;
-   cafeEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options};cafeSlot=0;cafeSelection=-1;await tick();
+   cafeEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions};cafeSlot=0;cafeSelection=-1;variantAddQuantity=1;await tick();
    if(cafeDialogEl&&!cafeDialogEl.open)cafeDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
+ }
+ async function addInventoryCafeVariant(){
+  const edit=cafeEdit,quantity=variantAddQuantity;
+  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
+  const next=edit.options[cafeSelection];if(!next||!edit.creationOptions.some(v=>v.variant.every((n,i)=>n===next.variant[i])))return;
+  busy=true;error='';
+  try{update(await createInventoryCafeVariant(edit.documentId,edit.before,next.variant,quantity));closeCafeEditor();await persistDraft()}
+  catch(e){error=describeError(e)}finally{busy=false}
  }
  function closeCafeEditor(){if(cafeDialogEl?.open)cafeDialogEl.close()}
  async function applyInventoryCafeVariant(event:SubmitEvent){
@@ -1642,7 +1650,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'cafe',colors:selected.slice(3).filter(n=>n>0)}}/></div>
     <div class="date-dialog-field">
      <div style="display:flex;gap:6px;flex-wrap:wrap">
-      {#each [0,1,2].filter(i=>edit.before[i]>0) as slot}
+      {#each [0,1,2].filter(i=>edit.before[i]>0||edit.options.some(v=>v.slot===i)) as slot}
        <button type="button" class="inventory-cafe-slot" data-cafe-slot={slot} aria-pressed={cafeSlot===slot} disabled={busy} onclick={()=>{cafeSlot=slot;cafeSelection=-1}}>{slot+1} · {cafeSlotLabel(selected,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</button>
       {/each}
      </div>
@@ -1656,9 +1664,18 @@ import {verifiedFloorplanName} from './floorplan-names';
      </select>
     </div>
     {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
+    {#if edit.creationOptions.some(v=>v.variant.every((n,i)=>n===edit.options[cafeSelection]?.variant[i]))}
+     <label class="date-dialog-field">
+      <span>{inventoryAddCopy(locale)} · {iCopy.quantity}</span>
+      <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
+     </label>
+    {/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeCafeEditor}>{copy.cancel}</button>
-     <button type="submit" class="primary" disabled={busy||cafeSelection<0}>{copy.apply}</button>
+     {#if edit.creationOptions.length}
+      <button type="button" class="inventory-create-cafe" disabled={busy||!validVariantAddQuantity||cafeSelection<0||!edit.creationOptions.some(v=>v.variant.every((n,i)=>n===edit.options[cafeSelection]?.variant[i]))} onclick={()=>void addInventoryCafeVariant()}>{inventoryAddCopy(locale)}</button>
+     {/if}
+     <button type="submit" formnovalidate class="primary" disabled={busy||cafeSelection<0}>{copy.apply}</button>
     </div>
    </form>
   {/if}

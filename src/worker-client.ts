@@ -11,7 +11,7 @@ import type {InventoryPalette,PaletteVariant} from './inventory-palette-display'
 import type {CafeVariant,CafeOption,CafeRow,CafeWitness} from './inventory-cafe-display';
 export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;quantityMinimum:number;flowerCreatable?:boolean;furnitureCreatable?:boolean;flower?:InventoryFlower;palette?:InventoryPalette;cafe?:CafeRow;unique?:InventoryUniqueInfo};
 export type InventoryQuantityRequest=[documentId:number,before:number,after:number];
-export type InventoryPatch={documentId:number;before:number;after:number;kind?:undefined}|{documentId:number;before:FlowerVariant;after:FlowerVariant;kind:'flower-variant'}|{documentId:number;before:FurnitureVariant;after:FurnitureVariant;kind:'furniture-variant'}|{documentId:number;before:PaletteVariant;after:PaletteVariant;kind:'palette-variant'}|{documentId:number;before:CafeVariant;after:CafeVariant;kind:'cafe-variant'}|{documentId:number;itemId:number;variant:PaletteVariant;quantity:number;kind:'palette-create'}|{documentId:number;itemId:number;variant:FlowerVariant;quantity:number;kind:'flower-create'}|{documentId:number;itemId:number;variant:FurnitureVariant;quantity:number;kind:'furniture-create'};
+export type InventoryPatch={documentId:number;before:number;after:number;kind?:undefined}|{documentId:number;before:FlowerVariant;after:FlowerVariant;kind:'flower-variant'}|{documentId:number;before:FurnitureVariant;after:FurnitureVariant;kind:'furniture-variant'}|{documentId:number;before:PaletteVariant;after:PaletteVariant;kind:'palette-variant'}|{documentId:number;before:CafeVariant;after:CafeVariant;kind:'cafe-variant'}|{documentId:number;itemId:number;variant:PaletteVariant;quantity:number;kind:'palette-create'}|{documentId:number;itemId:number;variant:CafeVariant;quantity:number;kind:'cafe-create'}|{documentId:number;itemId:number;variant:FlowerVariant;quantity:number;kind:'flower-create'}|{documentId:number;itemId:number;variant:FurnitureVariant;quantity:number;kind:'furniture-create'};
 export type HistoryScope='collections'|'achievements'|'inventory';
 export type HistoryRecord={
  scope:HistoryScope;applied:boolean;paired:boolean;
@@ -40,7 +40,7 @@ export type SaveSnapshot={
  inventoryCreatable:InventoryEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'flower-create'|'flower-create-variants'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'cafe-variants'|'cafe-variant-change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'flower-create'|'flower-create-variants'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'cafe-variants'|'cafe-variant-change'|'cafe-create-variants'|'cafe-create'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -162,7 +162,7 @@ export function applyDraft(patches:ChangeRequest[],achievementPatches:Achievemen
  return rpc('batch',{
   patches:patches.map(workerCollectionPatch),
   achievementPatches:achievementPatches.map(workerAchievementDraftPatch),
-  inventoryPatches:inventoryPatches.map(p=>p.kind==='palette-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind==='furniture-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind==='flower-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind!==undefined?{documentId:p.documentId,kind:p.kind,before:[...p.before],after:[...p.after]}:{documentId:p.documentId,before:p.before,after:p.after})
+  inventoryPatches:inventoryPatches.map(p=>p.kind==='cafe-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind==='palette-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind==='furniture-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind==='flower-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind!==undefined?{documentId:p.documentId,kind:p.kind,before:[...p.before],after:[...p.after]}:{documentId:p.documentId,before:p.before,after:p.after})
  }) as Promise<SaveSnapshot>;
 }
 
@@ -198,4 +198,11 @@ export function requestCafeVariants(documentId:number):Promise<CafeOption[]>{
 }
 export function changeInventoryCafeVariant(documentId:number,beforeCafeVariant:CafeVariant,nextCafeVariant:CafeVariant):Promise<SaveSnapshot>{
  return rpc('cafe-variant-change',{documentId,beforeCafeVariant:[...beforeCafeVariant],nextCafeVariant:[...nextCafeVariant]}) as Promise<SaveSnapshot>;
+}
+
+export function requestCafeCreationVariants(documentId:number):Promise<CafeOption[]>{
+ return rpc('cafe-create-variants',{documentId}) as Promise<CafeOption[]>;
+}
+export function createInventoryCafeVariant(documentId:number,beforeCafeVariant:CafeVariant,nextCafeVariant:CafeVariant,nextQuantity:number):Promise<SaveSnapshot>{
+ return rpc('cafe-create',{documentId,beforeCafeVariant:[...beforeCafeVariant],nextCafeVariant:[...nextCafeVariant],nextQuantity}) as Promise<SaveSnapshot>;
 }
