@@ -1,4 +1,5 @@
 import {flowerVariantOf,isFlowerVariantWire,furnitureVariantOf,isFurnitureVariantWire} from './inventory-unique';
+import {paletteVariantOf,isPaletteVariantWire} from './inventory-palette-display';
 import {cloneStoredAchievementPatches,type StoredPatch} from './achievement-draft';
 import type {InventoryEntry,InventoryPatch} from './worker-client';
 export type DraftPatch={id:number;before:string|null;after:string|null};
@@ -34,6 +35,8 @@ export function diffInventory(before:readonly InventoryEntry[],after:readonly In
     const before=flowerVariantOf(source.flower),after=flowerVariantOf(row.flower);
     if(before.some((x,i)=>x!==after[i]))result.push({documentId:row.documentId,before,after,kind:'flower-variant'});
    }
+   const paletteBefore=paletteVariantOf(source.unique),paletteAfter=paletteVariantOf(row.unique);
+   if(paletteBefore&&paletteAfter&&paletteBefore.some((v,i)=>v!==paletteAfter[i]))result.push({documentId:row.documentId,before:paletteBefore,after:paletteAfter,kind:'palette-variant'});
    const furnitureBefore=furnitureVariantOf(source.unique),furnitureAfter=furnitureVariantOf(row.unique);
    if(furnitureBefore&&furnitureAfter&&furnitureBefore.some((v,i)=>v!==furnitureAfter[i]))result.push({documentId:row.documentId,before:furnitureBefore,after:furnitureAfter,kind:'furniture-variant'});
   }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===7&&row.unique.uniqueId===null&&row.flower){
@@ -65,6 +68,10 @@ export function safeInventoryPatches(value:unknown):InventoryPatch[]{
   }else if(p.kind==='flower-variant'){
    const before:unknown=p.before,after:unknown=p.after;
    if(!isFlowerVariantWire(before)||!isFlowerVariantWire(after)||before.every((v,i)=>v===after[i]))throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,kind:p.kind,before:[...before],after:[...after]});
+  }else if(p.kind==='palette-variant'){
+   const before:unknown=p.before,after:unknown=p.after;
+   if(!isPaletteVariantWire(before)||!isPaletteVariantWire(after)||before.every((v,i)=>v===after[i]))throw Error('DRAFT_INVALID');
    result.push({documentId:p.documentId,kind:p.kind,before:[...before],after:[...after]});
   }else if(p.kind==='furniture-variant'){
    const before:unknown=p.before,after:unknown=p.after;

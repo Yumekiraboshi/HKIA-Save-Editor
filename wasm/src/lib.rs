@@ -176,6 +176,7 @@ pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
   let mut out=vec![0;4];let mut count=0u32;
   let hints:std::collections::HashSet<_>=editor.inventory_flower_edit_hints().collect();
   let furniture_hints:std::collections::HashSet<_>=editor.inventory_furniture_edit_hints().collect();
+  let palette_hints:std::collections::HashSet<_>=editor.inventory_palette_edit_hints().collect();
   for (id,uid,nil,data,fields) in editor.inventory_unique_rows(){
    if count>=1_000_000||out.len()>32*1024*1024{return 1}
    count+=1;
@@ -187,7 +188,7 @@ pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
    out.extend(uid.unwrap_or(0).to_le_bytes());out.extend(tag.to_le_bytes());
    out.extend((fields as u32).to_le_bytes());out.extend((words.len() as u32).to_le_bytes());
    for word in words{out.extend(word.to_le_bytes());}
-   let hint=if hints.contains(&id){1u32}else if furniture_hints.contains(&id){2}else{0};
+   let hint=if hints.contains(&id){1u32}else if furniture_hints.contains(&id){2}else if palette_hints.contains(&id){3}else{0};
    out.extend(hint.to_le_bytes());
   }
   out[..4].copy_from_slice(&count.to_le_bytes());a.reply=out;0
@@ -284,7 +285,7 @@ pub extern "C" fn hkia_inventory_flower_color_change(id:u32,before:i32,after:i32
  })
 }
 
-/// Read-only palette payload: count + (document ID, 12 original f32 bit words).
+/// Effective palette payload: count + (document ID, 12 exact f32 bit words).
 #[no_mangle]
 pub extern "C" fn hkia_inventory_palettes_snapshot()->u32{
  STATE.with(|s|{
@@ -732,6 +733,29 @@ pub extern "C" fn hkia_inventory_furniture_variant_change(id:u32,b0:i32,b1:i32,b
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
   match a.editor.as_mut().map(|e|e.change_inventory_furniture_variant(id,[b0,b1,b2],[a0,a1,a2])){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+
+#[no_mangle]
+pub extern "C" fn hkia_inventory_palette_variants(id:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_palette_variants(id);
+  if rows.len()>438{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*48);
+  out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for bits in row.into_iter().flatten(){out.extend(bits.to_le_bytes());}}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_palette_variant_change(id:u32,b0:u32,b1:u32,b2:u32,b3:u32,b4:u32,b5:u32,b6:u32,b7:u32,b8:u32,b9:u32,b10:u32,b11:u32,a0:u32,a1:u32,a2:u32,a3:u32,a4:u32,a5:u32,a6:u32,a7:u32,a8:u32,a9:u32,a10:u32,a11:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.change_inventory_palette_variant(id,[[b0,b1,b2,b3],[b4,b5,b6,b7],[b8,b9,b10,b11]],[[a0,a1,a2,a3],[a4,a5,a6,a7],[a8,a9,a10,a11]])){
    Some(Ok(()))=>0,_=>1
   }
  })

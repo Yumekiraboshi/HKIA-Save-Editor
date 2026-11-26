@@ -7,10 +7,10 @@ export type AchievementDraftPatch={guid:[number,number,number,number];before:Ach
 export type CounterEntry={guid:[number,number,number,number];current:number;countedValues:number|null;countedGuids:number};
 import type {FlowerVariant,FurnitureVariant,InventoryUniqueInfo} from './inventory-unique';
 import type {InventoryFlower} from './inventory-flower-display';
-import type {InventoryPalette} from './inventory-palette-display';
+import type {InventoryPalette,PaletteVariant} from './inventory-palette-display';
 export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;quantityMinimum:number;flowerCreatable?:boolean;furnitureCreatable?:boolean;flower?:InventoryFlower;palette?:InventoryPalette;unique?:InventoryUniqueInfo};
 export type InventoryQuantityRequest=[documentId:number,before:number,after:number];
-export type InventoryPatch={documentId:number;before:number;after:number;kind?:undefined}|{documentId:number;before:FlowerVariant;after:FlowerVariant;kind:'flower-variant'}|{documentId:number;before:FurnitureVariant;after:FurnitureVariant;kind:'furniture-variant'}|{documentId:number;itemId:number;variant:FlowerVariant;quantity:number;kind:'flower-create'}|{documentId:number;itemId:number;variant:FurnitureVariant;quantity:number;kind:'furniture-create'};
+export type InventoryPatch={documentId:number;before:number;after:number;kind?:undefined}|{documentId:number;before:FlowerVariant;after:FlowerVariant;kind:'flower-variant'}|{documentId:number;before:FurnitureVariant;after:FurnitureVariant;kind:'furniture-variant'}|{documentId:number;before:PaletteVariant;after:PaletteVariant;kind:'palette-variant'}|{documentId:number;itemId:number;variant:FlowerVariant;quantity:number;kind:'flower-create'}|{documentId:number;itemId:number;variant:FurnitureVariant;quantity:number;kind:'furniture-create'};
 export type HistoryScope='collections'|'achievements'|'inventory';
 export type HistoryRecord={
  scope:HistoryScope;applied:boolean;paired:boolean;
@@ -38,7 +38,7 @@ export type SaveSnapshot={
  inventoryCreatable:InventoryEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'flower-create'|'flower-create-variants'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'flower-create'|'flower-create-variants'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-variant-change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -175,4 +175,11 @@ export function requestFurnitureVariants(documentId:number):Promise<FurnitureVar
 }
 export function changeInventoryFurnitureVariant(documentId:number,beforeFurnitureVariant:FurnitureVariant,nextFurnitureVariant:FurnitureVariant):Promise<SaveSnapshot>{
  return rpc('furniture-variant-change',{documentId,beforeFurnitureVariant:[...beforeFurnitureVariant],nextFurnitureVariant:[...nextFurnitureVariant]}) as Promise<SaveSnapshot>;
+}
+
+export function requestPaletteVariants(documentId:number):Promise<PaletteVariant[]>{
+ return rpc('palette-variants',{documentId}) as Promise<PaletteVariant[]>;
+}
+export function changeInventoryPaletteVariant(documentId:number,beforePaletteVariant:PaletteVariant,nextPaletteVariant:PaletteVariant):Promise<SaveSnapshot>{
+ return rpc('palette-variant-change',{documentId,beforePaletteVariant:[...beforePaletteVariant],nextPaletteVariant:[...nextPaletteVariant]}) as Promise<SaveSnapshot>;
 }

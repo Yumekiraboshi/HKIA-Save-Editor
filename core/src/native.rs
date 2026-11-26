@@ -139,6 +139,9 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
  /// presets, placed items, mail and wand sources), separate from UID refs.
  pub inventory_payload_item_refs:HashSet<i32>,
  pub inventory_payload_refs_incomplete:bool,
+ /// Exact tag-6 copies outside inventory, including unkeyed outfit snapshots.
+ pub inventory_palette_copies:Vec<[[u32;4];3]>,
+ pub inventory_palette_copies_incomplete:bool,
  pub(crate) document_spans:Vec<DocumentSpan>,
  /// DbRoot.Key(1), native shared document allocation counter and exact token span.
  pub root_next_id:Option<(i32,Range<usize>)>,
@@ -276,8 +279,9 @@ impl<'a> Walk<'a>{
      Shape::Union(branches)=>{let union_start=self.c.pos;if self.c.array()?!=2{return Err(Error::Schema)}self.budget(depth+1)?;let tag=self.c.int(i32::MIN as i128,i32::MAX as i128)? as i32;let branch=branches.iter().find(|(t,_)|*t==tag).ok_or(Error::Schema)?.1;
       let capture_unique=name==INVENTORY_UNIQUE&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,0));
       let capture_source=name==INVENTORY_UNIQUE&&ctx==Some((WAND_SOURCE_CAPTURE,0));
-      let value=self.read(branch,depth+1,Some((if capture_unique{INVENTORY_UNIQUE_CAPTURE}else if capture_source{WAND_SOURCE_CAPTURE}else{name},tag)),false)?;
-      if capture_unique||capture_source {
+      let capture_palette_copy=name==INVENTORY_UNIQUE&&tag==6&&!capture_unique;
+      let value=self.read(branch,depth+1,Some((if capture_unique||capture_palette_copy{INVENTORY_UNIQUE_CAPTURE}else if capture_source{WAND_SOURCE_CAPTURE}else{name},tag)),false)?;
+      if capture_unique||capture_source||capture_palette_copy {
        let unique_fields=match &value{Value::Fields(a)=>a.iter().map(|(_,span)|span.clone()).collect(),_=>Vec::new()};
        let data=match (&value,tag){
         (Value::Fields(a),3) if a.len()==2=>match &a[1].0{
@@ -315,6 +319,14 @@ impl<'a> Walk<'a>{
          InventoryUniqueData::Palette{rgba_bits}},
         _=>InventoryUniqueData::Opaque{tag},
        };
+       if capture_palette_copy{
+        if let InventoryUniqueData::Palette{rgba_bits}=data{
+         if self.index.inventory_palette_copies.len()<256&&rgba_bits.iter().flatten().all(|&word|(0.0..=1.0).contains(&f32::from_bits(word))){
+          self.index.inventory_palette_copies.push(rgba_bits);
+         }else{self.index.inventory_palette_copies_incomplete=true;}
+        }else{self.index.inventory_palette_copies_incomplete=true;}
+        if !capture_source{return Ok(Value::Other)}
+       }
        return Ok(Value::InventoryUnique(data,unique_fields));
       }
       if name==DOC{let (id,a)=match value{
@@ -350,6 +362,7 @@ impl<'a> Walk<'a>{
        _=>&[],
       };
       if payload_ref_keys.iter().any(|&key|key>=n){self.index.inventory_payload_refs_incomplete=true;}
+      if short=="OutfitAvatarSnapshotModel"&&n<4{self.index.inventory_palette_copies_incomplete=true;}
       // Historical GUID-based flower outfit/wand payloads cannot safely
       // be joined by integer ID here; fail closed for that domain.
       let opaque_flower_ref=match name{
