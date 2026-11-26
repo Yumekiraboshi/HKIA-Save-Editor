@@ -22,7 +22,7 @@ def cstr(b,p):
 
 def align(n): return (n+3)&~3
 
-def extract(source):
+def extract(source,furniture_reference_rows=None):
     B=source.read_bytes()
     require(hashlib.sha256(B).hexdigest()==SOURCE,'unsupported source bundle')
     spec=importlib.util.spec_from_file_location('unityfs_audit',ROOT/'scripts/unityfs-audit.py')
@@ -105,6 +105,13 @@ def extract(source):
         if cosmetic:
             require(bool(cat&64)!=bool(cat&256),'ambiguous cosmetic category')
             cosmetic_counts[0 if cat&64 else 1]+=1
+            if cat&64 and furniture_reference_rows is not None:
+                guid=d['SerializedGuid']
+                require(len(guid)==32 and all(c in '0123456789abcdefABCDEF' for c in guid),'invalid furniture GUID')
+                words=[int(guid[i:i+8][::-1],16) for i in range(0,32,8)]
+                h=2166136261
+                for byte in s.pack('<4I',*words): h=((h^byte)*16777619)&0xffffffff
+                furniture_reference_rows.append((id,h))
         rows.append((id,int(stack)|unique*2|custom*4|int(bool(candidate))*8|int(bool(cosmetic))*16))
         if custom:caps.append((id,d['CustomMaxCount']))
         # Native raw masks: CreationStationIngredient | Fish / Critter.
@@ -146,11 +153,26 @@ def render(rows,caps):
     fmt=lambda pairs: ' '+','.join(f'({i},{v})' for i,v in pairs)+',\n'
     return header+''.join(fmt(rows[i:i+8]) for i in range(0,len(rows),8))+'];\n'+'pub(super) const CUSTOM_CAPS:&[(i32,i32)]=&[\n'+fmt(caps)+'];\n'
 
+def render_furniture_references(rows):
+    rows=sorted(rows)
+    ids='8fbdf8f0b216c3513b9526cf9ce0f201cab30ce97ada1b2b6d4137f4edc4715b'
+    keys='703d7d7a46cf57bad14b9f6212a3a72ee9e25af8a6d8f5ad1f67b95de50e6235'
+    require(len(rows)==1114 and len({i for i,_ in rows})==1114 and len({h for _,h in rows})==1114,'furniture reference coverage')
+    require(hashlib.sha256(b''.join(s.pack('<i',i) for i,_ in rows)).hexdigest()==ids,'furniture ID fingerprint')
+    require(hashlib.sha256(b''.join(s.pack('<I',h) for _,h in rows)).hexdigest()==keys,'furniture GUID fingerprint')
+    header=("// Generated from Steam v3.0.1 InventoryItemDefinitionAsset.SerializedGuid and Id.\n"
+            "// Only the 1114 ordinary furniture candidates; fingerprint is denial-only.\n"
+            f"// Sorted LE i32 ID SHA256 {ids}\n"
+            f"// Sorted LE u32 fingerprint SHA256 {keys}\n"
+            "pub(super) const FURNITURE_REFERENCE_KEYS:&[(i32,u32)]=&[\n")
+    return header+''.join(' '+','.join(f'({i},0x{h:08x})' for i,h in rows[j:j+4])+',\n' for j in range(0,len(rows),4))+'];\n'
+
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source',type=Path);parser.add_argument('--check',action='store_true')
     args=parser.parse_args()
-    rows,caps,gathered,food_bait=extract(args.source)
+    furniture_references=[]
+    rows,caps,gathered,food_bait=extract(args.source,furniture_references)
     generated=render(rows,caps)
     gathered_source=("// Generated from the pinned original Steam v3.0.1 definitions.\n"
                      "// 168 fish, 56 critters; native ordinary, always-periodic definitions.\n"
@@ -161,7 +183,7 @@ if __name__=='__main__':
                       f"// ID little-endian SHA256 {FOOD_BAIT}\n"
                       "pub(super) const FOOD_BAIT_IDS:&[i32]=&[\n"
                       +''.join(' '+','.join(str(id) for id in food_bait[i:i+8])+',\n' for i in range(0,len(food_bait),8))+'];\n')
-    for name,content in [('inventory_source_data.rs',generated),('inventory_gathered_data.rs',gathered_source)]:
+    for name,content in [('inventory_source_data.rs',generated),('inventory_gathered_data.rs',gathered_source),('inventory_furniture_reference_data.rs',render_furniture_references(furniture_references))]:
         target=ROOT/'core/src'/name
         if args.check: require(target.read_text()==content,'checked-in source differs: '+name)
         else: target.write_text(content)
