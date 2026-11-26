@@ -43,3 +43,8 @@ test('upload binds exact source buffers and releases all resources on failure or
  assert.equal(h.meshes.get('1').indexCount,3);assert.deepEqual(f.state.data,[[4,[...new Uint8Array(bytes,0,36)]],[5,[...new Uint8Array(bytes,36,6)]]]);assert.deepEqual(f.state.attrs,[[2,3,7,false,12,0]]);assert.equal(f.state.vao,f.oldVAO);assert.equal(f.state.buffer,f.oldBuffer);h.dispose();h.dispose();assert.deepEqual(f.state.deleted,f.state.created);assert.equal(h.meshes.size,0);
  f=fake(true);await assert.rejects(uploadNativeGeometry(f.gl,s,bytes,{'1':{0:0}}),/NATIVE_MESH_GPU_UPLOAD/);assert.deepEqual(f.state.deleted,f.state.created);assert.equal(f.state.vao,f.oldVAO);assert.equal(f.state.buffer,f.oldBuffer);
 });
+
+test('multi-submesh source cannot be flattened by the single-material GPU path',()=>{
+ const {s}=fixture();s.meshes['1'].submeshes=[{firstByte:0,indexCount:3,firstVertex:0,vertexCount:3,bounds:[0,0,0,1,1,1]}];
+ assert.throws(()=>validateNativeGeometryLayout(s),/NATIVE_MESH_SUBMESH_UNSUPPORTED/);
+});

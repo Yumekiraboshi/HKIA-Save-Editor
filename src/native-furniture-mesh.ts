@@ -12,6 +12,9 @@ export function validateNativeGeometryLayout(source:NativeGeometrySource){
  const meshes=Object.entries(source.meshes);if(!int(meshes.length,1,512))fail('COUNT');
  const ranges:MeshRange[]=[];
  for(const [pid,m] of meshes){
+  // The offline extractor preserves ordered submeshes. Until the shader/material
+  // renderer supports them, reject rather than flattening all triangles.
+  if(Object.prototype.hasOwnProperty.call(m,'submeshes'))fail('SUBMESH_UNSUPPORTED');
   if(!/^-?[0-9]+$/.test(pid)||!int(m.vertexCount,1,65536)||!int(m.indexCount,3,6*1024*1024)||m.indexCount%3||!int(m.stride,12,64)||m.stride%4||m.channels.length!==14)fail('LAYOUT');
   if(m.bounds.length!==1||m.bounds[0].length!==6||!m.bounds[0].every(Number.isFinite)||m.bounds[0].slice(3).some(x=>x<0))fail('BOUNDS');
   const active:Array<[number,number]>=[];
