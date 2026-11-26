@@ -1700,8 +1700,9 @@ fn palette_and_chef_quantity_preserves_entire_original_payload(){
   let raw=make("3.0.1",vec![(4,1835273963,21,palette.clone()),(5,203331651,22,cafe.clone()),(6,1798633565,23,boba.clone())]);
   let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
-  assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==1&&r.quantity_limit==Some(i32::MAX)));
-  assert!(e.change_inventory_quantities(&[(4,2,10),(5,2,0)]).is_err());assert!(!e.dirty());
+  assert!(original.iter().all(|r|r.editable&&r.quantity_limit==Some(i32::MAX)));
+  assert_eq!(original.iter().map(|r|r.quantity_minimum).collect::<Vec<_>>(),vec![1,0,0]);
+  assert!(e.change_inventory_quantities(&[(4,2,0),(5,2,0)]).is_err());assert!(!e.dirty());
   e.change_inventory_quantities(&[(4,2,10),(5,2,20),(6,2,30)]).unwrap();
   let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();
   recovered.restore_history(&cp).unwrap();assert_eq!(recovered.inventory(),e.inventory());
@@ -2082,5 +2083,53 @@ fn saved_plucked_flower_zero_and_refill_preserve_uid_payload_and_other_rows(){
   let mut e=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
   assert_eq!(e.inventory()[0].quantity_minimum,1);
   assert!(e.change_inventory_quantity(4,3,0).is_err());
+ }
+}
+
+#[test]
+fn saved_chef_zero_and_refill_preserve_full_payloads_and_native_identity(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let cafe=arr(vec![vec![3],arr(vec![arr(vec![u(99),u(98)]),arr(vec![u(6),u(14),u(11),u(19)])])]);
+ let boba=arr(vec![vec![4],arr(vec![u(14),u(6),u(11),u(19),u(99)])]);
+ let make=|version:&str,rows:Vec<(u32,u32,u32,Vec<u8>)>|{
+  let mut payload=synthetic_payload(version);payload[3]=0x95+rows.len() as u8;
+  for (id,item,uid,p) in rows{payload.extend(doc(1,arr(vec![u(id),u(item),u(uid),u(2),p])));}
+  slot_from_payload(version,payload)
+ };
+ for zipped in [false,true]{
+  let raw=make("3.0.1",vec![(4,203331651,21,cafe.clone()),(5,1798633565,22,boba.clone())]);
+  let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==0));
+  assert!(e.change_inventory_quantities(&[(4,2,0),(5,1,0)]).is_err());
+  assert_eq!(e.inventory(),original);assert!(!e.dirty());
+  e.change_inventory_quantities(&[(4,2,0),(5,2,0)]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();
+  recovered.restore_history(&cp).unwrap();assert_eq!(recovered.inventory(),e.inventory());
+  assert!(recovered.undo_scope(Inventory));assert_eq!(recovered.inventory(),original);
+  assert!(recovered.redo_scope(Inventory));
+  let mut saved=Editor::open(recovered.export().unwrap()).unwrap();
+  assert!(saved.inventory().iter().all(|r|r.quantity==0&&r.quantity_minimum==0&&r.editable));
+  let uids=saved.inventory_unique_rows().map(|r|r.1).collect::<Vec<_>>();
+  assert_eq!(uids,vec![Some(21),Some(22)]);
+  for (id,p) in [(4,&cafe),(5,&boba)]{assert_eq!(saved.inventory_original_unique_payload(id),Some(p.as_slice()));}
+  saved.change_inventory_quantities(&[(4,0,6),(5,0,8)]).unwrap();
+  let reopened=Editor::open(saved.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory().iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![6,8]);
+  assert_eq!(reopened.inventory_unique_rows().map(|r|r.1).collect::<Vec<_>>(),uids);
+  for (id,p) in [(4,&cafe),(5,&boba)]{assert_eq!(reopened.inventory_original_unique_payload(id),Some(p.as_slice()));}
+ }
+ // Duplicate item identities, legacy GUID-based wand copies, and integer
+ // Item ID wand copies cannot safely authorize removal of a last stack.
+ let legacy_wand=arr(vec![vec![5],arr(vec![guid([1,2,3,4]),cafe.clone(),u(104),u(125),u(1)])]);
+ let wand=arr(vec![vec![9],arr(vec![u(203331651),cafe.clone(),u(104),u(125),u(1)])]);
+ for (version,rows) in [
+  ("3.0.1",vec![(4,203331651,21,cafe.clone()),(5,203331651,22,cafe.clone())]),
+  ("3.0.1",vec![(4,203331651,21,cafe.clone()),(5,39246601,22,legacy_wand)]),
+  ("3.0.1",vec![(4,203331651,21,cafe.clone()),(5,39246601,22,wand)]),
+  ("3.0.0",vec![(4,203331651,21,cafe.clone())])
+ ]{
+  let mut e=Editor::open(make(version,rows)).unwrap();
+  assert!(e.change_inventory_quantity(4,2,0).is_err());assert!(!e.dirty());
  }
 }

@@ -368,7 +368,10 @@ impl<'a> Walk<'a>{
         let mut c=Cursor::new(&self.c.bytes[at..self.c.pos]);
         if c.array()?!=2{return Err(Error::Schema)}
         let tag=c.int(i32::MIN as i128,i32::MAX as i128)?;
-        if matches!(tag,2|7|9){self.index.inventory_payload_refs_incomplete=true;}
+        if matches!(tag,2|7|9)||
+         (name=="Sunblink.Game.WandUniqueDataDeprecatedV75"&&matches!(tag,3|4)){
+         self.index.inventory_payload_refs_incomplete=true;
+        }
        }
        if capture_all{fields.push((value,at..self.c.pos));}
        else if is_doc&&i==0{document_id=Some(value);}
