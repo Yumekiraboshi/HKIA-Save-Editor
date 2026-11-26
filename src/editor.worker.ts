@@ -3,7 +3,7 @@ import {decodeInventoryUnique,decodeFlowerVariants,isFlowerVariantWire,decodeFur
 import {decodeInventoryFlowers,type InventoryFlower} from './inventory-flower-display';
 import {decodeInventoryPalettes,decodePaletteVariants,isPaletteVariantWire,type InventoryPalette,type PaletteVariant} from './inventory-palette-display';
 import {decodeBobaRows,decodeBobaVariants,isBobaVariantWire,type InventoryBoba,type BobaVariant} from './inventory-boba-display';
-type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'flower-create'|'flower-create-variants'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'boba-variants'|'boba-variant-change'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'flower-create'|'flower-create-variants'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'boba-variants'|'boba-variant-change'|'boba-create-variants'|'boba-create'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type AchievementValue = {complete:boolean;current:number;completed:[bigint,number]|null};
 type AchievementPatch = {guid:number[];before:AchievementValue;after:AchievementValue};
 type AchievementDraftPatch = {guid:number[];before:AchievementValue|null;after:AchievementValue};
@@ -13,7 +13,7 @@ type Engine = {
  memory:WebAssembly.Memory;
  hkia_stage(n:number):number; hkia_open():number;
  hkia_collection_creatable_snapshot():number;
- hkia_inventory_snapshot():number;hkia_inventory_creatable_snapshot():number;hkia_inventory_quantity_bounds():number;hkia_inventory_flowers_snapshot():number;hkia_inventory_palettes_snapshot():number;hkia_inventory_boba_snapshot():number;hkia_inventory_boba_variants(id:number):number;hkia_inventory_boba_variant_change(id:number,...words:number[]):number;hkia_inventory_palette_variants(id:number):number;hkia_inventory_palette_creation_variants(id:number):number;hkia_inventory_palette_create(id:number,...words:number[]):number;hkia_inventory_palette_variant_change(id:number,...words:number[]):number;hkia_inventory_unique_snapshot():number;hkia_inventory_flower_variants(id:number):number;hkia_inventory_absent_flower_ids():number;hkia_inventory_absent_furniture_ids():number;hkia_inventory_default_furniture_ids():number;hkia_inventory_flower_creation_variants(id:number):number;hkia_inventory_flower_create(id:number,...values:[...FlowerVariant,...FlowerVariant,number]):number;hkia_inventory_flower_variant_change(id:number,...values:[...FlowerVariant,...FlowerVariant]):number;hkia_inventory_furniture_variants(id:number):number;hkia_inventory_furniture_creation_variants(id:number):number;hkia_inventory_furniture_create(id:number,...values:[...FurnitureVariant,...FurnitureVariant,number]):number;hkia_inventory_furniture_variant_change(id:number,...values:[...FurnitureVariant,...FurnitureVariant]):number;hkia_inventory_change(id:number,before:number,after:number):number;hkia_inventory_batch_limit():number;hkia_inventory_batch_change():number;
+ hkia_inventory_snapshot():number;hkia_inventory_creatable_snapshot():number;hkia_inventory_quantity_bounds():number;hkia_inventory_flowers_snapshot():number;hkia_inventory_palettes_snapshot():number;hkia_inventory_boba_snapshot():number;hkia_inventory_boba_variants(id:number):number;hkia_inventory_boba_creation_variants(id:number):number;hkia_inventory_boba_create(id:number,...words:number[]):number;hkia_inventory_boba_variant_change(id:number,...words:number[]):number;hkia_inventory_palette_variants(id:number):number;hkia_inventory_palette_creation_variants(id:number):number;hkia_inventory_palette_create(id:number,...words:number[]):number;hkia_inventory_palette_variant_change(id:number,...words:number[]):number;hkia_inventory_unique_snapshot():number;hkia_inventory_flower_variants(id:number):number;hkia_inventory_absent_flower_ids():number;hkia_inventory_absent_furniture_ids():number;hkia_inventory_default_furniture_ids():number;hkia_inventory_flower_creation_variants(id:number):number;hkia_inventory_flower_create(id:number,...values:[...FlowerVariant,...FlowerVariant,number]):number;hkia_inventory_flower_variant_change(id:number,...values:[...FlowerVariant,...FlowerVariant]):number;hkia_inventory_furniture_variants(id:number):number;hkia_inventory_furniture_creation_variants(id:number):number;hkia_inventory_furniture_create(id:number,...values:[...FurnitureVariant,...FurnitureVariant,number]):number;hkia_inventory_furniture_variant_change(id:number,...values:[...FurnitureVariant,...FurnitureVariant]):number;hkia_inventory_change(id:number,before:number,after:number):number;hkia_inventory_batch_limit():number;hkia_inventory_batch_change():number;
  hkia_change(id:number,expectedPresent:number,old:bigint,nextPresent:number,value:bigint):number;
  hkia_achievement_parent_create(...args:[ number,number,number,number, number, number,number,bigint,number,number, number,number,bigint,number,number, number,number,number,number, number,number,bigint,number,number]):number;
  hkia_achievement_create(g0:number,g1:number,g2:number,g3:number,complete:number,progress:number,seconds:bigint,nanos:number,hasDate:number):number;
@@ -160,8 +160,8 @@ function snapshot(e:Engine){
  const uniqueRows=decodeInventoryUnique(readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len()),docIds);
  for(const row of inventory)row.unique=uniqueRows.get(row.documentId);
  if(e.hkia_inventory_boba_snapshot()!==0)throw Error('BOBA_SNAPSHOT_FAILED');
- const bobaRows=decodeBobaRows(readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len()),docIds);
- for(const row of inventory){const boba=bobaRows.get(row.documentId);if(boba)row.boba=boba;}
+ const bobaData=decodeBobaRows(readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len()),docIds);
+ for(const row of inventory){const boba=bobaData.rows.get(row.documentId);if(boba)row.boba=boba;}
  if(e.hkia_achievement_snapshot()!==0)throw Error('実績の取得に失敗しました。');
  const a=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
  if(a.byteLength<4)throw Error('実績データの形式が不正です。');
@@ -257,7 +257,7 @@ function snapshot(e:Engine){
   eligibleCollectionHistoryIds.push(id);
   lastId=id;
  }
- return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,inventory,inventoryCreatable,inventoryBatchLimit:e.hkia_inventory_batch_limit(),achievements,counters,history,historyCheckpoint:checkpoint,eligibleCollectionHistoryIds,achievementGoals};
+ return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,inventory,inventoryCreatable,inventoryBatchLimit:e.hkia_inventory_batch_limit(),bobaWitnesses:bobaData.witnesses,achievements,counters,history,historyCheckpoint:checkpoint,eligibleCollectionHistoryIds,achievementGoals};
 }
 function validAchievement(v:AchievementValue):boolean{
  return !!v&&typeof v.complete==='boolean'&&typeof v.current==='number'&&Number.isFinite(v.current)&&v.current>=0&&
@@ -353,15 +353,27 @@ async function execute(r:Request):Promise<unknown>{
    if(e.hkia_inventory_palette_create(id,...before,...next,quantity)!==0)throw Error('INVENTORY_CONFLICT');
    return snapshot(e);
   }
+  case 'boba-create-variants':{
+   const id=r.documentId;
+   if(id===undefined||!Number.isInteger(id)||id<1||id>4294967295)throw Error('INVENTORY_INVALID');
+   if(e.hkia_inventory_boba_creation_variants(id)!==0)throw Error('INVENTORY_CONFLICT');
+   return decodeBobaVariants(readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len()));
+  }
+  case 'boba-create':{
+   const id=r.documentId,before=r.beforeBobaVariant,next=r.nextBobaVariant,quantity=r.nextQuantity;
+   if(id===undefined||!Number.isInteger(id)||id<1||id>4294967295||!isBobaVariantWire(before)||!isBobaVariantWire(next)||quantity===undefined||!Number.isInteger(quantity)||quantity<1||quantity>2147483647)throw Error('INVENTORY_INVALID');
+   if(e.hkia_inventory_boba_create(id,...before,...next,quantity)!==0)throw Error('INVENTORY_CONFLICT');
+   return snapshot(e);
+  }
   case 'boba-variants':{
    const id=r.documentId;
-   if(id===undefined||!Number.isInteger(id)||id<1||id>2147483647)throw Error('INVENTORY_INVALID');
+   if(id===undefined||!Number.isInteger(id)||id<1||id>4294967295)throw Error('INVENTORY_INVALID');
    if(e.hkia_inventory_boba_variants(id)!==0)throw Error('INVENTORY_CONFLICT');
    return decodeBobaVariants(readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len()));
   }
   case 'boba-variant-change':{
    const id=r.documentId,before=r.beforeBobaVariant,next=r.nextBobaVariant;
-   if(id===undefined||!Number.isInteger(id)||id<1||id>2147483647||!isBobaVariantWire(before)||!isBobaVariantWire(next))throw Error('INVENTORY_INVALID');
+   if(id===undefined||!Number.isInteger(id)||id<1||id>4294967295||!isBobaVariantWire(before)||!isBobaVariantWire(next))throw Error('INVENTORY_INVALID');
    if(e.hkia_inventory_boba_variant_change(id,...before,...next)!==0)throw Error('INVENTORY_CONFLICT');
    return snapshot(e);
   }
@@ -515,7 +527,7 @@ async function execute(r:Request):Promise<unknown>{
    for(const p of r.inventoryPatches??[]){
     // Unique creation requires the native checkpoint with its source CAS
     // and exact handle. Net changes are a verification view, never a writer.
-    if(p?.kind==='flower-create'||p?.kind==='furniture-create'||p?.kind==='palette-create'){e.hkia_reset();throw Error('HISTORY_RESTORE_CONFLICT')}
+    if(p?.kind==='flower-create'||p?.kind==='furniture-create'||p?.kind==='palette-create'||p?.kind==='boba-create'){e.hkia_reset();throw Error('HISTORY_RESTORE_CONFLICT')}
     if(!p||!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>4294967295||(p.documentId>2147483647&&(p.kind!==undefined||p.before!==0||p.after<=0))){
      e.hkia_reset();throw Error('DRAFT_INVALID');
     }

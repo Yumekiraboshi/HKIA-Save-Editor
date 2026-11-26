@@ -116,3 +116,21 @@ pub(crate) fn supported_boba_base(v:[i32;5])->bool{
  BOBA_SOURCE_TRIPLES.binary_search(&[v[0],v[1],v[3]]).is_ok()&&
  BOBA_PEARLS.contains(&v[2])&&BOBA_SWEETNESS.contains(&v[4])
 }
+
+/// Display examples only: exact (ingredient ID, flavor, color) from the
+/// original item definitions for all fourteen authored Boba color/flavor pairs.
+pub(crate) const BOBA_WITNESSES:&[(i32,i32,i32)]=&[
+ (1877756618,44,6),(590978630,53,6),(1240730051,62,6),(449040119,55,9),
+ (518638500,61,9),(1104825533,59,16),(818900842,100,24),(1350635557,63,25),
+ (45140131,58,30),(479562317,43,32),(590790304,87,34),(1344087400,39,46),
+ (1254065963,50,46),(350967404,64,47),
+];
+#[cfg(test)]mod boba_source_tests{
+ use super::*;
+ #[test]fn authored_base_combinations_and_display_witnesses(){
+  assert_eq!(BOBA_SOURCE_TRIPLES.len(),19);
+  assert!(BOBA_SOURCE_TRIPLES.windows(2).all(|x|x[0]<x[1]));
+  assert!(BOBA_SOURCE_TRIPLES.iter().all(|&[c,f,_]|BOBA_WITNESSES.iter().any(|&(_,flavor,color)|(flavor,color)==(f,c))));
+  assert_eq!(BOBA_SOURCE_TRIPLES.len()*BOBA_PEARLS.len()*BOBA_SWEETNESS.len(),152);
+ }
+}

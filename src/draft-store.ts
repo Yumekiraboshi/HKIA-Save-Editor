@@ -42,6 +42,8 @@ export function diffInventory(before:readonly InventoryEntry[],after:readonly In
    if(paletteBefore&&paletteAfter&&paletteBefore.some((v,i)=>v!==paletteAfter[i]))result.push({documentId:row.documentId,before:paletteBefore,after:paletteAfter,kind:'palette-variant'});
    const furnitureBefore=furnitureVariantOf(source.unique),furnitureAfter=furnitureVariantOf(row.unique);
    if(furnitureBefore&&furnitureAfter&&furnitureBefore.some((v,i)=>v!==furnitureAfter[i]))result.push({documentId:row.documentId,before:furnitureBefore,after:furnitureAfter,kind:'furniture-variant'});
+  }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===4&&row.unique.uniqueId===null&&row.boba){
+   result.push({documentId:row.documentId,itemId:row.itemId,variant:row.boba.variant,quantity:row.quantity,kind:'boba-create'});
   }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===6&&row.unique.uniqueId===null&&paletteVariantOf(row.unique)){
    result.push({documentId:row.documentId,itemId:row.itemId,variant:paletteVariantOf(row.unique)!,quantity:row.quantity,kind:'palette-create'});
   }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===7&&row.unique.uniqueId===null&&row.flower){
@@ -58,11 +60,15 @@ export function safeInventoryPatches(value:unknown):InventoryPatch[]{
  if(!Array.isArray(value)||value.length>20000)throw Error('DRAFT_INVALID');
  const ids=new Set<string>(),result:InventoryPatch[]=[];
  for(const p of value){
-  if(!p||typeof p!=='object'||!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>4294967295||(p.documentId>2147483647&&p.kind!=='flower-create'&&p.kind!=='furniture-create'&&p.kind!=='palette-create'&&(p.kind!==undefined||p.before!==0||p.after<=0)))throw Error('DRAFT_INVALID');
+  if(!p||typeof p!=='object'||!Number.isInteger(p.documentId)||p.documentId<=0||p.documentId>4294967295||(p.documentId>2147483647&&p.kind!=='flower-create'&&p.kind!=='furniture-create'&&p.kind!=='palette-create'&&p.kind!=='boba-create'&&(p.kind!==undefined||p.before!==0||p.after<=0)))throw Error('DRAFT_INVALID');
   const key=p.documentId+':'+(p.kind??'quantity');
   if(ids.has(key))throw Error('DRAFT_INVALID');
   ids.add(key);
-  if(p.kind==='palette-create'){
+  if(p.kind==='boba-create'){
+   const variant:unknown=p.variant;
+   if(p.documentId<=2147483647||!Number.isInteger(p.itemId)||p.itemId<=0||p.itemId>2147483647||!isBobaVariantWire(variant)||!Number.isInteger(p.quantity)||p.quantity<=0||p.quantity>2147483647)throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,itemId:p.itemId,variant:[...variant],quantity:p.quantity,kind:'boba-create'});
+  }else if(p.kind==='palette-create'){
    const variant:unknown=p.variant;
    if(p.documentId<=2147483647||!Number.isInteger(p.itemId)||p.itemId<=0||p.itemId>2147483647||!isPaletteVariantWire(variant)||!Number.isInteger(p.quantity)||p.quantity<=0||p.quantity>2147483647)throw Error('DRAFT_INVALID');
    result.push({documentId:p.documentId,itemId:p.itemId,variant:[...variant],quantity:p.quantity,kind:'palette-create'});
