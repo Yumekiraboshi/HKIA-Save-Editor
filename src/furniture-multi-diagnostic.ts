@@ -12,6 +12,8 @@ import {uploadNativeCube,validateNativeCubeOrientation} from './native-cube-uplo
 import {createFurnitureForwardRenderer,validateFurnitureForwardInputs,type FurnitureForwardMaterial,type FurnitureForwardScene} from './furniture-forwardlit-gpu';
 import type {Vec3,Vec4} from './furniture-surface-v3.0.1';
 import {furnitureRimFromMaterial} from './furniture-rim-v3.0.1';
+import {resolveCustomLitFixedMaterial} from './furniture-customlit-v3.0.1';
+import {resolveSparkleFixedMaterial,validateSparkleGpuInputs,createSparkleGpuRenderer} from './furniture-sparkle-gpu';
 type Pattern=NativeTextureSource&{guid:string;bundle:string;bundleSha256:string;pathId:string;objectSha256:string};
 export type FurnitureMultiSources=Omit<RugNativeSources,'variants'>&{
  variants:RugNativeSources['variants']&{bundleNames:readonly string[];patterns:readonly (readonly [string,number,number,readonly number[]])[]};
@@ -64,9 +66,35 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
  if(d.additionalPatterns.schema!=='HKIA.FurniturePatternTextureSources.1'||d.additionalPatterns.version!=='3.0.1'||d.base.shaders[shaderId]?.objectSha256!==shaderHash)fail('SOURCE_VERSION');
  const patternRows=[...d.patterns.rows,...d.additionalPatterns.rows] as readonly Pattern[];
  const nodes=bound.geometry.nodes as unknown as Parameters<typeof authoredRendererModel>[0];
- validateNativeGeometryLayout(bound.geometry);
+ validateNativeGeometryLayout(bound.geometry,true);
+ const checkTextures=(ts:readonly (NativeTextureSource|null)[])=>{
+  for(const t of ts.filter((v):v is NativeTextureSource=>v!==null)){
+   validateNativeTextureLayout(t);
+   if(t.format===10&&!['rgb','rgba'].includes(request.bc1Modes[t.sha256]))fail('BC1_MODE');
+  }
+ };
  const plans=bound.plans.map(p=>{
   const base=p.baseMaterial,f=base.floats,c=base.colors;
+  const mesh=get(bound.geometry.meshes[p.meshPathId],'MESH');
+  const common={rendererPathId:p.rendererPathId,meshPathId:p.meshPathId,submeshIndex:p.submeshIndex,slot:p.choice?.slot??null,selectedIndex:p.choice?.selectedIndex??null,cull:f._Cull};
+  const sceneFor=(reflectionStrength:number,emissionColor:Vec3,modelNodes=nodes):FurnitureForwardScene=>{
+   const transform=authoredRendererModel(modelNodes,p.rendererPathId,request.mountWorld,request.runtimeRoot,request.fit);
+   return {...request.scene,model:transform.model,normalMatrix:transform.normalMatrix,tangentParity:transform.tangentParity,reflectionStrength,emissionColor};
+  };
+  if(base.shader.endsWith(':-2527260696058741820')){
+   if(p.choice!==null||p.submeshIndex===undefined)fail('SHADER_UNSUPPORTED');
+   const r=resolveSparkleFixedMaterial(d.base,p.baseMaterialId),scene=sceneFor(r.reflectionStrength,r.emissionColor);
+   const attributes:MeshAttributeLocations={0:0,1:1,2:2,4:4};
+   if(Object.keys(attributes).some(i=>!(mesh.channels[Number(i)]?.[3]&15)))fail('MESH_CHANNEL');
+   checkTextures(Object.values(r.textures));validateSparkleGpuInputs(scene,r.material);
+   return {...common,kind:'sparkle' as const,material:r.material,scene,attributes,...r.textures,patternMap:null};
+  }
+  if(base.shader.endsWith(':-6681258383375895387')){
+   if(p.choice!==null)fail('SHADER_UNSUPPORTED');
+   const r=resolveCustomLitFixedMaterial(d.base,p.baseMaterialId),scene=sceneFor(r.reflectionStrength,r.emissionColor);
+   validateFurnitureForwardInputs(scene,r.material);checkTextures(Object.values(r.textures));
+   return {...common,kind:'forward' as const,material:r.material,scene,attributes:furnitureForwardAttributeLocations(mesh,r.material,null),...r.textures,patternMap:null};
+  }
   if(base.shader!==shaderId||base.textures._PatternNormalMap?.texture!==null||base.textures._Surface_EffectMap?.texture!==null||
    f._PatternNormalMap_Toggle!==0||f._Surface_Effect!==0||f.GLIMMER!==0||f._AlphaClip!==0||f._Material_Alpha!==0||f._ZWrite!==1)fail('SHADER_UNSUPPORTED');
   const rim=furnitureRimFromMaterial(base.validKeywords,f);
@@ -100,26 +128,27 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
    rotationCenter:treatment?.rotationCenter??[c._PatternRotateCenter[0],c._PatternRotateCenter[1]],
    smoothnessShift:treatment?.smoothnessShift??f._Smoothness_Shift,metallicShift:treatment?.metallicShift??f._Metallic_Shift,
    patternSmoothnessShift:treatment?.patternSmoothnessShift??f._Smoothness_Shift_Pattern,patternMetallicShift:treatment?.patternMetallicShift??f._Metallic_Shift_Pattern,
-   occlusionStrength:f._OcclusionStrength,worldUV:f._Pattern_WorldUV===1,...(rim?{rim}:{})
+   occlusionStrength:f._OcclusionStrength,worldUV:f._Pattern_WorldUV===1,useComboEmissionMask:true,...(rim?{rim}:{})
   };
   if(!pattern&&material.baseColor[3]<=0)fail('NULL_PATTERN_CONTRIBUTES');
   const modelNodes=treatment?nodes.map(node=>node.rendererPathId===p.rendererPathId?{...node,scale:furnitureTreatmentScale(node.scale,treatment!.mirrored)}:node):nodes;
-  const transform=authoredRendererModel(modelNodes,p.rendererPathId,request.mountWorld,request.runtimeRoot,request.fit);
   const emissionColor=get(c._EmissionColor,'EMISSION').slice(0,3) as unknown as Vec3;
-  const scene:FurnitureForwardScene={...request.scene,model:transform.model,normalMatrix:transform.normalMatrix,tangentParity:transform.tangentParity,reflectionStrength:f._ReflectionStrength,emissionColor};
-  validateFurnitureForwardInputs(scene,material);
-  for(const t of [b,n,x,pattern].filter((v):v is NativeTextureSource=>v!==null)){
-   validateNativeTextureLayout(t);
-   if(t.format===10&&!['rgb','rgba'].includes(request.bc1Modes[t.sha256]))fail('BC1_MODE');
-  }
-  const mesh=get(bound.geometry.meshes[p.meshPathId],'MESH');
+  const scene=sceneFor(f._ReflectionStrength,emissionColor,modelNodes);
+  validateFurnitureForwardInputs(scene,material);checkTextures([b,n,x,pattern]);
   const attributes=furnitureForwardAttributeLocations(mesh,material,pattern);
-  return {rendererPathId:p.rendererPathId,meshPathId:p.meshPathId,slot:p.choice?.slot??null,selectedIndex:p.choice?.selectedIndex??null,
-   material,scene,attributes,baseMap:b,normalMap:n,comboMap:x,patternMap:pattern};
+  return {...common,kind:'forward' as const,material,scene,attributes,baseMap:b,normalMap:n,comboMap:x,patternMap:pattern};
  });
  if(new Set(plans.map(p=>p.meshPathId)).size!==Object.keys(bound.geometry.meshes).length)fail('MESH_COVERAGE');
+ const mixed=plans.some(p=>p.kind==='sparkle'||p.kind==='forward'&&p.material.customLit!==undefined);
+ if(mixed&&plans.some(p=>![0,2].includes(p.cull)))fail('CULL_UNSUPPORTED');
+ const locations:Record<string,MeshAttributeLocations>={};
+ for(const p of plans){
+  const previous=locations[p.meshPathId]??{};
+  if(Object.entries(p.attributes).some(([i,v])=>previous[Number(i)]!==undefined&&previous[Number(i)]!==v))fail('ATTRIBUTE_CONFLICT');
+  locations[p.meshPathId]={...previous,...p.attributes};
+ }
  for(const c of [request.reflectionPrimary,request.reflectionSecondary])validateNativeCubeOrientation(c.source,c.orientation);
- return {geometry:bound.geometry,plans,fidelity:'forward-diagnostic-only' as const};
+ return {geometry:bound.geometry,plans,locations,mixed,fidelity:'forward-diagnostic-only' as const};
 }
 /** Resolve all static meshes, including fixed renderer parts and selected
  * local mirroring, before applying the existing native diagonal scale fit.
@@ -141,10 +170,11 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
   const b=await read({kind,sha256,bytes});if(!(b instanceof ArrayBuffer)||b.byteLength!==bytes)fail('PAYLOAD_LENGTH');return b;
  };
  const owned:WebGLTexture[]=[],textures=new Map<string,WebGLTexture>(),payloads=new Map<string,ArrayBuffer>();
- let geometry:Awaited<ReturnType<typeof uploadNativeGeometry>>|undefined,renderer:ReturnType<typeof createFurnitureForwardRenderer>|undefined;
+ let geometry:Awaited<ReturnType<typeof uploadNativeGeometry>>|undefined,renderer:ReturnType<typeof createFurnitureForwardRenderer>|undefined,sparkleRenderer:ReturnType<typeof createSparkleGpuRenderer>|undefined;
+ let cullState:{enabled:boolean;mode:number;front:number}|undefined;
  try{
   geometry=await uploadNativeGeometry(gl,resolved.geometry,await getBytes('geometry',resolved.geometry.geometrySha256,resolved.geometry.geometryBytes),
-   Object.fromEntries(resolved.plans.map(p=>[p.meshPathId,p.attributes])));
+   resolved.locations,true);
   const texture=async(t:NativeTextureSource)=>{
    const key=t.sha256+':'+t.colorSpace+':'+t.format+':'+JSON.stringify(t.sampler)+':'+(request.bc1Modes[t.sha256]??'');
    const cached=textures.get(key);if(cached)return cached;
@@ -157,25 +187,39 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
   const reflectionPrimary=await cube(request.reflectionPrimary),reflectionSecondary=await cube(request.reflectionSecondary);
   // Resolve every payload before first draw, so unsupported or corrupt assets
   // cannot leave a misleading partial model in the caller's framebuffer.
-  const draws=[];
+  const draws:Array<{cull:number;run:()=>void}>=[];
   for(const p of resolved.plans){
    const baseMap=await texture(p.baseMap),normalMap=await texture(p.normalMap),comboMap=await texture(p.comboMap);
-   if(!p.patternMap&&p.material.useBaseMapMask&&!nativeBaseIsOpaque(p.baseMap,get(payloads.get(p.baseMap.sha256),'BASE_PAYLOAD')))fail('NULL_PATTERN_CONTRIBUTES');
-   // When the base weight is identically one the unused pattern binding can
-   // alias the original base texture. This invents no replacement asset.
-   const patternMap=p.patternMap?await texture(p.patternMap):baseMap;
-   draws.push({p,mesh:get(geometry.meshes.get(p.meshPathId),'GPU_MESH'),textures:{baseMap,normalMap,comboMap,patternMap,reflectionPrimary,reflectionSecondary}});
+   const mesh=get(geometry.meshes.get(p.meshPathId),'GPU_MESH');
+   if(p.kind==='sparkle'){
+    const noiseMap=await texture(p.noiseMap),submeshIndex=get(p.submeshIndex,'SUBMESH');
+    draws.push({cull:p.cull,run:()=>sparkleRenderer!.draw(mesh,{baseMap,normalMap,comboMap,noiseMap,reflectionPrimary,reflectionSecondary},p.scene,p.material,submeshIndex)});
+   }else{
+    if(!p.patternMap&&p.material.useBaseMapMask&&!nativeBaseIsOpaque(p.baseMap,get(payloads.get(p.baseMap.sha256),'BASE_PAYLOAD')))fail('NULL_PATTERN_CONTRIBUTES');
+    // CustomLit never consumes patternMap; unused source binding can alias base.
+    const patternMap=p.patternMap?await texture(p.patternMap):baseMap;
+    draws.push({cull:p.cull,run:()=>{
+     if(resolved.locations[p.meshPathId][5]===undefined)gl.vertexAttrib2f(5,0,0);
+     renderer!.draw(mesh,{baseMap,normalMap,comboMap,patternMap,reflectionPrimary,reflectionSecondary},p.scene,p.material,p.submeshIndex);
+    }});
+   }
   }
-  renderer=createFurnitureForwardRenderer(gl);
+  // Compile every required shader before the first draw.
+  if(resolved.plans.some(p=>p.kind==='forward'))renderer=createFurnitureForwardRenderer(gl);
+  if(resolved.plans.some(p=>p.kind==='sparkle'))sparkleRenderer=createSparkleGpuRenderer(gl);
+  if(resolved.mixed){
+   cullState={enabled:gl.isEnabled(gl.CULL_FACE),mode:gl.getParameter(gl.CULL_FACE_MODE),front:gl.getParameter(gl.FRONT_FACE)};
+   // Explicit diagnostic handedness (not proof of Unity camera parity).
+   gl.frontFace(gl.CCW);gl.cullFace(gl.BACK);
+  }
   for(const draw of draws){
-   // Disabled UV1 uses an explicit finite generic value; the preflight above
-   // proved that its value cannot affect this shader path.
-   if(draw.p.attributes[5]===undefined)gl.vertexAttrib2f(5,0,0);
-   renderer.draw(draw.mesh,draw.textures,draw.p.scene,draw.p.material);
+   if(resolved.mixed){if(draw.cull===2)gl.enable(gl.CULL_FACE);else gl.disable(gl.CULL_FACE);}
+   draw.run();
   }
-  return {itemId:request.itemId,renderers:draws.length,uniqueTextures:textures.size,fidelity:resolved.fidelity};
+  return {itemId:request.itemId,renderers:new Set(resolved.plans.map(p=>p.rendererPathId)).size,drawCalls:draws.length,uniqueTextures:textures.size,fidelity:resolved.fidelity};
  }finally{
-  if(renderer){gl.useProgram(null);renderer.dispose();}
+  if(cullState){gl.frontFace(cullState.front);gl.cullFace(cullState.mode);if(cullState.enabled)gl.enable(gl.CULL_FACE);else gl.disable(gl.CULL_FACE);}
+  if(renderer||sparkleRenderer){gl.useProgram(null);renderer?.dispose();sparkleRenderer?.dispose();}
   // A rejected read/hash can occur before the first GPU allocation. Do not
   // touch the context (or mask the original error) without owned geometry.
   if(geometry){gl.bindVertexArray(null);geometry.dispose();}

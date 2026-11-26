@@ -56,3 +56,14 @@ test('explicit ordered submesh draw uses original index count and byte offset',(
  assert.deepEqual(a.calls.filter(x=>x[0]==='draw'),[['draw',30,300,31,0],['draw',30,240,31,600]]);
  renderer.dispose();
 });
+
+test('CustomLit and original combo emission switches reset between submesh draws',()=>{
+ const a=fake(),r=createFurnitureForwardRenderer(a.gl);
+ const sub={...mesh,indexCount:540,submeshes:[{firstByte:0,indexCount:300},{firstByte:600,indexCount:240}]};
+ r.draw(sub,textures,s,{...m,worldUV:false,useBaseMapMask:false,customLit:{materialAlpha:0}},1);
+ r.draw(mesh,textures,s,{...m,useComboEmissionMask:true});r.draw(mesh,textures,s,m);
+ assert.deepEqual(a.calls.filter(x=>x[0]==='int'&&x[1]==='customLit').map(x=>x[2]),[1,0,0]);
+ assert.deepEqual(a.calls.filter(x=>x[0]==='int'&&x[1]==='useComboEmissionMask').map(x=>x[2]),[0,1,0]);
+ assert.throws(()=>r.draw(mesh,textures,s,{...m,customLit:{materialAlpha:1}}),/INPUT/);
+ r.dispose();
+});
