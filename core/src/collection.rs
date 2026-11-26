@@ -347,7 +347,7 @@ impl Editor {
  }
  fn unique_row_source(&self,row:&crate::native::InventoryRow,fields:usize)->Option<i32>{
   if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<0||
-   (row.quantity==Some(0)&&!Self::is_plucked_species(row))||
+   (row.quantity==Some(0)&&!Self::is_emptyable_unique_family(row))||
    row.unique_is_nil!=Some(false)||row.unique_fields.len()!=fields||self.slot.index.inventory_item_refs_incomplete{return None}
   let item=row.item_id?;let uid=row.unique_id?;
   if item<=0||uid<=0||self.slot.index.inventory_item_refs.contains(&(item,uid))||self.slot.index.inventory_legacy_uid_refs.contains(&uid){return None}
@@ -734,11 +734,21 @@ impl Editor {
   r.item_id.is_some_and(|item|FLOWER_SPECIES.iter().any(|&(id,_)|id==item))&&
    r.unique_data.and_then(flower_variant).is_some_and(|v|v[0]==6)
  }
+ // Only consumable families with the existing source-authorized
+ // complete payload and quantity gates. No palette/outfit/layout removal.
+ fn is_emptyable_unique_family(r:&crate::native::InventoryRow)->bool{
+  use crate::inventory_source::{CAFE_IDS,BOBA_ID};
+  Self::is_plucked_species(r)||match (r.item_id,r.unique_data){
+   (Some(item),Some(InventoryUniqueData::CafeAppearance{..}))=>CAFE_IDS.binary_search(&item).is_ok(),
+   (Some(item),Some(InventoryUniqueData::BobaAppearance{..}))=>item==BOBA_ID,
+   _=>false
+  }
+ }
  /// Native subtraction clamps to zero without deleting the saved record.
- /// Existing positive or zero plucked flowers must pass the full original
- /// unique quantity identity/reference index, including copied payloads.
+ /// Existing consumables must pass the full original unique quantity
+ /// identity/reference index, including copied payloads.
  fn inventory_can_empty(&self,r:&crate::native::InventoryRow)->bool{
-  if Self::is_plucked_species(r)&&self.unique_quantity_ids.contains(&r.id){return true}
+  if Self::is_emptyable_unique_family(r)&&self.unique_quantity_ids.contains(&r.id){return true}
   let Some(item_id)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
    crate::inventory_source::ordinary_membership_item(item_id)&&
