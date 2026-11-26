@@ -100,3 +100,19 @@ mod tests{
   assert_eq!(ordinary_quantity_limit(id),Some(1));
  }
 }
+
+/// Exact (color, flavor, milk) triples of the 23 native Boba
+/// definition assets in the pinned Switch v3.0.1 definitions CAB.
+/// Some authoring names disagree with their flags; use serialized IDs.
+pub(crate) const BOBA_SOURCE_TRIPLES:&[[i32;3]]=&[
+ [6,44,75],[6,44,78],[6,53,75],[6,53,78],[6,62,75],[6,62,78],
+ [9,55,78],[9,61,78],[16,59,78],[24,100,78],[25,63,78],[30,58,78],
+ [32,43,75],[34,87,75],[46,39,75],[46,39,78],[46,50,75],[46,50,78],[47,64,78],
+];
+// CharacteristicsDatabase named source fields, confirmed in BobaTeaProcessor.
+pub(crate) const BOBA_PEARLS:[i32;2]=[79,76]; // no / yes
+pub(crate) const BOBA_SWEETNESS:[i32;4]=[71,72,73,74];
+pub(crate) fn supported_boba_base(v:[i32;5])->bool{
+ BOBA_SOURCE_TRIPLES.binary_search(&[v[0],v[1],v[3]]).is_ok()&&
+ BOBA_PEARLS.contains(&v[2])&&BOBA_SWEETNESS.contains(&v[4])
+}

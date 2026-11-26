@@ -2481,3 +2481,37 @@ fn existing_palette_color_edits_are_native_exact_cas_and_copy_safe(){
  assert!(e.change_inventory_palette_variant(4,original,next).is_err());
  assert!(Editor::open(make("3.0.0",peer,None)).unwrap().inventory_palette_variants(4).is_empty());
 }
+
+#[test]
+fn boba_pearls_and_sweetness_preserve_flavor_color_milk_and_uid(){
+ use hkia_save_core::collection::{HistoryScope::Inventory,BobaVariant};
+ let original=[6,44,76,75,73];let mut next=original;next[2]=79;next[4]=71;
+ let mut peer=original;peer[4]=74;
+ let encode=|v:BobaVariant|arr(vec![vec![4],arr(v.into_iter().map(|w|u(w as u32)).collect())]);
+ let make=|v:BobaVariant,other:BobaVariant|{
+  let mut p=synthetic_payload("3.0.1");p[3]=0x97;
+  for (id,v) in [(4,v),(5,other)]{p.extend(doc(1,arr(vec![u(id),u(1798633565),u(20+id),u(2),encode(v)])));}
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(original,peer);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();assert!(e.inventory_boba_variants(4).contains(&next));
+  assert!(!e.inventory_boba_variants(4).contains(&peer));
+  let mut invalid=next;invalid[1]=39;assert!(e.change_inventory_boba_variant(4,original,invalid).is_err());
+  invalid=next;invalid[2]=75;assert!(e.change_inventory_boba_variant(4,original,invalid).is_err());
+  assert!(e.change_inventory_boba_variant(4,peer,next).is_err());assert!(!e.dirty());
+  e.change_inventory_boba_variant(4,original,next).unwrap();
+  e.change_inventory_quantity(4,2,7).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut r=Editor::open(input).unwrap();r.restore_history(&cp).unwrap();
+  assert_eq!(r.inventory_boba_rows().next(),Some((4,next,true)));
+  assert!(r.undo_scope(Inventory));assert!(r.undo_scope(Inventory));assert_eq!(r.inventory_boba_rows().next(),Some((4,original,true)));assert!(!r.dirty());
+  assert!(r.redo_scope(Inventory));assert!(r.redo_scope(Inventory));
+  let reopened=Editor::open(r.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory_boba_rows().next(),Some((4,next,true)));
+  assert_eq!(reopened.inventory()[0].quantity,7);
+  assert_eq!(reopened.inventory_original_unique_payload(5),Some(encode(peer).as_slice()));
+  assert_eq!(reopened.inventory_unique_rows().next().unwrap().1,Some(24));
+ }
+ let mut unknown=original;unknown[1]=99;
+ let e=Editor::open(make(unknown,peer)).unwrap();assert!(e.inventory_boba_variants(4).is_empty());
+}
