@@ -13,6 +13,19 @@ def require(ok,msg):
     if not ok:raise ValueError(msg)
 def sha(b):return hashlib.sha256(b).hexdigest()
 
+# Original PC v3.0.1 Shader object identities. Extraction support does not
+# imply WebGL rendering support. Offsets refer to each exact hashed object.
+SHADER_SOURCES={
+    'CAB-2b27edbfe7f08bad1cd631865ee4eb15:-6806329374484566350':('cdb64e92e92cbc2b88b3ce48c8a3ed302a16972a23528c27e766b7a646d852d0',20904,'Sunblink/Lynx/CustomLitFurniture',42,4),
+    'CAB-46b8f8fe122147493b3113f7c1c8cd0f:-6681258383375895387':('7c32f4b3f7c0c0d580af1e22584952aa29d266dfbe98de3b916c3fecb7339931',90796,'Sunblink/Lynx/CustomLit',47,42),
+    'CAB-2b27edbfe7f08bad1cd631865ee4eb15:-5284085216943671920':('b23e096723fa706e6691614cce6855479eeb4657fbeb6bc76a0ff75f22ad1890',7324,'Sunblink/Lynx/Fluid',24,1),
+    'CAB-2b27edbfe7f08bad1cd631865ee4eb15:5672080719818937120':('cd5500644f788d349e8558edf99a83b883fd28da9089ad18fe5f93a5576732a4',20000,'Shader Graphs/FluidStream',34,1),
+}
+def shader_source(key,object_sha):
+    source=SHADER_SOURCES.get(key)
+    require(source is not None and source[0]==object_sha,'unsupported shader identity '+key)
+    return source
+
 def extract(bundles,scene,mesh,audit,shader_audit,out=None,resolve_cab=None):
     loaded={}
     def load(path,expected_cab=None):
@@ -20,8 +33,8 @@ def extract(bundles,scene,mesh,audit,shader_audit,out=None,resolve_cab=None):
         cabs=[x for x in nodes if re.fullmatch('CAB-[0-9a-f]{32}',x)];require(len(cabs)==1,'CAB identity');cab=cabs[0]
         require(expected_cab is None or cab==expected_cab,'resolved CAB mismatch')
         require(cab not in loaded,'duplicate CAB')
-        trees,externals=mesh.type_trees(nodes[cab]);objects={p:(c,b) for c,p,b,e in audit.serialized_objects(nodes[cab],classes=(21,28,48)) if e=='<'}
-        loaded[cab]={'bundle':path.name.removesuffix('.bin'),'sha256':sha(raw),'trees':trees,'externals':externals,'objects':objects,'stream':nodes.get(cab+'.resS',b'')}
+        trees,externals,object_types=mesh.type_trees(nodes[cab],indexed=True);objects={p:(c,b) for c,p,b,e in audit.serialized_objects(nodes[cab],classes=(21,28,48)) if e=='<'}
+        loaded[cab]={'bundle':path.name.removesuffix('.bin'),'sha256':sha(raw),'trees':trees,'objectTypes':object_types,'externals':externals,'objects':objects,'stream':nodes.get(cab+'.resS',b'')}
     for path in bundles:load(path)
     def entry_for(cab):
         if cab not in loaded and resolve_cab is not None:
@@ -61,21 +74,21 @@ def extract(bundles,scene,mesh,audit,shader_audit,out=None,resolve_cab=None):
         if key in shaders:return
         target=object_for(key,48)
         if not target:unresolved.add(key);return
-        entry,b=target;require(key=='CAB-2b27edbfe7f08bad1cd631865ee4eb15:-6806329374484566350' and sha(b)=='cdb64e92e92cbc2b88b3ce48c8a3ed302a16972a23528c27e766b7a646d852d0','unsupported shader identity')
-        r=shader_audit.Reader(b,20904);name=r.string();require(name=='Sunblink/Lynx/CustomLitFurniture','shader name')
+        entry,b=target;_,name_offset,expected_name,property_count,segment_count=shader_source(key,sha(b))
+        r=shader_audit.Reader(b,name_offset);name=r.string();require(name==expected_name,'shader name')
         editor,fallback=r.string(),r.string();r.array(lambda:(r.string(),r.string()));r.array(lambda:(r.string(),r.string()));r.take('B');r.align()
         platforms=r.array(lambda:r.take('I'));offsets,sizes,expanded=[r.array(lambda:r.array(lambda:r.take('I'))) for _ in range(3)]
         require(platforms==[4] and len(offsets)==len(sizes)==len(expanded)==1,'shader platform');n=r.take('I');require(n<=len(b)-r.pos,'shader blob bounds');blob=b[r.pos:r.pos+n];cursor=0;segments=[]
-        require(len(offsets[0])==len(sizes[0])==len(expanded[0]),'shader segment counts')
+        require(len(offsets[0])==len(sizes[0])==len(expanded[0])==segment_count,'shader segment counts')
         for off,z,size in zip(offsets[0],sizes[0],expanded[0]):
             require(off==cursor and 0<z<=len(blob)-off and 0<size<=2000000,'shader segment bounds');data=audit.auditor.decompress(blob[off:off+z],size,2);segments.append({'offset':off,'compressedBytes':z,'bytes':size,'sha256':sha(data),'programs':shader_audit.containers(data)});cursor+=z
-        require(cursor==len(blob),'shader blob length');props=shader_audit.shader_properties(b);require(len(props)==42,'shader property count')
+        require(cursor==len(blob),'shader blob length');props=shader_audit.shader_properties(b);require(len(props)==property_count,'shader property count')
         shaders[key]={'name':name,'bundle':entry['bundle'],'objectSha256':sha(b),'properties':props,'segments':segments}
     def material(key):
         if key in materials:return
         target=object_for(key,21)
         if not target:unresolved.add(key);return
-        entry,b=target;cab=key.split(':')[0];f=mesh.fields(entry['trees'][21],b);name=mesh.string(f['m_Name'])[0];sh=ref(cab,mesh.ptr(f['m_Shader']));require(sh is not None,'shader missing');shader(sh)
+        entry,b=target;cab=key.split(':')[0];f=mesh.fields(entry['trees'][entry['objectTypes'][key.split(':')[1]]],b);name=mesh.string(f['m_Name'])[0];sh=ref(cab,mesh.ptr(f['m_Shader']));require(sh is not None,'shader missing');shader(sh)
         def strings(b):
             n=mesh.u(b);require(n<=1024,'keywords');p=4;result=[]
             for _ in range(n):s,p=mesh.string(b,p);result.append(s)
