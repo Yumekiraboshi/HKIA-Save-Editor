@@ -1,25 +1,29 @@
 /** Presentation of Rust-owned Boba tuples. No save eligibility or recipe planning. */
 export type BobaVariant=[number,number,number,number,number];
 export type InventoryBoba={variant:BobaVariant;editable:boolean};
+export type BobaWitness=[itemId:number,flavor:number,color:number];
 export function isBobaVariantWire(v:unknown):v is BobaVariant{
  return Array.isArray(v)&&v.length===5&&v.every(n=>Number.isInteger(n)&&n>=-2147483648&&n<=2147483647);
 }
-export function decodeBobaRows(bytes:Uint8Array,docIds:ReadonlySet<number>):Map<number,InventoryBoba>{
- if(bytes.length<4)throw Error('BOBA_SNAPSHOT_INVALID');
+export function decodeBobaRows(bytes:Uint8Array,docIds:ReadonlySet<number>):{rows:Map<number,InventoryBoba>;witnesses:BobaWitness[]}{
+ if(bytes.length<8)throw Error('BOBA_SNAPSHOT_INVALID');
  const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),n=v.getUint32(0,true);
- if(n>docIds.size||bytes.length!==4+n*28)throw Error('BOBA_SNAPSHOT_INVALID');
+ if(n>docIds.size||bytes.length<8+n*28)throw Error('BOBA_SNAPSHOT_INVALID');
  const rows=new Map<number,InventoryBoba>();
  for(let i=0;i<n;i++){
   const at=4+i*28,id=v.getUint32(at,true),editable=v.getUint32(at+4,true);
   if(!docIds.has(id)||rows.has(id)||editable>1)throw Error('BOBA_SNAPSHOT_INVALID');
   rows.set(id,{variant:Array.from({length:5},(_,j)=>v.getInt32(at+8+j*4,true)) as BobaVariant,editable:editable===1});
  }
- return rows;
+ const start=4+n*28,m=v.getUint32(start,true);
+ if(m>14||bytes.length!==start+4+m*12)throw Error('BOBA_SNAPSHOT_INVALID');
+ const witnesses=Array.from({length:m},(_,i)=>Array.from({length:3},(_,j)=>v.getInt32(start+4+i*12+j*4,true)) as BobaWitness);
+ return {rows,witnesses};
 }
 export function decodeBobaVariants(bytes:Uint8Array):BobaVariant[]{
  if(bytes.length<4)throw Error('BOBA_OPTIONS_INVALID');
  const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),n=v.getUint32(0,true);
- if(n>7||bytes.length!==4+n*20)throw Error('BOBA_OPTIONS_INVALID');
+ if(n>151||bytes.length!==4+n*20)throw Error('BOBA_OPTIONS_INVALID');
  return Array.from({length:n},(_,i)=>Array.from({length:5},(_,j)=>v.getInt32(4+i*20+j*4,true)) as BobaVariant);
 }
 // Editor copy, not asserted to be original game localization.
@@ -46,4 +50,32 @@ export function bobaVariantLabel(v:BobaVariant,locale:string):string{
  const pearl=v[2]===76?c[0]:v[2]===79?c[1]:'';
  const sweet=v[4]>=71&&v[4]<=74?c[v[4]-69]:'';
  return [pearl,sweet].filter(Boolean).join(' · ');
+}
+
+// Localized editor labels for milk presence; source ingredient labels use
+// the existing game name map. These labels do not authorize save edits.
+const milkLabels:Record<string,[string,string]>={
+ en:['With milk','Without milk'],'en-GB':['With milk','Without milk'],
+ ja:['ミルク入り','ミルクなし'],ar:['مع الحليب','بدون حليب'],
+ de:['Mit Milch','Ohne Milch'],es:['Con leche','Sin leche'],
+ fr:['Avec lait','Sans lait'],'fr-CA':['Avec lait','Sans lait'],
+ it:['Con latte','Senza latte'],ko:['우유 추가','우유 없음'],
+ nl:['Met melk','Zonder melk'],'pt-BR':['Com leite','Sem leite'],
+ ru:['С молоком','Без молока'],tr:['Sütlü','Sütsüz'],
+ 'zh-Hans':['加奶','不加奶'],'zh-Hant':['加奶','不加奶'],
+};
+export function bobaBaseKey(v:BobaVariant):string{return [v[0],v[1],v[3]].join(':')}
+export function bobaBaseChoices(before:BobaVariant,options:readonly BobaVariant[]):BobaVariant[]{
+ const rows=new Map<string,BobaVariant>();
+ for(const v of [before,...options])if(!rows.has(bobaBaseKey(v)))rows.set(bobaBaseKey(v),v);
+ return [...rows.values()];
+}
+export function bobaBaseLabel(v:BobaVariant,locale:string,witnesses:readonly BobaWitness[],name:(id:number)=>string):string{
+ const labels=milkLabels[locale]??milkLabels.en;
+ const ingredient=witnesses.find(w=>w[1]===v[1]&&w[2]===v[0]);
+ const names=ingredient?name(ingredient[0]):'';
+ return [names||'—',v[3]===75?labels[0]:v[3]===78?labels[1]:''].filter(Boolean).join(' · ');
+}
+export function fullBobaLabel(v:BobaVariant,locale:string,witnesses:readonly BobaWitness[],name:(id:number)=>string):string{
+ return [bobaBaseLabel(v,locale,witnesses,name),bobaVariantLabel(v,locale)].filter(Boolean).join(' · ');
 }

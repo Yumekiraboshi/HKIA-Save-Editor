@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPaletteVariants,changeInventoryPaletteVariant,requestPaletteCreationVariants,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPaletteVariants,changeInventoryPaletteVariant,requestPaletteCreationVariants,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -43,7 +43,7 @@ import {searchAchievementRows} from './achievement-search';
  import {inventoryWandAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance} from './inventory-chef-display';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,type PaletteVariant} from './inventory-palette-display';
- import {bobaVariantLabel,type BobaVariant} from './inventory-boba-display';
+ import {bobaVariantLabel,bobaBaseKey,bobaBaseChoices,bobaBaseLabel,fullBobaLabel,type BobaVariant} from './inventory-boba-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {toAchievementDateTimeValue,fromAchievementDateTimeValue} from './achievement-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
@@ -81,8 +81,9 @@ import {verifiedFloorplanName} from './floorplan-names';
  let paletteDialogEl:HTMLDialogElement|undefined=$state();
  let paletteEdit=$state<{documentId:number;itemId:number;revision:number;before:PaletteVariant;options:PaletteVariant[];creationOptions:PaletteVariant[]}|null>(null);
  let bobaDialogEl:HTMLDialogElement|undefined=$state();
- let bobaEdit=$state<{documentId:number;itemId:number;revision:number;before:BobaVariant;options:BobaVariant[]}|null>(null);
+ let bobaEdit=$state<{documentId:number;itemId:number;revision:number;before:BobaVariant;options:BobaVariant[];creationOptions:BobaVariant[]}|null>(null);
  let bobaSelection=$state(-1);
+ let bobaBase=$state('');
  let paletteSlot=$state(0);
  let paletteSelection=$state(-1);
  let inventoryNativeArt:InventoryNativeArt|null=$state(null);
@@ -439,8 +440,9 @@ import {verifiedFloorplanName} from './floorplan-names';
  function setTheme(v:ThemePref){
   themePref=v;try{localStorage.setItem('hkia-display-theme',v)}catch{}
  }
+ function bobaName(v:BobaVariant):string{return fullBobaLabel(v,locale,snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}
  function inventoryVariantSearchName(row:InventoryEntry):string{
-  if(row.boba)return bobaVariantLabel(row.boba.variant,locale);
+  if(row.boba)return bobaName(row.boba.variant);
   const furniture=furnitureVariantOf(row.unique);
   if(furniture)return furnitureVariantTitle(furnitureDisplay,row.itemId,furniture,furnitureCopy.defaultMaterial);
   return [flowerGrowthLabel(locale,flowerGrowthKind(row.itemId,row.flower)),flowerDisplay(row.flower,flowerDefinitions,flowerLabels[locale]??{})?.title].filter(Boolean).join(' · ');
@@ -555,7 +557,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
  }
  function historyEntryChange(i:number):string{
-  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerVariantName,v=>v.map(n=>materialLabel(furnitureDisplay,n,furnitureCopy.defaultMaterial)).join(' / '),id=>inventoryName(inventoryHistoryItems.get(id)??(id>2147483647?id-2147483648:0)))||
+  return formatHistoryChange(tabHistoryDetails[i],locale,hDetailCopy,hCopy.paired,iCopy.quantity,flowerVariantName,v=>v.map(n=>materialLabel(furnitureDisplay,n,furnitureCopy.defaultMaterial)).join(' / '),id=>inventoryName(inventoryHistoryItems.get(id)??(id>2147483647?id-2147483648:0)),bobaName)||
    (tabHistory[i]?.paired?hCopy.paired:'');
  }
  function historyEntryLabel(entry:HistoryRecord,i:number):string{
@@ -758,11 +760,19 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||!row.boba?.editable)return;
   const before=row.boba.variant,revision=snapshot.revision;busy=true;error='';
   try{
-   const options=await requestBobaVariants(row.documentId);
+   const [options,creationOptions]=await Promise.all([requestBobaVariants(row.documentId),requestBobaCreationVariants(row.documentId)]);
    if(!snapshot||snapshot.revision!==revision)return;
-   bobaEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options};bobaSelection=-1;await tick();
+   bobaEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions};bobaBase=bobaBaseKey(before);bobaSelection=-1;variantAddQuantity=1;await tick();
    if(bobaDialogEl&&!bobaDialogEl.open)bobaDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
+ }
+ async function addInventoryBobaVariant(){
+  const edit=bobaEdit,quantity=variantAddQuantity;
+  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
+  const next=edit.options[bobaSelection];if(!next||!edit.creationOptions.some(v=>v.every((n,i)=>n===next[i])))return;
+  busy=true;error='';
+  try{update(await createInventoryBobaVariant(edit.documentId,edit.before,next,quantity));closeBobaEditor();await persistDraft()}
+  catch(e){error=describeError(e)}finally{busy=false}
  }
  function closeBobaEditor(){if(bobaDialogEl?.open)bobaDialogEl.close()}
  async function applyInventoryBobaVariant(event:SubmitEvent){
@@ -1631,23 +1641,39 @@ import {verifiedFloorplanName} from './floorplan-names';
  <dialog class="date-dialog" bind:this={bobaDialogEl} aria-labelledby="boba-editor-title" onclose={()=>{bobaEdit=null;bobaSelection=-1}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if bobaEdit}
    {@const edit=bobaEdit}
+   {@const selected=edit.options[bobaSelection]??bobaBaseChoices(edit.before,edit.options).find(v=>bobaBaseKey(v)===bobaBase)??edit.before}
    <form class="date-dialog-inner" onsubmit={applyInventoryBobaVariant}>
     <div class="date-dialog-heading">
      <h2 id="boba-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeBobaEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:edit.before[0]}}/></div>
-    <label class="date-dialog-field">
-     <span>{bobaVariantLabel(edit.before,locale)}</span>
-     <select name="boba-variant" bind:value={bobaSelection} disabled={busy}>
-      <option value={-1}>{bobaVariantLabel(edit.before,locale)}</option>
-      {#each edit.options as option,i}<option value={i}>{bobaVariantLabel(option,locale)}</option>{/each}
+    <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}}/></div>
+    <div class="date-dialog-field">
+     <select name="boba-base" aria-label={inventoryName(edit.itemId)} bind:value={bobaBase} onchange={()=>bobaSelection=-1} disabled={busy}>
+      {#each bobaBaseChoices(edit.before,edit.options) as base}
+       <option value={bobaBaseKey(base)}>{bobaBaseLabel(base,locale,snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
+      {/each}
      </select>
-    </label>
+     <select name="boba-variant" aria-label={bobaVariantLabel(edit.before,locale)} bind:value={bobaSelection} disabled={busy}>
+      <option value={-1}>{bobaBase===bobaBaseKey(edit.before)?bobaVariantLabel(edit.before,locale):'—'}</option>
+      {#each edit.options as option,i}
+       {#if bobaBaseKey(option)===bobaBase}<option value={i}>{bobaVariantLabel(option,locale)}</option>{/if}
+      {/each}
+     </select>
+    </div>
     {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
+    {#if edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[bobaSelection]?.[i]))}
+     <label class="date-dialog-field">
+      <span>{inventoryAddCopy(locale)} · {iCopy.quantity}</span>
+      <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
+     </label>
+    {/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeBobaEditor}>{copy.cancel}</button>
-     <button type="submit" class="primary" disabled={busy||bobaSelection<0}>{copy.apply}</button>
+     {#if edit.creationOptions.length}
+      <button type="button" class="inventory-create-boba" disabled={busy||!validVariantAddQuantity||bobaSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[bobaSelection]?.[i]))} onclick={()=>void addInventoryBobaVariant()}>{inventoryAddCopy(locale)}</button>
+     {/if}
+     <button type="submit" formnovalidate class="primary" disabled={busy||bobaSelection<0}>{copy.apply}</button>
     </div>
    </form>
   {/if}
