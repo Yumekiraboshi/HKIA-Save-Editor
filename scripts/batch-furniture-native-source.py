@@ -34,7 +34,7 @@ def candidates(doc,row):
     names=doc['bundleNames']
     require(row[3] and all(type(i) is int and 0<=i<len(names) for i in row[3]),'bundle index')
     result=list(dict.fromkeys(names[i] for i in row[3]))
-    require(all(re.fullmatch('[a-zA-Z0-9_.-]+',n) and n not in ('.','..') for n in result),'bundle name')
+    require(all(re.fullmatch('[a-zA-Z0-9_. -]+',n) and n==n.strip() and n not in ('.','..') for n in result),'bundle name')
     return result
 def make_plan():
     v=read('furniture-visual-source-v3.0.1.json')
