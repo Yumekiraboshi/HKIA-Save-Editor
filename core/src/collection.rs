@@ -509,19 +509,26 @@ impl Editor {
   if expected!=current||next==current||next==original||next[0]!=current[0]||!valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
   self.stage_new_flower(source_id,item_id,expected,next,quantity)
  }
+ fn absent_flower_budget_available(&self)->bool{
+  self.inventory_creation_source_valid()&&self.undo.len()+self.redo.len()<MAX_UNDO&&
+   crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_flowers.len()+1).is_ok()&&
+   crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_ok()
+ }
  fn absent_flower_options(&self,item_id:i32)->Vec<FlowerVariant>{
-  if !self.inventory_creation_source_valid()||self.inventory_item_rows.contains_key(&item_id)||
+  if !self.absent_flower_budget_available(){return Vec::new()}
+  self.absent_flower_choices(item_id)
+ }
+ fn absent_flower_choices(&self,item_id:i32)->Vec<FlowerVariant>{
+  if self.inventory_item_rows.contains_key(&item_id)||
    self.slot.index.inventory_payload_item_refs.contains(&item_id)||
-   self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item_id)||
-   self.undo.len()+self.redo.len()>=MAX_UNDO||
-   crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_flowers.len()+1).is_err()||
-   crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
+   self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item_id){return Vec::new()}
   let Some((_,colors))=ABSENT_FLOWER_DEFAULTS.iter().find(|&&(id,_)|id==item_id)else{return Vec::new()};
   if !crate::inventory_source::is_uncapped_required_unique_stack(item_id){return Vec::new()}
   colors.iter().map(|&color|[6,color,0,0]).filter(|v|!self.pending_flowers.values().any(|f|f.item_id==item_id&&f.variant==*v)).collect()
  }
  pub fn inventory_absent_flower_ids(&self)->Vec<i32>{
-  ABSENT_FLOWER_DEFAULTS.iter().filter_map(|&(id,_)|(!self.absent_flower_options(id).is_empty()).then_some(id)).collect()
+  if !self.absent_flower_budget_available(){return Vec::new()}
+  ABSENT_FLOWER_DEFAULTS.iter().filter_map(|&(id,_)|(!self.absent_flower_choices(id).is_empty()).then_some(id)).collect()
  }
  fn stage_new_flower(&mut self,source_id:u32,item_id:i32,expected:FlowerVariant,next:FlowerVariant,quantity:i32)->Result<u32,Error>{
   if self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
