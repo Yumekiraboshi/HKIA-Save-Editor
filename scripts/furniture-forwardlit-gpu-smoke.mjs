@@ -50,13 +50,13 @@ try{
   const mat={baseColor:[.8,.9,1,1],patternTint:[.7,1,.6,1],baseST:[1,1,0,0],patternST:[1,1,0,0],useBaseMapMask:true,worldUV:false,smoothnessShift:.1,metallicShift:.05,patternSmoothnessShift:.02,patternMetallicShift:.03,occlusionStrength:.9,rotationTurns:0,rotationCenter:[.5,.5]};
   const rows=[];
   gl.viewport(0,0,33,33);gl.disable(gl.BLEND);gl.disable(gl.CULL_FACE);gl.disable(gl.DITHER);
-  for(const [label,material,s] of [['mixed',mat,scene],['base',{...mat,useBaseMapMask:false},scene],['pattern',{...mat,baseColor:[.8,.9,1,0]},scene],['reflection-off',mat,{...scene,reflectionStrength:0}],['reflection-secondary',mat,{...scene,reflectionBlendWeight:1}]]){
+  for(const [label,material,s] of [['mixed',mat,scene],['base',{...mat,useBaseMapMask:false},scene],['pattern',{...mat,baseColor:[.8,.9,1,0]},scene],['reflection-off',mat,{...scene,reflectionStrength:0}],['reflection-secondary',mat,{...scene,reflectionBlendWeight:1}],['rim',{...mat,rim:{power:1.5,feathering:.167,intensity:1,coloring:0}}, {...scene,cameraPosition:[2,0,1]}]]){
    gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
    renderer.draw({vao,indexCount:3},textures,s,material);
    const pixels=new Uint8Array(4);gl.readPixels(16,16,1,1,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
    if(gl.getError()!==gl.NO_ERROR)throw Error('READBACK_FAILED');
    const surface=H.furnitureSurface(norm(b),norm(p),norm(c),material);
-   const result=H.furnitureLighting({...s,...surface,normal:H.furnitureTangentNormal(norm(nm),true),view:[0,0,1],reflectionPrimary:norm(rp).slice(0,3),reflectionSecondary:norm(rs).slice(0,3)});
+   const result=H.furnitureLighting({...s,...surface,normal:H.furnitureTangentNormal(norm(nm),true),view:s.cameraPosition,rim:material.rim,reflectionPrimary:norm(rp).slice(0,3),reflectionSecondary:norm(rs).slice(0,3)});
    const expected=[...result.color.map(v=>Math.round(Math.min(1,Math.max(0,v))*255)),255];
    rows.push({label,actual:[...pixels],expected});
   }
