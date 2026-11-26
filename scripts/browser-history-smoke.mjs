@@ -858,6 +858,9 @@ async function inventoryAbsentFurnitureCreationSmoke(){
   await chooseTab(page,'inventory');await search.fill('61381969');
   await card.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();
+  // A search with no matches retains the previous category after reload.
+  // Undo does not change the selected category; select the restored row's tab.
+  await page.locator('[data-inventory-group="furniture"]').click();
   await quantity.waitFor();assert.equal(await quantity.inputValue(),'1');
   await page.locator('button[title="Redo"]:not([disabled])').click();
   await card.waitFor({state:'hidden'});
