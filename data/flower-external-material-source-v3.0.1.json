@@ -1,0 +1,150 @@
+{
+  "schema": "HKIA.FlowerExternalMaterialSource.1",
+  "version": "3.0.1",
+  "rows": [
+    {
+      "bundle": "gal_main_l0_-45_0",
+      "bundleSha256": "725eb7a07ff7ec625f2fefd8015b2aeff8e4922acc8d91463a05b931c0eace7d",
+      "cab": "CAB-428ecf8f591ca252f18fe7e01063afb3",
+      "pathId": "-6391124537363433764",
+      "classId": 28,
+      "name": "Flower_Tulip_X",
+      "objectSha256": "410253b7db087e9390bcdef696a7b55de5b6420bc43242633ac5f2aec6619cbf",
+      "width": 512,
+      "height": 512,
+      "format": 12,
+      "mips": 10,
+      "colorSpace": 0,
+      "bytes": 349552,
+      "sha256": "3f9768744121f815da628d14a01b8bd254407dcc6dd8a223a89ea382b166664f",
+      "sampler": [
+        1,
+        2,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "bundle": "gal_main_l0_-45_0",
+      "bundleSha256": "725eb7a07ff7ec625f2fefd8015b2aeff8e4922acc8d91463a05b931c0eace7d",
+      "cab": "CAB-428ecf8f591ca252f18fe7e01063afb3",
+      "pathId": "1519949084322980002",
+      "classId": 28,
+      "name": "Flower_Tulip_N",
+      "objectSha256": "e18a938407c7337f6f3bc550c1bbf6c31af738268435f8d5fd1a5dc69e4c335e",
+      "width": 512,
+      "height": 512,
+      "format": 12,
+      "mips": 10,
+      "colorSpace": 0,
+      "bytes": 349552,
+      "sha256": "8b44c723a2ba1481e22b2ea9aa9174b6fe875d4023b81c56877c0013ea12aa70",
+      "sampler": [
+        1,
+        2,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "bundle": "gal_main_l0_-45_0",
+      "bundleSha256": "725eb7a07ff7ec625f2fefd8015b2aeff8e4922acc8d91463a05b931c0eace7d",
+      "cab": "CAB-428ecf8f591ca252f18fe7e01063afb3",
+      "pathId": "7176842630081840981",
+      "classId": 28,
+      "name": "Flower_Tulip_C",
+      "objectSha256": "0ec789213790ff546bbda4818caa301ce72c8587d9f742a111d8f857bda74614",
+      "width": 512,
+      "height": 512,
+      "format": 12,
+      "mips": 10,
+      "colorSpace": 1,
+      "bytes": 349552,
+      "sha256": "b3713af901f38bb8bac659bb21ffa31d8700d44369920b311add7dc48c95d2f3",
+      "sampler": [
+        1,
+        2,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "bundle": "gal_main_l0_-45_-2",
+      "bundleSha256": "348a4463ab4fd5557f963022ba5c8f198f831249842041ff616a70f5db189c67",
+      "cab": "CAB-6df9b7d36015f1762383468832407e58",
+      "pathId": "-3420419626064508002",
+      "classId": 28,
+      "name": "BlankPattern",
+      "objectSha256": "220c0cfd66d2f5f589d2b606ef548f771578770a210a8655fc438bffac234cb2",
+      "width": 2,
+      "height": 2,
+      "format": 4,
+      "mips": 2,
+      "colorSpace": 0,
+      "bytes": 20,
+      "sha256": "9a8dcd3f9ff7aa3114e141f03c12989d363ea81fd74c02eea63c5f41489cb17a",
+      "sampler": [
+        1,
+        2,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "bundle": "networkedprototypes",
+      "bundleSha256": "8e477013041ba0935dd21fa6f1f3b5387660b7cc23ca3c661904a4185b4a78da",
+      "cab": "CAB-6ef5e40a482b00b1d462fae2060592ab",
+      "pathId": "-2018151570093324821",
+      "classId": 89,
+      "name": "Cubemap_Exterior",
+      "objectSha256": "43649a5f81d75a8e97616da7b97664cc21ce5fe868461fa1d3ca341975687f49",
+      "width": 128,
+      "height": 128,
+      "format": 10,
+      "mips": 8,
+      "colorSpace": 1,
+      "bytes": 65616,
+      "sha256": "c2e13b5e37d9f212820201e3521dbc8aed27b695549bc4186b709efb774b7fd6",
+      "sampler": [
+        1,
+        2,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "bundle": "ga_art_flowers_shared_surfaceeffectmaps",
+      "bundleSha256": "08a18c52618f6d885c9000940a5faf0331e493a8219a953764b788c7e22a7017",
+      "cab": "CAB-ca6a297058e099c4dd9b3d5b274aefab",
+      "pathId": "-1109036676960341086",
+      "classId": 28,
+      "name": "Iridescent",
+      "objectSha256": "26c8909f206cdb4d50cfc1f44c31db0f889f00f76796cec64ed8e40bb1d12dec",
+      "width": 128,
+      "height": 32,
+      "format": 10,
+      "mips": 8,
+      "colorSpace": 1,
+      "bytes": 2760,
+      "sha256": "e10aea0fbb4ce8a0d665d6970d0f150ad99e52ec68728039f4ee5af5933bef20",
+      "sampler": [
+        1,
+        2,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}
