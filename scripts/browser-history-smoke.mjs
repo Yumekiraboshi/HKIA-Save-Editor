@@ -26,7 +26,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,quantityBounds=false,emptyMaterialInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,quantityBounds=false,emptyMaterialInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -36,14 +36,16 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const inventory=doc(1,arr([4],u32(315822),[0],u32(6),[0xc0]));
  const color=(r,g,b)=>arr(f32(r),f32(g),f32(b),f32(1));
  const palette=(id,colors)=>doc(1,arr([id],u32(1835273963),u32(id),u32(1),arr([6],arr(...colors))));
- const originalArtItem=paletteInventory?palette(5,[color(1,0,0),color(0,1,0),color(0,0,1)]):doc(1,arr([5],u32(1286846063),[0],u32(3),[0xc0]));
+ const nativeColor=words=>arr(...words.map(n=>append([0xca],u32(n).subarray(1))));
+ const nativeColors=[[0x3f41c1c2,0x3e24a4a5,0x3e74f4f5,0x3f800000],[0x3f6cade3,0x3eb8b8b9,0x3ecacacb,0x3f800000],[0x3f73f3f4,0x3f20dbbe,0x3dd6adba,0x3f800000]].map(nativeColor);
+ const originalArtItem=paletteCreationInventory?palette(5,nativeColors):paletteInventory?palette(5,[color(1,0,0),color(0,1,0),color(0,0,1)]):doc(1,arr([5],u32(1286846063),[0],u32(3),[0xc0]));
  const sourceFitItem=paletteInventory?palette(6,[color(0,0,1),color(1,0,0),color(0,1,0)]):doc(1,arr([6],u32(54272482),[0],u32(2),[0xc0]));
  const nonCollectionItem=doc(1,arr([7],u32(427689),[0],u32(5),[0xc0]));
  const flower=(id,color,pattern,accent,grow=6)=>doc(1,arr([id],u32(43114910),u32(id),u32(1),arr([7],arr([grow],u32(color),u32(pattern),u32(accent)))));
  const chef=(id,item,unique)=>doc(1,arr([id],u32(item),u32(id),u32(1),unique));
  const cafe=colors=>arr([3],arr(arr(u32(99)),arr(...colors.map(u32))));
  const boba=color=>arr([4],arr(u32(color),u32(6),u32(11),u32(19),u32(99)));
- const model=arr([0],(editableFlower||editableFurniture)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
+ const model=arr([0],(editableFlower||editableFurniture||paletteCreationInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
@@ -193,6 +195,44 @@ async function inventoryDynamicPaletteArtSmoke(){
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM DYNAMIC PALETTE PASS: native unique Color1/2/3, independent quantities, draft recovery and local generation');
  }finally{await context.close();}
+}
+async function inventoryPaletteCreationSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-palette-create.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({artInventory:true,paletteCreationInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
+  const rows=page.locator('.inventory-card input[name="quantity"]'),dialog=page.locator('dialog[aria-labelledby="palette-editor-title"]');
+  await rows.first().waitFor();assert.equal(await rows.count(),1);
+  await page.locator('.inventory-card .inventory-unique-edit-button').first().click();
+  await dialog.waitFor();await dialog.locator('.inventory-palette-option').first().click();
+  await dialog.locator('input[name="variant-add-quantity"]').fill('3');
+  await dialog.locator('.inventory-create-palette:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
+  await page.locator('button[title="Undo"]:not([disabled])').click();await rows.nth(1).waitFor({state:'detached'});
+  await page.locator('button[title="Redo"]:not([disabled])').click();await rows.nth(1).waitFor();
+  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
+  await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_palettes_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(v.getUint32(0,true),2);
+  const words=at=>Array.from({length:12},(_,i)=>v.getUint32(at+i*4,true));
+  assert.deepEqual(words(8),[0x3f41c1c2,0x3e24a4a5,0x3e74f4f5,0x3f800000,0x3f6cade3,0x3eb8b8b9,0x3ecacacb,0x3f800000,0x3f73f3f4,0x3f20dbbe,0x3dd6adba,0x3f800000]);
+  assert.notDeepEqual(words(60).slice(0,4),words(8).slice(0,4));
+  assert.deepEqual(words(60).slice(4),words(8).slice(4));
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM PALETTE ADD PASS: independent stack, quantity, history, draft and export reparse');
+ }finally{await context.close()}
 }
 async function inventoryBobaEditSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
@@ -2019,6 +2059,7 @@ async function run(){
  await context.close();
  await achievementExportReopenRoundtrip();
  await inventoryDynamicPaletteArtSmoke();
+ await inventoryPaletteCreationSmoke();
  await chefRuntimeSmoke(browser,origin,base);
  await inventoryChefArtSmoke();
  await inventoryBobaEditSmoke();

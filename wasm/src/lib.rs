@@ -761,6 +761,29 @@ pub extern "C" fn hkia_inventory_palette_variant_change(id:u32,b0:u32,b1:u32,b2:
  })
 }
 
+#[no_mangle]
+pub extern "C" fn hkia_inventory_palette_creation_variants(id:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_palette_creation_variants(id);
+  if rows.len()>438{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*48);
+  out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for bits in row.into_iter().flatten(){out.extend(bits.to_le_bytes());}}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_palette_create(id:u32,b0:u32,b1:u32,b2:u32,b3:u32,b4:u32,b5:u32,b6:u32,b7:u32,b8:u32,b9:u32,b10:u32,b11:u32,a0:u32,a1:u32,a2:u32,a3:u32,a4:u32,a5:u32,a6:u32,a7:u32,a8:u32,a9:u32,a10:u32,a11:u32,quantity:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.create_inventory_palette_variant(id,[[b0,b1,b2,b3],[b4,b5,b6,b7],[b8,b9,b10,b11]],[[a0,a1,a2,a3],[a4,a5,a6,a7],[a8,a9,a10,a11]],quantity)){
+   Some(Ok(_))=>0,_=>1
+  }
+ })
+}
+
 /// Separate full Boba tuple snapshot; the existing appearance wire stays stable.
 #[no_mangle]
 pub extern "C" fn hkia_inventory_boba_snapshot()->u32{
