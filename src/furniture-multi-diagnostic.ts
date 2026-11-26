@@ -5,6 +5,7 @@ import {bindFurnitureRendererTreatments,nativeFurnitureTreatment,furnitureTreatm
 import type {RugNativeSources} from './furniture-rug-source';
 import type {RugCubeRequest,RugPayload,ReadRugPayload} from './furniture-rug-diagnostic';
 import {authoredRendererModel} from './furniture-authored-transforms';
+import {mergeStaticRendererBounds} from './furniture-renderer-bounds';
 import {uploadNativeGeometry,validateNativeGeometryLayout} from './native-furniture-mesh';
 import {uploadNativeTexture,validateNativeTextureLayout,type NativeTextureSource,type Bc1Mode} from './native-texture-upload';
 import {uploadNativeCube,validateNativeCubeOrientation} from './native-cube-upload';
@@ -102,6 +103,17 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
  if(new Set(plans.map(p=>p.meshPathId)).size!==Object.keys(bound.geometry.meshes).length)fail('MESH_COVERAGE');
  for(const c of [request.reflectionPrimary,request.reflectionSecondary])validateNativeCubeOrientation(c.source,c.orientation);
  return {geometry:bound.geometry,plans,fidelity:'forward-diagnostic-only' as const};
+}
+/** Resolve all static meshes, including fixed renderer parts and selected
+ * local mirroring, before applying the existing native diagonal scale fit.
+ * Explicit runtimeRoot, mount and lossyScale still come from the caller.
+ * This is a static-mesh diagnostic, not a Unity runtime component census. */
+export function fitFurnitureMultiStaticBounds(d:FurnitureMultiSources,request:FurnitureMultiRequest){
+ const raw=resolveFurnitureMultiDiagnostic(d,{...request,fit:{...request.fit,extents:[0,0,0]}});
+ const bounds=mergeStaticRendererBounds(raw.plans.map(p=>({
+  model:p.scene.model,localBounds:raw.geometry.meshes[p.meshPathId].bounds[0]
+ })));
+ return {request:{...request,fit:{...request.fit,extents:bounds.extents}},bounds,renderFidelity:'unverified' as const};
 }
 /** One depth buffer, one model upload, and one upload per distinct texture.
  * All source bindings and payloads are resolved before the first draw.
