@@ -814,7 +814,6 @@ impl Editor {
    keys.all(|k|
     !index.inventory_clothing_guid_refs.contains(k)&&!index.inventory_furniture_guid_refs.contains(k))
  }
-      self.furniture_zero_reference_safe(item_id)||self.ordinary_clothing_zero_reference_safe(item_id))&&
  /// Native subtraction clamps to zero without deleting the saved record.
  /// Existing consumables must pass the full original unique quantity
  /// identity/reference index, including copied payloads.
