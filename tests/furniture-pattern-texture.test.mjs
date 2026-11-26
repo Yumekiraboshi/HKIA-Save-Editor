@@ -1,4 +1,6 @@
 import test from 'node:test';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -24,4 +26,31 @@ test('all six rug patterns retain exact original texture GUID, BC1 mip chain and
   for(const hash of [t.bundleSha256,t.objectSha256,t.sha256])assert.match(hash,/^[a-f0-9]{64}$/);
  }
  assert.equal(d.rows.reduce((s,r)=>s+r.bytes,0),1048656);
+});
+
+test('streamed RGBA32 patterns preserve native alpha and every mip byte; malformed ranges refuse',()=>{
+ const py=String.raw`
+import importlib.util,struct,hashlib
+spec=importlib.util.spec_from_file_location('pattern','scripts/extract-furniture-pattern-texture.py')
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+def st(s):
+    b=s.encode();v=struct.pack('<I',len(b))+b;return v+bytes((-len(v))%4)
+guid='1'*32;cab='CAB-'+'2'*32;bundle='synthetic'
+container=st('bundle')+struct.pack('<II',0,1)+st(guid)+struct.pack('<iiiq',0,0,0,123)
+payload=bytes(range(32))+bytes([0,1,2,3,4,5,6,7])+bytes([8,9,10,11])
+def tex(fmt=4,size=len(payload),stream_len=len(payload),offset=3):
+    return (st('pattern')+struct.pack('<7I',1,4,2,size,0,fmt,3)+bytes(8)+struct.pack('<4I',0,0,1,2)+struct.pack('<iifiii',1,2,0,0,0,0)+struct.pack('<4I',0,1,0,0)+struct.pack('<QI',offset,stream_len)+st('archive:/'+cab+'/'+cab+'.resS'))
+def run(t,data):
+    return m.extract(b'bundle',bundle,cab,[(142,'1',container,'<'),(28,'123',t,'<')],data,{guid})
+metadata,blobs=run(tex(),b'abc'+payload)
+r=metadata[guid];assert blobs[guid]==payload and r['format']==4 and r['bytes']==44
+assert r['sha256']==hashlib.sha256(payload).hexdigest()
+assert [x[:4] for x in r['mips']]==[[4,2,0,32],[2,1,32,8],[1,1,40,4]]
+for row in r['mips']:
+    assert row[4]==hashlib.sha256(payload[row[2]:row[2]+row[3]]).hexdigest()
+for t,data in [(tex(fmt=5),b'abc'+payload),(tex(size=43,stream_len=43),b'abc'+payload),(tex(),b'abc'+payload[:-1]),(tex(offset=4),b'abc'+payload)]:
+    try:run(t,data);raise AssertionError('invalid stream accepted')
+    except ValueError:pass
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:fileURLToPath(new URL('../',import.meta.url))});
 });
