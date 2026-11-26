@@ -906,6 +906,9 @@ import {verifiedFloorplanName} from './floorplan-names';
   busy=true;error='';
   try{
    update(await jumpHistory(scope,target));
+   // A history jump may remove or recreate selected inventory rows. Never
+   // carry a selection or an unsubmitted quantity across native revisions.
+   if(scope==='inventory')resetInventoryBatchSelection();
    editId=null;editingAchievement=null;
    if(historyMenu)historyMenu.open=false;
    await persistDraft();
