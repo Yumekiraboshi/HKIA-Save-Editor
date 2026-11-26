@@ -2524,3 +2524,32 @@ fn add_custom_palette_variants_from_owned_source_and_cancel_staged(){
  let e=Editor::open(make(invalid)).unwrap();
  assert!(e.inventory_palette_creation_variants(4).is_empty());
 }
+
+#[test]
+fn cafe_source_ingredient_pairs_keep_order_and_native_identity(){
+ use hkia_save_core::collection::{HistoryScope::Inventory,CafeVariant};
+ let original=[44,49,48,6,46,9];let next=[62,49,48,6,46,9];let peer=[55,49,48,9,46,9];
+ let encode=|v:CafeVariant|arr(vec![vec![3],arr(vec![arr(v[..3].iter().map(|&w|u(w as u32)).collect()),arr(v[3..].iter().map(|&w|u(w as u32)).collect())])]);
+ let make=||{let mut p=synthetic_payload("3.0.1");p[3]=0x97;
+  for (id,v) in [(4,original),(5,peer)]{p.extend(doc(1,arr(vec![u(id),u(203331651),u(20+id),u(2),encode(v)])));}
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make();let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory_cafe_variants(4).contains(&(next,1240730051,0)));
+  assert!(!e.inventory_cafe_variants(4).iter().any(|(v,_,_)|*v==peer));
+  let mut invalid=next;invalid[3]=9;
+  assert!(e.change_inventory_cafe_variant(4,original,invalid).is_err());
+  assert!(e.change_inventory_cafe_variant(4,peer,next).is_err());assert!(!e.dirty());
+  e.change_inventory_cafe_variant(4,original,next).unwrap();e.change_inventory_quantity(4,2,7).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut r=Editor::open(input).unwrap();r.restore_history(&cp).unwrap();
+  assert_eq!(r.inventory_cafe_rows().next(),Some((4,next,true)));
+  assert!(r.undo_scope(Inventory));assert!(r.undo_scope(Inventory));assert_eq!(r.inventory_cafe_rows().next(),Some((4,original,true)));assert!(!r.dirty());
+  assert!(r.redo_scope(Inventory));assert!(r.redo_scope(Inventory));
+  let reopened=Editor::open(r.export().unwrap()).unwrap();assert_eq!(reopened.inventory_cafe_rows().next(),Some((4,next,true)));
+  assert_eq!(reopened.inventory()[0].quantity,7);
+  assert_eq!(reopened.inventory_original_unique_payload(5),Some(encode(peer).as_slice()));
+  assert_eq!(reopened.inventory_unique_rows().next().unwrap().1,Some(24));
+ }
+}
