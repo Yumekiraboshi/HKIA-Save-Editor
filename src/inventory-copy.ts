@@ -78,3 +78,9 @@ const selectVisibleLabels:Record<Locale,string>={
  'pt-BR':'Selecionar itens visíveis até o limite',ru:'Выбрать видимые предметы до лимита',tr:'Görünen eşyaları sınıra kadar seç','zh-Hans':'选择当前显示的物品（不超过上限）','zh-Hant':'選取目前顯示的物品（不超過上限）'
 };
 export function inventorySelectVisibleCopy(locale:Locale):string{return selectVisibleLabels[locale]}
+
+/** Explicit removal of all units in the selected stack(s). */
+const deleteLabels:Record<Locale,string>={
+ ar:'حذف',de:'Löschen',en:'Delete','en-GB':'Delete',es:'Eliminar',fr:'Supprimer','fr-CA':'Supprimer',it:'Elimina',ja:'削除',ko:'삭제',nl:'Verwijderen','pt-BR':'Excluir',ru:'Удалить',tr:'Sil','zh-Hans':'删除','zh-Hant':'刪除'
+};
+export function inventoryDeleteCopy(locale:Locale):string{return deleteLabels[locale]}
