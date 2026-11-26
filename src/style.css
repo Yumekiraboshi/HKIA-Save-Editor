@@ -332,4 +332,9 @@
 
 .inventory-quantity-form .inventory-compact-variant{flex:none;display:grid;place-items:center;width:30px;height:30px;padding:0}
 
+.inventory-stack-delete{position:absolute;inset-block-start:5px;inset-inline-end:5px;z-index:2;display:grid;place-items:center;width:25px;height:25px;padding:0;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--danger)}
+.inventory-stack-delete:disabled{opacity:.35;cursor:default}
+.inventory-stack-delete:not(:disabled):hover,.inventory-batch-delete:not(:disabled):hover{color:var(--danger);background:var(--hover)}
+.inventory-batch-delete{display:grid;place-items:center;color:var(--danger)}
+
 .inventory-empty-stack .inventory-card-heading{opacity:.55}

@@ -60,7 +60,10 @@ test('confirmation checks save identity, revision and current recorded/completed
  assert.match(app,/\.value\.complete!==true/);
  assert.match(app,/closeRemovalConfirmation\(\);error=removalCopy\.stale;return/);
  assert.match(app,/if\(target\.kind==='collections'\)\{[\s\S]*?await change\(target\.id,null\)/);
- assert.match(app,/else await quickToggleAchievement\(target\.item,undefined,undefined,true\)/);
+ assert.match(app,/else if\(target\.kind==='achievements'\)await quickToggleAchievement\(target\.item,undefined,undefined,true\)/);
+ assert.match(app,/target\.requests\.some\(\(\[id,before\]\)=>!snapshot\?\.inventory\.some\(row=>row\.documentId===id&&row\.quantity===before&&row\.editable&&row\.quantityMinimum===0\)/);
+ assert.match(app,/if\(target\.batch\)\{update\(await changeInventoryQuantities\(target\.requests\)\)/);
+ assert.match(app,/requestRemoval\(\{kind:'inventory',requests,batch,name,revision:snapshot\.revision\},opener\)/);
  assert.match(app,/<dialog class="removal-confirm-dialog"/);
  assert.match(app,/aria-labelledby="removal-confirm-title"/);
  assert.match(app,/class="date-dialog-cancel removal-cancel" autofocus/);
