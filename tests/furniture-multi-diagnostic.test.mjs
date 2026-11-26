@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({stdin:{contents:"export * from './src/furniture-multi-diagnostic';export * from './src/native-texture-upload';export * from './src/furniture-renderer-bounds';",resolveDir:fileURLToPath(new URL('../',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {resolveFurnitureMultiDiagnostic,fitFurnitureMultiStaticBounds,mergeStaticRendererBounds,drawFurnitureMultiDiagnostic,nativeBaseIsOpaque,verifyNativeTexturePayload,validateNativeTextureLayout}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {resolveFurnitureMultiDiagnostic,fitFurnitureMultiStaticBounds,mergeStaticRendererBounds,drawFurnitureMultiDiagnostic,furnitureForwardAttributeLocations,nativeBaseIsOpaque,verifyNativeTexturePayload,validateNativeTextureLayout}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const read=p=>JSON.parse(readFileSync(new URL('../'+p,import.meta.url)));
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const additionalPath='data/furniture-chair-pattern-sources-v3.0.1.json';
@@ -116,4 +116,21 @@ test('the extracted podium GUID matches the authored camera mount without inferr
  assert.equal(a.parent,null);assert.equal(b.parent,a.pathId);assert.equal(c.parent,b.pathId);
  assert.deepEqual(a.position,[0,0,0]);assert.deepEqual(a.rotation,[0,0,0,1]);assert.deepEqual(a.scale,[1,1,1]);
  assert.equal(c.rendererPathId,'4695806416409439665');assert.equal(c.meshFilterPathId,'-1995439662326436431');
+});
+
+test('UV1 is optional only for world UV, exact original white pattern or proven-unused null pattern',()=>{
+ const d=sources(),p=resolveFurnitureMultiDiagnostic(d,request(d,32709745,[207,0,0])).plans[0];
+ const mesh=structuredClone(d.geometry.rows.find(x=>x.itemId===32709745).meshes[p.meshPathId]);
+ assert.deepEqual(furnitureForwardAttributeLocations(mesh,p.material,p.patternMap),{0:0,1:1,2:2,4:4,5:5});
+ mesh.channels[5]=[0,0,0,0];
+ assert.throws(()=>furnitureForwardAttributeLocations(mesh,p.material,p.patternMap),/MESH_CHANNEL/);
+ const white=d.additionalPatterns.rows.find(x=>x.guid==='507ffd4fc696e458c96231e026f49923');
+ const expected={0:0,1:1,2:2,4:4};
+ assert.deepEqual(furnitureForwardAttributeLocations(mesh,p.material,white),expected);
+ assert.throws(()=>furnitureForwardAttributeLocations(mesh,p.material,{...white,sha256:'0'.repeat(64)}),/MESH_CHANNEL/);
+ assert.throws(()=>furnitureForwardAttributeLocations(mesh,p.material,{...white,width:3}),/ARGB_UNSUPPORTED/);
+ assert.deepEqual(furnitureForwardAttributeLocations(mesh,{...p.material,worldUV:true},p.patternMap),expected);
+ assert.deepEqual(furnitureForwardAttributeLocations(mesh,{...p.material,baseColor:[1,1,1,1]},null),expected);
+ assert.throws(()=>furnitureForwardAttributeLocations(mesh,{...p.material,baseColor:[1,1,1,0]},null),/MESH_CHANNEL/);
+ mesh.channels[4]=[0,0,0,0];assert.throws(()=>furnitureForwardAttributeLocations(mesh,p.material,white),/MESH_CHANNEL/);
 });
