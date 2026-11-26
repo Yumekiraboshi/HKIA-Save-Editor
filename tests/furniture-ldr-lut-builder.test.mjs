@@ -25,7 +25,7 @@ const near=(a,b)=>{assert.equal(a.length,b.length);a.forEach((x,i)=>assert.ok(Ma
 test('native LutBuilderLdr program 2 fixture: full grading, all eight curves',()=>{
  const calls=[];const c=nativeLdrBuilderPixel([.076171875,.21875],[16,.001953125,.03125,16/15],uniform,(slot,x)=>{calls.push(slot);return sample(slot,x);});
  near(c,[0.36096391990472687,0.3530881678605804,0.32134375,1]);
- assert.deepEqual(calls,[4,7,5,6,0,1,0,2,0,3]);
+ assert.deepEqual(calls,[4,7,5,6,0,0,0,1,2,3]);
  assert.throws(()=>nativeLdrBuilderPixel([.1,.2],[16,0,.03125,16/15],{...uniform,gamma:[1,0,1]},sample),/UNIFORMS/);
  assert.throws(()=>nativeLdrBuilderPixel([.1,.2],[16,0,.03125,16/15],uniform,()=>NaN),/CURVE_SAMPLE/);
 });
