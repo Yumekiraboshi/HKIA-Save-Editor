@@ -80,7 +80,7 @@ def extract(root,stage,mesh,typed,audit):
     index=json.loads((ROOT/'data/flower-pattern-source-index-v3.0.1.json').read_text())
     expected={r[0]:r[1:] for r in index['bundles']}
     require(set(expected)=={bs[0] for bs in found.values()},'primary bundle coverage')
-    textures={}
+    textures={};runtime={}
     for name in sorted(expected):
         raw=(root/(name+'.bin')).read_bytes();digest=sha(raw);require(digest==expected[name][2],'bundle hash '+name)
         ns=nodes(raw);cabs=[k for k in ns if re.fullmatch('CAB-[0-9a-f]{32}',k)];require(len(cabs)==1,'CAB');cab=cabs[0];o,_=typed.load(ns[cab],mesh)
@@ -104,6 +104,19 @@ def extract(root,stage,mesh,typed,audit):
                 chain=sum(max(1,w>>i)*max(1,h>>i)*4 if fmt in (4,5) else ((max(1,w>>i)+3)//4)*((max(1,h>>i)+3)//4)*8 for i in range(mips))
                 require(len(payload)==complete==chain,'mip byte count')
                 hsh=sha(payload);textures[key]=[name,digest,cab,pi,mesh.string(f['m_Name'])[0],w,h,fmt,mips,color,len(payload),hsh];n+=1;total+=len(payload)
+                sampler=list(struct.unpack('<iifiii',f['m_TextureSettings']));require(sampler in ([1,2,0,0,0,0],[1,0,0,0,0,0]),'source sampler')
+                outfmt=fmt
+                if fmt==5:
+                    # This one source ARGB32 BlankPattern is all white at every mip;
+                    # the bytes are therefore identical under RGBA32 interpretation.
+                    require(payload==b'\xff'*len(payload),'non-white ARGB32');outfmt=4
+                levels=[];cursor=0
+                for i in range(mips):
+                    mw,mh=max(1,w>>i),max(1,h>>i)
+                    length=mw*mh*4 if outfmt==4 else ((mw+3)//4)*((mh+3)//4)*8
+                    levels.append([mw,mh,cursor,length,sha(payload[cursor:cursor+length])]);cursor+=length
+                require(cursor==len(payload),'runtime mip closure')
+                runtime[key]={'width':w,'height':h,'format':outfmt,'colorSpace':color,'sampler':sampler,'bytes':len(payload),'sha256':hsh,'mips':levels}
                 if stage:
                     target=stage/(hsh+'.texture.bin')
                     if target.exists():require(sha(target.read_bytes())==hsh,'staged hash')
@@ -111,14 +124,16 @@ def extract(root,stage,mesh,typed,audit):
             require(p==len(v),'container bounds')
         require(n==expected[name][0] and total==expected[name][1] and wanted.issubset(textures),'bundle texture coverage')
     require(set(textures)==guids,'texture closure')
-    return source,textures
+    return source,textures,runtime
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',type=Path,required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--stage',type=Path);a=p.parse_args()
     if a.stage:
         require(not a.stage.resolve().is_relative_to(ROOT),'stage outside repository');a.stage.mkdir(parents=True,exist_ok=True)
-    s,t=extract(a.root,a.stage,module('extract-furniture-mesh-source'),module('extract-furniture-preview-camera'),module('audit-native-dye-materials'))
+    s,t,r=extract(a.root,a.stage,module('extract-furniture-mesh-source'),module('extract-furniture-preview-camera'),module('audit-native-dye-materials'))
     meta=(json.dumps(s,separators=(',',':'))+'\n').encode();tex=(json.dumps(t,sort_keys=True,separators=(',',':'))+'\n').encode()
+    run=(json.dumps(r,sort_keys=True,separators=(',',':'))+'\n').encode()
+    require(sha(run)=='59f314c74097c9b227d86ee670ab5d8fce8b00dabc3f5343f4ba585d7e4d8323','runtime texture metadata fingerprint')
     require(sha(meta)=='88e186b5e3e39941d7969ea72e6c257b3586045234c992de84dcaa353d7d11f4' and sha(tex)=='1d0b80d4cf07d268a25282d178a5a5ed2a93f9fe2f35756f439da3a2f1793865','original extracted metadata fingerprint')
-    a.out.mkdir(parents=True,exist_ok=True);(a.out/'flower-pattern-source.json').write_bytes(meta);(a.out/'flower-pattern-textures.json').write_bytes(tex)
+    a.out.mkdir(parents=True,exist_ok=True);(a.out/'flower-pattern-source.json').write_bytes(meta);(a.out/'flower-pattern-textures.json').write_bytes(tex);(a.out/'flower-pattern-runtime.json').write_bytes(run)
     print('HKIA_FLOWER_PATTERN_SOURCE_OK 16 patterns 218 overrides 77 textures')
