@@ -27,15 +27,15 @@ def pack_batches(plan,source,materials,out,prior=None,prior_sha=None):
     require(bool(prior)==bool(prior_sha),'PRIOR_PIN_REQUIRED')
     require(not out.exists() and not out.is_symlink(),'OUTPUT_EXISTS')
     require(all(not out.resolve().is_relative_to(x.resolve()) for x in
-                (source,materials,batch.REPO)),'OUTPUT_INSIDE_SOURCE')
+                (source,batch.REPO,*([materials] if materials else []))),'OUTPUT_INSIDE_SOURCE')
     if prior:plan=batch.remaining_plan(plan,prior,prior_sha)
-    src=read(source/'report.json');mat=read(materials/'report.json')
+    src=read(source/'report.json');mat=read(materials/'report.json') if materials else None
     identity(src,'HKIA.FurnitureBatchExtraction.1',plan)
-    identity(mat,'HKIA.FurnitureBatchMaterials.1',plan)
+    if mat:identity(mat,'HKIA.FurnitureBatchMaterials.1',plan)
     models=batch.unique(plan['models'],lambda r:r['itemId'])
     patterns=batch.unique(plan['patterns'],lambda r:r['guid'])
     receipts=batch.unique(src['results'],lambda r:(r['kind'],r['key']))
-    closed=batch.unique(mat['items'],lambda r:r['itemId'])
+    closed=batch.unique(mat['items'] if mat else [],lambda r:r['itemId'])
     # Existing pack exclusion is optional at extraction time. Reject overlap
     # here: the delta must consist of the exact selected missing identities.
     for (kind,key),r in receipts.items():
@@ -100,7 +100,8 @@ def pack_batches(plan,source,materials,out,prior=None,prior_sha=None):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
-    for name in ('source','materials','out'):p.add_argument('--'+name,type=Path,required=True)
+    for name in ('source','out'):p.add_argument('--'+name,type=Path,required=True)
+    p.add_argument('--materials',type=Path,help='material closure batch; omit for pattern-only extraction')
     p.add_argument('--prior',type=Path);p.add_argument('--prior-sha256')
     a=p.parse_args()
     print(json.dumps(pack_batches(batch.make_plan(),a.source,a.materials,a.out,a.prior,a.prior_sha256)))
