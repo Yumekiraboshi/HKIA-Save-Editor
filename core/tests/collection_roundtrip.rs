@@ -2423,3 +2423,61 @@ fn palette_quantities_respect_native_approximate_color_equality(){
   let e=Editor::open(make(vec![first.clone(),peer])).unwrap();assert!(!e.inventory()[0].editable);
  }
 }
+
+#[test]
+fn existing_palette_color_edits_are_native_exact_cas_and_copy_safe(){
+ use hkia_save_core::{collection::{HistoryScope::Inventory,PaletteVariant},inventory_palette_source::palette_output_color,native::InventoryUniqueData};
+ let encode=|v:PaletteVariant|arr(vec![vec![6],arr(v.into_iter().map(|c|arr(c.into_iter().map(|w|f(f32::from_bits(w))).collect())).collect())]);
+ let red=palette_output_color(1,0).unwrap();let white=palette_output_color(16,0).unwrap();
+ let original=[red,white,[0.25f32.to_bits(),(-0.0f32).to_bits(),0.75f32.to_bits(),1.0f32.to_bits()]];
+ let mut next=original;next[0]=palette_output_color(2,3).unwrap();
+ let mut peer=original;peer[0]=palette_output_color(3,0).unwrap();
+ let make=|version:&str,other:PaletteVariant,copy:Option<PaletteVariant>|{
+  let mut p=synthetic_payload(version);p[3]=if copy.is_some(){0x98}else{0x97};
+  for (id,v) in [(4,original),(5,other)]{p.extend(doc(1,arr(vec![u(id),u(1835273963),u(20+id),u(2),encode(v)])));}
+  if let Some(v)=copy{
+   let snapshot=arr(vec![guid([1,2,3,4]),arr(vec![]),arr(vec![]),encode(v)]);
+   let preset=arr(vec![guid([2,3,4,5]),arr(vec![]),vec![0xc2],vec![0xc2],vec![0xc2],snapshot]);
+   p.extend(doc(22,arr(vec![u(6),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![preset])])));
+  }
+  slot_from_payload(version,p)
+ };
+ for zipped in [false,true]{
+  let raw=make("3.0.1",peer,None);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory_palette_edit_hints().any(|id|id==4));
+  assert!(e.inventory_palette_variants(4).contains(&next));
+  assert!(!e.inventory_palette_variants(4).contains(&peer));
+  let mut arbitrary=original;arbitrary[0]=[1.0f32.to_bits(),0,0,1.0f32.to_bits()];
+  let mut event=original;event[0]=palette_output_color(14,0).unwrap();
+  assert!(e.change_inventory_palette_variant(4,peer,next).is_err());
+  assert!(e.change_inventory_palette_variant(4,original,arbitrary).is_err());
+  assert!(e.change_inventory_palette_variant(4,original,event).is_err());
+  assert!(e.change_inventory_palette_variant(4,original,peer).is_err());
+  assert!(!e.dirty());assert!(!e.can_undo());
+  e.change_inventory_palette_variant(4,original,next).unwrap();
+  let mut final_color=next;final_color[1]=palette_output_color(4,4).unwrap();
+  e.change_inventory_palette_variant(4,next,final_color).unwrap();
+  e.change_inventory_quantity(4,2,7).unwrap();
+  assert_eq!(e.inventory_palettes().next(),Some((4,final_color)));
+  let cp=e.history_checkpoint().unwrap();let mut r=Editor::open(input.clone()).unwrap();r.restore_history(&cp).unwrap();
+  assert_eq!(r.inventory_unique_data(4),Some(InventoryUniqueData::Palette{rgba_bits:final_color}));
+  assert!(r.undo_scope(Inventory));assert!(r.undo_scope(Inventory));assert_eq!(r.inventory_palettes().next(),Some((4,next)));
+  assert!(r.undo_scope(Inventory));assert_eq!(r.inventory_palettes().next(),Some((4,original)));assert!(!r.dirty());
+  assert!(r.redo_scope(Inventory));assert!(r.redo_scope(Inventory));assert!(r.redo_scope(Inventory));
+  let reopened=Editor::open(r.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory_unique_data(4),Some(InventoryUniqueData::Palette{rgba_bits:final_color}));
+  assert_eq!(reopened.inventory_original_unique_payload(5),Some(encode(peer).as_slice()));
+  assert_eq!(reopened.inventory_unique_rows().next().unwrap().1,Some(24));
+  assert_eq!(reopened.inventory()[0].quantity,7);
+  assert_eq!(Editor::open(input).unwrap().inventory_palettes().next(),Some((4,original)));
+ }
+ let mut e=Editor::open(make("3.0.1",peer,Some(original))).unwrap();
+ assert!(e.inventory_palette_variants(4).is_empty());
+ assert!(e.change_inventory_palette_variant(4,original,next).is_err());
+ assert!(!e.inventory_palette_variants(5).is_empty());
+ let mut e=Editor::open(make("3.0.1",peer,Some(next))).unwrap();
+ assert!(!e.inventory_palette_variants(4).contains(&next));
+ assert!(e.change_inventory_palette_variant(4,original,next).is_err());
+ assert!(Editor::open(make("3.0.0",peer,None)).unwrap().inventory_palette_variants(4).is_empty());
+}

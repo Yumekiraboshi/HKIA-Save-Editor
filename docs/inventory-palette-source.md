@@ -1,0 +1,13 @@
+# Native custom palette output source (v3.0.1)
+
+The authenticated original Switch v3.0.1 metadata SHA-256 is `4b4eb6a543722e1dfaf8aad5593e9e1300723aff55e9e750d489744960feb738`. `CustomPaletteConfig.PaletteColorMap` maps FlowerColorDefinition to FlowerColorsToOutput; each value has BaseColor, BlackAdditiveOutputs and WhiteAdditiveOutputs. PaletteSelection has OutputColor, PrimaryFlower, AdditiveFlower and AdditiveQuantity. PaletteUniqueData holds three independent Color fields (MessagePack keys 0, 1, 2).
+
+Original Switch catalog SHA-256 `805050ba06fcd41df05ee93df22c92228b6c94ad0bb92b86cb92372c03677c97`: Addressables resource type Sunblink.Game.CustomPaletteConfig at 0x5979FC; unique location 0x597A04, GUID bfb87bbbd19fd4efea097229f1e95dea. Its 18 bundle dependencies include the following exact source objects:
+- Config bundle 1f1816bfb5221f7c3ccb88afd913868f.bundle, SHA-256 `9888453f39d5e1f509f324d6c8a12a2384b9bb3edd58b8c83bfb5a91b8165f55`, CAB-5f79c218689053d862a6ced51baba3e0, path ID 8463800613119872860, type 6, 3664-byte Default.CustomPaletteConfig object SHA-256 `f1ab01c368ec48c09153ca7c18dc4b275eb4b1127b2813241cd61850ffebdc02`.
+- Definitions bundle 7acd12a2895ab8172afdabcd72f5af5c.bundle, SHA-256 `660aba36ab6da5964180fe0d474696fc22dd806b2f5b19ce601222cb5a631afa`, CAB-191652df9468c684714b3b89a22974ec. Config external PPtr file index 2; all 29 flower keys resolve to type 92 FlowerColorDefinition objects and ColorIndex 1 through 29 in source order.
+
+Each color has exactly five configured outputs: base, black additive quantity 1, black 2, white 1, white 2. The ordered 145 RGBA values include 144 distinct bit tuples, all alpha 1.0 and finite normalized components. The little-endian 2320-byte concatenation SHA-256 is `76304a597cd7328c8696e580aa4644f0b638e8c9ff3e5be3f9ab8b6c85501937`. Keep original float32 words rather than RGB rounding or a fabricated interpolation. The extraction validates the pinned bundles, object/type identities, source keys and array boundaries. The checked-in Rust lookup is source metadata only, not a save mutation operation.
+
+Reproduction with private local original bundles: `python scripts/extract-inventory-palette-colors.py /path/to/config.bundle /path/to/definitions.bundle --check`. Original binaries and private file locations are not committed.
+
+Remaining gates for palette mutation: native flower item validity, availability and event restrictions, BYOB confirmation/application semantics, copied palette references, CAS collision checks against original/effective variants, bounded native history, export/reparse and actual game acceptance. Do not infer arbitrary RGB permission or new ownership from the output table alone.
