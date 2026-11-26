@@ -1,22 +1,37 @@
 /** Original interleaved static mesh transport for display-only WebGL2 previews.
  * No save rules, substitute UVs, or inferred geometry. */
 export type MeshRange=readonly [offset:number,bytes:number,sha256:string];
-export type NativeMeshSource={vertexCount:number;indexCount:number;stride:number;channels:readonly (readonly number[])[];vertexBytes:MeshRange;indexBytes:MeshRange;bounds:readonly (readonly number[])[]};
+export type NativeSubmesh={firstByte:number;indexCount:number;firstVertex:number;vertexCount:number;bounds:readonly number[]};
+export type NativeMeshSource={submeshes?:readonly NativeSubmesh[];vertexCount:number;indexCount:number;stride:number;channels:readonly (readonly number[])[];vertexBytes:MeshRange;indexBytes:MeshRange;bounds:readonly (readonly number[])[]};
 export type NativeGeometrySource={geometryBytes:number;geometrySha256:string;meshes:Readonly<Record<string,NativeMeshSource>>};
 const int=(v:number,a:number,b:number)=>Number.isInteger(v)&&v>=a&&v<=b;
 const hex=/^[a-f0-9]{64}$/;
 const fail=(message:string):never=>{throw Error('NATIVE_MESH_'+message);};
 const hash=async(b:ArrayBuffer)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b)),n=>n.toString(16).padStart(2,'0')).join('');
-export function validateNativeGeometryLayout(source:NativeGeometrySource){
+/** Source index ranges are ordered, nonoverlapping and cover the full original buffer. */
+export function validateNativeSubmeshes(m:NativeMeshSource){
+ if(m.submeshes===undefined)return;
+ if(!Array.isArray(m.submeshes)||!int(m.submeshes.length,2,64))fail('SUBMESH_COUNT');
+ let end=0;
+ for(const s of m.submeshes){
+  if(!s||!int(s.firstByte,0,m.indexCount*2)||s.firstByte!==end||!int(s.indexCount,3,m.indexCount)||s.indexCount%3||
+   !int(s.firstVertex,0,m.vertexCount-1)||!int(s.vertexCount,1,m.vertexCount-s.firstVertex)||
+   !Array.isArray(s.bounds)||s.bounds.length!==6||!s.bounds.every(Number.isFinite)||s.bounds.slice(3).some(x=>x<0))fail('SUBMESH_RANGE');
+  end+=s.indexCount*2;if(end>m.indexCount*2)fail('SUBMESH_RANGE');
+ }
+ if(end!==m.indexCount*2)fail('SUBMESH_COVERAGE');
+}
+export function validateNativeGeometryLayout(source:NativeGeometrySource,allowSubmeshes=false){
  if(!int(source.geometryBytes,1,64*1024*1024)||!hex.test(source.geometrySha256))fail('HEADER');
  const meshes=Object.entries(source.meshes);if(!int(meshes.length,1,512))fail('COUNT');
  const ranges:MeshRange[]=[];
  for(const [pid,m] of meshes){
   // The offline extractor preserves ordered submeshes. Until the shader/material
   // renderer supports them, reject rather than flattening all triangles.
-  if(Object.prototype.hasOwnProperty.call(m,'submeshes'))fail('SUBMESH_UNSUPPORTED');
+  if(Object.prototype.hasOwnProperty.call(m,'submeshes')&&!allowSubmeshes)fail('SUBMESH_UNSUPPORTED');
   if(!/^-?[0-9]+$/.test(pid)||!int(m.vertexCount,1,65536)||!int(m.indexCount,3,6*1024*1024)||m.indexCount%3||!int(m.stride,12,64)||m.stride%4||m.channels.length!==14)fail('LAYOUT');
   if(m.bounds.length!==1||m.bounds[0].length!==6||!m.bounds[0].every(Number.isFinite)||m.bounds[0].slice(3).some(x=>x<0))fail('BOUNDS');
+  validateNativeSubmeshes(m);
   const active:Array<[number,number]>=[];
   for(const [i,c] of m.channels.entries()){
    if(c.length!==4||!c.every(x=>int(x,0,255)))fail('CHANNEL');
@@ -36,13 +51,17 @@ export function validateNativeGeometryLayout(source:NativeGeometrySource){
 }
 /** Validates all original bytes, per-stream hashes, index bounds and every
  * float/half-float attribute before permitting GPU upload. */
-export async function verifyNativeGeometry(source:NativeGeometrySource,bytes:ArrayBuffer){
- validateNativeGeometryLayout(source);
+export async function verifyNativeGeometry(source:NativeGeometrySource,bytes:ArrayBuffer,allowSubmeshes=false){
+ validateNativeGeometryLayout(source,allowSubmeshes);
  if(bytes.byteLength!==source.geometryBytes||await hash(bytes)!==source.geometrySha256)fail('HASH');
  const view=new DataView(bytes);
  for(const m of Object.values(source.meshes)){
   for(const [off,len,digest] of [m.vertexBytes,m.indexBytes])if(await hash(bytes.slice(off,off+len))!==digest)fail('STREAM_HASH');
   for(let i=0;i<m.indexCount;i++)if(view.getUint16(m.indexBytes[0]+2*i,true)>=m.vertexCount)fail('INDEX');
+  for(const s of m.submeshes??[])for(let i=0;i<s.indexCount;i++){
+   const index=view.getUint16(m.indexBytes[0]+s.firstByte+2*i,true);
+   if(index<s.firstVertex||index>=s.firstVertex+s.vertexCount)fail('SUBMESH_INDEX');
+  }
   for(let i=0;i<m.vertexCount;i++)for(const [,off,fmt,rawDim] of m.channels){
    const dim=rawDim&15;for(let c=0;c<dim;c++){
     const p=m.vertexBytes[0]+i*m.stride+off+c*[4,2,1][fmt];
@@ -52,11 +71,24 @@ export async function verifyNativeGeometry(source:NativeGeometrySource,bytes:Arr
  }
 }
 export type MeshAttributeLocations=Readonly<Record<number,number>>;
-export type UploadedNativeMesh={vao:WebGLVertexArrayObject;indexCount:number};
+export type UploadedNativeMesh={vao:WebGLVertexArrayObject;indexCount:number;submeshes?:readonly Readonly<{firstByte:number;indexCount:number}>[]};
+/** A multi-material mesh is never implicitly drawn as one material. */
+export function nativeMeshDrawRange(mesh:UploadedNativeMesh,submeshIndex?:number){
+ if(!int(mesh.indexCount,3,6*1024*1024)||mesh.indexCount%3)fail('DRAW_RANGE');
+ if(mesh.submeshes===undefined){if(submeshIndex!==undefined)fail('DRAW_RANGE');return {firstByte:0,indexCount:mesh.indexCount};}
+ if(submeshIndex===undefined||!int(submeshIndex,0,mesh.submeshes.length-1)||!int(mesh.submeshes.length,2,64))throw Error('NATIVE_MESH_DRAW_SUBMESH');
+ let end=0;
+ for(const s of mesh.submeshes){
+  if(!s||s.firstByte!==end||!int(s.indexCount,3,mesh.indexCount)||s.indexCount%3)fail('DRAW_RANGE');
+  end+=s.indexCount*2;
+ }
+ if(end!==mesh.indexCount*2)fail('DRAW_RANGE');
+ return mesh.submeshes[submeshIndex];
+}
 /** Caller maps verified shader semantic channels to attribute locations.
  * Missing UV1 etc. must not be silently replaced with UV0. */
-export async function uploadNativeGeometry(gl:WebGL2RenderingContext,source:NativeGeometrySource,bytes:ArrayBuffer,locations:Readonly<Record<string,MeshAttributeLocations>>):Promise<{meshes:ReadonlyMap<string,UploadedNativeMesh>;dispose:()=>void}>{
- await verifyNativeGeometry(source,bytes);
+export async function uploadNativeGeometry(gl:WebGL2RenderingContext,source:NativeGeometrySource,bytes:ArrayBuffer,locations:Readonly<Record<string,MeshAttributeLocations>>,allowSubmeshes=false):Promise<{meshes:ReadonlyMap<string,UploadedNativeMesh>;dispose:()=>void}>{
+ await verifyNativeGeometry(source,bytes,allowSubmeshes);
  const max=gl.getParameter(gl.MAX_VERTEX_ATTRIBS) as number;
  if(Object.keys(locations).length!==Object.keys(source.meshes).length)fail('ATTRIBUTES');
  for(const [pid,m] of Object.entries(source.meshes)){
@@ -74,7 +106,7 @@ export async function uploadNativeGeometry(gl:WebGL2RenderingContext,source:Nati
     const b=gl.createBuffer();if(!b)throw Error('NATIVE_MESH_GPU_CREATE');buffers.push(b);gl.bindBuffer(target,b);gl.bufferData(target,new Uint8Array(bytes,r[0],r[1]),gl.STATIC_DRAW);
    }
    for(const [channel,location] of Object.entries(locations[pid])){const [,off,fmt,rawDim]=m.channels[Number(channel)];gl.enableVertexAttribArray(location);gl.vertexAttribPointer(location,rawDim&15,[gl.FLOAT,gl.HALF_FLOAT,gl.UNSIGNED_BYTE][fmt],fmt===2,m.stride,off);}
-   if(gl.getError()!==gl.NO_ERROR)fail('GPU_UPLOAD');uploaded.set(pid,{vao,indexCount:m.indexCount});
+   if(gl.getError()!==gl.NO_ERROR)fail('GPU_UPLOAD');uploaded.set(pid,{vao,indexCount:m.indexCount,...(m.submeshes?{submeshes:Object.freeze(m.submeshes.map(s=>Object.freeze({firstByte:s.firstByte,indexCount:s.indexCount})))}:{})});
   }
   return {meshes:uploaded,dispose};
  }catch(e){dispose();throw e;}

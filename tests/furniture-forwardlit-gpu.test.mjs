@@ -36,3 +36,15 @@ test('program cleanup on compile, link or missing uniforms and explicit GPU draw
  }
  const a=fake({drawError:true}),renderer=createFurnitureForwardRenderer(a.gl);assert.throws(()=>renderer.draw(mesh,textures,s,m),/FURNITURE_FORWARD_DRAW/);renderer.dispose();
 });
+
+test('explicit ordered submesh draw uses original index count and byte offset',()=>{
+ const a=fake(),renderer=createFurnitureForwardRenderer(a.gl);
+ const sub={...mesh,indexCount:540,submeshes:[{firstByte:0,indexCount:300},{firstByte:600,indexCount:240}]};
+ assert.throws(()=>renderer.draw(sub,textures,s,m),/DRAW_SUBMESH/);
+ assert.throws(()=>renderer.draw(sub,textures,s,m,2),/DRAW_SUBMESH/);
+ assert.throws(()=>renderer.draw({...sub,submeshes:[...sub.submeshes.slice(0,1),{firstByte:598,indexCount:240}]},textures,s,m,1),/DRAW_RANGE/);
+ assert.equal(a.calls.filter(x=>x[0]==='draw').length,0);
+ renderer.draw(sub,textures,s,m,0);renderer.draw(sub,textures,s,m,1);
+ assert.deepEqual(a.calls.filter(x=>x[0]==='draw'),[['draw',30,300,31,0],['draw',30,240,31,600]]);
+ renderer.dispose();
+});
