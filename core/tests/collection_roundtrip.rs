@@ -1902,12 +1902,14 @@ fn source_verified_fish_and_critters_share_ordinary_add_empty_refill_path(){
 }
 
 #[test]
-fn native_currency_rarity_does_not_authorize_membership_edits(){
+fn native_currency_rarity_alone_does_not_authorize_membership_edits(){
  let mut payload=synthetic_payload("3.0.1");payload[3]=0x96;
- payload.extend(doc(1,arr(vec![u(4),u(460708033),u(0),u(6),vec![0xc0]])));
+ // Nontradable seasonal currency remains outside the new allowlist.
+ payload.extend(doc(1,arr(vec![u(4),u(484139114),u(0),u(6),vec![0xc0]])));
  let mut editor=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
  assert_eq!(editor.inventory()[0].quantity_minimum,1);
  assert!(editor.change_inventory_quantity(4,6,0).is_err());assert!(!editor.dirty());
+ assert!(!editor.inventory_creatable().iter().any(|r|r.item_id==460708033));
 }
 
 #[test]
