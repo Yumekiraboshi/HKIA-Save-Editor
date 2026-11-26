@@ -32,7 +32,7 @@ export function evaluateFlowerLighting(u:FlowerLightingInput){
  const scalars=[u.roughness,u.metallic,u.occlusion,u.reflectionStrength,u.ambientSaturation,u.screenOcclusion,u.screenOcclusionStrength,u.fogVarying,u.fogMultiplier];
  if(!vectors.every(v=>finite(v,3))||!scalars.every(Number.isFinite)||![u.roughness,u.metallic,u.occlusion,u.screenOcclusion].every(v=>v>=0&&v<=1)||
  u.albedo.some(v=>v<0)||Math.abs(Math.hypot(...u.lightDirection)-1)>1e-5||
- (u.rim!==null&&(![u.rim.power,u.rim.feathering,u.rim.intensity,u.rim.coloring].every(Number.isFinite)||u.rim.power<0||u.rim.power>1)))throw Error('FLOWER_LIGHTING_INPUT');
+ (u.rim!==null&&(![u.rim.power,u.rim.feathering,u.rim.intensity,u.rim.coloring].every(Number.isFinite)||u.rim.power<0)))throw Error('FLOWER_LIGHTING_INPUT');
  const n=unit(u.normal),v=unit(u.view),l=u.lightDirection,h=unit(map(i=>v[i]+l[i]));
  const om=.96*(1-u.metallic),diffuse=map(i=>u.albedo[i]*om),specular=map(i=>mix(.04,u.albedo[i],u.metallic));
  const r=Math.max(u.roughness*u.roughness,.0078125),r2=r*r;
