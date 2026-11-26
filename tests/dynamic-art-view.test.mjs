@@ -73,3 +73,50 @@ test('partial artwork is used only when complete artwork is missing, never after
  const canceled=startDynamicArtRequest(()=>pending,()=>{},partial);canceled();release(null);await pending;await Promise.resolve();
  assert.equal(partialCalls,1);
 });
+
+test('large inventory bounds active generation and cancels queued cards before asset loading',async()=>{
+ const started=[],finished=[],seen=[],releases=new Map();
+ const make=i=>startDynamicArtRequest(()=>new Promise(resolve=>{
+  started.push(i);releases.set(i,()=>{finished.push(i);resolve(null);});
+ }),v=>seen.push([i,v]));
+ const stops=Array.from({length:8},(_,i)=>make(i));
+ try{
+  assert.deepEqual(started,[0,1,2,3]);
+  assert.equal(seen.length,8);
+  stops[5]();stops[6]();
+  // A running cancellation must not allow an extra concurrent GPU/canvas job.
+  stops[0]();
+  assert.deepEqual(started,[0,1,2,3]);
+  releases.get(1)();await new Promise(setImmediate);
+  assert.deepEqual(started,[0,1,2,3,4]);
+  releases.get(0)();await new Promise(setImmediate);
+  assert.deepEqual(started,[0,1,2,3,4,7]);
+  assert.equal(started.length-finished.length,4);
+  for(const i of [2,3,4,7])releases.get(i)();
+  await new Promise(setImmediate);
+  assert.equal(started.length,finished.length);
+  assert.ok(seen.every(([,url])=>url===null));
+ }finally{
+  for(const stop of stops)stop();
+  for(const release of releases.values())release();
+  await new Promise(setImmediate);
+ }
+});
+test('a failed render releases its slot for the next queued appearance',async()=>{
+ const started=[],failures=[];
+ const stops=Array.from({length:5},(_,i)=>startDynamicArtRequest(()=>{
+  started.push(i);
+  if(i===4)return Promise.resolve(null);
+  return new Promise((_,reject)=>failures.push(reject));
+ },()=>{}));
+ try{
+  assert.deepEqual(started,[0,1,2,3]);
+  failures[0](Error('missing source'));
+  await new Promise(setImmediate);
+  assert.deepEqual(started,[0,1,2,3,4]);
+ }finally{
+  for(const stop of stops)stop();
+  for(const reject of failures)reject(Error('cleanup'));
+  await new Promise(setImmediate);
+ }
+});

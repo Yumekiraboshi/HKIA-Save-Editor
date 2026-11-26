@@ -1,0 +1,150 @@
+/** Multi-renderer diagnostic path. All materials and geometry come from the
+ * original source crosswalk. Camera, root pose, scene and cube orientation
+ * are explicit diagnostic inputs, not inferred production icon settings. */
+import {bindFurnitureRendererTreatments,nativeFurnitureTreatment,furnitureTreatmentScale} from './furniture-material-treatment';
+import type {RugNativeSources} from './furniture-rug-source';
+import type {RugCubeRequest,RugPayload,ReadRugPayload} from './furniture-rug-diagnostic';
+import {authoredRendererModel} from './furniture-authored-transforms';
+import {uploadNativeGeometry,validateNativeGeometryLayout} from './native-furniture-mesh';
+import {uploadNativeTexture,validateNativeTextureLayout,type NativeTextureSource,type Bc1Mode} from './native-texture-upload';
+import {uploadNativeCube,validateNativeCubeOrientation} from './native-cube-upload';
+import {createFurnitureForwardRenderer,validateFurnitureForwardInputs,type FurnitureForwardMaterial,type FurnitureForwardScene} from './furniture-forwardlit-gpu';
+import type {Vec3,Vec4} from './furniture-surface-v3.0.1';
+type Pattern=NativeTextureSource&{guid:string;bundle:string;bundleSha256:string;pathId:string;objectSha256:string};
+export type FurnitureMultiSources=Omit<RugNativeSources,'variants'>&{
+ variants:RugNativeSources['variants']&{bundleNames:readonly string[];patterns:readonly (readonly [string,number,number,readonly number[]])[]};
+ additionalPatterns:{schema:string;version:string;rows:readonly Pattern[]};
+};
+type Scene=Omit<FurnitureForwardScene,'model'|'normalMatrix'|'tangentParity'|'reflectionStrength'|'emissionColor'>;
+export type FurnitureMultiRequest={
+ itemId:number;indices:readonly number[];scene:Scene;
+ mountWorld:readonly number[];runtimeRoot:Parameters<typeof authoredRendererModel>[3];fit:Parameters<typeof authoredRendererModel>[4];
+ bc1Modes:Readonly<Record<string,Bc1Mode>>;
+ reflectionPrimary:RugCubeRequest;reflectionSecondary:RugCubeRequest;
+};
+const shaderId='CAB-2b27edbfe7f08bad1cd631865ee4eb15:-6806329374484566350';
+const shaderHash='cdb64e92e92cbc2b88b3ce48c8a3ed302a16972a23528c27e766b7a646d852d0';
+const fail=(code:string):never=>{throw Error('FURNITURE_MULTI_'+code);};
+function get<T>(x:T|undefined|null,code:string):T{if(x==null)throw Error('FURNITURE_MULTI_'+code);return x;}
+/** An exact null pattern may be mathematically unused by the shader.
+ * Independently establish opacity even if BC1's alpha mode is not known. */
+export function nativeBaseIsOpaque(s:NativeTextureSource,bytes:ArrayBuffer){
+ if(bytes.byteLength!==s.bytes)return false;
+ const b=new Uint8Array(bytes),v=new DataView(bytes);
+ if(s.format===4||s.format===5)return b.every((x,i)=>i%4!==3||x===255);
+ if(s.format===10){
+  if(!b.length||b.length%8)return false;
+  for(let i=0;i<b.length;i+=8)if(v.getUint16(i,true)<=v.getUint16(i+2,true)){
+   const indices=v.getUint32(i+4,true);for(let j=0;j<16;j++)if(((indices>>>(j*2))&3)===3)return false;
+  }
+  return true;
+ }
+ // No general BC3 alpha proof is inferred.
+ return false;
+}
+export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:FurnitureMultiRequest){
+ const bound=bindFurnitureRendererTreatments(d,request.itemId,request.indices);
+ if(d.additionalPatterns.schema!=='HKIA.FurniturePatternTextureSources.1'||d.additionalPatterns.version!=='3.0.1'||d.base.shaders[shaderId]?.objectSha256!==shaderHash)fail('SOURCE_VERSION');
+ const patternRows=[...d.patterns.rows,...d.additionalPatterns.rows] as readonly Pattern[];
+ const nodes=bound.geometry.nodes as unknown as Parameters<typeof authoredRendererModel>[0];
+ validateNativeGeometryLayout(bound.geometry);
+ const plans=bound.plans.map(p=>{
+  const base=p.baseMaterial,f=base.floats,c=base.colors;
+  if(base.shader!==shaderId||base.validKeywords.length||base.textures._PatternNormalMap?.texture!==null||base.textures._Surface_EffectMap?.texture!==null||
+   f._PatternNormalMap_Toggle!==0||f._Surface_Effect!==0||f.CUSTOM_RIMLIGHT!==0||f.GLIMMER!==0||f._AlphaClip!==0||f._Material_Alpha!==0||f._ZWrite!==1)fail('SHADER_UNSUPPORTED');
+  const link=(name:string)=>get(base.textures[name],'TEXTURE_LINK');
+  const st=(name:string):Vec4=>{const l=link(name);return [...l.scale,...l.offset] as Vec4;};
+  const tex=(name:string)=>get(d.base.textures[get(link(name).texture,'TEXTURE_NULL')],'TEXTURE');
+  const b=tex('_BaseMap'),n=tex('_BumpMap'),x=tex('_MetallicGlossMap');
+  const baseST=st('_BaseMap');
+  if(['_BumpMap','_MetallicGlossMap'].some(k=>st(k).some((v,i)=>v!==baseST[i])))fail('BASE_UV');
+  if(![0,1].includes(f._Pattern_WorldUV)||![0,1].includes(f._BaseMap_Mask_Toggle))fail('FLAGS');
+  let treatment:ReturnType<typeof nativeFurnitureTreatment>|null=null,pattern:NativeTextureSource|null=null;
+  if(p.choice){
+   const row=p.choice.definition,guid=row[5];
+   if(guid!==null){
+    const selected=patternRows.filter(t=>t.guid===guid);
+    if(selected.length!==1)fail('PATTERN_UNAVAILABLE');
+    const t=selected[0],locations=d.variants.patterns.filter(v=>v[0]===guid);
+    if(locations.length!==1||!locations[0][3].some(i=>d.variants.bundleNames[i]===t.bundle))fail('PATTERN_SOURCE');
+    pattern=t;
+   }
+   treatment=nativeFurnitureTreatment(row,guid);
+  }else{
+   const l=link('_PatternMap');if(l.texture!==null)pattern=get(d.base.textures[l.texture],'PATTERN_AUTHORED');
+  }
+  const material:FurnitureForwardMaterial={
+   baseColor:treatment?.baseColor??get(c._BaseColor,'BASE_COLOR'),
+   patternTint:treatment?.patternTint??get(c._PatternTint,'PATTERN_TINT'),
+   useBaseMapMask:treatment?.useBaseMapMask??(f._BaseMap_Mask_Toggle===1),
+   baseST,patternST:treatment?.patternST??st('_PatternMap'),
+   rotationTurns:treatment?.rotationTurns??f._PatternRotate,
+   rotationCenter:treatment?.rotationCenter??[c._PatternRotateCenter[0],c._PatternRotateCenter[1]],
+   smoothnessShift:treatment?.smoothnessShift??f._Smoothness_Shift,metallicShift:treatment?.metallicShift??f._Metallic_Shift,
+   patternSmoothnessShift:treatment?.patternSmoothnessShift??f._Smoothness_Shift_Pattern,patternMetallicShift:treatment?.patternMetallicShift??f._Metallic_Shift_Pattern,
+   occlusionStrength:f._OcclusionStrength,worldUV:f._Pattern_WorldUV===1
+  };
+  if(!pattern&&material.baseColor[3]<=0)fail('NULL_PATTERN_CONTRIBUTES');
+  const modelNodes=treatment?nodes.map(node=>node.rendererPathId===p.rendererPathId?{...node,scale:furnitureTreatmentScale(node.scale,treatment!.mirrored)}:node):nodes;
+  const transform=authoredRendererModel(modelNodes,p.rendererPathId,request.mountWorld,request.runtimeRoot,request.fit);
+  const emissionColor=get(c._EmissionColor,'EMISSION').slice(0,3) as unknown as Vec3;
+  const scene:FurnitureForwardScene={...request.scene,model:transform.model,normalMatrix:transform.normalMatrix,tangentParity:transform.tangentParity,reflectionStrength:f._ReflectionStrength,emissionColor};
+  validateFurnitureForwardInputs(scene,material);
+  for(const t of [b,n,x,pattern].filter((v):v is NativeTextureSource=>v!==null)){
+   validateNativeTextureLayout(t);
+   if(t.format===10&&!['rgb','rgba'].includes(request.bc1Modes[t.sha256]))fail('BC1_MODE');
+  }
+  const mesh=get(bound.geometry.meshes[p.meshPathId],'MESH');
+  if([0,1,2,4,5].some(i=>!mesh.channels[i]||!(mesh.channels[i][3]&15)))fail('MESH_CHANNEL');
+  return {rendererPathId:p.rendererPathId,meshPathId:p.meshPathId,slot:p.choice?.slot??null,selectedIndex:p.choice?.selectedIndex??null,
+   material,scene,baseMap:b,normalMap:n,comboMap:x,patternMap:pattern};
+ });
+ if(new Set(plans.map(p=>p.meshPathId)).size!==Object.keys(bound.geometry.meshes).length)fail('MESH_COVERAGE');
+ for(const c of [request.reflectionPrimary,request.reflectionSecondary])validateNativeCubeOrientation(c.source,c.orientation);
+ return {geometry:bound.geometry,plans,fidelity:'forward-diagnostic-only' as const};
+}
+/** One depth buffer, one model upload, and one upload per distinct texture.
+ * All source bindings and payloads are resolved before the first draw.
+ * Caller owns the isolated framebuffer and discards it on any thrown error. */
+export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:FurnitureMultiSources,request:FurnitureMultiRequest,read:ReadRugPayload){
+ const resolved=resolveFurnitureMultiDiagnostic(d,request);
+ const getBytes=async(kind:RugPayload['kind'],sha256:string,bytes:number)=>{
+  const b=await read({kind,sha256,bytes});if(!(b instanceof ArrayBuffer)||b.byteLength!==bytes)fail('PAYLOAD_LENGTH');return b;
+ };
+ const owned:WebGLTexture[]=[],textures=new Map<string,WebGLTexture>(),payloads=new Map<string,ArrayBuffer>();
+ let geometry:Awaited<ReturnType<typeof uploadNativeGeometry>>|undefined,renderer:ReturnType<typeof createFurnitureForwardRenderer>|undefined;
+ try{
+  geometry=await uploadNativeGeometry(gl,resolved.geometry,await getBytes('geometry',resolved.geometry.geometrySha256,resolved.geometry.geometryBytes),
+   Object.fromEntries(Object.keys(resolved.geometry.meshes).map(id=>[id,{0:0,1:1,2:2,4:4,5:5}])));
+  const texture=async(t:NativeTextureSource)=>{
+   const key=t.sha256+':'+t.colorSpace+':'+t.format+':'+JSON.stringify(t.sampler)+':'+(request.bc1Modes[t.sha256]??'');
+   const cached=textures.get(key);if(cached)return cached;
+   let b=payloads.get(t.sha256);if(!b){b=await getBytes('texture',t.sha256,t.bytes);payloads.set(t.sha256,b);}
+   const uploaded=await uploadNativeTexture(gl,t,b,request.bc1Modes[t.sha256]);owned.push(uploaded);textures.set(key,uploaded);return uploaded;
+  };
+  const cube=async(c:RugCubeRequest)=>{
+   const t=await uploadNativeCube(gl,c.source,await getBytes('cube',c.source.sha256,c.source.bytes),c.orientation,c.bc1Mode);owned.push(t);return t;
+  };
+  const reflectionPrimary=await cube(request.reflectionPrimary),reflectionSecondary=await cube(request.reflectionSecondary);
+  // Resolve every payload before first draw, so unsupported or corrupt assets
+  // cannot leave a misleading partial model in the caller's framebuffer.
+  const draws=[];
+  for(const p of resolved.plans){
+   const baseMap=await texture(p.baseMap),normalMap=await texture(p.normalMap),comboMap=await texture(p.comboMap);
+   if(!p.patternMap&&p.material.useBaseMapMask&&!nativeBaseIsOpaque(p.baseMap,get(payloads.get(p.baseMap.sha256),'BASE_PAYLOAD')))fail('NULL_PATTERN_CONTRIBUTES');
+   // When the base weight is identically one the unused pattern binding can
+   // alias the original base texture. This invents no replacement asset.
+   const patternMap=p.patternMap?await texture(p.patternMap):baseMap;
+   draws.push({p,mesh:get(geometry.meshes.get(p.meshPathId),'GPU_MESH'),textures:{baseMap,normalMap,comboMap,patternMap,reflectionPrimary,reflectionSecondary}});
+  }
+  renderer=createFurnitureForwardRenderer(gl);
+  for(const draw of draws)renderer.draw(draw.mesh,draw.textures,draw.p.scene,draw.p.material);
+  return {itemId:request.itemId,renderers:draws.length,uniqueTextures:textures.size,fidelity:resolved.fidelity};
+ }finally{
+  if(renderer){gl.useProgram(null);renderer.dispose();}
+  // A rejected read/hash can occur before the first GPU allocation. Do not
+  // touch the context (or mask the original error) without owned geometry.
+  if(geometry){gl.bindVertexArray(null);geometry.dispose();}
+  for(const t of owned)gl.deleteTexture(t);
+ }
+}
