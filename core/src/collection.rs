@@ -72,6 +72,34 @@ const FLOWER_CROWN_SPECIES:&[(i32,i32)]=&[
  (1861587997,1968535430),
  (1876646873,274491259),
 ];
+// Exact source flower definitions paired to the 23 unrestricted crown
+// outputs above. DefaultColors are from the pinned Steam FlowerItemDetails.
+// Unowned creation is deliberately narrower than editing existing colors.
+const ABSENT_FLOWER_DEFAULTS:&[(i32,&[i32])]=&[
+ (43114910,&[2,5,10]),
+ (183701770,&[13]),
+ (203856820,&[3]),
+ (228573412,&[10,29]),
+ (252458237,&[7,21,29]),
+ (261557677,&[12]),
+ (274491259,&[1,4,11]),
+ (275816250,&[4,8,12]),
+ (462608550,&[1,4,16]),
+ (668399845,&[5,13]),
+ (1223758923,&[11]),
+ (1299466625,&[22,24,26,28]),
+ (1331175279,&[6,8,16]),
+ (1386186941,&[17,23,27]),
+ (1554283135,&[1,4,16,29]),
+ (1561432864,&[1,16]),
+ (1583118562,&[25]),
+ (1669522060,&[4,12]),
+ (1695731578,&[16]),
+ (1804880447,&[2,18,19,20]),
+ (1934826268,&[8,16]),
+ (1968535430,&[4,9,16]),
+ (2105820233,&[3]),
+];
 // Original generic processors accept any flower; the HK-style bow explicitly
 // clears both pattern fields (IgnorePatternOnOutputItem=true).
 const FLOWER_CLOTHING_GENERIC:&[i32]=&[105502901,1110255162,1227385139];
@@ -452,6 +480,7 @@ impl Editor {
  /// On-demand creation choices. Rust alone checks the source species,
  /// allocation budget, identity/reference guards, and original tuple.
  pub fn inventory_flower_creation_variants(&self,id:u32)->Vec<FlowerVariant>{
+  if id&PENDING_ITEM!=0{return self.absent_flower_options((id&!PENDING_ITEM) as i32)}
   if !self.inventory_creation_source_valid()||!self.unique_quantity_ids.contains(&id)||self.undo.len()+self.redo.len()>=MAX_UNDO||
    crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_flowers.len()+1).is_err()||
    crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
@@ -465,6 +494,11 @@ impl Editor {
  /// existing validated species row. No persisted UID is assigned until
  /// export. Multiple variants of one species use independent handles.
  pub fn create_inventory_flower_variant(&mut self,source_id:u32,expected:FlowerVariant,next:FlowerVariant,quantity:i32)->Result<u32,Error>{
+  if source_id&PENDING_ITEM!=0{
+   let item_id=(source_id&!PENDING_ITEM) as i32;
+   if quantity<=0||expected!=[0;4]||!self.absent_flower_options(item_id).contains(&next){return Err(Error::Schema)}
+   return self.stage_new_flower(source_id,item_id,expected,next,quantity)
+  }
   if quantity<=0||!self.inventory_creation_source_valid()||!self.unique_quantity_ids.contains(&source_id){return Err(Error::Schema)}
   let row=self.slot.index.inventory.iter().find(|r|r.id==source_id).ok_or(Error::Schema)?;
   let item_id=row.item_id.ok_or(Error::Schema)?;
@@ -473,6 +507,30 @@ impl Editor {
   let (patterns,current,reserved)=self.flower_context(source_id).ok_or(Error::Schema)?;
   let original=flower_variant(row.unique_data.ok_or(Error::Schema)?).ok_or(Error::Schema)?;
   if expected!=current||next==current||next==original||next[0]!=current[0]||!valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
+  self.stage_new_flower(source_id,item_id,expected,next,quantity)
+ }
+ fn absent_flower_budget_available(&self)->bool{
+  self.inventory_creation_source_valid()&&self.undo.len()+self.redo.len()<MAX_UNDO&&
+   crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_flowers.len()+1).is_ok()&&
+   crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_ok()
+ }
+ fn absent_flower_options(&self,item_id:i32)->Vec<FlowerVariant>{
+  if !self.absent_flower_budget_available(){return Vec::new()}
+  self.absent_flower_choices(item_id)
+ }
+ fn absent_flower_choices(&self,item_id:i32)->Vec<FlowerVariant>{
+  if self.inventory_item_rows.contains_key(&item_id)||
+   self.slot.index.inventory_payload_item_refs.contains(&item_id)||
+   self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item_id){return Vec::new()}
+  let Some((_,colors))=ABSENT_FLOWER_DEFAULTS.iter().find(|&&(id,_)|id==item_id)else{return Vec::new()};
+  if !crate::inventory_source::is_uncapped_required_unique_stack(item_id){return Vec::new()}
+  colors.iter().map(|&color|[6,color,0,0]).filter(|v|!self.pending_flowers.values().any(|f|f.item_id==item_id&&f.variant==*v)).collect()
+ }
+ pub fn inventory_absent_flower_ids(&self)->Vec<i32>{
+  if !self.absent_flower_budget_available(){return Vec::new()}
+  ABSENT_FLOWER_DEFAULTS.iter().filter_map(|&(id,_)|(!self.absent_flower_choices(id).is_empty()).then_some(id)).collect()
+ }
+ fn stage_new_flower(&mut self,source_id:u32,item_id:i32,expected:FlowerVariant,next:FlowerVariant,quantity:i32)->Result<u32,Error>{
   if self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
   crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_flowers.len()+1)?;
   crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1)?;

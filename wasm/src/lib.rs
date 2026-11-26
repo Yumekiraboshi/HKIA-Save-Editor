@@ -208,6 +208,18 @@ pub extern "C" fn hkia_inventory_flower_variants(id:u32)->u32{
  })
 }
 #[no_mangle]
+pub extern "C" fn hkia_inventory_absent_flower_ids()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_absent_flower_ids();
+  let mut out=Vec::with_capacity(4+rows.len()*4);
+  out.extend((rows.len() as u32).to_le_bytes());
+  for id in rows{out.extend(id.to_le_bytes());}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
 pub extern "C" fn hkia_inventory_flower_creation_variants(id:u32)->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();

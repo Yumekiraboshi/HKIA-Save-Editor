@@ -69,7 +69,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let flowerDefinitions:FlowerDisplayDefinitions|null=$state(null);
  let flowerLabels:FlowerLabels=$state({});
  let flowerDialogEl:HTMLDialogElement|undefined=$state();
- let flowerEdit=$state<{documentId:number;itemId:number;revision:number;before:FlowerVariant;options:FlowerVariant[];creationOptions:FlowerVariant[]}|null>(null);
+ let flowerEdit=$state<{documentId:number;itemId:number;revision:number;before:FlowerVariant;options:FlowerVariant[];creationOptions:FlowerVariant[];absent?:boolean}|null>(null);
  let flowerSelection=$state(-1);
  let furnitureDialogEl:HTMLDialogElement|undefined=$state();
  let furnitureDisplay:FurnitureDisplay|null=$state(null);
@@ -702,6 +702,19 @@ import {verifiedFloorplanName} from './floorplan-names';
   }catch(e){error=describeError(e)}
   finally{busy=false}
  }
+ async function openAbsentFlowerEditor(row:InventoryEntry){
+  if(!snapshot||busy||!row.flowerCreatable)return;
+  const revision=snapshot.revision;
+  busy=true;error='';
+  try{
+   const options=await requestFlowerCreationVariants(row.documentId);
+   if(!snapshot||snapshot.revision!==revision||!options.length)return;
+   flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before:[0,0,0,0],options,creationOptions:options,absent:true};
+   flowerSelection=0;await tick();
+   if(flowerDialogEl&&!flowerDialogEl.open)flowerDialogEl.showModal();
+  }catch(e){error=describeError(e)}
+  finally{busy=false}
+ }
  async function openFurnitureEditor(row:InventoryEntry){
   const before=furnitureVariantOf(row.unique);
   if(!snapshot||busy||!before||!row.unique?.furnitureEditable)return;
@@ -1299,7 +1312,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
      {@const canFlower=!!item.flower&&!!item.unique?.flowerEditable&&!!flowerDefinitions&&!!flowerLabels[locale]}
      {@const canFurniture=!!item.unique?.furnitureEditable}
-      <article class="inventory-card" class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
+      <article class="inventory-card" class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!item.flowerCreatable} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
       {#if inventoryBatchMode&&item.editable}
        <input class="inventory-batch-checkbox" type="checkbox" checked={inventoryBatchSelected.has(item.documentId)} aria-label={iBatchCopy+': '+inventoryName(item.itemId)}
         disabled={busy||(!inventoryBatchSelected.has(item.documentId)&&inventoryBatchSelected.size>=snapshot.inventoryBatchLimit)} onchange={()=>toggleInventoryBatch(item)}/>
@@ -1355,6 +1368,8 @@ import {verifiedFloorplanName} from './floorplan-names';
          </button>
         {/if}
        </form>
+      {:else if item.flowerCreatable}
+       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openAbsentFlowerEditor(item)}>{inventoryAddCopy(locale)}</button>
       {:else if canFurniture}
        <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} title={furnitureCopy.title} aria-label={furnitureCopy.title+': '+inventoryName(item.itemId)} onclick={()=>void openFurnitureEditor(item)}>
         <span>{item.quantity}</span>
@@ -1572,7 +1587,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   onclose={()=>{flowerEdit=null;flowerSelection=-1}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if flowerEdit}
    {@const edit=flowerEdit}
-   <form class="date-dialog-inner" onsubmit={e=>void applyInventoryFlowerVariant(e)}>
+   <form class="date-dialog-inner" onsubmit={e=>{if(edit.absent){e.preventDefault();void addInventoryFlowerVariant()}else void applyInventoryFlowerVariant(e)}}>
     <div class="date-dialog-heading">
      <h2 id="flower-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFlowerEditor}>×</button>
@@ -1584,12 +1599,15 @@ import {verifiedFloorplanName} from './floorplan-names';
        <DynamicFlowerSprite itemId={edit.itemId} flower={{growState:current[0],baseColor:current[1],pattern:current[2],patternColor:current[3]}} definitions={flowerDefinitions} fallback={inventoryNativeArt?.entries.get(edit.itemId)}/>
       {/if}
      </span>
-     <div class="date-dialog-detail"><strong>{flowerVariantName(edit.before)}</strong></div>
+     <div class="date-dialog-detail"><strong>{flowerVariantName(edit.absent?(edit.options[flowerSelection]??edit.options[0]):edit.before)}</strong></div>
     </div>
     {#if edit.options.length}
      <label class="date-dialog-field">
       <span>{flowerCopy.title}</span>
       <select bind:value={flowerSelection} disabled={busy} required>
+       {#if edit.absent}
+        {#each edit.options as v,i}<option value={i}>{flowerVariantName(v)}</option>{/each}
+       {:else}
        <option value={-1} disabled>{flowerVariantName(edit.before)}</option>
        {#each [flowerCopy.color,flowerCopy.pattern,flowerCopy.accent] as group, g}
         {#if edit.options.some(v=>flowerOptionGroup(edit.before,v)===g)}
@@ -1602,6 +1620,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          </optgroup>
         {/if}
        {/each}
+       {/if}
       </select>
      </label>
     {:else}
@@ -1612,7 +1631,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {#if edit.creationOptions.length}
       <button type="button" class="inventory-create-flower" disabled={busy||flowerSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[flowerSelection]?.[i]))} onclick={()=>void addInventoryFlowerVariant()}>{inventoryAddCopy(locale)}</button>
      {/if}
-     <button type="submit" class="primary" disabled={busy||flowerSelection<0}>{copy.apply}</button>
+     {#if !edit.absent}<button type="submit" class="primary" disabled={busy||flowerSelection<0}>{copy.apply}</button>{/if}
     </div>
    </form>
   {/if}
