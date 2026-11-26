@@ -2656,3 +2656,32 @@ fn all_authored_boba_base_choices_and_new_stacks_roundtrip(){
   assert_eq!(restored.inventory_boba_rows().find(|(id,_,_)|*id==b).unwrap().1,child);
  }
 }
+
+#[test]
+fn mixed_chef_creations_share_uid_and_document_allocator_and_replay(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let cafe=[44,49,48,6,46,9];let cafe_next=[62,49,48,6,46,9];
+ let boba=[6,44,76,75,73];let boba_next=[46,39,79,78,71];
+ let cafe_encode=|v:[i32;6]|arr(vec![vec![3],arr(vec![arr(v[..3].iter().map(|&w|u(w as u32)).collect()),arr(v[3..].iter().map(|&w|u(w as u32)).collect())])]);
+ let boba_encode=|v:[i32;5]|arr(vec![vec![4],arr(v.into_iter().map(|w|u(w as u32)).collect())]);
+ let mut payload=synthetic_payload("3.0.1");payload[2]=8;payload[3]=0x97;
+ payload.extend(doc(1,arr(vec![u(4),u(203331651),u(21),u(2),cafe_encode(cafe)])));
+ payload.extend(doc(1,arr(vec![u(5),u(1798633565),u(22),u(2),boba_encode(boba)])));
+ let raw=slot_from_payload("3.0.1",payload);
+ for zipped in [false,true]{
+  let input=if zipped{zip(&raw)}else{raw.clone()};let mut e=Editor::open(input.clone()).unwrap();
+  let a=e.create_inventory_cafe_variant(4,cafe,cafe_next,3).unwrap();
+  let b=e.create_inventory_boba_variant(5,boba,boba_next,5).unwrap();
+  assert_ne!(a,b);assert!(e.undo_scope(Inventory));assert!(e.redo_scope(Inventory));
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert_eq!(restored.inventory(),e.inventory());
+  let reopened=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory().len(),4);
+  assert_eq!(reopened.inventory_original_unique_payload(4),Some(cafe_encode(cafe).as_slice()));
+  assert_eq!(reopened.inventory_original_unique_payload(5),Some(boba_encode(boba).as_slice()));
+  let ids:std::collections::HashSet<_>=reopened.inventory_unique_rows().map(|(_,uid,_,_,_)|uid.unwrap()).collect();
+  assert_eq!(ids,std::collections::HashSet::from([21,22,23,24]));
+  assert!(reopened.inventory_cafe_rows().any(|(_,v,_)|v==cafe_next));
+  assert!(reopened.inventory_boba_rows().any(|(_,v,_)|v==boba_next));
+ }
+}

@@ -61,6 +61,14 @@ export function diffInventory(before:readonly InventoryEntry[],after:readonly In
  }
  return result.sort((a,b)=>a.documentId-b.documentId);
 }
+/** Compare canonical validated net edits, not incidental property order.
+ * A unique addition must replay the native checkpoint; a false mismatch
+ * cannot safely fall back to the net-only restore path. */
+export function inventoryPatchesEqual(a:readonly InventoryPatch[],b:readonly InventoryPatch[]):boolean{
+ const canonical=(rows:readonly InventoryPatch[])=>safeInventoryPatches(rows).sort((x,y)=>x.documentId-y.documentId||
+  (x.kind??'').localeCompare(y.kind??''));
+ return JSON.stringify(canonical(a))===JSON.stringify(canonical(b));
+}
 export function safeInventoryPatches(value:unknown):InventoryPatch[]{
  if(!Array.isArray(value)||value.length>20000)throw Error('DRAFT_INVALID');
  const ids=new Set<string>(),result:InventoryPatch[]=[];

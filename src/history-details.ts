@@ -130,11 +130,11 @@ export function decodeHistoryDetails(
     const createdHandle=u32(),documentId=u32(),before=Array.from({length:5},()=>i32()) as BobaVariant,variant=Array.from({length:5},()=>i32()) as BobaVariant,quantity=i32();
     const stagedSource=result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&r.bobaCreated&&r.createdHandle===documentId);
     if(createdHandle<=2147483647||createdHandle===documentId||documentId<=0||quantity<=0||before.every((v,i)=>v===variant[i])||(documentId>2147483647&&!stagedSource))return [];
-    result.push({scope:'inventory',documentId,createdHandle,itemId:1798633565,variant,quantity,bobaCreated:true;cafeCreated?:false});
+    result.push({scope:'inventory',documentId,createdHandle,itemId:1798633565,variant,quantity,bobaCreated:true});
    }else if(kind===15){
     const documentId=u32(),before=Array.from({length:5},()=>i32()) as BobaVariant,after=Array.from({length:5},()=>i32()) as BobaVariant;
     if(documentId<=0||(documentId>2147483647&&!result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&r.bobaCreated&&r.createdHandle===documentId))||before.every((v,i)=>v===after[i]))return [];
-    result.push({scope:'inventory',documentId,before,after,bobaVariant:true;cafeVariant?:false});
+    result.push({scope:'inventory',documentId,before,after,bobaVariant:true});
    }else if(kind===13){
     const documentId=u32(),before=Array.from({length:12},()=>u32()),after=Array.from({length:12},()=>u32());
     if(documentId<=0||(documentId>2147483647&&!result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&r.paletteCreated&&r.createdHandle===documentId))||before.every((v,i)=>v===after[i]))return [];
