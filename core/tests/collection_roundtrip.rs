@@ -2490,7 +2490,7 @@ fn add_custom_palette_variants_from_owned_source_and_cancel_staged(){
  let mut child=next;child[1]=color(5,4).unwrap();
  let encode=|v:PaletteVariant|arr(vec![vec![6],arr(v.into_iter().map(|c|arr(c.into_iter().map(|w|f(f32::from_bits(w))).collect())).collect())]);
  let make=|v:PaletteVariant|{
-  let mut p=synthetic_payload("3.0.1");p[3]=0x96;
+  let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=0x96;
   p.extend(doc(1,arr(vec![u(4),u(1835273963),u(21),u(2),encode(v)])));
   slot_from_payload("3.0.1",p)
  };
