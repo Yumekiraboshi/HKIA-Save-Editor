@@ -1,0 +1,26 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import {build} from 'esbuild';
+const {outputFiles}=await build({stdin:{contents:"export * from './src/furniture-source-pack';export * from './src/furniture-multi-diagnostic';",resolveDir:fileURLToPath(new URL('../',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+const {openFurnitureSourcePack}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const read=p=>JSON.parse(readFileSync(new URL('../'+p,import.meta.url)));
+const source={catalog:read('public/inventory-ui/furniture-customization-v3.0.1.json'),variants:read('data/furniture-material-render-source-v3.0.1.json')};
+const visual=read('data/furniture-visual-source-v3.0.1.json'),addressables=read('data/furniture-addressables-v3.0.1.json');
+const root=new URL('https://example.invalid/diagnostic/');
+const get=()=>({schema:'HKIA.FurnitureSourcePack.1',version:'3.0.1',catalogSha256:addressables.catalogSha256,renderFidelity:'unverified',geometry:read('data/furniture-mesh-source-sample-v3.0.1.json'),base:read('data/furniture-base-material-source-v3.0.1.json'),patterns:{schema:'HKIA.FurniturePatternTextureSamples.1',version:'3.0.1',itemId:32709745,rows:[]},additionalPatterns:read('data/furniture-chair-pattern-sources-v3.0.1.json'),cubemaps:read('data/furniture-light-region-source-v3.0.1.json').cubemaps});
+const encode=p=>{const a=new TextEncoder().encode(JSON.stringify(p));return [a.buffer,{sha256:createHash('sha256').update(a).digest('hex'),bytes:a.length}];};
+const open=(p,expected)=>{const [bytes,pin]=encode(p);return openFurnitureSourcePack(bytes,expected??pin,root,source,visual,addressables,async()=>{throw Error('UNEXPECTED_FETCH');});};
+test('manifest pin and exact native visual/texture crosswalk before payload requests',async()=>{
+ const p=get(),result=await open(p);assert.equal(result.sources.geometry.rows.length,4);assert.equal(result.renderFidelity,'unverified');
+ const [bytes,pin]=encode(p);await assert.rejects(open(p,{...pin,sha256:'0'.repeat(64)}),/SOURCE_PACK_HASH/);
+ await assert.rejects(open(p,{...pin,bytes:pin.bytes+1}),/SOURCE_PACK_LENGTH/);
+ await assert.rejects(result.read({kind:'texture',sha256:'0'.repeat(64),bytes:4}),/PAYLOAD_UNKNOWN/);
+ const bad=structuredClone(p);bad.geometry.rows[0].visualGuid='0'.repeat(32);await assert.rejects(open(bad),/SOURCE_PACK_VISUAL/);
+ const badBundle=structuredClone(p);badBundle.geometry.rows[0].bundle='not-a-source';await assert.rejects(open(badBundle),/MODEL_SOURCE/);
+ const badPattern=structuredClone(p);badPattern.additionalPatterns.rows[0].bundle='not-a-source';await assert.rejects(open(badPattern),/PATTERN_SOURCE/);
+ const dup=structuredClone(p);dup.additionalPatterns.rows.push(dup.additionalPatterns.rows[0]);await assert.rejects(open(dup),/DUPLICATE/);
+ const pending=openFurnitureSourcePack(bytes,pin,root,source,visual,addressables);new Uint8Array(bytes).fill(0);assert.equal((await pending).sources.geometry.rows.length,4);
+});
