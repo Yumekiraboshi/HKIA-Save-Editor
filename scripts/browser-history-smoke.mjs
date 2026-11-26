@@ -358,15 +358,29 @@ async function inventoryBatchQuantitySmoke(){
    await q.waitFor();assert.equal(await q.inputValue(),String(count));
   };
   await check(315822,20);await check(517031,20);
+  // A pending batch must not be silently carried into a different history revision.
+  await page.locator('.inventory-batch-toggle').click();
+  await page.locator('.inventory-select-visible').click();
+  await page.locator('.inventory-batch-form input[type="number"]').fill('21');
+  assert.match(await page.locator('.inventory-batch-form .inventory-total').innerText(),/^1\s*\//);
   await page.locator('button[title="Undo"]').click();
   await page.locator('button[title="Undo"]:disabled').waitFor();
   await page.locator('button[title="Redo"]:not([disabled])').waitFor();
+  assert.match(await page.locator('.inventory-batch-form .inventory-total').innerText(),/^0\s*\//);
+  assert.equal(await page.locator('.inventory-batch-form input[type="number"]').inputValue(),'');
+  assert.equal(await page.locator('.inventory-batch-checkbox:checked').count(),0);
   await check(315822,6);await check(517031,9);
+  await page.locator('.inventory-select-visible').click();
+  await page.locator('.inventory-batch-form input[type="number"]').fill('22');
   await page.locator('button[title="Redo"]').click();
   await page.locator('button[title="Redo"]:disabled').waitFor();
   // A disabled button also means the Worker request is in flight. Require the
   // opposite history control to be enabled after the native snapshot and draft write.
   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  assert.match(await page.locator('.inventory-batch-form .inventory-total').innerText(),/^0\s*\//);
+  assert.equal(await page.locator('.inventory-batch-form input[type="number"]').inputValue(),'');
+  assert.equal(await page.locator('.inventory-batch-checkbox:checked').count(),0);
+  await page.locator('.inventory-batch-toggle').click();
   await check(315822,20);await check(517031,20);
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([
