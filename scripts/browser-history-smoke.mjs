@@ -657,8 +657,24 @@ async function inventoryFlowerGrowthDisplaySmoke(){
   await page.waitForFunction(()=>document.querySelectorAll('.inventory-card').length===1&&document.querySelector('[data-flower-growth="seed"]'));
   await search.fill('43114910 Uprooted plant Red');
   await page.waitForFunction(()=>document.querySelectorAll('.inventory-card').length===1&&document.querySelector('[data-flower-growth="uprooted"]'));
+  for(const [query,kind] of [['43114910 Seed Red','seed'],['43114910 Uprooted plant Red','uprooted']]){
+   await search.fill(query);
+   await page.waitForFunction(k=>document.querySelectorAll('.inventory-card').length===1&&document.querySelector('[data-flower-growth="'+k+'"]'),kind);
+   const card=cards.first(),quantity=card.locator('input[name="quantity"]'),apply=card.locator('.inventory-quantity-form button[type="submit"]');
+   assert.equal(await quantity.getAttribute('min'),'0');
+   await quantity.fill('0');page.once('dialog',d=>d.accept());await apply.click();
+   await apply.waitFor({state:'visible'});
+   await card.locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+   assert.equal(await quantity.inputValue(),'0');
+   await page.locator('button[title="Undo"]:not([disabled])').click();
+   await page.locator('button[title="Redo"]:not([disabled])').waitFor();
+   await page.waitForFunction(()=>document.querySelector('.inventory-card input[name="quantity"]')?.value==='1');
+   await page.locator('button[title="Redo"]:not([disabled])').click();
+   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+   await page.waitForFunction(()=>document.querySelector('.inventory-card input[name="quantity"]')?.value==='0');
+  }
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM FLOWER GROWTH PASS: separate original seed and troweled pixels, shared sheet, localized search');
+  console.log('CHROMIUM FLOWER GROWTH PASS: native seed/troweled art, localized search, zero and Undo/Redo');
  }finally{await context.close();}
 }
 async function inventoryFlowerVariantEditSmoke(){

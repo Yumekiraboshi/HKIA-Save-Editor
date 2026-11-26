@@ -696,15 +696,15 @@ impl Editor {
  }
  // A saved plucked species is a verified tag-7 flower, not a seed,
  // a planted/uprooted specimen, a crafted outfit, or a copied payload.
- fn is_plucked_species(r:&crate::native::InventoryRow)->bool{
+ fn is_emptyable_flower_species(r:&crate::native::InventoryRow)->bool{
   r.item_id.is_some_and(|item|FLOWER_SPECIES.iter().any(|&(id,_)|id==item))&&
-   r.unique_data.and_then(flower_variant).is_some_and(|v|v[0]==6)
+   r.unique_data.and_then(flower_variant).is_some_and(|v|matches!(v[0],0|6|7))
  }
  // Only consumable families with the existing source-authorized
  // complete payload and quantity gates. No palette/outfit/layout removal.
  fn is_emptyable_unique_family(r:&crate::native::InventoryRow)->bool{
   use crate::inventory_source::{CAFE_IDS,BOBA_ID};
-  Self::is_plucked_species(r)||match (r.item_id,r.unique_data){
+  Self::is_emptyable_flower_species(r)||match (r.item_id,r.unique_data){
    (Some(item),Some(InventoryUniqueData::CafeAppearance{..}))=>CAFE_IDS.binary_search(&item).is_ok(),
    (Some(item),Some(InventoryUniqueData::BobaAppearance{..}))=>item==BOBA_ID,
    _=>false
