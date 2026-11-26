@@ -146,6 +146,9 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
  /// Exact tag-6 copies outside inventory, including unkeyed outfit snapshots.
  pub inventory_palette_copies:Vec<[[u32;4];3]>,
  pub inventory_palette_copies_incomplete:bool,
+ pub inventory_palette_avatar_models:usize,
+ pub inventory_palette_general_models:usize,
+ pub inventory_palette_context_incomplete:bool,
  pub(crate) document_spans:Vec<DocumentSpan>,
  /// DbRoot.Key(1), native shared document allocation counter and exact token span.
  pub root_next_id:Option<(i32,Range<usize>)>,
@@ -404,6 +407,18 @@ impl<'a> Walk<'a>{
       if n<furniture_min_fields||furniture_ref_keys.iter().any(|&key|key>=n)||furniture_guid_key.is_some_and(|key|key>=n){
        self.index.inventory_furniture_refs_incomplete=true;
       }
+      // A truncated avatar or preset could omit its palette snapshot.
+      // Preserve existing positive quantity/edit rules; zero requires
+      // complete original avatar context in addition to the copy index.
+      if name=="Sunblink.UserData.AvatarSpeciesSettingsModel"{
+       self.index.inventory_palette_avatar_models+=1;
+       if n<8{self.index.inventory_palette_context_incomplete=true;}
+      }
+      if name=="Sunblink.UserData.AvatarGeneralSettingsModel"{
+       self.index.inventory_palette_general_models+=1;
+       if n<6{self.index.inventory_palette_context_incomplete=true;}
+      }
+      if name=="Sunblink.UserData.OutfitPresetModel"&&n<6{self.index.inventory_palette_context_incomplete=true;}
       if short=="OutfitAvatarSnapshotModel"&&n<4{self.index.inventory_palette_copies_incomplete=true;}
       // Historical GUID-based flower outfit/wand payloads cannot safely
       // be joined by integer ID here; fail closed for that domain.
