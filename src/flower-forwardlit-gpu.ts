@@ -96,7 +96,7 @@ export function validateFlowerForwardInputs(s:FlowerForwardScene,m:FlowerForward
  Math.abs(Math.hypot(...s.lightDirection)-1)>1e-5||s.screenOcclusion<0||s.screenOcclusion>1||
  !materialScalars.every(k=>Number.isFinite(m[k]))||!materialVec3.every(k=>finite(m[k],3))||!materialVec4.every(k=>finite(m[k],4))||
  m.surfaceEffect!==0||m.baseColor.slice(0,3).some(x=>x<0)||m.patternColor1.some(x=>x<0)||m.patternColor2.some(x=>x<0)||
- (m.rim!==null&&(![m.rim.power,m.rim.feathering,m.rim.intensity,m.rim.coloring].every(Number.isFinite)||m.rim.power<0||m.rim.power>1)))fail('INPUT');
+ (m.rim!==null&&(![m.rim.power,m.rim.feathering,m.rim.intensity,m.rim.coloring].every(Number.isFinite)||m.rim.power<0)))fail('INPUT');
 }
 /** Caller owns isolated context and native textures/cube (including proven face
  * orientation), depth/culling, framebuffer and final color conversion. */
