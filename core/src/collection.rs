@@ -346,7 +346,8 @@ impl Editor {
    }))
  }
  fn unique_row_source(&self,row:&crate::native::InventoryRow,fields:usize)->Option<i32>{
-  if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<=0||
+  if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<0||
+   (row.quantity==Some(0)&&!Self::is_plucked_species(row))||
    row.unique_is_nil!=Some(false)||row.unique_fields.len()!=fields||self.slot.index.inventory_item_refs_incomplete{return None}
   let item=row.item_id?;let uid=row.unique_id?;
   if item<=0||uid<=0||self.slot.index.inventory_item_refs.contains(&(item,uid))||self.slot.index.inventory_legacy_uid_refs.contains(&uid){return None}
@@ -733,10 +734,17 @@ impl Editor {
    }
   })
  }
+ // A saved plucked species is a verified tag-7 flower, not a seed,
+ // a planted/uprooted specimen, a crafted outfit, or a copied payload.
+ fn is_plucked_species(r:&crate::native::InventoryRow)->bool{
+  r.item_id.is_some_and(|item|FLOWER_SPECIES.iter().any(|&(id,_)|id==item))&&
+   r.unique_data.and_then(flower_variant).is_some_and(|v|v[0]==6)
+ }
  /// Native subtraction clamps to zero without deleting the saved record.
- /// Permit the zero endpoint only for source-verified ordinary materials, fish and critters,
- /// with an exact UID-zero nil row and no ambiguous or known direct references.
+ /// Existing positive or zero plucked flowers must pass the full original
+ /// unique quantity identity/reference index, including copied payloads.
  fn inventory_can_empty(&self,r:&crate::native::InventoryRow)->bool{
+  if Self::is_plucked_species(r)&&self.unique_quantity_ids.contains(&r.id){return true}
   let Some(item_id)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
    crate::inventory_source::ordinary_membership_item(item_id)&&
@@ -835,7 +843,7 @@ impl Editor {
   }).collect()
  }
  fn inventory_quantity_limit(&self,r:&crate::native::InventoryRow)->Option<i32>{
-  // Existing source-verified unique variants, never creation or zero.
+  // Existing source-verified unique variants; minimum is independently gated.
   if self.unique_quantity_ids.contains(&r.id){return Some(i32::MAX)}
   if self.slot.envelope.version!=Version::V301||r.id==0||r.id>i32::MAX as u32||
    r.quantity?<0||r.unique_is_nil!=Some(true)||r.fields[2].is_none()||
