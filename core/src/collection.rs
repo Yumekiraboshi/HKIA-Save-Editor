@@ -799,13 +799,23 @@ impl Editor {
  /// Native subtraction clamps to zero without deleting the saved record.
  /// Existing consumables must pass the full original unique quantity
  /// identity/reference index, including copied payloads.
+ fn ordinary_clothing_zero_reference_safe(&self,item:i32)->bool{
+  let Some((own,group))=crate::inventory_source::ordinary_clothing_reference_keys(item)else{return false};
+  let index=&self.slot.index;
+  index.inventory_clothing_avatar_models>0&&index.inventory_clothing_general_models==1&&
+   !index.inventory_clothing_refs_incomplete&&!index.inventory_clothing_unknown_preset&&
+   !index.inventory_furniture_refs_incomplete&&!index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
+   !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
+   std::iter::once(&own).chain(group.iter()).all(|k|
+    !index.inventory_clothing_guid_refs.contains(k)&&!index.inventory_furniture_guid_refs.contains(k))
+ }
  fn inventory_can_empty(&self,r:&crate::native::InventoryRow)->bool{
   if self.is_emptyable_unique_family(r)&&self.unique_quantity_ids.contains(&r.id){return true}
   let Some(item_id)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
    (crate::inventory_source::ordinary_membership_item(item_id)||
     ((crate::inventory_source::existing_currency_item(item_id)||
-      self.furniture_zero_reference_safe(item_id))&&
+      self.furniture_zero_reference_safe(item_id)||self.ordinary_clothing_zero_reference_safe(item_id))&&
      !self.slot.index.inventory_payload_refs_incomplete&&
      !self.slot.index.inventory_payload_item_refs.contains(&item_id)))&&
    r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.quantity.is_some_and(|q|q>=0)&&
