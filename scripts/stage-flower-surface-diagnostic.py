@@ -10,7 +10,7 @@ def require(ok,msg):
     if not ok:raise ValueError(msg)
 def module(name):
     spec=importlib.util.spec_from_file_location(name,Path(__file__).with_name(name+'.py'));m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
-def adapt(crowns,external,source,stage,mesh,typed,audit):
+def adapt(crowns,external,source,stage,mesh,typed,audit,forward_rows=None):
     ext={r['cab']+':'+r['pathId']:r for r in external['rows']}
     bycab={}
     textures={}
@@ -50,16 +50,40 @@ def adapt(crowns,external,source,stage,mesh,typed,audit):
         maps=r['maps'];tex={k:texture(maps[k][0]+':'+maps[k][1],r['materialBundle'],r['materialBundleSha256']) for k in ('_BaseMap','_MetallicGlossMap','_PatternMap')}
         f=r['properties']['m_Floats'];c=r['properties']['m_Colors'];require(f['_Surface_Effect']==0,'only authored no-effect')
         rows.append({'itemId':r['itemId'],'guid':r['visualGuid'],'geometry':geometry,'textures':tex,'baseST':maps['_BaseMap'][2],'patternST':maps['_PatternMap'][2],'surface':{'baseColor':c['_BaseColor'],'patternColor1':c['_Pattern_Color1'][:3],'patternColor2':c['_Pattern_Color2'][:3],'smoothnessShift':f['_Smoothness_Shift'],'metallicShift':f['_Metallic_Shift'],'patternSmoothnessShift':f['_Smoothness_Shift_Pattern'],'patternMetallicShift':f['_Metallic_Shift_Pattern'],'occlusionStrength':f['_OcclusionStrength'],'surfaceEffect':0}})
+        if forward_rows is not None:
+            # Keep the original surface diagnostic descriptor unchanged.
+            # Read the exact material again for authored keyword selection.
+            mc,mp=r['materialRef']
+            if mc not in bycab:
+                raw=(source/(r['materialBundle']+'.bin')).read_bytes()
+                require(sha(raw)==r['materialBundleSha256'],'material bundle hash')
+                nodes=dict(audit.auditor.extract_nodes(raw)[1]);objs,_=typed.load(nodes[mc],mesh);bycab[mc]=(objs,r['materialBundleSha256'])
+            objs,digest=bycab[mc];cl,tt,bb=objs[mp]
+            require(cl==21 and digest==r['materialBundleSha256'] and sha(bb)==r['materialSha256'],'material object identity')
+            mf=mesh.fields(tt,bb);kw=mf['m_ValidKeywords'];p=4;keywords=[]
+            for _ in range(mesh.u(kw)):
+                k,p=mesh.string(kw,p);keywords.append(k)
+            require(p==len(kw) and len(keywords)==len(set(keywords)),'keyword array')
+            normal=texture(maps['_BumpMap'][0]+':'+maps['_BumpMap'][1],r['materialBundle'],r['materialBundleSha256'])
+            reflection=maps['_Lighting_ReflectionMap_Assigned'][:2]
+            require(reflection[1]=='0' or reflection==['CAB-6ef5e40a482b00b1d462fae2060592ab','-2018151570093324821'],'unexpected assigned cube')
+            material={**rows[-1]['surface'],'baseST':rows[-1]['baseST'],'patternST':rows[-1]['patternST'],'emissionColor':c['_EmissionColor'][:3],'reflectionStrength':f['_ReflectionStrength'],'ambientSaturation':f['_Lighting_Ambient_Saturation'],'rim':{k:f['_Lighting_Rim'+n] for k,n in [('power','Power'),('feathering','Feathering'),('intensity','Intensity'),('coloring','Coloring')]} if 'CUSTOM_RIMLIGHT_ON' in keywords else None}
+            forward_rows.append({'itemId':r['itemId'],'guid':r['visualGuid'],'geometry':geometry,'meshId':r['meshPathId'],'textures':{'baseMap':tex['_BaseMap'],'patternMap':tex['_PatternMap'],'comboMap':tex['_MetallicGlossMap'],'normalMap':normal},'material':material,'materialRef':r['materialRef'],'materialSha256':r['materialSha256'],'authoredKeywords':keywords,'authoredReflectionRef':None if reflection[1]=='0' else reflection})
     return sorted(rows,key=lambda r:r['itemId'])
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',type=Path,required=True);p.add_argument('--crown-manifest',type=Path,required=True);p.add_argument('--stage',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',type=Path,required=True);p.add_argument('--crown-manifest',type=Path,required=True);p.add_argument('--stage',type=Path,required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--forward-out',type=Path);a=p.parse_args()
     require(not a.out.resolve().is_relative_to(ROOT),'diagnostic output outside repository')
+    if a.forward_out:require(not a.forward_out.resolve().is_relative_to(ROOT) and a.forward_out.resolve()!=a.out.resolve(),'forward output outside repository and distinct')
+    forward=[] if a.forward_out else None
     index=json.loads((ROOT/'data/flower-crown-source-index-v3.0.1.json').read_text())
     raw=a.crown_manifest.read_bytes();require(sha(raw)==index['stagedManifestSha256'],'source crown manifest identity')
     crowns=json.loads(raw);external=json.loads((ROOT/'data/flower-external-material-source-v3.0.1.json').read_text())
-    rows=adapt(crowns,external,a.root,a.stage,module('extract-furniture-mesh-source'),module('extract-furniture-preview-camera'),module('audit-native-dye-materials'))
+    rows=adapt(crowns,external,a.root,a.stage,module('extract-furniture-mesh-source'),module('extract-furniture-preview-camera'),module('audit-native-dye-materials'),forward)
     require(len(rows)==25,'coverage')
     output=(json.dumps(rows,separators=(',',':'))+'\n').encode()
     require(sha(output)=='5d6781ee543214858e4d4e5b0f6cb9f5fbc86f542e8a61c662805bef7d39243a','diagnostic manifest identity')
     a.out.write_bytes(output)
+    if forward is not None:
+        require(len(forward)==25 and sum('CUSTOM_RIMLIGHT_ON' in r['authoredKeywords'] for r in forward)==19 and sum(r['authoredReflectionRef'] is None for r in forward)==3,'forward source coverage')
+        a.forward_out.write_text(json.dumps({'schema':'HKIA.FlowerForwardDiagnostic.1','version':'3.0.1','rows':sorted(forward,key=lambda r:r['itemId'])},separators=(',',':'))+'\n')
     print('HKIA_FLOWER_SURFACE_STAGE_OK 25')
