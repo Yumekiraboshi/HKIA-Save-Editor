@@ -9,8 +9,8 @@ from collections import defaultdict
 
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE='ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0'
-ROW_HASH='78af6f73d9b221e7d9a74c55f8cb47cff256bf796ebc7d1a79c98c06686e01a8'
-GROUP_HASH='637b317fc88ac6c8aca1ce4c6b065333635169019e8fa2bd1b3f7e4a9091cac7'
+ROW_HASH='ea9fbdb217aaf41e2d94b7320c6d13f5f073534e8406af2580222b249c2f3aed'
+GROUP_HASH='7c1d7dc8b3d64aafafd57aff8181d67b3fea8900e738ea884fd1a765cd07ebf4'
 FLOWER_HASH='80aa4103198c492cb9e670b21c397e7f94dba77730b99cdf257d8bf46abfc16a'
 FLOWER_IDS={105502901,108363489,475585922,638410399,644209106,790136191,810330134,833950358,881399767,894396852,897617923,1001954252,1021906725,1048380205,1101281143,1110255162,1120342995,1177909060,1227385139,1423101683,1482119840,1560032168,1607110454,1693955310,1783185900,1861587997,1876646873}
 
@@ -101,10 +101,12 @@ def extract(source):
             j=end[j]
         id=d['Id'];by_path[path]=(id,d['ParentItem'])
         cat=d['ItemCategory']
+        regular=(d['Rarity'] in (2,3,4) or (d['Rarity']==1 and d['ItemOwnership'] in (2,18)))
+        quest_cosmetic=(d['Rarity']==5 and d['ItemOwnership'] in (2,18) and d['ItemProperties']&2)
         if id in FLOWER_IDS:
             require(d['RequiresUniqueData'] and not d['HasCustomMaxCount'] and d['ItemProperties']&2 and cat&256 and not cat&64,'invalid flower clothing definition')
         elif not(not d['RequiresUniqueData'] and not d['ReleaseVersion']
-               and (d['Rarity'] in (2,3,4) or (d['Rarity']==1 and d['ItemOwnership'] in (2,18)))
+               and (regular or quest_cosmetic)
                and cat>=0 and not cat&(1|2|134217728) and cat&256):continue
         require(not cat&64,'ambiguous clothing category')
         while j<246:_,pos=parse(raw,j,pos);j=end[j]
@@ -120,23 +122,35 @@ def extract(source):
         require(labels==['OutfitItemDetails','Sunblink.Game','Assembly-CSharp'],'unsupported clothing details')
         file,ptr=s.unpack_from('<iq',raw,pos)
         require(file==0 and objects[ptr][0]==5,'invalid outfit PPtr')
-        (flower if id in FLOWER_IDS else selected).append((id,d['SerializedGuid'],path,ptr))
-    require(len(by_path)==12163 and len(selected)==5452,'item coverage')
+        if id in FLOWER_IDS:flower.append((id,d['SerializedGuid'],path,ptr))
+        else:selected.append((id,d['SerializedGuid'],path,ptr,regular))
+    require(len(by_path)==12163 and len(selected)==5963,'item coverage')
     def model(path):
         i,raw=objects[path];tt=types[i][1];end,parse=decoder(tt);d={};pos=0;j=1
         while j<len(tt):
             v,pos=parse(raw,j,pos);d[tt[j][2]]=v;j=end[j]
         require(pos==len(raw),'incomplete outfit/piece type');return d
-    parent_groups=defaultdict(set);rows=[]
-    for id,guid,path,ptr in selected:
-        _,(file,parent)=by_path[path];require(file==0,'external parent')
-        parent_id=by_path[parent][0] if parent else id
-        parent_groups[parent_id].add(ptr);rows.append((id,parent_id,fingerprint(guid)))
-    require(len(parent_groups)==438 and all(len(v)==1 for v in parent_groups.values())
-            and len(set(x[3] for x in selected))==438,'ambiguous outfit parent group')
+    # The exact managed Outfit PPtr, not a presumed parent-item equivalence,
+    # is the reference group. Preserve regular groups' established keys;
+    # additional direct outfits use their smallest member Item ID.
+    outfits=defaultdict(list);rows=[];group_paths={}
+    for id,guid,path,ptr,regular in selected:
+        outfits[ptr].append((id,guid,path,regular))
+    for ptr,members in outfits.items():
+        regular_parents=set()
+        for id,guid,path,regular in members:
+            if regular:
+                _,(file,parent)=by_path[path];require(file==0,'external parent')
+                regular_parents.add(by_path[parent][0] if parent else id)
+        require(len(regular_parents)<=1,'ambiguous regular group')
+        key=next(iter(regular_parents)) if regular_parents else min(id for id,_,_,_ in members)
+        require(key not in group_paths,'duplicate exact-outfit group key')
+        group_paths[key]=ptr
+        rows.extend((id,key,fingerprint(guid)) for id,guid,_,_ in members)
+    require(len(group_paths)==949,'exact outfit coverage')
     groups=[];all_pieces=set();piece_links=0
-    for parent,paths in sorted(parent_groups.items()):
-        d=model(next(iter(paths)));pieces=set()
+    for parent,ptr in sorted(group_paths.items()):
+        d=model(ptr);pieces=set()
         for field in ('Outfits','AlternateWaterOutfits'):
             for v in d[field]['common:49']:
                 file,q=v['OutfitPiece'];require(file==0 and objects[q][0]==6,'invalid piece PPtr')
@@ -145,9 +159,9 @@ def extract(source):
         keys=sorted(set(map(fingerprint,[d['SerializedGuid'],*pieces])))
         require(len(keys)==1+len(pieces),'intragroup collision')
         groups.append((parent,keys))
-    require(piece_links==913,'piece coverage')
+    require(piece_links==2049,'piece coverage')
     rows.sort()
-    require(len({x[0] for x in rows})==5452,'duplicate item ID')
+    require(len({x[0] for x in rows})==5963,'duplicate item ID')
     require(hashlib.sha256(b''.join(s.pack('<iiI',*r) for r in rows)).hexdigest()==ROW_HASH,'row fingerprint')
     require(hashlib.sha256(b''.join(s.pack('<iB',p,len(ks))+s.pack('<'+'I'*len(ks),*ks) for p,ks in groups)).hexdigest()==GROUP_HASH,'group fingerprint')
     flower_rows=[]
@@ -186,4 +200,4 @@ if __name__=='__main__':
     generated=render(*extract(args.source))
     if args.check:require(target.read_text()==generated,'checked-in clothing source differs')
     else:target.write_text(generated)
-    print('Verified 5452 ordinary clothing IDs, 438 outfits and 913 outfit/piece links')
+    print('Verified 5963 ordinary clothing IDs, 949 exact outfits and 2049 outfit/piece links')
