@@ -61,6 +61,7 @@ const FLOWER_CANDLE_SPECIES:&[(i32,i32,u32)]=&[
  (282150062,1554283135,0x9e5df1d5),
  (302852764,274491259,0xca25c0af),
  (371833720,203856820,0x3c73ca70),
+ (385493558,1466319046,0x96bb2942),
  (469825649,261557677,0x20986e93),
  (510997667,1561432864,0xdfbd6e75),
  (571502700,1968535430,0xcbeb8781),
@@ -76,12 +77,14 @@ const FLOWER_CANDLE_SPECIES:&[(i32,i32,u32)]=&[
  (1124067577,43114910,0x1adbe13e),
  (1137627495,203856820,0xcc0b5c0c),
  (1170993638,668399845,0xd9f7e275),
+ (1205053551,312661096,0xd363949b),
  (1221419078,1331175279,0x059a5d37),
  (1221620580,261557677,0xb722e11f),
  (1257505968,1223758923,0xfc1a4f58),
  (1283860765,1299466625,0x2f4a57eb),
  (1348991543,1583118562,0x5973d51a),
  (1367911683,462608550,0x5fcc113d),
+ (1377029192,312661096,0xb57cc893),
  (1395596528,1695731578,0x8effa38a),
  (1396910324,1386186941,0xed35296b),
  (1417320481,1695731578,0xf14ffd6b),
@@ -94,6 +97,7 @@ const FLOWER_CANDLE_SPECIES:&[(i32,i32,u32)]=&[
  (1924806266,183701770,0x12e0bd1f),
  (2056044876,1561432864,0xdec24cd8),
  (2057109142,1934826268,0x51cfe130),
+ (2062954152,1466319046,0xe0995427),
  (2103772766,1804880447,0x5ec8feff),
 ];
 fn flower_candle_source(item:i32)->Option<&'static (i32,i32,u32)>{
@@ -113,6 +117,7 @@ const FLOWER_CROWN_SPECIES:&[(i32,i32)]=&[
  (1001954252,275816250),
  (1021906725,203856820),
  (1048380205,183701770),
+ (1095918548,312661096),
  (1101281143,1299466625),
  (1120342995,43114910),
  (1177909060,1386186941),
@@ -120,6 +125,7 @@ const FLOWER_CROWN_SPECIES:&[(i32,i32)]=&[
  (1560032168,1223758923),
  (1607110454,1583118562),
  (1693955310,1934826268),
+ (1716283922,1466319046),
  (1783185900,228573412),
  (1861587997,1968535430),
  (1876646873,274491259),
@@ -156,6 +162,11 @@ const ABSENT_FLOWER_DEFAULTS:&[(i32,&[i32])]=&[
 // clears both pattern fields (IgnorePatternOnOutputItem=true).
 const FLOWER_CLOTHING_GENERIC:&[i32]=&[105502901,1110255162,1227385139];
 const FLOWER_CLOTHING_NO_PATTERN:i32=1482119840;
+// Switch v3.0.1: DLC output rows require an original owned witness.
+const OWNED_DLC_FLOWER_GENERIC:&[i32]=&[401804031,1776250358,1797473773];
+fn owned_dlc_flower_output(item:i32)->bool{
+ matches!(item,385493558|1205053551|1377029192|2062954152|1095918548|1716283922|401804031|1776250358|1797473773)
+}
 const ALL_UNRESTRICTED_FLOWER_PATTERNS:&[i32]=&[1,2,3,4,5,7,8,9,10,11,12,13,14,16];
 pub type BobaVariant=[i32;5];
 pub type WandVariant=[i32;2];
@@ -210,7 +221,7 @@ fn flower_item_patterns(item:i32,grow:i32)->Option<FlowerPolicy>{
   return FLOWER_SPECIES.iter().find(|(id,_)|*id==species).map(|&(_,p)|FlowerPolicy::ordinary(p))
  }
  if rare_candle_key(item).is_some(){Some(FlowerPolicy{patterns:RARE_CANDLE_PATTERNS,require_pattern:true})}
- else if FLOWER_CLOTHING_GENERIC.contains(&item){Some(FlowerPolicy::ordinary(ALL_UNRESTRICTED_FLOWER_PATTERNS))}
+ else if FLOWER_CLOTHING_GENERIC.contains(&item)||OWNED_DLC_FLOWER_GENERIC.contains(&item){Some(FlowerPolicy::ordinary(ALL_UNRESTRICTED_FLOWER_PATTERNS))}
  else if item==FLOWER_CLOTHING_NO_PATTERN||flower_candle_source(item).is_some(){Some(FlowerPolicy::ordinary(&[]))}else{None}
 }
 fn valid_flower_variant(policy:FlowerPolicy,v:FlowerVariant)->bool{
@@ -457,6 +468,7 @@ impl Editor {
   // Copied outfit/placement payload references also block clothing.
   if !FLOWER_SPECIES.iter().any(|&(id,_)|id==item)&&
    (self.slot.index.inventory_payload_refs_incomplete||self.slot.index.inventory_payload_item_refs.contains(&item)){return None}
+  if owned_dlc_flower_output(item)&&!self.is_emptyable_unique_family(row){return None}
   let patterns=flower_item_patterns(item,original[0])?;
   if !valid_flower_variant(patterns,original){return None}
   Some(patterns)
@@ -767,7 +779,7 @@ impl Editor {
    crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
   let Some(row)=self.slot.index.inventory.iter().find(|r|r.id==id)else{return Vec::new()};
   let Some(item)=row.item_id else{return Vec::new()};
-  if crate::inventory_source::flower_clothing_reference_keys(item).is_some()&&
+  if (crate::inventory_source::flower_clothing_reference_keys(item).is_some()||owned_dlc_flower_output(item))&&
    !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return Vec::new()}
   if !self.inventory_creation_payload_safe(item){return Vec::new()}
   let Some(original)=row.unique_data.and_then(flower_variant)else{return Vec::new()};
@@ -800,7 +812,7 @@ impl Editor {
   if !self.unique_quantity_ids.contains(&id){return None}
   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
   let item=row.item_id?;
-  if crate::inventory_source::flower_clothing_reference_keys(item).is_some()&&
+  if (crate::inventory_source::flower_clothing_reference_keys(item).is_some()||owned_dlc_flower_output(item))&&
    !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
   if !self.inventory_creation_payload_safe(item){return None}
   let (patterns,current,reserved)=self.flower_context(id)?;
@@ -851,7 +863,7 @@ impl Editor {
   matches!(grow,0|7)&&ABSENT_FLOWER_DEFAULTS.iter().any(|&(id,_)|id==item)
  }
  fn absent_flower_choices(&self,item_id:i32)->Vec<FlowerVariant>{
-  if self.inventory_item_rows.contains_key(&item_id)||
+  if owned_dlc_flower_output(item_id)||self.inventory_item_rows.contains_key(&item_id)||
    !self.inventory_creation_payload_safe(item_id)||
    self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item_id){return Vec::new()}
   if !crate::inventory_source::is_uncapped_required_unique_stack(item_id){return Vec::new()}
@@ -1048,7 +1060,7 @@ impl Editor {
  fn is_flower_quantity_definition(item:i32)->bool{
   FLOWER_SPECIES.iter().any(|(id,_)|*id==item)||
    FLOWER_CROWN_SPECIES.binary_search_by_key(&item,|&(id,_)|id).is_ok()||flower_candle_source(item).is_some()||rare_candle_key(item).is_some()||
-   FLOWER_CLOTHING_GENERIC.contains(&item)||item==FLOWER_CLOTHING_NO_PATTERN
+   FLOWER_CLOTHING_GENERIC.contains(&item)||OWNED_DLC_FLOWER_GENERIC.contains(&item)||item==FLOWER_CLOTHING_NO_PATTERN
  }
  // Full ordered source keys for native Cafe/Boba Equals. Read every
  // original field, never the truncated display projection. No new flavor
