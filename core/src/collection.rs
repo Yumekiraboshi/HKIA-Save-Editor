@@ -1454,7 +1454,7 @@ impl Editor {
  }
  fn absent_wand_source_allowed(&self,item:i32,source:i32)->bool{
   source>0&&crate::inventory_source::wand_source_style(item,source)==Some(0)&&
-   (crate::inventory_source::ordinary_creation_item(source)||self.has_owned_wand_source(source))
+   (crate::inventory_source::ordinary_bag_creation_item(source)||self.has_owned_wand_source(source))
  }
  // Reserve both original and effective identities, including original zero rows.
  // Any unverified original peer makes the whole source family unsafe to extend.
@@ -1552,8 +1552,8 @@ impl Editor {
   Self::furniture_wand_pairs(witness,&keys)
  }
  fn wand_source_candidates(&self,item:i32)->Vec<i32>{
-  let mut sources=crate::inventory_source::ordinary_creation_ids().filter(|&source|
-   crate::inventory_source::ordinary_creation_item(source)&&crate::inventory_source::wand_source_style(item,source)==Some(0)).collect::<Vec<_>>();
+  let mut sources=crate::inventory_source::ordinary_bag_creation_ids().filter(|&source|
+   crate::inventory_source::wand_source_style(item,source)==Some(0)).collect::<Vec<_>>();
   sources.extend(self.slot.index.inventory.iter().filter_map(|r|{
    let source=r.item_id?;
    (crate::inventory_source::wand_source_style(item,source)==Some(0)&&self.inventory_item_rows.get(&source)==Some(&1)&&

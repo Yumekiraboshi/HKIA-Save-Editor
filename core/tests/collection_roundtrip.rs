@@ -3752,6 +3752,7 @@ fn first_source_wands_require_explicit_source_witness_and_replay_it(){
   assert!(e.inventory_absent_wand_ids().contains(&(critter as i32,0)));
   let sources=e.inventory_absent_wand_sources(item_candidate);
   assert!(sources.contains(&stick)&&sources.windows(2).all(|w|w[0]<w[1]));
+  assert!(sources.contains(&15761463)); // unrestricted native bag definition outside the old creation slice
   assert_eq!(e.inventory_absent_wand_sources(critter_candidate),vec![bug]);
   assert_eq!(e.inventory_wand_creation_variants(item_candidate).len(),36);
   for bad in [[0,0],[stick,1],[1900000001,0]]{
@@ -3769,6 +3770,8 @@ fn first_source_wands_require_explicit_source_witness_and_replay_it(){
   assert!(e.create_inventory_wand_variant(item_candidate,[stick,0],[104,125],1).is_err());
   let alternate=e.create_inventory_wand_variant(item_candidate,[315822,0],[104,125],4).unwrap();
   assert!(matches!(e.inventory_unique_data(alternate),Some(U::WandAppearance{source_item_id:315822,style:0,magic:104,fleck:125,..})));
+  let common=e.create_inventory_wand_variant(item_candidate,[15761463,0],[104,125],5).unwrap();
+  assert!(matches!(e.inventory_unique_data(common),Some(U::WandAppearance{source_item_id:15761463,style:0,magic:104,fleck:125,source_tag:-1,..})));
   e.change_inventory_wand_variant(first,[104,125],[106,125]).unwrap();
   assert!(!e.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[104,125]));
   assert!(!e.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[106,125]));
@@ -3780,6 +3783,8 @@ fn first_source_wands_require_explicit_source_witness_and_replay_it(){
   assert!(saved.inventory().iter().any(|r|r.quantity==3&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(first)));
   assert!(saved.inventory().iter().any(|r|r.quantity==1&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(second)));
   assert!(saved.inventory().iter().any(|r|r.quantity==4&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(alternate)));
+  assert!(saved.inventory().iter().any(|r|r.quantity==5&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(common)));
+  assert!(!saved.inventory().iter().any(|r|r.item_id==15761463));
   assert!(!saved.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[106,125]));
   assert!(saved.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[104,125]));
  }
