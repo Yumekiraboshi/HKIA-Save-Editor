@@ -1,9 +1,11 @@
 /** Browser fixture for the real runtime modules and actual original textures.
  * No synthetic save decoder, no exported game captures, no production test UI. */
 import assert from 'node:assert/strict';
+import {wandNonSquareSmoke} from './wand-nonsquare-smoke.mjs';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 export async function wandRuntimeSmoke(browser,origin,base){
+ await wandNonSquareSmoke(browser,origin,base);
  const {outputFiles}=await build({
   stdin:{contents:"export * from './wand-runtime-art'; export * from './wand-original-subicon'; export {initialInventoryNativeArt} from './inventory-native-art'; export {loadChefOriginalOverlay} from './chef-runtime-art'; export {loadPaletteOriginalOverlay} from './palette-runtime-art'; export {loadIconPack} from './icon-packs'; export {loadInventoryNativeArt} from './inventory-native-art';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
   bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env.BASE_URL':JSON.stringify(base)}
