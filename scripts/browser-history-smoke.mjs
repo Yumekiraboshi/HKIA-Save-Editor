@@ -26,7 +26,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -50,6 +50,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const furnitureHomeObject=doc(32,arr([10],hash(10,0,0,0),[0],arr(doc(8,arr(arr(furnitureHome))))));
  const model=arr([0],cafeCreateInventory?[10]:(editableFlower||editableFurniture||paletteCreationInventory||bobaCreateInventory||wandEditInventory||nestedWandInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
+  ...(scaleInventory?[2064380032,1806222956,142358610].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
   ...(paletteRemovalInventory?[doc(10,arr([8],hash(1,2,3,4),arr(),arr(),arr(),hash(1,2,3,4),[0xc3],
    paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
    doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
@@ -2177,6 +2178,33 @@ async function inventoryFurnitureVariantEditSmoke(){
   console.log('CHROMIUM FURNITURE VARIANT EDIT PASS: native choices, CAS, draft, Undo/Redo and exported payload reparse');
  }finally{await context.close();}
 }
+async function inventoryIconScaleSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-inventory-icon-scale.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({scaleInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  for(const [id,scale] of [[2064380032,1],[1806222956,.8],[142358610,.6],[315822,1]]){
+   await search.fill(String(id));
+   await page.waitForFunction(s=>{
+    const cards=document.querySelectorAll('.inventory-card');
+    const art=cards[0]?.querySelector('.inventory-item-art');
+    return cards.length===1&&art?.style.getPropertyValue('--inventory-icon-scale')===String(s)&&!!art.querySelector('.item-sprite');
+   },scale,{timeout:30_000});
+   const art=page.locator('.inventory-card .inventory-item-art');
+   const size=await art.evaluate(el=>{
+    const image=el.querySelector('.item-sprite');
+    return {width:image.getBoundingClientRect().width,height:image.getBoundingClientRect().height,slot:el.getBoundingClientRect().width};
+   });
+   assert.ok(Math.abs(size.width-64*scale)<.05);assert.ok(Math.abs(size.height-64*scale)<.05);
+   assert.equal(size.slot,64);
+  }
+  console.log('CHROMIUM INVENTORY ICON SCALE PASS: three sizes of original fish and ordinary item');
+ }finally{await context.close();}
+}
 async function inventoryOriginalArtSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -2967,6 +2995,7 @@ async function run(){
  await ordinaryClothingRemovalSmoke();
  await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
+ await inventoryIconScaleSmoke();
  await inventoryDynamicFlowerArtSmoke();
  await inventoryFlowerGrowthDisplaySmoke();
  await flowerRuntimeCoverage(browser,origin,base);
