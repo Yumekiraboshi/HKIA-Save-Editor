@@ -475,11 +475,11 @@ impl Editor {
   if row.id==0||row.id>=PENDING_ITEM||row.unique_id!=Some(0)||row.unique_is_nil!=Some(true)||
    self.inventory_changes.get(&row.id).copied().or(row.quantity)?<=0||
    !row.fields.iter().all(Option::is_some)||
-   self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)&&r.id!=row.id).any(|r|!self.permits_separate_ordinary_base(r))||
    !crate::inventory_source::ordinary_creation_item(item)||!self.inventory_creation_payload_safe(item)||
    self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item){return None}
   let source=furniture_source::item(item)?;
   if source.is_home_layout||crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX){return None}
+  if self.inventory_item_rows.get(&item)!=Some(&1)&&self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)&&r.id!=row.id).any(|r|!self.permits_separate_ordinary_base(r)){return None}
   Some(item)
  }
  fn default_furniture_choices(&self,item_id:i32)->Vec<FurnitureVariant>{
@@ -502,12 +502,14 @@ impl Editor {
  // Both original and effective identities remain reserved across history.
  fn default_furniture_reserved(&self,source:&FurnitureItemSource)->Option<HashSet<FurnitureVariant>>{
   let mut reserved=HashSet::new();
+  if self.inventory_item_rows.contains_key(&source.item_id){
   for row in self.slot.index.inventory.iter().filter(|r|r.item_id==Some(source.item_id)){
    if row.unique_is_nil==Some(true){reserved.insert(furniture_key(source,[0;3])?);continue}
    if !self.permits_separate_ordinary_base(row){return None}
    for value in [row.unique_data,self.effective_unique(row)]{
     reserved.insert(furniture_key(source,furniture_variant(value?)?)?);
    }
+  }
   }
   for (&id,f) in &self.pending_furniture{
    if f.item_id!=source.item_id||!self.inventory_changes.contains_key(&id){continue}
