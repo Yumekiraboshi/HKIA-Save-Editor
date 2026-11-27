@@ -15,7 +15,7 @@
  import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,flowerGrowthKind,hasNativeFlowerArt,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
- import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
+ import {initialInventoryNativeArt,loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
  import {inventoryGroupLabel} from './inventory-native-category-copy';
  import {loadSourceItemNames,type SourceItemNames} from './source-names';
  import {decodeHistoryDetails,formatHistoryChange} from './history-details';
@@ -110,7 +110,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let paletteSlot=$state(0);
  let paletteDraft=$state<PaletteVariant|null>(null);
  let paletteDraftCreatable=$state(false);
- let inventoryNativeArt:InventoryNativeArt|null=$state(null);
+ let inventoryNativeArt:InventoryNativeArt=$state(initialInventoryNativeArt());
  let inventoryEditableOnly=$state(false);
  let inventoryShowZero=$state(false);
  let inventoryAddMode=$state(false);
