@@ -58,3 +58,18 @@ export async function loadAchievementCategoryAtlas(
  const image=await loadVerifiedAchievementImage(base,'achievement-category-atlas.webp',EXPECTED_ATLAS_SHA);
  return {...atlas,...image};
 }
+
+/** Native LocalAchievementDetailsViewModel uses alwaysShowIcon=true; the
+ * list uses false. Only the direct parent may supply a missing detail icon.
+ * Both verified atlases must be loaded before absence implies a null PPtr. */
+export function resolveAchievementDetailCategoryArt(
+ guid:string,version:string,categories:CategoryIconAtlas|null,
+ individual:import('./achievement-individual-icons').IndividualAchievementAtlas|null,
+ hierarchy:AchievementHierarchy|null
+):CategorySprite|undefined{
+ const own=categories?.bySaveGuid.get(guid);
+ if(own)return own;
+ if(version!=='3.0.1'||!categories||!individual||!hierarchy||individual.bySaveGuid.has(guid))return;
+ const parent=hierarchy.owner.get(guid);
+ return parent===undefined?undefined:categories.bySaveGuid.get(parent);
+}
