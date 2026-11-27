@@ -40,7 +40,7 @@ import {searchAchievementRows} from './achievement-search';
  import DynamicPaletteSprite from './DynamicPaletteSprite.svelte';
  import DynamicChefSprite from './DynamicChefSprite.svelte';
  import DynamicWandSprite from './DynamicWandSprite.svelte';
- import {selectWandOriginalCell} from './wand-original-subicon';
+ import {selectWandOriginalCell,selectInventoryWandOriginalCell} from './wand-original-subicon';
  import {inventoryWandAppearance,wandVariantOf,wandVariantLabel,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance} from './inventory-chef-display';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
@@ -432,7 +432,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(activeTool!=='inventory'||!snapshot||!catalog)return;
   const groups=new Set<string>();
   function addWandSource(id:number|undefined){
-   if(!id||id===1185152302)return;
+   if(!id||id===1185152302||inventoryNativeArt?.entries.has(id)||inventoryNativeArt?.withheld.has(id))return;
    const item=inventorySourceItems.get(id);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
@@ -488,6 +488,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function wandOriginalCell(id:number){
   if(inventoryNativeArt?.withheld.has(id))return undefined;
+  const native=selectInventoryWandOriginalCell(id,inventoryNativeArt?.entries);
+  if(native)return native;
   const group=inventorySourceItems.get(id)?.[3];
   return selectWandOriginalCell(id,group,group?inventoryIconPacks[group]?.entries:undefined);
  }
