@@ -25,12 +25,8 @@ try{
    const post={vignetteColor:[0,0,0],vignetteAspect:1,vignetteCenter:[.5,.5],vignetteIntensity,vignetteSmoothness,output,exposureMultiplier:1};
    for(const [label,plan] of [['identity',{atlas:identity,post}],['serialized-default',H.prepareDefaultFurnitureLdrDiagnostic(16,45,post)]]){
     const cpu=H.applyFurnitureLdrDiagnostic(frame,plan),gpu=H.applyFurnitureLdrGpuDiagnostic(frame,plan);
-    let maxRgbError=0;
-    for(let i=0;i<rgba.length;i++){
-     if(i%4===3){if(gpu.rgba[i]!==rgba[i])throw Error('ALPHA_CHANGED');}
-     else maxRgbError=Math.max(maxRgbError,Math.abs(cpu.rgba[i]-gpu.rgba[i]));
-    }
-    rows.push({label,output,vignetteIntensity,vignetteSmoothness,maxRgbError,changed:gpu.gradedChangedPixels,hidden:gpu.gradedHiddenChangedPixels,visible:gpu.visiblePixels,partial:gpu.partialAlphaPixels});
+    const parity=H.compareFurnitureLdrDiagnostic(cpu,gpu);
+    rows.push({label,output,vignetteIntensity,vignetteSmoothness,...parity,changed:gpu.gradedChangedPixels,hidden:gpu.gradedHiddenChangedPixels,visible:gpu.visiblePixels,partial:gpu.partialAlphaPixels});
    }
   }
   return rows;
