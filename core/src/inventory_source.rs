@@ -176,6 +176,13 @@ mod tests{
   }
   for id in [517031,315822,460708033,1900000001]{assert_eq!(ordinary_tradeable_nonclothing_reference(id),None);}
  }
+ #[test]fn expanded_customized_furniture_zero_uses_verified_nonlayout_intersection(){
+  let candidates=crate::furniture_source::ITEMS.iter().filter(|s|!s.is_home_layout);
+  assert_eq!(candidates.clone().filter(|s|ordinary_furniture_guid_fingerprint(s.item_id).is_some()).count(),295);
+  assert_eq!(candidates.filter(|s|ordinary_tradeable_nonclothing_reference(s.item_id).is_some()).count(),456);
+  assert!(ordinary_furniture_guid_fingerprint(32709745).is_none());
+  assert!(ordinary_tradeable_nonclothing_reference(32709745).is_some());
+ }
  #[test]fn limits_and_required_unique_are_not_guessed(){
   assert_eq!(ordinary_quantity_limit(315822),Some(i32::MAX));
   assert_eq!(ordinary_quantity_limit(413462588),Some(3));
