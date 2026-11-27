@@ -427,8 +427,18 @@ pub(crate) fn ordinary_clothing_reference_keys(item:i32)->Option<(u32,&'static [
  let (_,keys)=CLOTHING_REFERENCE_GROUPS[CLOTHING_REFERENCE_GROUPS.binary_search_by_key(&parent,|r|r.0).ok()?];
  Some((key,keys))
 }
+// Exact item/outfit/normal and alternate-water piece fingerprints from
+// Switch v3.0.1. These are denial keys, not evidence of DLC rights.
+const OWNED_DLC_FLOWER_CLOTHING_REFERENCE_KEYS:&[(i32,&[u32])]=&[
+ (401804031,&[0x40038ae8,0xa65c589d,0xe6988039]),
+ (1095918548,&[0x42b06f44,0x5bb50645,0xba86ea4b]),
+ (1716283922,&[0x4859abad,0xc57e16e9,0xcc268acd]),
+ (1776250358,&[0x32734a3f,0x70acf18b,0x880fe67e,0xb4c5fc8e,0xd14ee2f4]),
+ (1797473773,&[0x1996d2bb,0x4240566e,0x6f08b35a]),
+];
 pub(crate) fn flower_clothing_reference_keys(item:i32)->Option<&'static [u32]>{
  FLOWER_CLOTHING_REFERENCE_KEYS.binary_search_by_key(&item,|r|r.0).ok().map(|i|FLOWER_CLOTHING_REFERENCE_KEYS[i].1)
+ .or_else(||OWNED_DLC_FLOWER_CLOTHING_REFERENCE_KEYS.binary_search_by_key(&item,|r|r.0).ok().map(|i|OWNED_DLC_FLOWER_CLOTHING_REFERENCE_KEYS[i].1))
 }
 #[cfg(test)]
 mod clothing_reference_tests{
