@@ -5,8 +5,8 @@
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
- import {selectMatchingInventoryRows} from './inventory-selection';
- import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy,inventoryDeleteCopy} from './inventory-copy';
+ import {selectMatchingInventoryRows,deselectMatchingInventoryRows} from './inventory-selection';
+ import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy,inventoryDeselectVisibleCopy,inventoryDeleteCopy} from './inventory-copy';
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,type FurnitureDisplay} from './inventory-furniture-display';
@@ -986,6 +986,11 @@ import {verifiedFloorplanName} from './floorplan-names';
  // Select matching editable records independently of incremental rendering.
  // Explicit selections in other categories/searches remain selected.
  const inventorySelectableMatching=$derived(inventoryRows.some(row=>row.editable&&!inventoryBatchSelected.has(row.documentId)));
+ const inventoryDeselectableMatching=$derived(inventoryRows.some(row=>inventoryBatchSelected.has(row.documentId)));
+ function deselectMatchingInventoryBatch(){
+  if(!snapshot||busy||!inventoryBatchMode)return;
+  inventoryBatchSelected=deselectMatchingInventoryRows(inventoryRows,inventoryBatchSelected);
+ }
  function selectMatchingInventoryBatch(){
   if(!snapshot||busy||!inventoryBatchMode)return;
   inventoryBatchSelected=selectMatchingInventoryRows(inventoryRows,inventoryBatchSelected,snapshot.inventoryBatchLimit);
@@ -1481,6 +1486,9 @@ import {verifiedFloorplanName} from './floorplan-names';
      <form class="inventory-batch-form" onsubmit={e=>void applyInventoryBatch(e)}>
       <button type="button" class="inventory-editable-filter inventory-select-visible" disabled={busy||inventoryBatchSelected.size>=snapshot.inventoryBatchLimit||!inventorySelectableMatching} title={inventorySelectVisibleCopy(locale)} aria-label={inventorySelectVisibleCopy(locale)} onclick={selectMatchingInventoryBatch}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 12 3 3 7-7"/></svg>
+       </button>
+       <button type="button" class="inventory-editable-filter inventory-deselect-visible" disabled={busy||!inventoryDeselectableMatching} title={inventoryDeselectVisibleCopy(locale)} aria-label={inventoryDeselectVisibleCopy(locale)} onclick={deselectMatchingInventoryBatch}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 12h10"/></svg>
        </button>
        <span class="inventory-total" aria-live="polite">{inventoryBatchSelected.size.toLocaleString(locale)} / {snapshot.inventoryBatchLimit.toLocaleString(locale)}</span>
       <input type="number" min={inventoryBatchMinimum} max={inventoryBatchMaximum} step="1" required bind:value={inventoryBatchQuantity} placeholder={iCopy.quantity} aria-label={iCopy.quantity} disabled={busy}/>
