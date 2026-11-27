@@ -3,7 +3,7 @@ import type {Rgba} from './dynamic-sprite-color';
 import type {PixelBuffer,Rect,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
 import {originalWandOverlay,originalWandCellKey,type WandOriginalCell} from './wand-original-subicon';
-import {loadSampledWandOverlay,WAND_CANDIDATE_SOURCE_SHA} from './wand-candidate-source';
+import {loadSampledWandOverlay} from './wand-candidate-source';
 import {hasNativePlaceholderArt,loadNativePlaceholderTexture,NATIVE_PLACEHOLDER_SPRITE,PLACEHOLDER_ASSET} from './native-placeholder-art';
 
 const ROOT=import.meta.env.BASE_URL+'dynamic-wand-art/';
@@ -136,7 +136,7 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
     // read-only artwork, not permission to create or edit a wand variant.
     const direct=await loadSampledWandOverlay(appearance.sourceItemId,transform);
     if(direct){
-     sourceHash=WAND_CANDIDATE_SOURCE_SHA;spritePathId=direct.spritePathId;overlay=direct.overlay;
+     sourceHash=direct.sourceHash;spritePathId=direct.spritePathId;overlay=direct.overlay;
     }else{
      // Every shape can reuse the independently selected original cell.
      // The existing cell selector excludes non-square/withheld sources;
