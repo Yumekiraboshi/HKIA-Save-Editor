@@ -1341,22 +1341,24 @@ async function inventoryAbsentFlowerCreationSmoke(){
   await card.locator('.inventory-unique-edit-button').click();
   const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');
   await dialog.waitFor();
-  assert.equal(await dialog.locator('select option').count(),3);
   assert.equal(await dialog.locator('button[type="submit"]').count(),0);
+  const firstPattern=await dialog.locator('option[data-flower-variant="6,2,1,16"]').getAttribute('value');assert.ok(firstPattern!==null);
+  await dialog.locator('select').selectOption(firstPattern);
+  const reset=dialog.locator('.inventory-flower-reset:not([disabled])');
+  await reset.waitFor();
+  await reset.click();
+  await dialog.locator('.inventory-flower-reset').waitFor({state:'hidden'});
+  const restoredPattern=await dialog.locator('option[data-flower-variant="6,2,1,16"]').getAttribute('value');
+  assert.ok(restoredPattern!==null);
+  await dialog.locator('select').selectOption(restoredPattern);
+  await reset.waitFor();
   await dialog.locator('.inventory-create-flower:not([disabled])').click();
   await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();
   await search.fill('43114910');
   await card.locator('input[name="quantity"]').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'1');
-  // Customize immediately, without a save/export round trip.
-  await card.locator('.inventory-unique-edit-button').click();
-  await dialog.waitFor();
-  const pattern=dialog.locator('select optgroup').nth(1).locator('option').first();
-  const value=await pattern.getAttribute('value');assert.ok(value!==null);
-  await dialog.locator('select').selectOption(value);
-  await dialog.locator('button[type="submit"]').click();
-  await dialog.waitFor({state:'hidden'});
+  // The first stack already has the selected pattern, without an intermediate edit.
   await card.locator('.inventory-unique-edit-button:not([disabled])').waitFor();
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
   const color=await dialog.locator('select optgroup').first().locator('option').first().getAttribute('value');assert.ok(color!==null);
@@ -1399,8 +1401,8 @@ async function inventoryFlowerClothingCreationSmoke(){
   await card.locator('.inventory-unique-edit-button').click();
   const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');
   await dialog.waitFor();
-  assert.equal(await dialog.locator('select option').count(),3);
-  await dialog.locator('select').selectOption('1');
+  const crownColor=await dialog.locator('option[data-flower-variant="6,5,0,0"]').getAttribute('value');assert.ok(crownColor!==null);
+  await dialog.locator('select').selectOption(crownColor);
   await dialog.locator('.inventory-create-flower:not([disabled])').click();
   await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();

@@ -753,8 +753,11 @@ import {verifiedFloorplanName} from './floorplan-names';
   try{
    const options=await requestFlowerCreationVariants(row.documentId);
    if(!snapshot||snapshot.revision!==revision||!options.length)return;
-   flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before:[0,0,0,0],options,creationOptions:options,absent:true};
-   flowerSelection=0;flowerDraft=[...options[0]];flowerDraftCreatable=true;variantAddQuantity=1;await tick();
+   const before=options[0];
+   const preview=await requestFlowerPreview(row.documentId,before,before);
+   if(!snapshot||snapshot.revision!==revision)return;
+   flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:preview.options,creationOptions:options,absent:true};
+   flowerSelection=-1;flowerDraft=[...before];flowerDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
    if(flowerDialogEl&&!flowerDialogEl.open)flowerDialogEl.showModal();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -917,12 +920,11 @@ import {verifiedFloorplanName} from './floorplan-names';
   const edit=flowerEdit;
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
   const next=edit.options[index];if(!next)return;
-  if(edit.absent){flowerDraft=[...next];flowerDraftCreatable=true;return}
   await refreshFlowerDraft(next);
  }
  async function refreshFlowerDraft(next:FlowerVariant){
   const edit=flowerEdit;
-  if(!snapshot||busy||!edit||edit.absent||snapshot.revision!==edit.revision)return;
+  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
   busy=true;error='';
   try{
    const preview=await requestFlowerPreview(edit.documentId,edit.before,next);
@@ -1993,7 +1995,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    {@const changed=current.some((n,i)=>n!==edit.before[i])}
    <form class="date-dialog-inner" onsubmit={e=>{if(edit.absent){e.preventDefault();void addInventoryFlowerVariant()}else void applyInventoryFlowerVariant(e)}}>
     <div class="date-dialog-heading">
-     <h2 id="flower-editor-title">{inventoryName(edit.itemId)}{#if flowerGrowthKind(edit.itemId,{growState:(edit.absent?edit.options[0]?.[0]:edit.before[0])??255,baseColor:0,pattern:0,patternColor:0})} · {flowerGrowthLabel(locale,flowerGrowthKind(edit.itemId,{growState:(edit.absent?edit.options[0]?.[0]:edit.before[0])??255,baseColor:0,pattern:0,patternColor:0}))}{/if}</h2>
+     <h2 id="flower-editor-title">{inventoryName(edit.itemId)}{#if flowerGrowthKind(edit.itemId,{growState:edit.before[0],baseColor:0,pattern:0,patternColor:0})} · {flowerGrowthLabel(locale,flowerGrowthKind(edit.itemId,{growState:edit.before[0],baseColor:0,pattern:0,patternColor:0}))}{/if}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFlowerEditor}>×</button>
     </div>
     <div class="date-dialog-item">
@@ -2002,28 +2004,24 @@ import {verifiedFloorplanName} from './floorplan-names';
        <DynamicFlowerSprite itemId={edit.itemId} flower={{growState:current[0],baseColor:current[1],pattern:current[2],patternColor:current[3]}} definitions={flowerDefinitions} fallback={inventoryNativeArt?.entries.get(edit.itemId)}/>
       {/if}
      </span>
-     <div class="date-dialog-detail"><strong>{flowerVariantName(current)}</strong>{#if changed&&!edit.absent}<button type="button" class="inventory-flower-reset" disabled={busy} aria-label={flowerVariantName(edit.before)} title={flowerVariantName(edit.before)} onclick={()=>void refreshFlowerDraft(edit.before)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>{/if}</div>
+     <div class="date-dialog-detail"><strong>{flowerVariantName(current)}</strong>{#if changed}<button type="button" class="inventory-flower-reset" disabled={busy} aria-label={flowerVariantName(edit.before)} title={flowerVariantName(edit.before)} onclick={()=>void refreshFlowerDraft(edit.before)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>{/if}</div>
     </div>
     {#if edit.options.length}
      <label class="date-dialog-field">
       <span>{flowerCopy.title}</span>
       <select bind:value={flowerSelection} onchange={e=>void selectFlowerDraft(Number(e.currentTarget.value))} disabled={busy}>
-       {#if edit.absent}
-        {#each edit.options as v,i}<option value={i}>{flowerVariantName(v)}</option>{/each}
-       {:else}
        <option value={-1} disabled>{flowerVariantName(current)}</option>
        {#each [flowerCopy.color,flowerCopy.pattern,flowerCopy.accent] as group, g}
         {#if edit.options.some(v=>flowerOptionGroup(current,v)===g)}
          <optgroup label={group}>
           {#each edit.options as v,i}
            {#if flowerOptionGroup(current,v)===g}
-            <option value={i}>{flowerVariantName(v)}</option>
+            <option value={i} data-flower-variant={v.join(',')}>{flowerVariantName(v)}</option>
            {/if}
           {/each}
          </optgroup>
         {/if}
        {/each}
-       {/if}
       </select>
      </label>
     {:else}
@@ -2035,6 +2033,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
      </label>
     {/if}
+    {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFlowerEditor}>{copy.cancel}</button>
      {#if edit.creationOptions.length||flowerDraftCreatable}
