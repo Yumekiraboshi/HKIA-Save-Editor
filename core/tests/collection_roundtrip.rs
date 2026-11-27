@@ -1916,14 +1916,14 @@ fn create_absent_material_stacks_uses_native_ids_and_scoped_history(){
  for zipped in [false,true]{
   let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();
-  let candidates=e.inventory_creatable();assert_eq!(candidates.len(),7601);
+  let candidates=e.inventory_creatable();assert_eq!(candidates.len(),7607);
   assert!(candidates.iter().any(|r|r.item_id==460708033));
   let apple=candidates.iter().find(|r|r.item_id==1877756618).unwrap().document_id;
   let flour=candidates.iter().find(|r|r.item_id==627013240).unwrap().document_id;
   assert!(e.change_inventory_quantities(&[(apple,0,6),(u32::MAX,0,7)]).is_err());
   assert!(e.inventory().is_empty());assert!(!e.dirty());
   e.change_inventory_quantities(&[(apple,0,6),(flour,0,9)]).unwrap();
-  assert_eq!(e.inventory().len(),2);assert_eq!(e.inventory_creatable().len(),7599);
+  assert_eq!(e.inventory().len(),2);assert_eq!(e.inventory_creatable().len(),7605);
   assert!(e.change_inventory_quantity(apple,0,1).is_err());
   assert_eq!(e.inventory_unique_rows().count(),2);
   let checkpoint=e.history_checkpoint().unwrap();
@@ -1932,14 +1932,14 @@ fn create_absent_material_stacks_uses_native_ids_and_scoped_history(){
   assert!(e.undo_scope(Inventory));assert!(e.inventory().is_empty());
   assert!(!e.dirty());assert!(e.redo_scope(Inventory));
   e.change_inventory_quantity(apple,6,0).unwrap();
-  assert_eq!(e.inventory().len(),1);assert_eq!(e.inventory_creatable().len(),7600);
+  assert_eq!(e.inventory().len(),1);assert_eq!(e.inventory_creatable().len(),7606);
   assert!(e.undo_scope(Inventory));
   let exported=e.export().unwrap();let reopened=Editor::open(exported).unwrap();
   let rows=reopened.inventory();assert_eq!(rows.len(),2);
   assert_eq!((rows[0].document_id,rows[0].item_id,rows[0].quantity),(5,627013240,9));
   assert_eq!((rows[1].document_id,rows[1].item_id,rows[1].quantity),(6,1877756618,6));
   assert_eq!(reopened.inventory_original_unique_payload(5),Some([0xc0].as_slice()));
-  assert_eq!(reopened.inventory_creatable().len(),7599);assert_eq!(reopened.achievements(),e.achievements());assert_eq!(reopened.entries(),e.entries());
+  assert_eq!(reopened.inventory_creatable().len(),7605);assert_eq!(reopened.achievements(),e.achievements());assert_eq!(reopened.entries(),e.entries());
  }
 }
 
@@ -2032,7 +2032,7 @@ fn ordinary_furniture_and_clothing_creation_preserves_other_data_and_gates_last_
   let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw.clone()};
   let mut editor=Editor::open(input.clone()).unwrap();
   let candidates=editor.inventory_creatable();
-  assert_eq!(candidates.len(),7601);
+  assert_eq!(candidates.len(),7607);
   let furniture=candidates.iter().find(|r|r.item_id==286009791).unwrap().document_id;
   let clothing=candidates.iter().find(|r|r.item_id==315822).unwrap().document_id;
   assert!(candidates.iter().any(|r|r.item_id==517031));
@@ -4233,7 +4233,7 @@ fn first_unowned_currency_creation_roundtrip_and_atomic_rejection(){
   let mut e=Editor::open(input.clone()).unwrap();
   let candidates=e.inventory_creatable();
   let changes:Vec<_>=ids.iter().map(|id|(candidates.iter().find(|r|r.item_id==*id).unwrap().document_id,0,15)).collect();
-  for denied in [1205887707u32,615026760,709633628,413462588]{
+  for denied in [1205887707u32,615026760,709633628,1610049001]{
    let mut bad=changes.clone();bad.push((0x80000000|denied,0,1));
    assert!(e.change_inventory_quantities(&bad).is_err());assert!(!e.dirty());
   }
@@ -5369,7 +5369,7 @@ fn ordinary_cosmetic_quest_rarity_and_capped_effect_items_share_native_bag_rules
  assert_eq!(e.inventory()[0].quantity_minimum,1);
  assert!(e.change_inventory_quantity(4,3,0).is_err());assert!(!e.dirty());
  let mut empty=Editor::open(slot("3.0.1")).unwrap();
- for item in [restricted,413462588]{
+ for item in [restricted,1610049001]{
   assert!(empty.change_inventory_quantity((1u32<<31)|item,0,1).is_err())
  }
  // New unrestricted cosmetic rows follow the same common membership path.
@@ -5593,7 +5593,7 @@ fn complete_nil_definition_catalog_positive_bounds_and_all_ordinary_additions(){
   if !edits.is_empty(){e.change_inventory_quantities(&edits).unwrap();assert_eq!(Editor::open(e.export().unwrap()).unwrap().inventory(),e.inventory());}
  }
  let raw=slot("3.0.1");let e=Editor::open(raw.clone()).unwrap();
- let all=e.inventory_creatable();assert_eq!(all.len(),7601);
+ let all=e.inventory_creatable();assert_eq!(all.len(),7607);
  let expected:std::collections::HashSet<_>=defs.iter().filter(|r|r.2&4!=0).map(|r|r.0).collect();
  assert_eq!(all.iter().map(|r|r.item_id).collect::<std::collections::HashSet<_>>(),expected);
  for chunk in all.chunks(200){
@@ -5723,5 +5723,33 @@ fn complete_event_pickup_ingredient_class_roundtrip_without_other_state(){
   assert_eq!(saved.entries(),e.entries());assert_eq!(saved.achievements(),e.achievements());
   let zero:Vec<_>=rows.iter().map(|r|(r.document_id,25,0)).collect();saved.change_inventory_quantities(&zero).unwrap();
   let reopened=Editor::open(saved.export().unwrap()).unwrap();assert!(reopened.inventory().iter().all(|r|r.quantity==0&&r.editable));
+ }
+}
+
+#[test]
+fn all_unrestricted_finite_reset_consumables_share_bag_creation_and_cap(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let ids=[413462588,1254892985,1434684945,1459854039,1810077468,2131984752,1093982586,1763678003];
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let candidates=e.inventory_creatable();
+  let edits:Vec<_>=ids.iter().map(|id|{let row=candidates.iter().find(|r|r.item_id==*id).unwrap();assert_eq!(row.quantity_limit,Some(3));(row.document_id,0,3)}).collect();
+  let mut invalid=edits.clone();invalid[0].2=4;
+  assert!(e.change_inventory_quantities(&invalid).is_err());assert!(!e.dirty());
+  for id in [65594842,1144225647,1375142756,120261453,1610049001,615026760]{
+   let mut invalid=edits.clone();invalid.push((0x80000000|id,0,1));
+   assert!(e.change_inventory_quantities(&invalid).is_err());assert!(!e.dirty());
+  }
+  e.change_inventory_quantities(&edits).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert!(restored.inventory().is_empty());assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();let rows=saved.inventory();
+  assert_eq!(rows.len(),ids.len());assert!(rows.iter().all(|r|ids.contains(&r.item_id)&&r.quantity==3&&r.quantity_minimum==0&&r.quantity_limit==Some(3)));
+  assert_eq!(saved.entries(),e.entries());assert_eq!(saved.achievements(),e.achievements());
+  let zero:Vec<_>=rows.iter().map(|r|(r.document_id,3,0)).collect();saved.change_inventory_quantities(&zero).unwrap();
+  let mut reopened=Editor::open(saved.export().unwrap()).unwrap();
+  let refill:Vec<_>=reopened.inventory().iter().map(|r|(r.document_id,0,3)).collect();reopened.change_inventory_quantities(&refill).unwrap();
+  assert_eq!(Editor::open(reopened.export().unwrap()).unwrap().inventory(),rows);
  }
 }
