@@ -452,8 +452,9 @@ async function inventoryNestedWandSmoke(){
   const pair=dialog.locator('select[name="wand-variant"]');
   const choice=await pair.locator('option[data-wand-variant="106:127"]').getAttribute('value');assert.ok(choice!==null);
   await pair.selectOption(choice);
-  await materials.locator('option[data-wand-material="502:3:0"]').waitFor();
-  const combinedChoice=await materials.locator('option[data-wand-material="502:3:0"]').getAttribute('value');assert.ok(combinedChoice!==null);
+  const combinedOption=dialog.locator('select[name="wand-nested-material"]:not([disabled]) option[data-wand-material="502:3:0"]');
+  await combinedOption.waitFor({state:'attached'});
+  const combinedChoice=await combinedOption.getAttribute('value');assert.ok(combinedChoice!==null);
   await materials.selectOption(combinedChoice);
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-wand:not([disabled])').click();await dialog.waitFor({state:'hidden'});

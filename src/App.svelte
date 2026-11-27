@@ -863,10 +863,10 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(wandDialogEl&&!wandDialogEl.open)wandDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
  }
- async function chooseWandPair(){
+ async function chooseWandPair(value:string){
   const edit=wandEdit;if(!edit?.nestedBefore){wandMaterialSelection=-1;return}
   if(busy||!snapshot||snapshot.revision!==edit.revision)return;
-  const pair=edit.options[wandSelection]??edit.before;
+  const pair=edit.options[Number(value)]??edit.before;
   const previous=edit.nestedOptions?.[wandMaterialSelection]??edit.nestedBefore.slice(3);
   busy=true;error='';
   try{
@@ -1933,7 +1933,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <label class="date-dialog-field">
        <span>{furnitureCopy.material}</span>
        <select name="wand-nested-material" bind:value={wandMaterialSelection} disabled={busy}>
-        <option value={-1}>{furnitureVariantTitle(furnitureDisplay,edit.nestedBefore[0],edit.nestedBefore.slice(3),furnitureCopy.defaultMaterial)}</option>
+        <option value={-1}>{wandSelection<0?furnitureVariantTitle(furnitureDisplay,edit.nestedBefore[0],edit.nestedBefore.slice(3),furnitureCopy.defaultMaterial):'—'}</option>
         {#each edit.nestedOptions as variant,i}
          <option value={i} data-wand-material={variant.join(':')}>{furnitureVariantTitle(furnitureDisplay,edit.nestedBefore[0],variant,furnitureCopy.defaultMaterial)}</option>
         {/each}
@@ -1955,7 +1955,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {/if}
     <label class="date-dialog-field">
      <span>{edit.absent?inventoryName(edit.itemId):wandName(edit.before)}</span>
-     <select name="wand-variant" aria-label={inventoryName(edit.itemId)} bind:value={wandSelection} onchange={()=>void chooseWandPair()} disabled={busy||Boolean(edit.sourceChoices&&!edit.appearance.sourceItemId)}>
+     <select name="wand-variant" aria-label={inventoryName(edit.itemId)} bind:value={wandSelection} onchange={e=>void chooseWandPair(e.currentTarget.value)} disabled={busy||Boolean(edit.sourceChoices&&!edit.appearance.sourceItemId)}>
       {#if !edit.absent&&edit.appearance.sourceItemId===edit.beforeSource}<option value={-1}>{wandName(edit.before)}</option>{/if}
       {#each edit.options as option,i}<option value={i} data-wand-variant={option.join(':')}>{wandName(option)}</option>{/each}
      </select>

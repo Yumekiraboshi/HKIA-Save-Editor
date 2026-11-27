@@ -1064,7 +1064,7 @@ pub extern "C" fn hkia_inventory_wand_nested_material_variants(id:u32,creation:u
   let rows=if magic==0&&fleck==0{
    if creation==0{e.inventory_wand_nested_material_variants(id)}else{e.inventory_wand_nested_creation_material_variants(id)}
   }else{e.inventory_wand_nested_materials_for_pair(id,[magic,fleck],creation==1)};
-  if rows.len()>2635{return 1}
+  if rows.len()>2634{return 1}
   let mut out=Vec::with_capacity(4+rows.len()*12);out.extend((rows.len() as u32).to_le_bytes());
   for row in rows{for word in row{out.extend(word.to_le_bytes());}}a.reply=out;0
  })

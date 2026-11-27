@@ -1406,6 +1406,9 @@ impl Editor {
   let Some((item,original,current,reserved))=self.wand_full_context(id)else{return Vec::new()};
   if Self::wand_materials(current)==WAND_NIL_MATERIALS||!self.wand_source_edit_safe(id,item)||
    !crate::inventory_source::magic_wand_choices(pair)||(creation&&!self.wand_creation_gate(id,item)){return Vec::new()}
+  Self::wand_nested_material_options(item,original,current,&reserved,pair,creation)
+ }
+ fn wand_nested_material_options(item:i32,original:WandData,current:WandData,reserved:&HashSet<WandData>,pair:WandVariant,creation:bool)->Vec<FurnitureVariant>{
   let Some(source)=Self::wand_material_source(item,current[0])else{return Vec::new()};
   let mut out=Vec::new();let mut seen=HashSet::new();let old=Self::wand_key(item,current);
   let original_key=Self::wand_key(item,original);
@@ -1431,11 +1434,12 @@ impl Editor {
    self.inventory_wand_nested_materials_for_pair(id,Self::wand_pair(current),true))
  }
  pub fn inventory_wand_nested_pairs(&self,id:u32,creation:bool)->Vec<WandVariant>{
-  let Some((_,_,current,_))=self.wand_full_context(id)else{return Vec::new()};
-  if Self::wand_materials(current)==WAND_NIL_MATERIALS{return Vec::new()}
+  let Some((item,original,current,reserved))=self.wand_full_context(id)else{return Vec::new()};
+  if Self::wand_materials(current)==WAND_NIL_MATERIALS||!self.wand_source_edit_safe(id,item)||
+   (creation&&!self.wand_creation_gate(id,item)){return Vec::new()}
   crate::inventory_source::WAND_MAGIC.iter().flat_map(|&(magic,_)|
    crate::inventory_source::WAND_FLECK.iter().map(move |&(fleck,_)|[magic,fleck]))
-   .filter(|&pair|pair!=Self::wand_pair(current)&&!self.inventory_wand_nested_materials_for_pair(id,pair,creation).is_empty()).collect()
+   .filter(|&pair|pair!=Self::wand_pair(current)&&!Self::wand_nested_material_options(item,original,current,&reserved,pair,creation).is_empty()).collect()
  }
  pub fn change_inventory_wand_nested(&mut self,id:u32,expected:WandData,next:WandData)->Result<(),Error>{
   let (item,original,current,reserved)=self.wand_full_context(id).ok_or(Error::Schema)?;
