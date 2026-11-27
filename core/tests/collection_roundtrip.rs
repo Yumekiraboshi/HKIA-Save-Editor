@@ -3580,12 +3580,12 @@ fn furniture_multislot_creation_and_edit_are_atomic(){
 #[test]
 fn furniture_draft_preview_recomputes_material_choices_against_complete_identity(){
  use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
- let before=[13,2,0];let peer=[502,2,0];let intermediate=[13,3,0];let target=[502,3,0];
+ let before:[i32;3]=[13,2,0];let peer:[i32;3]=[502,2,0];let intermediate=[13,3,0];let target=[502,3,0];
  for zipped in [false,true]{
   // Reserve both persisted document IDs before requesting a new one.
   let mut payload=synthetic_payload("3.0.1");payload[2]=5;payload[3]=0x97;
   for (id,uid,quantity,variant) in [(4,11,93,before),(5,12,2,peer)]{
-   payload.extend(doc(1,arr(vec![u(id),u(61381969),u(uid),u(quantity),furniture_payload(variant)])));
+   payload.extend(doc(1,arr(vec![u(id),u(61381969),u(uid),u(quantity),furniture_payload(variant.map(|n|n as u32))])));
   }
   let raw=slot_from_payload("3.0.1",payload);let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();
