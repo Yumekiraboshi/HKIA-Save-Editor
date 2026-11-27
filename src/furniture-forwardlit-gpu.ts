@@ -146,7 +146,7 @@ const finite=(a:readonly number[],length:number)=>a.length===length&&a.every(Num
 export function validateFurnitureForwardInputs(s:FurnitureForwardScene,m:FurnitureForwardMaterial){
  if(m.rim!==undefined)validateFurnitureRim(m.rim);
  if(m.glass!==undefined){const g=m.glass;if(!g||m.customLit||m.rim||m.worldUV||m.useBaseMapMask||!finite(g.rim,4)||![g.roughness,g.metallic,g.lightingClamp].every(Number.isFinite)||g.roughness<0||g.roughness>1||g.metallic<0||g.metallic>1||g.lightingClamp<0)throw Error('FURNITURE_GLASS_INPUT');}
- if(m.customLit!==undefined&&(!m.customLit||m.customLit.materialAlpha!==0||m.baseColor[3]!==1||m.worldUV||m.useBaseMapMask)||m.useComboEmissionMask!==undefined&&typeof m.useComboEmissionMask!=='boolean')throw Error('FURNITURE_FORWARD_INPUT');
+ if(m.customLit!==undefined&&(!m.customLit||![0,1].includes(m.customLit.materialAlpha)||m.baseColor[3]!==1||m.worldUV||m.useBaseMapMask)||m.useComboEmissionMask!==undefined&&typeof m.useComboEmissionMask!=='boolean')throw Error('FURNITURE_FORWARD_INPUT');
  if(!finite(s.model,16)||!finite(s.viewProjection,16)||!finite(s.normalMatrix,9)||![1,-1].includes(s.tangentParity)||
  !sceneVectors.every(k=>finite(s[k],3))||!sceneScalars.every(k=>Number.isFinite(s[k]))||
  Math.abs(Math.hypot(...s.mainLightDirection)-1)>1e-5||s.reflectionBlendWeight<0||s.reflectionBlendWeight>1||

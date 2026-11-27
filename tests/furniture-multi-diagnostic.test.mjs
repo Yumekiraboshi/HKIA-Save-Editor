@@ -185,3 +185,25 @@ test('exact null BaseMap may alias selected original pattern only when base cont
  m.textures._BaseMap.texture=null;d.additionalPatterns.rows=[];d.patterns.rows=[];
  assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/PATTERN_UNAVAILABLE/);
 });
+
+test('single source-pinned transparent CustomLit range is permitted only after verified opaque ranges',()=>{
+ const d=sources(),id=90163601,g=d.geometry.rows.find(x=>x.itemId===id),b=d.base.rows.find(x=>x.itemId===id),n=g.nodes.find(x=>x.rendererPathId&&!x.slot);
+ const bind=b.bindings.find(x=>x[0]===n.rendererPathId),old=d.base.materials[bind[1]];
+ const cab='CAB-6c0f768e2ed4ce159a88e4d10c87130c',pid='-532235555454519552',key=cab+':'+pid,ref='1:'+pid,shader='CAB-46b8f8fe122147493b3113f7c1c8cd0f:-6681258383375895387';
+ // Synthetic geometry binding to exercise the real source gate, not original geometry evidence.
+ n.material=ref;g.materials[ref]={externalCab:'archive:/'+cab+'/'+cab,pathId:pid};bind[1]=key;
+ const link=texture=>({texture,scale:[1,1],offset:[0,0]});
+ d.base.materials[key]={...old,shader,objectSha256:'c999d000910a1cd7a947323d5d55ba205a3365cbac45d740927a7da57edc9210',renderQueue:3000,validKeywords:['CUSTOM_RIMLIGHT_ON'],
+ floats:{...old.floats,_Material_Alpha:1,_AlphaClip:0,_ZWrite:0,_Cull:0,_Lighting_Fog:1,_Lighting_Medium_Underwater:0,_Material_VertexAnimation:0,_Surface_Effect:0,_Clip_Offset:0,GLIMMER:0,UV_WORLD:0,_Material_SrcBlend:5,_Material_DstBlend:10,_ZTest:4,_StencilCompare:0,_StencilOverride:0,CUSTOM_RIMLIGHT:1,_Lighting_RimPower:1.5,_Lighting_RimFeathering:.16699999570846558,_Lighting_RimIntensity:1,_Lighting_RimColoring:0,_Smoothness_Shift:0,_Metallic_Shift:0,_OcclusionStrength:0,_ReflectionStrength:1},
+ colors:{...old.colors,_BaseColor:[1,1,1,1],_EmissionColor:[0,0,0,1]},
+ textures:{_BaseMap:link(old.textures._BaseMap.texture),_BumpMap:link(old.textures._BumpMap.texture),_MetallicGlossMap:link(old.textures._MetallicGlossMap.texture),_AnimTex:link(null),_Surface_EffectMap:link(null)}};
+ d.base.shaders[shader]={objectSha256:'7c32f4b3f7c0c0d580af1e22584952aa29d266dfbe98de3b916c3fecb7339931'};
+ const other=b.bindings.filter(x=>x!==bind);
+ for(const row of other){const m=d.base.materials[row[1]];m.renderQueue=-1;Object.assign(m.floats,{_Cull:2,_ZWrite:1,_Material_SrcBlend:1,_Material_DstBlend:0});}
+ const p=resolveFurnitureMultiDiagnostic(d,request(d,id));
+ assert.equal(p.hasTransparent,true);assert.equal(p.hasGlass,false);assert.equal(p.mixed,true);
+ const alpha=p.plans.find(x=>x.rendererPathId===n.rendererPathId);
+ assert.equal(alpha.customLitBlendState.srcBlend,5);assert.equal(alpha.material.customLit.materialAlpha,1);assert.equal(alpha.opaque,false);
+ d.base.materials[other[0][1]].floats._Material_SrcBlend=5;
+ assert.throws(()=>resolveFurnitureMultiDiagnostic(d,request(d,id)),/TRANSPARENT_ORDER_UNVERIFIED/);
+});

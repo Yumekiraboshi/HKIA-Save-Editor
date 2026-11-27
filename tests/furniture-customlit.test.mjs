@@ -45,3 +45,28 @@ test('source-pinned Scholastic fixed opaque objects reuse the verified rim-only 
   assert.throws(()=>resolveCustomLitFixedMaterial(bad,id),/CUSTOM_LIT_TEXTURE/);
  }
 });
+
+test('source-pinned banner alpha uses the same rim-only shader and native blend state',()=>{
+ const cab='CAB-6c0f768e2ed4ce159a88e4d10c87130c',shader='CAB-46b8f8fe122147493b3113f7c1c8cd0f:-6681258383375895387';
+ const id=cab+':-532235555454519552',opaqueId=cab+':6239858323994365581';
+ const keys=['-1565386650576965043','-1067708205451591808','873700301604624324','-6390226552218355717','8776367702219260351','8443359782372921580'].map(x=>cab+':'+x);
+ const link=texture=>({texture,scale:[1,1],offset:[0,0]});
+ const material={shader,objectSha256:'c999d000910a1cd7a947323d5d55ba205a3365cbac45d740927a7da57edc9210',renderQueue:3000,validKeywords:['CUSTOM_RIMLIGHT_ON'],
+ floats:{_Material_Alpha:1,_AlphaClip:0,_ZWrite:0,_Cull:0,_Lighting_Fog:1,_Lighting_Medium_Underwater:0,_Material_VertexAnimation:0,_Surface_Effect:0,_Clip_Offset:0,GLIMMER:0,UV_WORLD:0,_Material_SrcBlend:5,_Material_DstBlend:10,_ZTest:4,_StencilCompare:0,_StencilOverride:0,CUSTOM_RIMLIGHT:1,_Lighting_RimPower:1.5,_Lighting_RimFeathering:.16699999570846558,_Lighting_RimIntensity:1,_Lighting_RimColoring:0,_Smoothness_Shift:0,_Metallic_Shift:0,_OcclusionStrength:0,_ReflectionStrength:1},
+ colors:{_BaseColor:[1,1,1,1],_EmissionColor:[1.8443026542663574,1.0621638298034668,.5697060227394104,1]},
+ textures:{_BaseMap:link(keys[0]),_BumpMap:link(keys[1]),_MetallicGlossMap:link(keys[2]),_AnimTex:link(null),_Surface_EffectMap:link(null)}};
+ const opaque={...material,objectSha256:'02edfece5fd39fa1edf984d80ee4758d6bfa180794dd929556d29eada5d8ab46',renderQueue:-1,
+ floats:{...material.floats,_Material_Alpha:0,_ZWrite:1,_Cull:2,_Material_SrcBlend:1,_Material_DstBlend:0},
+ textures:{...material.textures,_BaseMap:link(keys[3]),_BumpMap:link(keys[4]),_MetallicGlossMap:link(keys[5])}};
+ const base={materials:{[id]:material,[opaqueId]:opaque},shaders:{[shader]:{objectSha256:'7c32f4b3f7c0c0d580af1e22584952aa29d266dfbe98de3b916c3fecb7339931'}},textures:Object.fromEntries(keys.map(k=>[k,{fixture:k}]))};
+ const p=resolveCustomLitFixedMaterial(base,id);
+ assert.deepEqual(p.blendState,{queue:3000,srcBlend:5,dstBlend:10,zWrite:false,cull:0});
+ assert.deepEqual(p.material.customLit,{materialAlpha:1});
+ assert.equal(resolveCustomLitFixedMaterial(base,opaqueId).blendState,undefined);
+ for(const [k,val] of [['_Material_Alpha',0],['_Cull',2],['_ZWrite',1],['_Material_SrcBlend',1],['_Material_DstBlend',0],['_ZTest',8],['_StencilCompare',3],['_StencilOverride',1]]){
+  const bad=structuredClone(base);bad.materials[id].floats[k]=val;
+  assert.throws(()=>resolveCustomLitFixedMaterial(bad,id),/SHADER_UNSUPPORTED/);
+ }
+ const bad=structuredClone(base);bad.materials[id].renderQueue=3001;
+ assert.throws(()=>resolveCustomLitFixedMaterial(bad,id),/SHADER_UNSUPPORTED/);
+});
