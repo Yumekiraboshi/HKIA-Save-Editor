@@ -1403,7 +1403,33 @@ impl Editor {
    self.inventory_item_rows.get(&item).copied().unwrap_or(0)+self.pending_palettes.len()>=256{return None}
   self.palette_context(id)
  }
+ /// Offer a native default selection for a missing palette, not a saved identity.
+ pub fn inventory_absent_palette_default(&self)->Option<(i32,PaletteVariant)>{
+  let item=crate::inventory_source::CUSTOM_PALETTE_ID;
+  let index=&self.slot.index;
+  if !crate::inventory_source::is_uncapped_required_unique_stack(item)||
+   self.inventory_item_rows.contains_key(&item)||
+   self.pending_palettes.keys().any(|id|self.inventory_changes.contains_key(id))||
+   index.inventory_palette_context_incomplete||index.inventory_palette_copies_incomplete||
+   !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
+   index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
+  Self::palette_output_choices().map(|color|[color;3])
+   .find(|&v|!index.inventory_palette_copies.iter().any(|&p|Self::palette_equal(p,v)))
+   .map(|v|(item,v))
+ }
+ fn absent_palette_context(&self,id:u32)->Option<(PaletteVariant,Vec<PaletteVariant>)>{
+  let (item,default)=self.inventory_absent_palette_default()?;
+  if id!=PENDING_ITEM|item as u32||self.pending_palettes.contains_key(&id){return None}
+  Some((default,self.slot.index.inventory_palette_copies.clone()))
+ }
+ fn absent_palette_target(reserved:&[PaletteVariant],next:PaletteVariant)->bool{
+  !reserved.iter().any(|&p|Self::palette_equal(p,next))&&
+   next.iter().all(|&c|Self::palette_output_choices().any(|x|x==c))
+ }
  pub fn inventory_palette_creation_variants(&self,id:u32)->Vec<PaletteVariant>{
+  if let Some((default,reserved))=self.absent_palette_context(id){
+   return Self::palette_choices(default,default,&reserved)
+  }
   let Some((original,current,_))=self.palette_creation_context(id)else{return Vec::new()};
   self.inventory_palette_variants(id).into_iter().filter(|v|
    !Self::palette_equal(*v,original)&&!Self::palette_equal(*v,current)&&
@@ -1416,14 +1442,23 @@ impl Editor {
  }
  /// Read-only native draft planning; identical final eligibility to creation CAS.
  pub fn inventory_palette_preview(&self,id:u32,expected:PaletteVariant,draft:PaletteVariant)->Result<(Vec<PaletteVariant>,bool),Error>{
+  if let Some((default,reserved))=self.absent_palette_context(id){
+   if expected!=default||!Self::absent_palette_target(&reserved,draft){return Err(Error::Schema)}
+   return Ok((Self::palette_choices(default,draft,&reserved),true))
+  }
   let (original,current,reserved)=self.palette_context(id).ok_or(Error::Schema)?;
   if expected!=current||!Self::valid_palette_target(original,draft)||reserved.iter().any(|&p|Self::palette_equal(p,draft)){return Err(Error::Schema)}
   let creatable=self.palette_creation_context(id).is_some()&&Self::palette_creation_target(original,current,&reserved,draft);
   Ok((Self::palette_choices(original,draft,&reserved),creatable))
  }
  pub fn create_inventory_palette_variant(&mut self,source_id:u32,expected:PaletteVariant,next:PaletteVariant,quantity:i32)->Result<u32,Error>{
-  let (original,current,reserved)=self.palette_creation_context(source_id).ok_or(Error::Schema)?;
-  if quantity<=0||expected!=current||!Self::palette_creation_target(original,current,&reserved,next){return Err(Error::Schema)}
+  if quantity<=0{return Err(Error::Schema)}
+  if let Some((default,reserved))=self.absent_palette_context(source_id){
+   if expected!=default||!Self::absent_palette_target(&reserved,next){return Err(Error::Schema)}
+  }else{
+   let (original,current,reserved)=self.palette_creation_context(source_id).ok_or(Error::Schema)?;
+   if expected!=current||!Self::palette_creation_target(original,current,&reserved,next){return Err(Error::Schema)}
+  }
   let document_id=self.allocate_staged_unique_handle()?;
   let revision=self.next_edit_revision()?;
   let change=Change::PaletteCreated{document_id,source_id,expected,variant:next,quantity};

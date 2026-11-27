@@ -3367,3 +3367,32 @@ fn first_seed_and_uprooted_plant_use_verified_species_and_full_tuple(){
   assert!(matches!(saved.inventory_unique_data(saved.inventory()[1].document_id),Some(U::Flower{grow_state:7,..})));
  }
 }
+
+
+#[test]
+fn first_custom_palette_uses_exact_native_output_words_and_replays(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,inventory_palette_source::palette_output_color};
+ let item=1835273963i32;let candidate=0x80000000u32|item as u32;
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let (id,default)=e.inventory_absent_palette_default().unwrap();assert_eq!(id,item);
+  let target=[palette_output_color(1,0).unwrap(),palette_output_color(2,3).unwrap(),palette_output_color(3,4).unwrap()];
+  assert!(e.inventory_palette_preview(candidate,default,default).unwrap().1);
+  assert!(e.inventory_palette_preview(candidate,default,target).unwrap().1);
+  assert!(e.create_inventory_palette_variant(candidate,[[0;4];3],target,1).is_err());
+  assert!(e.create_inventory_palette_variant(candidate,default,[[0;4];3],1).is_err());
+  assert!(e.create_inventory_palette_variant(candidate,default,target,0).is_err());assert!(!e.dirty());
+  let handle=e.create_inventory_palette_variant(candidate,default,target,2).unwrap();
+  assert!(e.inventory_absent_palette_default().is_none());
+  assert!(e.create_inventory_palette_variant(candidate,default,target,1).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.inventory_absent_palette_default().is_some());
+  assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();assert!(saved.inventory_absent_palette_default().is_none());
+  let row=&saved.inventory()[0];assert_eq!((row.item_id,row.quantity),(item,2));
+  assert_eq!(saved.inventory_unique_data(row.document_id),e.inventory_unique_data(handle));
+  assert_eq!(saved.inventory_unique_data(row.document_id).unwrap().display_words().1,target.into_iter().flatten().collect::<Vec<_>>());
+ }
+}
