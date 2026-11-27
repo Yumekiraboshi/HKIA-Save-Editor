@@ -81,10 +81,26 @@ export async function wandRuntimeSmoke(browser,origin,base){
     const blob=await renderWandArt(384749651,{...invAppearance,sourceItemId});
     placeholders.push({pixels:await pixels(blob),same:blob===await renderWandArt(384749651,{...invAppearance,sourceItemId:328475120})});
    }
-   return {rows,composed,itemRows,added,inv,directSources,placeholders,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315822,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
+   // The native saved source selection is independent of the wand shape.
+   // This proves rendering only, not creation eligibility for these pairs.
+   const allShapes=[];
+   for(const row of m.rows){
+    const a={magicCharacteristicId:104,fleckCharacteristicId:125};
+    const plain=await pixels(await renderWandBaseArt(row.itemId,a));
+    for(const sourceItemId of [315822,15761463,328475120,608452994]){
+     const appearance={...a,sourceItemId};
+     const blob=await renderWandArt(row.itemId,appearance);
+     allShapes.push({id:row.itemId,sourceItemId,art:await pixels(blob),plain:plain.rgba,cached:blob===await renderWandArt(row.itemId,appearance)});
+    }
+    if(await renderWandArt(row.itemId,{...a,sourceItemId:315823})!==null)throw Error('UNKNOWN_SOURCE_RENDERED');
+   }
+   return {rows,composed,itemRows,added,inv,directSources,placeholders,allShapes,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315823,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
   },base);
   assert.equal(out.rows.length,9);assert.ok(out.unknown&&out.unknownOriginal);
   assert.equal(out.composed.length,13);assert.ok(out.unsupportedSource);
+  assert.equal(out.allShapes.length,36);assert.equal(new Set(out.allShapes.map(r=>r.id)).size,9);
+  for(const row of out.allShapes){assert.ok(row.art.visible&&row.cached);if(row.sourceItemId!==328475120)assert.notEqual(row.art.rgba,row.plain);}
+  for(const id of new Set(out.allShapes.map(r=>r.id)))assert.equal(new Set(out.allShapes.filter(r=>r.id===id&&r.sourceItemId!==328475120).map(r=>r.art.rgba)).size,3);
   assert.equal(out.itemRows.length,25);
   assert.ok(out.added.art.visible&&out.added.cached&&out.added.mismatch&&out.added.noCell);
   assert.notEqual(out.added.art.rgba,out.added.plain.rgba);
@@ -122,9 +138,10 @@ export async function wandRuntimeSmoke(browser,origin,base){
      return {first:await bytes(first),guarded:await bytes(guarded),plain:await bytes(plain),
       cached:first===await render(315822),
       unknown:await render(315823)===null,
-      shaped:await renderWandArt(1304219546,{...a,sourceItemId:7285157})===null};
+      shaped:await bytes(await renderWandArt(1304219546,{...a,sourceItemId:315822})),
+      shapedUnknown:await renderWandArt(1304219546,{...a,sourceItemId:7285157})===null};
     },base);
-    assert.ok(failed.first&&failed.guarded&&failed.plain&&failed.cached&&failed.unknown&&failed.shaped,pattern);
+    assert.ok(failed.first&&failed.guarded&&failed.plain&&failed.cached&&failed.unknown&&failed.shaped&&failed.shapedUnknown,pattern);
     assert.notDeepEqual(failed.first,failed.plain,pattern);
     assert.notDeepEqual(failed.guarded,failed.plain,pattern);
     assert.notDeepEqual(failed.first,failed.guarded,pattern);

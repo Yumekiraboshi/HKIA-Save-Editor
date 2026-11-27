@@ -120,3 +120,25 @@ test('a failed render releases its slot for the next queued appearance',async()=
   await new Promise(setImmediate);
  }
 });
+
+test('rejected complete artwork still shows independent base and respects cancellation',async()=>{
+ const base=new Blob(['verified base']);
+ let partialCalls=0;
+ const partial=async()=>{partialCalls++;return base;};
+ for(const render of [()=>{throw Error('sync unavailable');},async()=>{throw Error('async unavailable');}]){
+  const shown=[];
+  const stop=startDynamicArtRequest(render,(url,isPartial)=>shown.push([url,isPartial]),partial);
+  await new Promise(setImmediate);
+  assert.equal(shown.length,2);
+  assert.ok(shown[1][0]?.startsWith('blob:'));
+  assert.equal(shown[1][1],true);
+  stop();
+ }
+ assert.equal(partialCalls,2);
+ let reject;
+ const pending=new Promise((_,r)=>{reject=r;});
+ const stop=startDynamicArtRequest(()=>pending,()=>{},partial);
+ stop();reject(Error('canceled'));
+ await new Promise(setImmediate);
+ assert.equal(partialCalls,2);
+});

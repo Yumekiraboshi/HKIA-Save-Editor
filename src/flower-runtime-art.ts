@@ -10,26 +10,27 @@ type SourceRow={itemId:number;baseSpritePathId:string;baseSampleRect:Rect;source
 type Manifest={schema:string;version:string;base:TextureAsset;mask:TextureAsset;alphaOffsetY:number;logicalSize:number;rows:SourceRow[]};
 type Mask={textureRect:{x:number;y:number;width:number;height:number}};
 type Sources={manifest:Manifest;index:FlowerMaskIndex;base:PixelBuffer;mask:PixelBuffer;rows:Map<number,SourceRow>};
-type Binding=Omit<Sources,'base'|'mask'>;
+type Binding=Pick<Sources,'manifest'|'rows'>;
 let binding:Promise<Binding>|undefined;
 function sourceBinding():Promise<Binding>{
  if(!binding)binding=(async()=>{
-  const [m,i]=await Promise.all([loadVerifiedArtAsset(ROOT,'flower-runtime-source-v3.0.1.json',MANIFEST_SHA,65536),loadVerifiedArtAsset(ROOT,'index.json',INDEX_SHA,524288)]);
+  const m=await loadVerifiedArtAsset(ROOT,'flower-runtime-source-v3.0.1.json',MANIFEST_SHA,65536);
   const manifest=JSON.parse(new TextDecoder().decode(m)) as Manifest;
-  const index=JSON.parse(new TextDecoder().decode(i)) as FlowerMaskIndex;
-  if(manifest.schema!=='HKIA.FlowerRuntimeSource.1'||manifest.version!=='3.0.1'||manifest.rows.length!==25||index.items.length!==25)throw Error('FLOWER_ART_VERSION');
+  if(manifest.schema!=='HKIA.FlowerRuntimeSource.1'||manifest.version!=='3.0.1'||manifest.rows.length!==25)throw Error('FLOWER_ART_VERSION');
   const rows=new Map(manifest.rows.map(row=>[row.itemId,row]));
-  if(rows.size!==25||index.items.some(item=>rows.get(item.itemId)?.baseSpritePathId!==item.baseSpritePathId))throw Error('FLOWER_ART_BINDING');
-  return {manifest,index,rows};
+  if(rows.size!==25)throw Error('FLOWER_ART_BINDING');
+  return {manifest,rows};
  })().catch(e=>{binding=undefined;throw e;});
  return binding;
 }
 let loading:Promise<Sources>|undefined;
 function sources():Promise<Sources>{
  if(!loading)loading=(async()=>{
-  const s=await sourceBinding();
+  const [s,i]=await Promise.all([sourceBinding(),loadVerifiedArtAsset(ROOT,'index.json',INDEX_SHA,524288)]);
+  const index=JSON.parse(new TextDecoder().decode(i)) as FlowerMaskIndex;
+  if(index.items.length!==25||new Set(index.items.map(item=>item.itemId)).size!==25||index.items.some(item=>s.rows.get(item.itemId)?.baseSpritePathId!==item.baseSpritePathId))throw Error('FLOWER_ART_BINDING');
   const [base,mask]=await Promise.all([loadOpaqueArtTexture(ROOT,s.manifest.base),loadOpaqueArtTexture(ROOT,s.manifest.mask)]);
-  return {...s,base,mask};
+  return {...s,index,base,mask};
  })().catch(e=>{loading=undefined;throw e;});
  return loading;
 }

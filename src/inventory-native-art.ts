@@ -1,4 +1,5 @@
 import type {SpriteCell} from './icon-packs';
+import placeholderSource from '../data/native-placeholder-main-routes-v3.0.1.json';
 
 const DEFINITIONS='ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0';
 const ATLAS='04c1f4c191b0a821a0bbcb15e67a75bec85cf343a0b2e875ee8e525e1e8dfc7b';
@@ -6,6 +7,14 @@ const INDEX_SHA='a5cb833211120f94c59e0bd31b6a0ae27e4d58149406fdc0269ab5274ffa13e
 export const NATIVE_PLACEHOLDER_SPRITE='-6646601456236922891';
 type NativeArt={entries:ReadonlyMap<number,SpriteCell>;withheld:ReadonlySet<number>;placeholders:ReadonlySet<number>};
 export type InventoryNativeArt=NativeArt;
+
+/** Known source decisions do not depend on loading the additional atlas index.
+ * A missing atlas never promotes a withheld definition into a guessed image. */
+export function initialInventoryNativeArt():InventoryNativeArt{
+ const placeholders=new Set(placeholderSource.ids);
+ return {entries:new Map(),placeholders,withheld:new Set([...placeholders,...placeholderSource.dynamicExcludedIds])};
+}
+
 
 /** Original Item ID -> exact UiIcon Sprite -> original texture crop.
  * Read-only presentation data; never grants save mutation eligibility. */
@@ -46,7 +55,10 @@ export function decodeInventoryNativeArt(value:unknown,base:string):NativeArt{
   }
   withheld.add(row[0]);
  }
- if(placeholders.size!==152)throw Error('INVENTORY_ART_INVALID');
+ const original=initialInventoryNativeArt();
+ if(placeholders.size!==original.placeholders.size||withheld.size!==original.withheld.size||
+  [...original.placeholders].some(id=>!placeholders.has(id))||
+  [...original.withheld].some(id=>!withheld.has(id)))throw Error('INVENTORY_ART_INVALID');
  return {entries,withheld,placeholders};
 }
 export async function loadInventoryNativeArt(base:string):Promise<NativeArt>{

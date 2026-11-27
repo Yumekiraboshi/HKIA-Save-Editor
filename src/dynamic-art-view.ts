@@ -43,7 +43,8 @@ export function startDynamicArtRequest(render:()=>Promise<Blob|null>,show:(url:s
  const job=async()=>{
   try{
    if(canceled)return;
-   let blob=await render(),partial=false;
+   let blob:Blob|null=null,partial=false;
+   try{blob=await render();}catch{/* The independently verified base may remain available. */}
    if(canceled)return;
    if(!blob&&renderPartial){blob=await renderPartial();partial=true;}
    if(canceled||!blob)return;
