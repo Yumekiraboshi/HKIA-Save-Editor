@@ -698,11 +698,28 @@ impl Editor {
   if reserved.contains(&current)||reserved.contains(&original){return None}
   Some((patterns,current,reserved))
  }
- /// On-demand choices preserve growth state and identity. Pattern changes
+ // Growth changes are inventory-only, for the same unrestricted species
+ // already supported by the first-stack native state selection. A copied
+ // payload could refer to the original growth state, so do not edit it.
+ fn flower_growth_change_allowed(&self,id:u32)->bool{
+  let item=self.pending_flowers.get(&id).map(|f|f.item_id)
+   .or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.item_id));
+  item.is_some_and(|item|Self::absent_flower_growth_supported(item,0)&&
+   self.inventory_creation_payload_safe(item)&&
+   !self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item))
+ }
+ fn flower_growth_options(current:FlowerVariant,reserved:&HashSet<FlowerVariant>,out:&mut Vec<FlowerVariant>){
+  for grow in [0,6,7]{let mut next=current;next[0]=grow;
+   if next!=current&&!reserved.contains(&next){out.push(next)}
+  }
+ }
+ /// On-demand choices preserve native identity. Pattern changes
  /// include the corresponding secondary-color change in the same candidate.
  pub fn inventory_flower_variants(&self,id:u32)->Vec<FlowerVariant>{
   let Some((patterns,current,reserved))=self.flower_context(id)else{return Vec::new()};
-  Self::flower_choices(patterns,current,&reserved)
+  let mut choices=Self::flower_choices(patterns,current,&reserved);
+  if self.flower_growth_change_allowed(id){Self::flower_growth_options(current,&reserved,&mut choices);}
+  choices
  }
  fn flower_choices(patterns:&[i32],current:FlowerVariant,reserved:&HashSet<FlowerVariant>)->Vec<FlowerVariant>{
   let mut out=Vec::new();
@@ -755,7 +772,7 @@ impl Editor {
   if let Some(f)=self.pending_flowers.get(&id){
    if !self.inventory_changes.contains_key(&id)||!self.inventory_creation_payload_safe(f.item_id){return None}
    let (patterns,current,reserved)=self.flower_context(id)?;
-   return (expected==current&&next!=current&&next!=f.variant&&next[0]==current[0]&&
+   return (expected==current&&next!=current&&next!=f.variant&&(next[0]==current[0]||self.flower_growth_change_allowed(id))&&
     valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(f.item_id)
   }
   if id&PENDING_ITEM!=0{
@@ -774,7 +791,7 @@ impl Editor {
   if !self.inventory_creation_payload_safe(item){return None}
   let (patterns,current,reserved)=self.flower_context(id)?;
   let original=flower_variant(row.unique_data?)?;
-  (expected==current&&next!=current&&next!=original&&next[0]==current[0]&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
+  (expected==current&&next!=current&&next!=original&&(next[0]==current[0]||self.flower_growth_change_allowed(id))&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
  }
  /// Read-only dialog planning from an uncommitted full tuple.
  pub fn inventory_flower_preview(&self,id:u32,expected:FlowerVariant,draft:FlowerVariant)->Result<(Vec<FlowerVariant>,bool),Error>{
@@ -784,14 +801,11 @@ impl Editor {
   }else{self.flower_context(id).ok_or(Error::Schema)?};
   let absent=id&PENDING_ITEM!=0&&!self.pending_flowers.contains_key(&id);
   let item=(id&!PENDING_ITEM) as i32;
-  if expected!=current||(draft[0]!=current[0]&&!(absent&&(draft[0]==6||Self::absent_flower_growth_supported(item,draft[0]))))||
+  let growth=if absent{Self::absent_flower_growth_supported(item,0)}else{self.flower_growth_change_allowed(id)};
+  if expected!=current||(draft[0]!=current[0]&&!growth)||
    !valid_flower_variant(patterns,draft)||reserved.contains(&draft){return Err(Error::Schema)}
   let mut choices=Self::flower_choices(patterns,draft,&reserved);
-  if absent&&Self::absent_flower_growth_supported(item,0){
-   for grow in [0,6,7]{let mut next=draft;next[0]=grow;
-    if next!=draft&&!reserved.contains(&next){choices.push(next)}
-   }
-  }
+  if growth{Self::flower_growth_options(draft,&reserved,&mut choices);}
   let creatable=self.flower_creation_item(id,expected,draft).is_some();
   Ok((choices,creatable))
  }
@@ -877,7 +891,7 @@ impl Editor {
  /// Native field spans only; no creation, ownership, quantity or placement changes.
  pub fn change_inventory_flower_variant(&mut self,id:u32,expected:FlowerVariant,next:FlowerVariant)->Result<(),Error>{
   let (patterns,current,reserved)=self.flower_context(id).ok_or(Error::Schema)?;
-  if current!=expected||current==next||current[0]!=next[0]||!valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
+  if current!=expected||current==next||(current[0]!=next[0]&&!self.flower_growth_change_allowed(id))||!valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
   let original=self.original_flower_variant(id).ok_or(Error::Schema)?;
   let revision=self.next_edit_revision()?;
   let before=self.flower_variant_changes.get(&id).copied();
@@ -2230,10 +2244,11 @@ impl Editor {
     let (patterns,current,reserved)=self.flower_context(row.id).ok_or(Error::Schema)?;
     if current!=*v||!valid_flower_variant(patterns,*v)||reserved.contains(v){return Err(Error::Schema)}
     let original=flower_variant(row.unique_data.ok_or(Error::Schema)?).ok_or(Error::Schema)?;
-    for i in 1..4{
+    if original[0]!=v[0]&&!self.flower_growth_change_allowed(row.id){return Err(Error::Schema)}
+    for i in 0..4{
      if original[i]==v[i]{continue}
      let span=row.unique_fields.get(i).cloned().ok_or(Error::Schema)?;
-     let mut encoded=vec![0xd2];encoded.extend(v[i].to_be_bytes());
+     let encoded=if i==0{vec![v[i] as u8]}else{let mut bytes=vec![0xd2];bytes.extend(v[i].to_be_bytes());bytes};
      patches.push((span,encoded));
     }
    }
