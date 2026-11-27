@@ -30,10 +30,8 @@ test('all 25 source species have distinct seed and grown-troweled source sprites
  }
  assert.equal(resolveFlowerGrowthCell(cells,108363489,{growState:0,baseColor:1,pattern:0,patternColor:0}),undefined);
 });
-test('published WebP transport retains exact source-derived bytes and full coverage',()=>{
- const transport=read('flower-growth-icons-v3.0.1.webp.b64');
- assert.equal(sha(transport),'db4d9182b3ebc170ed0c9f66b2c97cc5b2997f530a090fc1064a80aa5e57c342');
- const bytes=Buffer.from(transport.toString('ascii').trim(),'base64');
+test('published binary WebP retains exact source-derived bytes and full coverage',()=>{
+ const bytes=read('flower-growth-icons-v3.0.1.webp');
  assert.equal(bytes.length,manifest.sheet.bytes);
  assert.equal(sha(bytes),manifest.sheet.sha256);
  assert.equal(bytes.subarray(0,4).toString(),'RIFF');
