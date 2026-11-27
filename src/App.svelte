@@ -447,6 +447,13 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
   if(wandEdit?.itemId===384749651)addWandSource(wandEdit.appearance.sourceItemId);
+  // A dialog may outlive its visible inventory row or be opened from Add.
+  // Load its own original definition group using the same bounded pack queue.
+  for(const edit of [flowerEdit,paletteEdit,cafeEdit,bobaEdit,wandEdit]){
+   if(!edit||inventoryNativeArt?.entries.has(edit.itemId)||inventoryNativeArt?.withheld.has(edit.itemId))continue;
+   const item=inventorySourceItems.get(edit.itemId);
+   if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
+  }
   // The category representatives use the same verified item atlas/cache.
   for(const tab of NATIVE_INVENTORY_TABS){
    const id=inventoryCategoryRepresentative(tab.key,nativeInventoryIndex);
@@ -494,6 +501,13 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(native)return native;
   const group=inventorySourceItems.get(id)?.[3];
   return selectWandOriginalCell(id,group,group?inventoryIconPacks[group]?.entries:undefined);
+ }
+ function inventoryOriginalSprite(itemId:number){
+  if(inventoryNativeArt?.withheld.has(itemId))return undefined;
+  const native=inventoryNativeArt?.entries.get(itemId);
+  if(native)return native;
+  const group=inventorySourceItems.get(itemId)?.[3];
+  return group?inventoryIconPacks[group]?.entries[String(itemId)]:undefined;
  }
  function inventoryName(itemId:number):string{
   return sourceNames[String(itemId)]??'#'+String(itemId);
@@ -1679,7 +1693,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          {:else if chef&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicChefSprite itemId={item.itemId} appearance={chef} fallback={nativeSprite??sprite}/>
          {:else if item.palette&&item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
-         <DynamicPaletteSprite itemId={item.itemId} palette={item.palette}/>
+         <DynamicPaletteSprite itemId={item.itemId} palette={item.palette} fallback={nativeSprite??sprite}/>
         {:else if item.flower&&flowerDefinitions&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicFlowerSprite itemId={item.itemId} flower={item.flower} definitions={flowerDefinitions} fallback={nativeSprite??sprite}/>
         {:else if originalVariantArt[String(item.itemId)]||exactVariantArt[String(item.itemId)]||(!nativeSprite&&sprite&&nativeDyePalettes[String(item.itemId)])}
@@ -1915,7 +1929,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="cafe-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeCafeEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'cafe',colors:selected.slice(3).filter(n=>n>0)}}/></div>
+    <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'cafe',colors:selected.slice(3).filter(n=>n>0)}} fallback={inventoryOriginalSprite(edit.itemId)}/></div>
     <div class="date-dialog-field">
      <div style="display:flex;gap:6px;flex-wrap:wrap">
       {#each [0,1,2].filter(i=>edit.before[i]>0||edit.options.some(v=>v.slot===i)) as slot}
@@ -1959,7 +1973,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="wand-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeWandEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><DynamicWandSprite itemId={edit.itemId} appearance={{...edit.appearance,magicCharacteristicId:selected[0],fleckCharacteristicId:selected[1]}} originalCell={wandOriginalCell(edit.appearance.sourceItemId)}/></div>
+    <div style="display:flex;justify-content:center"><DynamicWandSprite itemId={edit.itemId} appearance={{...edit.appearance,magicCharacteristicId:selected[0],fleckCharacteristicId:selected[1]}} originalCell={wandOriginalCell(edit.appearance.sourceItemId)} fallback={inventoryOriginalSprite(edit.itemId)}/></div>
     {#if edit.nestedBefore}
      <div class="compact-hint">{inventoryName(edit.nestedBefore[0])} · {furnitureVariantTitle(furnitureDisplay,edit.nestedBefore[0],edit.nestedBefore.slice(3),furnitureCopy.defaultMaterial)}</div>
      {#if edit.nestedOptions?.length}
@@ -2034,7 +2048,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="boba-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeBobaEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}}/></div>
+    <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}} fallback={inventoryOriginalSprite(edit.itemId)}/></div>
     <div class="date-dialog-field">
      <select name="boba-base" aria-label={inventoryName(edit.itemId)} bind:value={bobaBase} onchange={e=>{bobaSelection=bobaSelectionForBase(edit.before,edit.options,bobaSelection,e.currentTarget.value);if(edit.absent&&bobaSelection<0)bobaSelection=edit.options.findIndex(v=>bobaBaseKey(v)===e.currentTarget.value&&v[2]===edit.before[2]&&v[4]===edit.before[4]);error=''}} disabled={busy}>
       {#each bobaBaseChoices(edit.before,edit.options) as base}
@@ -2079,7 +2093,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closePaletteEditor}>×</button>
     </div>
     <div class="inventory-palette-preview" style="display:flex;justify-content:center">
-     <DynamicPaletteSprite itemId={edit.itemId} palette={paletteFromWords(selected)}/>
+     <DynamicPaletteSprite itemId={edit.itemId} palette={paletteFromWords(selected)} fallback={inventoryOriginalSprite(edit.itemId)}/>
     </div>
     <div class="date-dialog-field">
      <div style="display:flex;gap:8px">
@@ -2189,6 +2203,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   {#if flowerEdit}
    {@const edit=flowerEdit}
    {@const current=flowerDraft??edit.before}
+   {@const appearance={growState:current[0],baseColor:current[1],pattern:current[2],patternColor:current[3]}}
+   {@const previewBadges=snapshot?.version==='3.0.1'?flowerDecorators(appearance,flowerDefinitions):[]}
    {@const changed=current.some((n,i)=>n!==edit.before[i])}
    <form class="date-dialog-inner" onsubmit={e=>{if(edit.absent){e.preventDefault();void addInventoryFlowerVariant()}else void applyInventoryFlowerVariant(e)}}>
     <div class="date-dialog-heading">
@@ -2196,10 +2212,20 @@ import {verifiedFloorplanName} from './floorplan-names';
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFlowerEditor}>×</button>
     </div>
     <div class="date-dialog-item">
-     <span class="date-dialog-art" aria-hidden="true">
-      {#if flowerDefinitions}
-       <DynamicFlowerSprite itemId={edit.itemId} flower={{growState:current[0],baseColor:current[1],pattern:current[2],patternColor:current[3]}} definitions={flowerDefinitions} fallback={inventoryNativeArt?.entries.get(edit.itemId)}/>
-      {/if}
+     <span class="date-dialog-art" style:height={previewBadges.length?'118px':undefined} aria-hidden="true">
+      <span style:position="relative" style:display="flex" style:padding-top={previewBadges.length?'22px':undefined}>
+       {#if flowerDefinitions}
+        <DynamicFlowerSprite itemId={edit.itemId} flower={appearance} definitions={flowerDefinitions} fallback={inventoryOriginalSprite(edit.itemId)}/>
+       {/if}
+       {#if previewBadges.length}
+        <span class="inventory-native-decorators">
+         {#each previewBadges as badge (badge.type)}
+          {#if badge.type===12}<InventoryDecorator type={12} primaryColor={badge.primaryColor}/>
+          {:else}<InventoryDecorator type={11} patternUrl={badge.patternUrl}/>{/if}
+         {/each}
+        </span>
+       {/if}
+      </span>
      </span>
      <div class="date-dialog-detail"><strong>{flowerVariantName(current)}</strong>{#if changed}<button type="button" class="inventory-flower-reset" disabled={busy} aria-label={flowerVariantName(edit.before)} title={flowerVariantName(edit.before)} onclick={()=>void refreshFlowerDraft(edit.before)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>{/if}</div>
     </div>

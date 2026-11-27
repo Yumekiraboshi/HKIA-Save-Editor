@@ -14,7 +14,7 @@
 <span use:watchDynamicArtVisibility={setNear}
  class:item-sprite={!!url||!!fallback} class:item-art-empty={!url&&!fallback}
  data-dynamic-art-source={url?source:undefined}
- data-icon-fidelity={url?(partial?'source-derived-base-only':source==='native-wand'?'source-derived-composite-unverified':'source-derived-runtime'):fallback?'species-fallback':undefined}
+ data-icon-fidelity={url?(partial?'source-derived-base-only':source==='native-wand'?'source-derived-composite-unverified':'source-derived-runtime'):fallback?(source==='native-flower'?'species-fallback':'original-template-fallback'):undefined}
  style:background-image={url?'url("'+url+'")':fallback?'url("'+fallback.url+'")':undefined}
  style:background-position={url?'center':fallback?'-'+fallback.x+'px -'+fallback.y+'px':undefined}
  style:background-size={url?'96px 96px':undefined}

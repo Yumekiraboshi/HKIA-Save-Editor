@@ -16,7 +16,7 @@ export async function chefRuntimeSmoke(browser,origin,base){
   await page.route(root+'__chef_runtime_fixture__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
   await page.goto(root+'__chef_runtime_fixture__.html');
   const out=await page.evaluate(async base=>{
-   const {renderChefArt}=await import(base+'__chef_runtime_fixture__.mjs');
+   const {renderChefArt,renderChefBaseArt}=await import(base+'__chef_runtime_fixture__.mjs');
    const m=await (await fetch(base+'dynamic-chef-art/chef-runtime-source-v3.0.1.json')).json();
    const sha=async b=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b)),v=>v.toString(16).padStart(2,'0')).join('');
    const pixels=async blob=>{
@@ -35,15 +35,18 @@ export async function chefRuntimeSmoke(browser,origin,base){
     const a=row.kind==='boba'?appearance(6):{kind:'cafe',colors:[6,6,6]};
     const b=row.kind==='boba'?appearance(14):{kind:'cafe',colors:[14,14,14]};
     const first=await renderChefArt(row.itemId,a),second=await renderChefArt(row.itemId,b);
-    rows.push({id:row.itemId,a:await pixels(first),b:await pixels(second),cache:first===await renderChefArt(row.itemId,a)});
+    const original=await renderChefBaseArt(row.itemId);
+    rows.push({id:row.itemId,a:await pixels(first),b:await pixels(second),original:await pixels(original),originalCache:original===await renderChefBaseArt(row.itemId),cache:first===await renderChefArt(row.itemId,a)});
    }
-   return {rows,unknown:await renderChefArt(1798633565,{kind:'boba',colorId:999999})===null};
+   return {rows,unknown:await renderChefArt(1798633565,{kind:'boba',colorId:999999})===null,unknownBase:await renderChefBaseArt(0)===null};
   },base);
-  assert.equal(out.rows.length,10);assert.ok(out.unknown);
+  assert.equal(out.rows.length,10);assert.ok(out.unknown&&out.unknownBase);
   for(const row of out.rows){
    assert.equal(row.a.width,96);assert.equal(row.a.height,96);assert.ok(row.a.visible&&row.b.visible);
    assert.equal(row.a.alpha,row.b.alpha);assert.notEqual(row.a.rgba,row.b.rgba,'same item must render different original color inputs: '+row.id);
-   assert.ok(row.cache);
+   assert.ok(row.cache&&row.originalCache&&row.original.visible);
+   assert.equal(row.original.alpha,row.a.alpha);
+   assert.equal(row.original.width,96);assert.equal(row.original.height,96);
   }
   console.log('CHROMIUM DYNAMIC CHEF PASS: 10 native source icons, color variants, alpha, shared cache and unknown-ID refusal');
  }finally{await context.close();}

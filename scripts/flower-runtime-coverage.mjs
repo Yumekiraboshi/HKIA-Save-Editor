@@ -15,7 +15,7 @@ export async function flowerRuntimeCoverage(browser,origin,base){
   await page.route(root+'__flower_coverage__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
   await page.goto(root+'__flower_coverage__.html');
   const out=await page.evaluate(async base=>{
-   const {renderFlowerArt}=await import(base+'__flower_coverage__.mjs');
+   const {renderFlowerArt,renderFlowerOriginalBaseArt}=await import(base+'__flower_coverage__.mjs');
    const [defs,index]=await Promise.all(['inventory-ui/flowers.json','inventory-flower-art/index.json'].map(async p=>{
     const r=await fetch(base+p);if(!r.ok)throw Error(p);return r.json();
    }));
@@ -36,6 +36,7 @@ export async function flowerRuntimeCoverage(browser,origin,base){
    const colors=Object.keys(defs.colors).map(Number),patterns=[0,...Object.keys(defs.patterns).map(Number)];
    const missing=[],primaryCollisions=[],patternPrimaryCollisions=[],accentCollisions=[],alphaMismatches=[],stateResults=[];
    let plainCases=0,patternCases=0,exactAccentCases=0;
+   const originalFailures=[];
    for(const item of index.items){
     const draw=async(color,pattern,accent,state=6)=>{
      const p=await pixels(await renderFlowerArt(item.itemId,{growState:state,baseColor:color,pattern,patternColor:accent},defs));
@@ -64,11 +65,14 @@ export async function flowerRuntimeCoverage(browser,origin,base){
       if(a&&c&&a.alpha!==c.alpha)alphaMismatches.push({itemId:item.itemId,pattern,accent:true});
      }
     }
+    const originalFields={growState:6,baseColor:9999,pattern:9999,patternColor:9999};
+    const original=await renderFlowerOriginalBaseArt(item.itemId,originalFields),p=await pixels(original);
+    if(!p?.visible||p.alpha!==alpha||original!==await renderFlowerOriginalBaseArt(item.itemId,{...originalFields,baseColor:1}))originalFailures.push(item.itemId);
     const states=[];
-    for(const state of [0,7])states.push({state,generated:!!await draw(1,0,0,state)});
+    for(const state of [0,7])states.push({state,generated:!!await draw(1,0,0,state),original:!!await renderFlowerOriginalBaseArt(item.itemId,{...originalFields,growState:state})});
     stateResults.push({itemId:item.itemId,states});
    }
-   return {species:index.items.length,colors:colors.length,plainCases,patternCases,exactAccentCases,missing,primaryCollisions,patternPrimaryCollisions,accentCollisions,alphaMismatches,stateResults};
+   return {species:index.items.length,colors:colors.length,plainCases,patternCases,exactAccentCases,missing,primaryCollisions,patternPrimaryCollisions,accentCollisions,alphaMismatches,stateResults,originalFailures,unknownOriginal:await renderFlowerOriginalBaseArt(0,{growState:6,baseColor:1,pattern:0,patternColor:0})===null};
   },base);
   console.log('CHROMIUM FLOWER PIXEL COVERAGE '+JSON.stringify(out));
   assert.equal(out.species,25);assert.equal(out.colors,30);assert.equal(out.plainCases,750);
@@ -80,6 +84,7 @@ export async function flowerRuntimeCoverage(browser,origin,base){
   // Exact accent collisions are reported, not automatically deemed defects:
   // source masks can contain no visible green channel. Native fallback and
   // effect sprites can also intentionally share the same image.
-  assert.ok(out.stateResults.every(r=>r.states.every(s=>!s.generated)),'non-plucked states use the documented native fallback');
+  assert.deepEqual(out.originalFailures,[]);assert.ok(out.unknownOriginal);
+  assert.ok(out.stateResults.every(r=>r.states.every(s=>!s.generated&&!s.original)),'non-plucked states use the documented native fallback');
  }finally{await context.close();}
 }

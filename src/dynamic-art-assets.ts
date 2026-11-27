@@ -60,3 +60,12 @@ export function renderCachedDynamicArt(key:string,input:RasterInput):Promise<Blo
  void task.then(value=>{if(!value&&cache.get(key)===task)cache.delete(key);});
  return task;
 }
+
+/** Show the exact untinted original source crop when an individual appearance
+ * cannot be reproduced. This is not an inferred color variant. A neutral
+ * one-pixel mask keeps the existing raster geometry and alpha sampling; no
+ * native mask texture is required for the source-only fallback. */
+const NO_TINT_MASK:PixelBuffer={width:1,height:1,rgba:new Uint8ClampedArray([0,0,0,255])};
+export function renderCachedOriginalBase(key:string,input:Pick<RasterInput,'base'|'baseRect'|'trim'|'alphaOffsetY'|'logicalSize'>):Promise<Blob|null>{
+ return renderCachedDynamicArt(JSON.stringify(['original-base-only',key]),{...input,mask:NO_TINT_MASK,maskRect:[0,0,1,1],tints:[[1,1,1,1],[1,1,1,1],[1,1,1,1]]});
+}

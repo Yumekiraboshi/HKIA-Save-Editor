@@ -200,6 +200,22 @@ async function inventoryDynamicPaletteArtSmoke(){
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
   await inputs.nth(1).waitFor();
   assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.value)),['4','7']);
+  // The source-only preview must survive an unavailable mask without
+  // pretending that the original base is the selected individual color.
+  await page.route('**/dynamic-palette-art/palette-mask-rgb-v3.0.1.webp',route=>route.fulfill({status:404,body:''}));
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
+  const originals=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-palette"][data-icon-fidelity="source-derived-base-only"]');
+  await originals.nth(1).waitFor({timeout:30_000});
+  const originalPixels=await originals.evaluateAll(async els=>Promise.all(els.map(async el=>{
+   const im=await createImageBitmap(await (await fetch(getComputedStyle(el).backgroundImage.slice(5,-2))).blob());
+   const canvas=document.createElement('canvas');canvas.width=im.width;canvas.height=im.height;
+   const ctx=canvas.getContext('2d');ctx.drawImage(im,0,0);im.close();
+   return Array.from(ctx.getImageData(0,0,canvas.width,canvas.height).data);
+  })));
+  assert.equal(originalPixels.length,2);assert.deepEqual(originalPixels[0],originalPixels[1]);
+  assert.deepEqual(originalPixels[0].filter((_,i)=>i%4===3),images[0].alpha);
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
   const output=readFileSync(await download.path());
@@ -1392,10 +1408,10 @@ async function inventoryDynamicFlowerArtSmoke(){
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');
   await page.locator('.inventory-controls input[type="search"]').fill('43114910');
-  const sprites=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"]');
+  const sprites=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"][data-icon-fidelity="source-derived-runtime"]');
   await sprites.nth(3).waitFor({timeout:30_000});
   assert.equal(await sprites.count(),4);
-  await page.locator('.inventory-card .item-sprite[data-icon-fidelity="species-fallback"]').waitFor({timeout:30_000});
+  await page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"][data-icon-fidelity="source-derived-base-only"]').waitFor({timeout:30_000});
   await page.locator('.inventory-card [data-native-decorator="11"] img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
   const effectCard=page.locator('.inventory-card').filter({has:page.locator('[data-native-decorator="11"] img[src$="pattern-3.webp"]')});
   assert.deepEqual(await effectCard.locator('[data-native-decorator]').evaluateAll(els=>els.map(e=>e.getAttribute('data-native-decorator'))),['12','11']);
@@ -1701,10 +1717,14 @@ async function inventoryAbsentFlowerCreationSmoke(){
   await dialog.locator('[data-flower-grow="6"][aria-pressed="true"]').waitFor();
   const firstPattern=await dialog.locator('option[data-flower-variant="6,2,1,16"]').getAttribute('value');assert.ok(firstPattern!==null);
   await dialog.locator('select').selectOption(firstPattern);
+  await dialog.locator('[data-native-decorator="11"] img[src$="pattern-1.webp"]').waitFor({timeout:30_000});
+  assert.deepEqual(await dialog.locator('[data-native-decorator]').evaluateAll(els=>els.map(e=>e.getAttribute('data-native-decorator'))),['12','11']);
   const reset=dialog.locator('.inventory-flower-reset:not([disabled])');
   await reset.waitFor();
   await reset.click();
   await dialog.locator('.inventory-flower-reset').waitFor({state:'hidden'});
+  await dialog.locator('[data-native-decorator="11"]').waitFor({state:'detached'});
+  await dialog.locator('[data-native-decorator="12"]').waitFor();
   const restoredPattern=await dialog.locator('option[data-flower-variant="6,2,1,16"]').getAttribute('value');
   assert.ok(restoredPattern!==null);
   await dialog.locator('select').selectOption(restoredPattern);
@@ -1761,6 +1781,8 @@ async function inventoryRareCandleSmoke(){
   const target=choices.find(v=>v[2]===3&&v[3]===0);assert.ok(target);
   const value=await dialog.locator('option[data-flower-variant="'+target.join(',')+'"]').getAttribute('value');assert.ok(value!==null);
   await dialog.locator('select').selectOption(value);
+  await dialog.locator('[data-native-decorator="11"] img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
+  await dialog.locator('[data-inventory-art="native-static-route"].item-sprite').waitFor({timeout:30_000});
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-flower:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('22657460');
