@@ -13,6 +13,7 @@ import {readFileSync} from 'node:fs';
 import {chromium} from 'playwright-core';
 import {chefRuntimeSmoke} from './chef-runtime-smoke.mjs';
 import {wandRuntimeSmoke} from './wand-runtime-smoke.mjs';
+import {wandMipSmoke} from './wand-mip-smoke.mjs';
 import {flowerRuntimeCoverage} from './flower-runtime-coverage.mjs';
 
 const append=(...arrays)=>Uint8Array.from(arrays.flatMap(x=>Array.from(x)));
@@ -3017,6 +3018,7 @@ async function run(){
  await inventoryCafeCreationAndOptionalSideSmoke();
  await inventoryChefQuantitySmoke();
  await wandRuntimeSmoke(browser,origin,base);
+ await wandMipSmoke(browser,origin,base);
  await inventoryEditExportSmoke();
  await inventoryBatchQuantitySmoke();
  await inventoryQuantityBoundsSmoke();
