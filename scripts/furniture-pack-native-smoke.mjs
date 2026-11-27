@@ -83,7 +83,7 @@ try{
  },{expected,source,visual,addressables,authored,cases:window.cases,size});
  assert.equal(result.length,window.cases.length);
  const rendered=result.filter(x=>x.status==='rendered-diagnostic'),failures=result.filter(x=>x.status==='failed');
- const reasonCounts={};for(const x of failures)reasonCounts[x.reason]=(reasonCounts[x.reason]??0)+1;
+ const reasonCounts=Object.create(null);for(const x of failures)reasonCounts[x.reason]=(reasonCounts[x.reason]??0)+1;
  console.log(JSON.stringify({schema:'HKIA.FurniturePackDiagnostic.1',manifestPin:expected,sourceVersion:'3.0.1',models:p.geometry.rows.length,totalCases:window.total,offset:window.offset,nextOffset:window.nextOffset,size,camera:'authored-relative-diagnostic',lighting:'synthetic-diagnostic',cubeOrientation:'unverified',bc1Mode:'rgb-diagnostic',runtimeRoot:'identity-diagnostic',clear:'transparent-black-diagnostic',renderFidelity:'unverified',rendered:rendered.length,failed:failures.length,distinctRawFrames:new Set(rendered.map(x=>x.sha256)).size,requests:requests.size,reasonCounts,routeFailures,result},null,2));
  if(failures.length||routeFailures.length||!rendered.length)process.exitCode=1;
 }finally{await browser.close();}
