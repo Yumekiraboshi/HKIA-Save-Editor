@@ -2203,6 +2203,35 @@ fn saved_plucked_flower_zero_and_refill_preserve_uid_payload_and_other_rows(){
 }
 
 #[test]
+fn cafe_draft_preview_recomputes_complete_ordered_identity_and_creation(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=203331651u32;
+ let original=[44,49,48,6,46,9];let peer=[55,49,48,25,46,9];
+ let intermediate=[44,39,48,6,46,9];let target=[55,39,48,25,46,9];
+ let encode=|v:[i32;6]|arr(vec![vec![3],arr(vec![arr(v[..3].iter().map(|&w|u(w as u32)).collect()),arr(v[3..].iter().map(|&w|u(w as u32)).collect())])]);
+ for zipped in [false,true]{
+  let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=0x97;
+  for (id,v) in [(4,original),(5,peer)]{p.extend(doc(1,arr(vec![u(id),u(item),u(id+20),u(2),encode(v)])));}
+  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let (options,can)=e.inventory_cafe_preview(4,original,original).unwrap();
+  assert!(!can&&options.iter().all(|r|r.0!=peer)&&options.iter().any(|r|r.0==intermediate));
+  assert!(e.inventory_cafe_preview(4,original,peer).is_err());
+  let (options,can)=e.inventory_cafe_preview(4,original,intermediate).unwrap();
+  assert!(can&&options.iter().any(|r|r.0==target));
+  assert!(e.inventory_cafe_preview(4,original,target).unwrap().1);
+  assert!(!e.dirty());
+  e.create_inventory_cafe_variant(4,original,target,5).unwrap();
+  assert!(e.inventory_cafe_preview(4,original,target).is_err());
+  assert!(e.undo_scope(Inventory));assert!(e.inventory_cafe_preview(4,original,target).unwrap().1);
+  assert!(e.redo_scope(Inventory));
+  let saved=Editor::open(e.export().unwrap()).unwrap();
+  assert!(saved.inventory_cafe_rows().any(|(_,v,_)|v==target));
+  assert_eq!(saved.inventory_original_unique_payload(4),Some(encode(original).as_slice()));
+ }
+}
+
+#[test]
 fn emptied_chef_families_allow_new_source_variants_without_reusing_saved_identity(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let cafe_item=203331651u32;let boba_item=1798633565u32;
