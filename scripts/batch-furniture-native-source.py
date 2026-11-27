@@ -118,17 +118,49 @@ def save_pair(out,key,suffix,meta,payload):
     # The outer stage is private and is only renamed on successful completion.
     (out/(str(key)+suffix)).write_bytes(payload)
     (out/(str(key)+'.json')).write_text(json.dumps(meta,separators=(',',':'))+'\n',encoding='utf-8')
+def candidate_rounds(jobs,found,attempt):
+    """Resolve catalog candidates in original order, grouped by available bundle.
+    Retry only a missing file or an explicitly absent native GUID. An actual
+    ambiguous binding, unsupported object, or conflicting copy is terminal.
+    Each job has exactly one final receipt; attempted candidate names are
+    diagnostic evidence, not alternate item identities.
+    """
+    pending=[(typ,row,list(names),[]) for typ,row,names in jobs]
+    results=[]
+    while pending:
+        groups=defaultdict(list)
+        for typ,row,names,tried in pending:
+            while names and not found.get(names[0]):
+                tried.append({'bundle':names.pop(0),'reason':'missing catalog bundle'})
+            if not names:
+                key=row['itemId'] if typ=='geometry' else row['guid']
+                results.append({'kind':typ,'key':key,'guid':row['guid'],'bundle':tried[-1]['bundle'],
+                                'status':'unresolved','reason':'no available catalog owner with exact GUID','attempts':tried})
+                continue
+            bundle=names.pop(0)
+            groups[bundle].append((typ,row,names,tried))
+        pending=[]
+        for bundle,group in sorted(groups.items()):
+            replies=attempt(bundle,[(typ,row) for typ,row,_,_ in group])
+            require(len(replies)==len(group),'candidate reply coverage')
+            for (typ,row,names,tried),(receipt,retry) in zip(group,replies):
+                require(receipt['bundle']==bundle and receipt['kind']==typ and receipt['guid']==row['guid'] and
+                        receipt['key']==(row['itemId'] if typ=='geometry' else row['guid']),'candidate receipt identity')
+                if retry:
+                    require(receipt['status']=='unresolved','candidate retry status')
+                    tried.append({'bundle':bundle,'reason':receipt['reason']})
+                    if names:
+                        pending.append((typ,row,names,tried))
+                        continue
+                if tried:receipt['attempts']=tried
+                results.append(receipt)
+    return sorted(results,key=lambda r:(r['kind'],r['key']))
+
 def extract_batch(plan,root,out,kind,limit):
     model_rows=plan['models'] if kind in ('all','geometry') else []
     pattern_rows=plan['patterns'] if kind in ('all','pattern') else []
     if limit is not None:
         model_rows=model_rows[:limit];pattern_rows=pattern_rows[:limit]
-    # The first catalog dependency is a candidate, not a proven asset owner.
-    # All successes still require an exact container GUID and supported layout.
-    groups=defaultdict(list)
-    for typ,rows in [('geometry',model_rows),('pattern',pattern_rows)]:
-        for row in rows:groups[row['bundles'][0]].append((typ,row))
-    found=locate(root,set(groups))
     mesh=module('extract-furniture-mesh-source');audit=module('audit-native-dye-materials')
     cab_index=module('batch-furniture-base-materials').CabIndex(root,{n for r in model_rows for n in r['bundles']},module('resolve-unityfs-cabs').node_names) if model_rows else None
     pattern=module('extract-furniture-pattern-texture')
@@ -136,16 +168,27 @@ def extract_batch(plan,root,out,kind,limit):
     known_models=unique(read('furniture-mesh-source-sample-v3.0.1.json')['rows'],lambda x:x['itemId'])
     known_patterns=unique(read('furniture-pattern-texture-sample-v3.0.1.json')['rows'],lambda x:x['guid'])
     known_chair=unique(read('furniture-chair-pattern-sources-v3.0.1.json')['rows'],lambda x:x['guid'])
-    results=[]
-    for bundle,rows in sorted(groups.items()):
+    jobs=[]
+    for typ,rows in [('geometry',model_rows),('pattern',pattern_rows)]:
+        for row in rows:
+            pinned=known_models.get(row['itemId']) if typ=='geometry' else known_chair.get(row['guid']) or known_patterns.get(row['guid'])
+            names=row['bundles']
+            if pinned is not None:
+                require(pinned['bundle'] in names,'pinned owner outside catalog')
+                names=[pinned['bundle']]
+            jobs.append((typ,row,names))
+    found=locate(root,{name for _,_,names in jobs for name in names})
+    def attempt(bundle,rows):
         raw=None;bundle_error=None;parsed=None
         try:raw=load_unique(found.get(bundle,[]))
         except (OSError,ValueError) as e:bundle_error=str(e)
+        replies=[]
         for typ,row in rows:
             key=row['itemId'] if typ=='geometry' else row['guid']
             receipt={'kind':typ,'key':key,'bundle':bundle,'guid':row['guid']}
             if bundle_error:
-                results.append({**receipt,'status':'unresolved','reason':bundle_error});continue
+                # Conflicting copies and failed reads are not evidence of absence.
+                replies.append(({**receipt,'status':'unresolved','reason':bundle_error},False));continue
             try:
                 if typ=='geometry':
                     meta,payload=mesh.extract(raw,bundle,row['guid'],key,audit,resolve_cab=lambda cab:cab_index.resolve(cab,set(row['bundles'])))
@@ -164,14 +207,16 @@ def extract_batch(plan,root,out,kind,limit):
                     meta=metas[key];payload=payloads[key]
                     if key in known_patterns:require(meta=={k:v for k,v in known_patterns[key].items() if k!='materialIndex'},'pinned pattern mismatch')
                     save_pair(out/'pattern',key,'.texture.bin',meta,payload)
-                results.append({**receipt,'status':'extracted','bytes':len(payload),'sha256':sha(payload),'bundleSha256':meta['bundleSha256']})
+                replies.append(({**receipt,'status':'extracted','bytes':len(payload),'sha256':sha(payload),'bundleSha256':meta['bundleSha256']},False))
             except Exception as e:
-                # Unsupported format or missing native reference is a per-item
-                # failure, never a substituted model. I/O errors abort staging.
                 if isinstance(e,OSError):raise
-                results.append({**receipt,'status':'unresolved','reason':f'{type(e).__name__}: {e}'[:300]})
-        del raw,parsed
-    return results
+                # Only an explicit absent GUID in a successfully parsed native
+                # container permits the next exact catalog dependency.
+                retry=isinstance(e,ValueError) and str(e)==('missing native prefab key' if typ=='geometry' else 'missing native GUID in supplied bundle')
+                replies.append(({**receipt,'status':'unresolved','reason':f'{type(e).__name__}: {e}'[:300]},retry))
+        return replies
+    return candidate_rounds(jobs,found,attempt)
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--plan',action='store_true',help='print complete source plan without accessing game files')

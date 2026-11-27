@@ -64,3 +64,41 @@ for data,fmt,ib in [(sm(a,row(4,3,fv=3)),0,indices),(sm(a,row(6,3,top=1,fv=3)),0
 `;
  execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
 });
+
+test('batch resolves exact missing GUIDs through remaining catalog owners, but never hides ambiguous or invalid owners',()=>{
+ const py=String.raw`
+import importlib.util
+spec=importlib.util.spec_from_file_location('batch','scripts/batch-furniture-native-source.py')
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+def model(i):return {'itemId':i,'guid':str(i)}
+jobs=[('geometry',model(1),['missing','a','b']),('geometry',model(2),['a','b']),('geometry',model(3),['a','b']),
+      ('geometry',model(4),['missing']),('pattern',{'guid':'p'},['a','b']),('geometry',model(5),['a'])]
+found={'a':['source-a'],'b':['source-b']}
+calls=[]
+def attempt(bundle,rows):
+    calls.append((bundle,[(t,r['guid']) for t,r in rows]))
+    replies=[]
+    for t,r in rows:
+        key=r.get('itemId',r['guid'])
+        receipt={'kind':t,'key':key,'guid':r['guid'],'bundle':bundle}
+        if bundle=='a' and key in (1,'p',5):
+            replies.append(({**receipt,'status':'unresolved','reason':'missing exact GUID'},True))
+        elif bundle=='a' and key==2:
+            replies.append(({**receipt,'status':'unresolved','reason':'ambiguous native prefab key'},False))
+        else:replies.append(({**receipt,'status':'extracted'},False))
+    return replies
+rows=m.candidate_rounds(jobs,found,attempt)
+assert calls==[('a',[('geometry','1'),('geometry','2'),('geometry','3'),('pattern','p'),('geometry','5')]),('b',[('geometry','1'),('pattern','p')])]
+assert len(rows)==6
+by={r['key']:r for r in rows}
+assert by[1]['bundle']=='b' and by[1]['status']=='extracted' and len(by[1]['attempts'])==2
+assert by[2]['status']=='unresolved' and by[2]['bundle']=='a' and 'attempts' not in by[2]
+assert by[3]['status']=='extracted' and by[3]['bundle']=='a'
+assert by[4]['status']=='unresolved' and by[4]['bundle']=='missing'
+assert by[5]['status']=='unresolved' and by[5]['bundle']=='a'
+assert by['p']['bundle']=='b' and by['p']['status']=='extracted'
+try:m.candidate_rounds(jobs,found,lambda b,r:[]);raise AssertionError('missing receipt accepted')
+except ValueError:pass
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
+});
