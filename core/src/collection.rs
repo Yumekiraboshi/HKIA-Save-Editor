@@ -542,7 +542,8 @@ impl Editor {
   if row.id==0||row.id>=PENDING_ITEM||row.unique_id!=Some(0)||row.unique_is_nil!=Some(true)||
    self.inventory_changes.get(&row.id).copied().or(row.quantity)?<=0||
    !row.fields.iter().all(Option::is_some)||
-   !crate::inventory_source::ordinary_creation_item(item)||!self.inventory_creation_payload_safe(item)||
+   !(crate::inventory_source::ordinary_creation_item(item)||self.extra_custom_furniture_zero_reference_safe(item))||
+   !self.inventory_creation_payload_safe(item)||
    self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item){return None}
   let source=furniture_source::item(item)?;
   if source.is_home_layout||crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX){return None}
