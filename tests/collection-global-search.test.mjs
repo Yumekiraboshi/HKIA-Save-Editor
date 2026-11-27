@@ -65,6 +65,17 @@ test('collection global search is visible on root, subcategory, and item pages a
  assert.match(app,/iconPack\.entries\[String\(item\[0\]\)\]/);
 });
 
+test('global search renders exact item artwork from the bounded shared pack cache',()=>{
+ const section=app.slice(app.indexOf('<div class="collection-search-results">'),app.indexOf('{:else if !selectedGroup}'));
+ assert.ok(section.includes('inventoryIconPacks[item[3]]?.entries'));
+ assert.ok(section.includes('originalArtUrl={originalVariantArt[String(item[0])]}'));
+ assert.ok(section.includes('class="collection-search-art"'));
+ assert.ok(section.includes('<DyeSprite'));
+ assert.ok(section.includes('class="item-sprite"'));
+ assert.match(app,/const groups=new Set\(collectionSearchResults\.slice\(0,visibleLimit\)\.map\(item=>item\[3\]\)\)/);
+ assert.match(app,/if\(inventoryIconPending\.size>=3\)break/);
+});
+
 test('achievement filter and manual show-all control are gone; infinite scroll loads both kinds of results',()=>{
  const achievements=app.slice(app.indexOf("{:else if activeTool==='achievements'}"),app.indexOf('<dialog class="achievement-dialog"'));
  assert.match(achievements,/bind:value=\{achievementQuery\}/);

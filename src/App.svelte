@@ -467,6 +467,17 @@ import {verifiedFloorplanName} from './floorplan-names';
    void fetchInventoryIcons(group);
   }
  });
+ // Global collection results share the original pack cache and its bounded request queue.
+ $effect(()=>{
+  inventoryIconPulse;
+  if(activeTool!=='collections'||!snapshot||!catalog||!showingGlobalCollectionSearch)return;
+  const groups=new Set(collectionSearchResults.slice(0,visibleLimit).map(item=>item[3]));
+  for(const group of groups){
+   if(inventoryIconPending.size>=3)break;
+   if(iconPack?.group===group||inventoryIconPacks[group]||inventoryIconPending.has(group)||inventoryIconFailed.has(group))continue;
+   void fetchInventoryIcons(group);
+  }
+ });
  const unnamed=$derived((catalog as Catalog|null)?.items.filter((x:Item)=>!x[5]&&!x[6]&&!verifiedFloorplanName(x[0],locale)).length??0);
  function describeError(e:unknown){const raw=e instanceof Error?e.message:String(e);return editorErrors[locale==='ja'?'ja':'en'][raw]??(locale==='ja'?(raw||copy.unknown):copy.unknown);}
  function setLanguage(v:LanguagePref){
@@ -1800,7 +1811,17 @@ import {verifiedFloorplanName} from './floorplan-names';
      <div class="collection-search-results">
       {#each collectionSearchResults.slice(0,visibleLimit) as item (item[0])}
        {@const resultGroup=catalog.groups.find(g=>g[0]===item[3])}
+       {@const sprite=(iconPack?.group===item[3]?iconPack.entries:inventoryIconPacks[item[3]]?.entries)?.[String(item[0])]}
        <button type="button" class="collection-search-result" onclick={()=>jumpToCollectionItem(item)}>
+        <span class="collection-search-art" aria-hidden="true">
+         {#if originalVariantArt[String(item[0])]||exactVariantArt[String(item[0])]||(sprite&&nativeDyePalettes[String(item[0])])}
+          <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item[0])]} sourceKey={item[1]} exactArtUrl={exactVariantArt[String(item[0])]} originalArtUrl={originalVariantArt[String(item[0])]}/>
+         {:else if sprite}
+          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
+         {:else}
+          <span class="item-art-empty">✧</span>
+         {/if}
+        </span>
         <span class="collection-search-result-text">
          <span class="collection-search-result-name">{nameFor(item)}</span>
          <span class="collection-search-result-context">

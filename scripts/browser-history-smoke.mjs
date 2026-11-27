@@ -2501,7 +2501,11 @@ async function run(){
   return result;
  }
  await search.fill('Ice Cream Archer Hat');
- await page.locator('.collection-search-result').first().click();
+ const iceResult=page.locator('.collection-search-result').first();
+ const iceSearchArt=iceResult.locator('.collection-search-art .item-sprite[data-dye-source="game-source-sprite"]');
+ await iceSearchArt.waitFor({timeout:30_000});
+ assert.ok((await iceSearchArt.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/704486536.webp'));
+ await iceResult.click();
  const iceSprite=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-source-sprite"]');
  await iceSprite.waitFor({timeout:30_000});
  const icePixels=await sampledSprite(iceSprite);
@@ -2705,6 +2709,7 @@ async function run(){
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();
  await result.waitFor({timeout:20_000});
+ await result.locator('.collection-search-art .item-sprite').waitFor({timeout:30_000});
  await result.click();
  const item=page.locator('article.item-tile button.item-toggle:not([disabled])').first();
  await item.waitFor();
