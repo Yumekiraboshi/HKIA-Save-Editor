@@ -7,3 +7,7 @@ Run `node scripts/furniture-ldr-gpu-smoke.mjs` with the existing browser diagnos
 ## Executed independent GLSL comparison
 
 Mesa OpenGL ES 3.2 (llvmpipe, Mesa 25.0.7-2) successfully compiled and linked the exact new vertex/fragment GLSL, including the existing flattened LUT helper. An independent local EGL harness used RGBA8 input and identity LUT textures, two RGBA8 color attachments, and six combinations of linear/gamma20/sRGB output and vignette on/off. Each 32×32 frame had three changed pixels (one with alpha zero), with all 1024 alpha bytes preserved and the clear alpha zero. Maximum RGB difference from the independent mathematical reference was 0–1 UNorm byte. This checks actual GLSL execution, not the TypeScript WebGL API or native game assets. The Chromium smoke is now called by the existing local-artifact browser test; live Pages checks do not execute the checkout-only diagnostic. No workflow/ruleset changes.
+
+## Chromium CI verification
+
+PR #282 test job 140275403478, run 45928470899, completed successfully. Log line `FURNITURE LDR GPU SYNTHETIC DIAGNOSTIC PASS` records all 18 combinations (two LUTs, three output modes, vignette disabled/enabled/zero smoothness): maximum RGB byte error 0 in all cases; exact raw alpha, two visible pixels and one partial-alpha pixel. This supersedes the earlier browser-unverified statement for synthetic frames only. Actual original furniture LDR rendering is still unverified.
