@@ -427,7 +427,16 @@ impl Editor {
   let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),inventory_removed:HashSet::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),pending_bobas:HashMap::new(),pending_cafes:HashMap::new(),pending_wands:HashMap::new(),inventory_item_rows,unique_quantity_ids:HashSet::new(),structural_quantity_caps:HashMap::new(),structural_zero_ids:HashSet::new(),legacy_wand_sources_resolved,flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),boba_variant_changes:HashMap::new(),wand_variant_changes:HashMap::new(),cafe_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
   editor.unique_quantity_ids=editor.index_unique_quantity_ids();
   editor.structural_quantity_caps=editor.index_structural_quantity_caps();
-  editor.structural_zero_ids=editor.inventory_removable_ids().into_iter().filter(|id|editor.structural_quantity_caps.contains_key(id)).collect();
+  let removable:HashSet<_>=editor.inventory_removable_ids().into_iter().collect();
+  editor.structural_zero_ids=editor.slot.index.inventory.iter().filter_map(|r|{
+   let item=r.item_id?;
+   if r.unique_is_nil!=Some(false)||!editor.structural_quantity_caps.contains_key(&r.id)||!removable.contains(&r.id){return None}
+   // Last-copy reference completeness is independent from the quantity
+   // field. In particular an unresolved legacy source or outfit copy
+   // cannot be made safe by merely preserving the outer record.
+   if crate::inventory_source::wand_output_item(item)&&(!editor.wand_reference_safe(item)||!editor.legacy_wand_sources_resolved){return None}
+   Some(r.id)
+  }).collect();
   Ok(editor)
  }
  fn compatible(slot:&ReadSlot)->bool{
@@ -2493,6 +2502,7 @@ impl Editor {
    // is an opaque preserved span, not part of quantity eligibility.
    // Reject inconsistent outer identity, not unrecognized appearance values.
    if (uid==0)!=r.unique_is_nil?{return None}
+   if r.unique_is_nil==Some(true)&&crate::inventory_source::definition_requires_unique(item)?{return None}
    let cap=crate::inventory_source::definition_quantity_limit(item)?;
    // A finite item cap must not be multiplied by ambiguous same-item rows.
    if cap<i32::MAX&&self.inventory_item_rows.get(&item)!=Some(&1){return None}
