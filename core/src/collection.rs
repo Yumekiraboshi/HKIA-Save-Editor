@@ -522,8 +522,44 @@ impl Editor {
    .or_else(||self.boba_variant_changes.get(&row.id).map(|v|InventoryUniqueData::BobaAppearance{color_id:v[0]}))
    .or_else(||self.cafe_variant_changes.get(&row.id).copied().map(Self::cafe_appearance)).or(row.unique_data)
  }
+ /// Presentation only. A denied edit does not imply an unknown appearance.
+ /// Never use this projection for eligibility, CAS, identity, or writing.
+ fn displayed_unique(&self,row:&crate::native::InventoryRow)->Option<InventoryUniqueData>{
+  let effective=self.effective_unique(row);
+  if self.slot.envelope.version!=Version::V301{return effective}
+  if !matches!(effective,None|Some(InventoryUniqueData::Opaque{..})){return effective}
+  let decoded=&self.slot.envelope.decoded;
+  let display=match row.unique_data{
+   Some(InventoryUniqueData::Opaque{tag:1})=>Self::legacy_furniture_materials(decoded,row).map(|materials|InventoryUniqueData::Furniture{materials}),
+   Some(InventoryUniqueData::Opaque{tag:2})=>Self::legacy_flower_variant(decoded,row).map(flower_unique),
+   Some(InventoryUniqueData::Opaque{tag:5})=>Self::legacy_wand_display(decoded,row),
+   _=>None
+  };
+  display.or(effective)
+ }
+ fn legacy_wand_display(decoded:&[u8],row:&crate::native::InventoryRow)->Option<InventoryUniqueData>{
+  if !matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))||row.unique_fields.len()!=5{return None}
+  let mut c=Cursor::new(decoded.get(row.unique_fields[0].clone())?);
+  let mut guid=[0;4];for word in &mut guid{*word=c.int(0,u32::MAX as i128).ok()? as u32;}
+  if c.pos!=c.bytes.len(){return None}
+  let source_item_id=if guid==[0;4]{0}else{crate::inventory_source::native_item_reference_id(guid)?};
+  let raw=decoded.get(row.unique_fields[1].clone())?;
+  let source_tag=if raw==[0xc0]{-1}else{
+   // Nested payload was already schema-walked. Native sub-icon selection
+   // ignores nested appearance, so retain only the original union tag.
+   let mut c=Cursor::new(raw);if c.array().ok()?!=2{return None}
+   c.int(0,11).ok()? as i32
+  };
+  let mut values=[0;3];
+  for (v,span) in values.iter_mut().zip(&row.unique_fields[2..]){
+   let mut c=Cursor::new(decoded.get(span.clone())?);
+   *v=c.int(i32::MIN as i128,i32::MAX as i128).ok()? as i32;
+   if c.pos!=c.bytes.len(){return None}
+  }
+  Some(InventoryUniqueData::WandAppearance{source_item_id,magic:values[0],fleck:values[1],style:values[2],source_tag,source_count:0,source_words:[0;12]})
+ }
  pub fn inventory_unique_rows(&self)->impl Iterator<Item=(u32,Option<i32>,Option<bool>,Option<InventoryUniqueData>,usize)>+'_{
-  self.slot.index.inventory.iter().filter(|r|r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,r.unique_is_nil,self.effective_unique(r),r.unique_fields.len()))
+  self.slot.index.inventory.iter().filter(|r|r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,r.unique_is_nil,self.displayed_unique(r),r.unique_fields.len()))
    .chain(self.pending_inventory_rows().into_iter().map(|r|if self.pending_palettes.contains_key(&r.document_id){(r.document_id,None,Some(false),self.inventory_unique_data(r.document_id),3)}else if self.pending_bobas.contains_key(&r.document_id){(r.document_id,None,Some(false),self.inventory_unique_data(r.document_id),5)}else if self.pending_cafes.contains_key(&r.document_id){(r.document_id,None,Some(false),self.inventory_unique_data(r.document_id),2)}else if self.pending_wands.contains_key(&r.document_id){(r.document_id,None,Some(false),self.inventory_unique_data(r.document_id),5)}else{match self.pending_flowers.get(&r.document_id){
     Some(f)=>(r.document_id,None,Some(false),Some(flower_unique(self.flower_variant_changes.get(&r.document_id).copied().unwrap_or(f.variant))),4),
     None=>match self.pending_furniture.get(&r.document_id){Some(f)=>(r.document_id,None,Some(false),Some(InventoryUniqueData::Furniture{materials:self.furniture_variant_changes.get(&r.document_id).copied().unwrap_or(f.variant)}),3),None=>(r.document_id,Some(0),Some(true),None,0)}
@@ -1081,7 +1117,7 @@ impl Editor {
  pub fn inventory_flowers(&self)->impl Iterator<Item=(u32,u8,i32,i32,i32)>+'_{
   self.slot.index.inventory.iter().filter_map(move |row|{
    if self.slot.envelope.version!=Version::V301||row.item_id.is_none()||row.quantity.is_none(){return None}
-   match self.effective_unique(row){
+   match self.displayed_unique(row){
     Some(crate::native::InventoryUniqueData::Flower{grow_state,base_color,pattern,pattern_color})=>Some((row.id,grow_state,base_color,pattern,pattern_color)),
     _=>None
    }
@@ -3642,6 +3678,50 @@ mod tests {
   slot.extend([0x92,0xc8,0,3,98,0xcd]);slot.extend((payload.len() as u16).to_be_bytes());
   slot.push(0xc6);slot.extend((compressed.len() as u32).to_be_bytes());slot.extend(compressed);
   slot
+ }
+
+ #[test]
+ fn historical_display_is_independent_of_mutation_eligibility(){
+  let original=revision_test_slot();
+  let mut editor=Editor::open(original.clone()).unwrap();
+  fn uint(n:u32)->Vec<u8>{let mut b=vec![0xce];b.extend(n.to_be_bytes());b}
+  fn guid(g:[u32;4])->Vec<u8>{g.into_iter().flat_map(uint).collect()}
+  fn row(editor:&mut Editor,id:u32,item:i32,tag:i32,parts:Vec<Vec<u8>>)->crate::native::InventoryRow{
+   let mut spans=Vec::new();
+   for part in parts{
+    let start=editor.slot.envelope.decoded.len();
+    editor.slot.envelope.decoded.extend(part);
+    spans.push(start..editor.slot.envelope.decoded.len());
+   }
+   crate::native::InventoryRow{id,item_id:Some(item),unique_id:Some(id as i32),quantity:Some(1),
+    fields:[None,None,None,None],unique_is_nil:Some(false),unique_data:Some(InventoryUniqueData::Opaque{tag}),unique_fields:spans}
+  }
+  let flower=row(&mut editor,100,43114910,2,vec![vec![6],guid(LEGACY_FLOWER_COLOR_GUIDS[1]),guid(LEGACY_FLOWER_PATTERN_GUIDS[0]),guid(LEGACY_FLOWER_COLOR_GUIDS[0])]);
+  let furniture=row(&mut editor,101,61381969,1,vec![guid([0;4]),guid([0;4]),guid([0;4])]);
+  let (source_guid,source_id)=crate::inventory_legacy_wand_guid_data::OTHER_NATIVE_ITEM_GUIDS[0];
+  assert!(crate::inventory_source::legacy_wand_source_id(source_guid).is_none());
+  let wand=row(&mut editor,102,384749651,5,vec![guid(source_guid),vec![0xc0],uint(104),uint(125),uint(0)]);
+  let unknown=row(&mut editor,103,384749651,5,vec![guid([u32::MAX;4]),vec![0xc0],uint(104),uint(125),uint(0)]);
+  let magic=row(&mut editor,104,1429161083,5,vec![guid([0;4]),vec![0xc0],uint(104),uint(125),uint(118)]);
+  let nested=row(&mut editor,105,384749651,5,vec![guid(source_guid),vec![0x92,0x04,0x95,6,1,2,3,4],uint(104),uint(125),uint(0)]);
+  assert_eq!(editor.displayed_unique(&flower).unwrap().display_words(),(7,vec![6,1,0,0]));
+  assert_eq!(editor.displayed_unique(&furniture).unwrap().display_words(),(8,vec![0,0,0]));
+  assert_eq!(editor.displayed_unique(&wand).unwrap().display_words(),(9,vec![source_id as u32,104,125,0,u32::MAX,0]));
+  assert_eq!(editor.displayed_unique(&magic).unwrap().display_words(),(9,vec![0,104,125,118,u32::MAX,0]));
+  assert_eq!(editor.displayed_unique(&nested).unwrap().display_words(),(9,vec![source_id as u32,104,125,0,4,0]));
+  assert_eq!(editor.displayed_unique(&unknown),unknown.unique_data);
+  for r in [&flower,&furniture,&wand,&magic,&nested,&unknown]{
+   assert_eq!(editor.effective_unique(r),r.unique_data);
+   assert!(!editor.unique_quantity_ids.contains(&r.id));
+  }
+  editor.slot.index.inventory.extend([flower,furniture,wand,unknown,magic,nested]);
+  assert_eq!(editor.inventory_flowers().collect::<Vec<_>>(),vec![(100,6,1,0,0)]);
+  assert_eq!(editor.inventory_unique_rows().find(|r|r.0==102).unwrap().3.unwrap().display_words().1[0],source_id as u32);
+  assert_eq!(editor.inventory_flower_edit_hints().count(),0);
+  assert_eq!(editor.inventory_furniture_edit_hints().count(),0);
+  assert_eq!(editor.inventory_wand_edit_hints().count(),0);
+  assert_eq!(editor.inventory_unique_data(102),Some(InventoryUniqueData::Opaque{tag:5}));
+  assert_eq!(editor.revision(),0);
  }
 
  #[test]
