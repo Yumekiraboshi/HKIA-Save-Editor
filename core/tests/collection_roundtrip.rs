@@ -5783,7 +5783,7 @@ fn native_defaulted_reference_tails_do_not_disable_unrelated_ordinary_bag_deleti
   let mut p=vec![0x93,0];p.extend(u(12+batch.len() as u32));p.push(0xdc);p.extend(((8+batch.len()) as u16).to_be_bytes());
   p.extend_from_slice(&synthetic_payload("3.0.1")[4..]);
   for (i,&item) in batch.iter().enumerate(){
-   p.extend(doc(1,arr(vec![u(4+i as u32),u(item as u32),u(0),u(2),vec![0xc0]])));
+   p.extend(doc(1,arr(vec![u(4+i as u32),u(item as u32),u(0),u(1),vec![0xc0]])));
   }
   let id=4+batch.len() as u32;
   p.extend(doc(10,arr(vec![u(id),guid([1,2,3,4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([1,2,3,4]),vec![0xc3],vec![0xc0]])));
@@ -5796,12 +5796,12 @@ fn native_defaulted_reference_tails_do_not_disable_unrelated_ordinary_bag_deleti
   let raw=make(batch);let mut e=Editor::open(raw).unwrap();let before=e.inventory();
   assert_eq!(before.len(),batch.len());
   for row in &before{assert_eq!(row.quantity_minimum,if row.item_id==target{1}else{0},"Item ID {}",row.item_id);}
-  let zero:Vec<_>=before.iter().filter(|r|r.item_id!=target).map(|r|(r.document_id,2,0)).collect();
+  let zero:Vec<_>=before.iter().filter(|r|r.item_id!=target).map(|r|(r.document_id,1,0)).collect();
   e.change_inventory_quantities(&zero).unwrap();
   assert!(e.undo_scope(Inventory));assert_eq!(e.inventory(),before);assert!(e.redo_scope(Inventory));
   let mut saved=Editor::open(e.export().unwrap()).unwrap();
-  assert!(saved.inventory().iter().all(|r|r.quantity==if r.item_id==target{2}else{0}));
-  let refill:Vec<_>=before.iter().filter(|r|r.item_id!=target).map(|r|(r.document_id,0,2)).collect();
+  assert!(saved.inventory().iter().all(|r|r.quantity==if r.item_id==target{1}else{0}));
+  let refill:Vec<_>=before.iter().filter(|r|r.item_id!=target).map(|r|(r.document_id,0,1)).collect();
   saved.change_inventory_quantities(&refill).unwrap();
   assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),before);
  }
@@ -5822,7 +5822,7 @@ fn all_source_ordinary_item_wand_ingredients_remain_deletable_after_copy(){
   p.extend_from_slice(&synthetic_payload("3.0.1")[4..]);
   for (i,&item) in batch.iter().enumerate(){
    let id=4+i as u32;
-   p.extend(doc(1,arr(vec![u(id),u(item as u32),u(0),u(2),vec![0xc0]])));
+   p.extend(doc(1,arr(vec![u(id),u(item as u32),u(0),u(1),vec![0xc0]])));
   }
   for (i,&item) in batch.iter().enumerate(){
    p.extend(doc(1,arr(vec![u(4+n+i as u32),u(wand),u(1+i as u32),u(1),
@@ -5838,12 +5838,12 @@ fn all_source_ordinary_item_wand_ingredients_remain_deletable_after_copy(){
   assert_eq!(original.len(),2*n);
   assert!(original[..n].iter().all(|r|r.editable&&r.quantity_minimum==0));
   let copies:Vec<_>=original[n..].iter().map(|r|(r.document_id,e.inventory_original_unique_payload(r.document_id).unwrap().to_vec())).collect();
-  let zero:Vec<_>=original[..n].iter().map(|r|(r.document_id,2,0)).collect();
+  let zero:Vec<_>=original[..n].iter().map(|r|(r.document_id,1,0)).collect();
   e.change_inventory_quantities(&zero).unwrap();assert!(e.undo_scope(Inventory));assert_eq!(e.inventory(),original);assert!(e.redo_scope(Inventory));
   let mut saved=Editor::open(e.export().unwrap()).unwrap();
   assert!(saved.inventory()[..n].iter().all(|r|r.quantity==0));
   for (id,bytes) in copies{assert_eq!(saved.inventory_original_unique_payload(id),Some(bytes.as_slice()));}
-  let refill:Vec<_>=original[..n].iter().map(|r|(r.document_id,0,2)).collect();
+  let refill:Vec<_>=original[..n].iter().map(|r|(r.document_id,0,1)).collect();
   saved.change_inventory_quantities(&refill).unwrap();
   assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),original);
  }
