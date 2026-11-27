@@ -34,3 +34,14 @@ test('sample source coverage and exact native side table choices, stable paginat
  assert.throws(()=>furniturePackDiagnosticCases(c,[302413286],32709745),/ITEM/);
  assert.throws(()=>furniturePackDiagnosticCases(c,[302413286,9999999999]),/COVERAGE/);
 });
+
+test('defaults-only covers every staged item exactly once with native default sentinels',()=>{
+ const ids=c.items.map(i=>i[0]);
+ const rows=furniturePackDiagnosticCases(c,ids,undefined,true);
+ assert.equal(rows.length,649);
+ assert.deepEqual(rows.map(r=>r.itemId),ids.slice().sort((a,b)=>a-b));
+ assert.ok(rows.every(r=>r.indices.length===3&&r.indices.every(i=>i===0)));
+ assert.deepEqual(furniturePackDiagnosticCases(c,[302413286,32709745],302413286,true),[{itemId:302413286,indices:[0,0,0]}]);
+ assert.throws(()=>furniturePackDiagnosticCases(c,[302413286,302413286],undefined,true),/DUPLICATE/);
+ assert.throws(()=>furniturePackDiagnosticCases(c,[302413286],undefined,'true'),/MODE/);
+});
