@@ -4676,6 +4676,50 @@ fn legacy_furniture_material_cas_retains_guid_union_and_untouched_spans(){
 
 
 #[test]
+fn mixed_legacy_and_current_wands_share_identity_and_keep_native_wire_tags(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=384749651u32;let source=1185152302u32;
+ let stick=[0x92872ce0,0x48d378f7,0x78fb30ab,0x3d491cdd];
+ let legacy=|magic:u32|arr(vec![vec![5],arr(vec![guid(stick),vec![0xc0],u(magic),u(125),u(0)])]);
+ let modern=|magic:u32|arr(vec![vec![9],arr(vec![u(source),vec![0xc0],u(magic),u(125),u(0)])]);
+ let make=|peer:Vec<u8>|{
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x98;
+  p.extend(doc(1,arr(vec![u(4),u(item),u(11),u(6),legacy(104)])));
+  p.extend(doc(1,arr(vec![u(5),u(item),u(12),u(2),peer])));
+  p.extend(doc(1,arr(vec![u(6),u(item),u(13),u(3),legacy(106)])));
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(modern(105));let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory().iter().all(|r|r.editable&&r.quantity_minimum==0));
+  assert!(!e.inventory_wand_variants(4).contains(&[105,125]));
+  assert!(!e.inventory_wand_creation_variants(4).contains(&[106,125]));
+  assert!(e.change_inventory_wand_variant(4,[104,125],[105,125]).is_err());
+  e.change_inventory_wand_variant(4,[104,125],[107,125]).unwrap();
+  let added=e.create_inventory_wand_variant(4,[107,125],[108,125],5).unwrap();
+  assert!(matches!(e.inventory_unique_data(added),Some(U::WandAppearance{magic:108,source_tag:-1,..})));
+  assert!(e.create_inventory_wand_variant(5,[105,125],[104,125],1).is_err());
+  e.change_inventory_quantities(&[(4,6,0),(5,2,0),(6,3,0)]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(modern(105).as_slice()));
+  assert_eq!(saved.inventory_original_unique_payload(6),Some(legacy(106).as_slice()));
+  assert_eq!(&saved.inventory_original_unique_payload(4).unwrap()[..3],&legacy(104)[..3]);
+  assert!(matches!(saved.inventory_unique_data(4),Some(U::WandAppearance{magic:107,..})));
+  assert!(saved.inventory().iter().all(|r|r.editable&&r.quantity_minimum==0));
+  saved.change_inventory_quantities(&[(4,0,6),(5,0,2),(6,0,3)]).unwrap();
+  assert!(Editor::open(saved.export().unwrap()).unwrap().inventory().iter().any(|r|r.quantity==5));
+ }
+ for peer in [modern(104),legacy(104)]{
+  let mut e=Editor::open(make(peer)).unwrap();
+  assert!(!e.inventory()[0].editable);assert!(!e.inventory()[1].editable);
+  assert!(e.change_inventory_quantity(4,6,0).is_err());assert!(!e.dirty());
+ }
+}
+
+#[test]
 fn legacy_wand_guid_and_pair_edit_cas_preserves_tag5_and_other_fields(){
  use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
  let stick=[0x92872ce0,0x48d378f7,0x78fb30ab,0x3d491cdd];
@@ -4691,8 +4735,8 @@ fn legacy_wand_guid_and_pair_edit_cas_preserves_tag5_and_other_fields(){
   assert!(e.inventory_wand_edit_hints().any(|id|id==4));
   assert!(e.inventory_wand_variants(4).contains(&[105,126]));
   assert!(e.inventory_wand_edit_sources(4).contains(&replacement));
-  assert!(e.inventory_wand_creation_variants(4).is_empty());
-  assert!(e.create_inventory_wand_variant(4,[104,125],[105,126],1).is_err());
+  assert!(e.inventory_wand_creation_variants(4).contains(&[105,126]));
+  assert!(e.create_inventory_wand_variant(4,[104,125],[104,125],1).is_err());
   assert!(e.change_inventory_wand_identity(4,[original,104,125],[0,105,126]).is_err());
   assert!(e.change_inventory_wand_identity(4,[original,104,125],[replacement,999,126]).is_err());
   assert!(e.change_inventory_wand_identity(4,[original,105,125],[replacement,105,126]).is_err());

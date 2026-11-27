@@ -1302,9 +1302,6 @@ impl Editor {
    row.fields.iter().all(Option::is_some)&&
    Self::wand_identity(row).is_some_and(|v|Self::wand_materials(v)!=WAND_NIL_MATERIALS)
  }
- fn wand_words(row:&crate::native::InventoryRow)->Option<WandVariant>{
-  Self::wand_identity(row).map(Self::wand_pair)
- }
  // Return exact native token spans for a complete nested tag-8 payload.
  fn wand_material_spans(raw:&[u8],materials:FurnitureVariant)->Result<Vec<std::ops::Range<usize>>,Error>{
   let mut cursor=Cursor::new(raw);
@@ -1318,8 +1315,7 @@ impl Editor {
   if cursor.pos!=raw.len(){return Err(Error::Schema)}
   Ok(spans)
  }
- // Zero is more restrictive than positive quantity changes. Unknown legacy
- // GUID targets cannot be joined to these six integer source IDs yet.
+ // Resolve legacy source GUIDs without changing their native representation.
  fn legacy_wand_identity(&self,row:&crate::native::InventoryRow)->Option<WandData>{
   Self::legacy_wand_identity_in(&self.slot.envelope.decoded,row)
  }
@@ -1342,11 +1338,18 @@ impl Editor {
   let identity=Self::wand_nil(source,[values[0],values[1]]);
   Self::wand_key(item,identity)?;Some(identity)
  }
+ fn saved_wand_identity(&self,row:&crate::native::InventoryRow)->Option<WandData>{
+  Self::wand_identity(row).or_else(||self.legacy_wand_identity(row))
+ }
+ // An unresolved historical source retains the original conservative block.
+ fn legacy_wand_sources_resolved(&self)->bool{
+  self.slot.index.inventory.iter().filter(|r|matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))).all(|r|
+   r.id>0&&r.id<PENDING_ITEM&&r.unique_id.is_some_and(|uid|uid>0)&&r.quantity.is_some_and(|q|q>=0)&&
+   r.fields.iter().all(Option::is_some)&&self.legacy_wand_identity(r).is_some())
+ }
  fn legacy_wand_zero_reference_safe(&self,row:&crate::native::InventoryRow)->bool{
-  let Some(item)=row.item_id else{return false};
-  self.legacy_wand_identity(row).is_some()&&self.inventory_item_rows.get(&item)==Some(&1)&&
-   self.wand_reference_safe(item)&&
-   !self.slot.index.inventory.iter().any(|r|r.id!=row.id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5})))
+  row.item_id.is_some_and(|item|self.wand_reference_safe(item))&&
+   self.legacy_wand_identity(row).is_some()&&self.legacy_wand_sources_resolved()
  }
  fn wand_reference_safe(&self,item:i32)->bool{
   let index=&self.slot.index;
@@ -1360,8 +1363,8 @@ impl Editor {
    !index.inventory_item_refs.iter().any(|&(id,_)|id==item)
  }
  fn wand_zero_reference_safe(&self,row:&crate::native::InventoryRow)->bool{
-  row.item_id.is_some_and(|item|self.wand_reference_safe(item))&&Self::wand_words(row).is_some()&&
-   !self.slot.index.inventory.iter().any(|r|matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5})))
+  row.item_id.is_some_and(|item|self.wand_reference_safe(item))&&self.saved_wand_identity(row).is_some()&&
+   self.legacy_wand_sources_resolved()
  }
  fn wand_appearance(item:i32,v:WandData)->Option<InventoryUniqueData>{
   Self::wand_key(item,v)?;
@@ -1396,7 +1399,7 @@ impl Editor {
   let mut reserved=HashSet::new();
   for peer in &self.slot.index.inventory{
    if peer.id==id||peer.item_id!=Some(item){continue}
-   let v=Self::wand_identity(peer)?;
+   let v=self.saved_wand_identity(peer)?;
    reserved.insert(Self::wand_key(item,v)?);
    reserved.insert(Self::wand_key(item,self.wand_variant_changes.get(&peer.id).copied().unwrap_or(v))?);
   }
@@ -1469,7 +1472,7 @@ impl Editor {
   };
   for row in self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)){
    if !self.unique_quantity_ids.contains(&row.id){return None}
-   reserve(row.id,Self::wand_identity(row)?)?;
+   reserve(row.id,self.saved_wand_identity(row)?)?;
   }
   for (&id,&(other,v)) in &self.pending_wands{
    if other!=item||!self.inventory_changes.contains_key(&id){continue}
@@ -1517,7 +1520,7 @@ impl Editor {
   let mut keys=HashSet::new();
   for r in self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)){
    if !self.unique_quantity_ids.contains(&r.id){return None}
-   let original=Self::wand_identity(r)?;
+   let original=self.saved_wand_identity(r)?;
    for v in [original,self.wand_variant_changes.get(&r.id).copied().unwrap_or(original)]{keys.insert(Self::wand_key(item,v)?);}
   }
   for (&id,&(i,original)) in &self.pending_wands{
@@ -1576,7 +1579,8 @@ impl Editor {
    .filter(|&(item,_)|!self.absent_wand_choices(item).is_empty()).collect()
  }
  fn wand_creation_gate(&self,id:u32,item:i32)->bool{
-  if self.slot.index.inventory.iter().any(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))){return false}
+  if self.slot.index.inventory.iter().any(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))&&
+   !self.legacy_wand_zero_reference_safe(r)){return false}
   let qty=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
   qty.is_some_and(|q|q>0)&&self.wand_family_count(item)<256&&self.absent_flower_budget_available()&&
    self.inventory_creation_payload_safe(item)&&!self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)
@@ -2247,7 +2251,7 @@ impl Editor {
     match self.chef_identity(row){Some((a,b))=>{*chef_counts.entry((item,a,b)).or_default()+=1;},None=>{ambiguous.insert(item);}}
    }
    if crate::inventory_source::wand_output_item(item){
-    match Self::wand_identity(row).and_then(|v|Self::wand_key(item,v)){Some(v)=>{*wand_counts.entry((item,v)).or_default()+=1;},None=>{ambiguous.insert(item);}}
+    match self.saved_wand_identity(row).and_then(|v|Self::wand_key(item,v)){Some(v)=>{*wand_counts.entry((item,v)).or_default()+=1;},None=>{ambiguous.insert(item);}}
    }
    if !Self::is_flower_quantity_definition(item){continue}
    let Some(v)=row.unique_data.and_then(flower_variant)
@@ -2272,7 +2276,10 @@ impl Editor {
    }
    if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:5})){
     self.unique_row_source(row,5)?;
-    return (crate::inventory_source::is_uncapped_required_unique_stack(item)&&self.legacy_wand_zero_reference_safe(row)).then_some(row.id)
+    let key=Self::wand_key(item,self.legacy_wand_identity(row)?)?;
+    return (!ambiguous.contains(&item)&&wand_counts.get(&(item,key))==Some(&1)&&
+     self.inventory_item_rows.get(&item).copied().unwrap_or(0)<=256&&
+     crate::inventory_source::is_uncapped_required_unique_stack(item)&&self.legacy_wand_zero_reference_safe(row)).then_some(row.id)
    }
    if ambiguous.contains(&item){return None}
    if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:2})){
