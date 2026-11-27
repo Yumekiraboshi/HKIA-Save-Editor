@@ -64,8 +64,8 @@ for key,source in m.SHADER_SOURCES.items():
     except ValueError:
         pass
 assert sorted((v[2],v[3],v[4]) for v in m.SHADER_SOURCES.values())==[
-    ('Shader Graphs/FluidStream',34,1),('Sunblink/Lynx/CustomLitTriplanar',22,3),('Shader Graphs/HK_Unlit_SoftTextured',11,1),('Shader Graphs/Standard Vertex Color',6,1),('Sunblink/Lynx/CustomLit',47,42),
-    ('Sunblink/Lynx/CustomLitFurniture',42,4),('Sunblink/Lynx/CustomLitRefractive',41,7),('Sunblink/Lynx/CustomLitSparkle',36,3),('Sunblink/Lynx/Fluid',24,1),
+    ('Shader Graphs/FluidStream',34,1),('Shader Graphs/HK_Unlit_SoftTextured',11,1),('Shader Graphs/Standard Vertex Color',6,1),('Sunblink/Lynx/CustomLit',47,42),
+    ('Sunblink/Lynx/CustomLitFurniture',42,4),('Sunblink/Lynx/CustomLitRefractive',41,7),('Sunblink/Lynx/CustomLitSparkle',36,3),('Sunblink/Lynx/CustomLitTriplanar',22,3),('Sunblink/Lynx/Fluid',24,1),
     ('Sunblink/Lynx/Terrain/Custom Lit Terrain Simple',31,4)]
 `;
  execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:fileURLToPath(new URL('../',import.meta.url))});
