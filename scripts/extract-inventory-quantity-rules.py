@@ -94,8 +94,10 @@ def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_r
             j=end[j]
         id=d['Id'];stack=bool(d['ItemProperties']&2);unique=d['RequiresUniqueData'];custom=d['HasCustomMaxCount']
         cat=d['ItemCategory']
-        if wand_ingredients is not None and cat>=0 and cat&0x100000 and not unique and not d['ReleaseVersion']:
-            wand_ingredients.append(id)
+        if wand_ingredients is not None and cat>=0 and cat&0x100000:
+            require(not unique,'item wand recipe unexpectedly includes a required-unique definition')
+            if not d['ReleaseVersion']:
+                wand_ingredients.append(id)
         candidate=(d['ItemOwnership']==18 and stack and not unique and not custom
                    and not d['ReleaseVersion'] and d['RequiredDlcContent']=='0'*32
                    and d['CollectionEventYear']=='0'*32 and d['Rarity'] in (2,3,4) and cat&2048

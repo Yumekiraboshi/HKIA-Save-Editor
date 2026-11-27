@@ -23,7 +23,7 @@ export function isWandVariantWire(v:unknown):v is WandVariant{
  return Array.isArray(v)&&v.length===2&&v.every(n=>Number.isInteger(n)&&n>=-2147483648&&n<=2147483647);
 }
 export function wandVariantOf(info:InventoryUniqueInfo|undefined):WandVariant|null{
- return info?.tag===9&&info.fieldCount===5&&info.words.length===6&&info.words[4]===4294967295&&info.words[5]===0?[info.words[1]|0,info.words[2]|0]:null;
+ return info?.tag===9&&info.fieldCount===5&&((info.words.length===6&&info.words[4]===4294967295&&info.words[5]===0)||(info.words.length===9&&info.words[4]===8&&info.words[5]===3))?[info.words[1]|0,info.words[2]|0]:null;
 }
 export function decodeWandVariants(bytes:Uint8Array):WandVariant[]{
  if(bytes.length<4)throw Error('WAND_OPTIONS_INVALID');
@@ -49,4 +49,13 @@ export function isWandIdentityWire(v:unknown):v is WandIdentity{
 }
 export function wandIdentityOf(info:InventoryUniqueInfo|undefined):WandIdentity|null{
  const pair=wandVariantOf(info);return pair&&info?[info.words[0]|0,...pair]:null;
+}
+
+export type WandNested=[number,number,number,number,number,number];
+export function isWandNestedWire(v:unknown):v is WandNested{
+ return Array.isArray(v)&&v.length===6&&v.every(n=>Number.isInteger(n)&&n>=0&&n<=2147483647)&&v[0]>0;
+}
+export function wandNestedOf(info:InventoryUniqueInfo|undefined):WandNested|null{
+ if(info?.tag!==9||info.fieldCount!==5||info.words.length!==9||info.words[4]!==8||info.words[5]!==3)return null;
+ const w=[...info.words.slice(0,3),...info.words.slice(6)];return isWandNestedWire(w)?w:null;
 }

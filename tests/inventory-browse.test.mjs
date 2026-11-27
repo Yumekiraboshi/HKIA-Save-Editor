@@ -259,3 +259,9 @@ test('style zero wand candidate remains a customization candidate',()=>{
  const owned={documentId:36,itemId:384749651,quantity:2,editable:true,unique:{wandEditable:true}};
  assert.deepEqual(inventoryAddRows([owned],[candidate]),[candidate]);
 });
+
+test('Add retains a verified nested wand witness alongside a nil-source candidate',()=>{
+ const candidate={documentId:2147483648+384749651,itemId:384749651,quantity:0,editable:false,wandCreatableStyle:0};
+ const nested={documentId:36,itemId:384749651,quantity:2,editable:true,unique:{wandEditable:true,tag:9,words:[61381969,104,125,0,8,3,13,2,0]}};
+ assert.deepEqual(inventoryAddRows([nested],[candidate]),[candidate,{...nested,editable:false}]);
+});
