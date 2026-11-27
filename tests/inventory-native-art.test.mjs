@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/inventory-native-art.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
-const {decodeInventoryNativeArt,initialInventoryNativeArt}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {decodeInventoryNativeArt,initialInventoryNativeArt,createInventoryNativeArtLoader}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const raw=readFileSync(new URL('../public/inventory-art/index.json',import.meta.url));
 const manifest=JSON.parse(raw);
 test('all additional original inventory definitions have a verified native 2D sprite or an explicit reason to withhold art',()=>{
@@ -66,5 +66,28 @@ test('all 152 original placeholder routes work before or without the additional 
  assert.throws(()=>decodeInventoryNativeArt(wrong,'/'));
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  assert.ok(app.includes('$state(initialInventoryNativeArt())'));
- assert.ok(app.includes('then(art=>inventoryNativeArt=art).catch(()=>{})'));
+ assert.ok(app.includes('if(!inventoryNativeArtDisposed)inventoryNativeArt=art'));
+ assert.ok(app.includes("window.addEventListener('online',refreshInventoryNativeArtwork)"));
+ assert.ok(app.includes("window.removeEventListener('online',refreshInventoryNativeArtwork)"));
+ assert.ok(app.includes('inventoryIconFailed.clear();inventoryIconPulse++;\n  refreshInventoryNativeArtwork();'));
+});
+
+test('the additional 1747 original routes recover after a transient failure without duplicate downloads',async()=>{
+ let attempts=0,online=false;
+ const expected=decodeInventoryNativeArt(manifest,'/editor/');
+ const request=createInventoryNativeArtLoader('/editor/',async base=>{
+  assert.equal(base,'/editor/');attempts++;
+  if(!online)throw Error('temporarily unavailable');
+  return expected;
+ });
+ const first=request();assert.equal(request(),first);
+ await assert.rejects(first,/temporarily unavailable/);
+ assert.equal(attempts,1);
+ online=true;
+ const second=request();assert.equal(request(),second);
+ const recovered=await second;
+ assert.equal(recovered.entries.size,1747);
+ assert.deepEqual(recovered.placeholders,initialInventoryNativeArt().placeholders);
+ assert.deepEqual(recovered.withheld,initialInventoryNativeArt().withheld);
+ assert.equal(request(),second);assert.equal(await request(),expected);assert.equal(attempts,2);
 });

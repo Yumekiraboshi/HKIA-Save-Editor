@@ -70,3 +70,13 @@ export async function loadInventoryNativeArt(base:string):Promise<NativeArt>{
  if(digest!==INDEX_SHA)throw Error('INVENTORY_ART_INVALID');
  return decodeInventoryNativeArt(JSON.parse(new TextDecoder().decode(data)),base);
 }
+
+/** Session-local successful index cache. Rejected requests are never cached;
+ * a repeated tab visit can recover all additional original image routes. */
+export function createInventoryNativeArtLoader(base:string,load=loadInventoryNativeArt):()=>Promise<InventoryNativeArt>{
+ let pending:Promise<InventoryNativeArt>|undefined;
+ return ()=>{
+  if(!pending)pending=Promise.resolve().then(()=>load(base)).catch(error=>{pending=undefined;throw error;});
+  return pending;
+ };
+}

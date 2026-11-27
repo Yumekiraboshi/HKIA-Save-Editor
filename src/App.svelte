@@ -15,7 +15,7 @@
  import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,flowerGrowthKind,hasNativeFlowerArt,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
- import {initialInventoryNativeArt,loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
+ import {initialInventoryNativeArt,createInventoryNativeArtLoader,type InventoryNativeArt} from './inventory-native-art';
  import {nativeInventoryIconScale} from './native-inventory-icon-scale';
  import {inventoryGroupLabel} from './inventory-native-category-copy';
  import {loadSourceItemNames,type SourceItemNames} from './source-names';
@@ -113,6 +113,13 @@ import {verifiedFloorplanName} from './floorplan-names';
  let paletteDraft=$state<PaletteVariant|null>(null);
  let paletteDraftCreatable=$state(false);
  let inventoryNativeArt:InventoryNativeArt=$state(initialInventoryNativeArt());
+ const requestInventoryNativeArt=createInventoryNativeArtLoader(import.meta.env.BASE_URL);
+ let inventoryNativeArtDisposed=false;
+ function refreshInventoryNativeArtwork(){
+  void requestInventoryNativeArt().then(art=>{
+   if(!inventoryNativeArtDisposed)inventoryNativeArt=art;
+  }).catch(()=>{});
+ }
  let inventoryEditableOnly=$state(false);
  let inventoryShowZero=$state(false);
  let inventoryAddMode=$state(false);
@@ -278,7 +285,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   void loadFlowerDisplayDefinitions(import.meta.env.BASE_URL).then(data=>flowerDefinitions=data).catch(()=>{});
   void loadFlowerLabels(import.meta.env.BASE_URL).then(data=>flowerLabels=data).catch(()=>{});
   void loadFurnitureDisplay().then(data=>furnitureDisplay=data).catch(()=>{});
-  void loadInventoryNativeArt(import.meta.env.BASE_URL).then(art=>inventoryNativeArt=art).catch(()=>{});
+  refreshInventoryNativeArtwork();
+  window.addEventListener('online',refreshInventoryNativeArtwork);
   // Exact game dye palettes, used exclusively for recoloring item image pixels.
   void loadNativeDyePalettes(import.meta.env.BASE_URL)
    .then(palettes=>nativeDyePalettes=palettes).catch(()=>{});
@@ -315,6 +323,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   return ()=>{
    media.removeEventListener?.('change',listener);
    window.removeEventListener('beforeunload',beforeUnload);
+   window.removeEventListener('online',refreshInventoryNativeArtwork);
+   inventoryNativeArtDisposed=true;
    iconEpoch++;iconLoadingGroup=null;iconPack=null;
    inventoryIconEpoch++;
    for(const pack of Object.values(inventoryIconPacks))pack.dispose();
@@ -570,6 +580,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   // Retry transient failures only when the user reopens Inventory.
   // Successfully verified original images remain cached and unchanged.
   inventoryIconFailed.clear();inventoryIconPulse++;
+  refreshInventoryNativeArtwork();
  }
  function showAchievementGroup(guid:string|null){
   achievementGroupSelection=guid;achievementQuery='';
