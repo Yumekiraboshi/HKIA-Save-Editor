@@ -28,3 +28,13 @@ python scripts/pack-furniture-batches.py --source /tmp/hkia-batch --materials /t
 ```
 
 The packer checks the full extracted manifest against the committed original scene evidence, both cubemap payload hashes and lengths, and the existing assembler's exact face/mip coverage. This eliminates dependence on a prior ZIP for the shared reflection payloads. Existing pattern-only and incremental packs remain supported. A pack still needs complete source model/material graphs before it can render; runtime lighting and face orientation are not inferred or verified by packing.
+
+### Single-command local rebuild
+
+From a checkout of the canonical repository, Python 3.12+ is sufficient for extraction and packing (no package install or network required):
+
+```powershell
+python scripts/rebuild-furniture-source-pack.py --root "D:\\SteamLibrary\\steamapps\\common\\Hello Kitty Island Adventure\\Hello Kitty_Data" --out "$env:USERPROFILE\\Desktop\\HKIA-Furniture-Source"
+```
+
+Use your actual original v3.0.1 tree path. The output must be new and outside both the game tree and repository. The command discovers the exact catalog and lighting bundles by pinned hashes, runs the existing geometry/pattern and material-closure extractors, includes the original reflection cubes, assembles the pack, and verifies lazy browser staging. Optional `--catalog`, `--limit` and independently pinned `--prior` / `--prior-sha256` are supported. Intermediate local stages remain available if a later stage fails; no success receipt is written on failure. The final `result.json` records pack and manifest pins, coverage and omitted source identities; the pack remains diagnostic. No upload or deployment is performed. Actual original full-tree execution is pending.
