@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPalettePreview,changeInventoryPaletteVariant,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafeVariants,changeInventoryCafeVariant,requestCafeCreationVariants,createInventoryCafeVariant,requestWandVariants,changeInventoryWandIdentity,requestWandNestedMaterials,requestWandNestedPairs,changeInventoryWandNested,createInventoryWandNested,requestWandEditSources,requestAbsentWandSources,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPalettePreview,changeInventoryPaletteVariant,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafeVariants,changeInventoryCafeVariant,requestCafeCreationVariants,createInventoryCafeVariant,requestWandVariants,changeInventoryWandIdentity,requestWandNestedMaterials,requestWandNestedPairs,changeInventoryWandNested,createInventoryWandNested,requestWandEditSources,requestAbsentWandSources,requestOwnedFurnitureWandSources,requestOwnedFurnitureWandPairs,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,inventoryPatchesEqual,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -92,7 +92,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let cafeDraft=$state<CafeVariant|null>(null);
  let cafeSlot=$state(0);
  let wandDialogEl:HTMLDialogElement|undefined=$state();
- let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[];absent?:boolean;sourceChoices?:number[];beforeSource?:number;nestedBefore?:WandNested;nestedOptions?:FurnitureVariant[];nestedCreationOptions?:FurnitureVariant[]}|null>(null);
+ let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[];absent?:boolean;sourceChoices?:number[];beforeSource?:number;nestedBefore?:WandNested;nestedOptions?:FurnitureVariant[];nestedCreationOptions?:FurnitureVariant[];ownedFurnitureChoices?:number[];ownedFurnitureSource?:number;ownedFurnitureWitness?:WandNested}|null>(null);
  let wandSelection=$state(-1);
  let wandMaterialSelection=$state(-1);
  let wandSourceQuery=$state('');
@@ -831,10 +831,10 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||row.wandCreatableStyle===undefined)return;
   const revision=snapshot.revision;busy=true;error='';
   try{
-   const [options,sourceChoices]=await Promise.all([requestWandCreationVariants(row.documentId),row.wandCreatableStyle===0?requestAbsentWandSources(row.documentId):Promise.resolve(undefined)]);
-   if(!snapshot||snapshot.revision!==revision||!options.length||(sourceChoices&&!sourceChoices.length))return;
+   const [options,sourceChoices,ownedFurnitureChoices]=await Promise.all([requestWandCreationVariants(row.documentId),row.wandCreatableStyle===0?requestAbsentWandSources(row.documentId):Promise.resolve(undefined),row.wandCreatableStyle===0?requestOwnedFurnitureWandSources(row.documentId):Promise.resolve([])]);
+   if(!snapshot||snapshot.revision!==revision||!options.length||(sourceChoices&&!sourceChoices.length&&!ownedFurnitureChoices.length))return;
    const before:WandVariant=[0,0],appearance:WandInventoryAppearance={sourceItemId:0,sourceUnique:null,styleCharacteristicId:row.wandCreatableStyle,magicCharacteristicId:options[0][0],fleckCharacteristicId:options[0][1]};
-   wandEdit={documentId:row.documentId,itemId:row.itemId,revision,before,appearance,options,creationOptions:options,absent:true,sourceChoices};
+   wandEdit={documentId:row.documentId,itemId:row.itemId,revision,before,appearance,options,creationOptions:options,absent:true,sourceChoices,ownedFurnitureChoices};
    wandSourceQuery='';wandSelection=0;variantAddQuantity=1;await tick();
    if(wandDialogEl&&!wandDialogEl.open)wandDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
@@ -847,8 +847,22 @@ import {verifiedFloorplanName} from './floorplan-names';
    const options=await (edit.absent?requestWandCreationVariants(edit.documentId,source):requestWandVariants(edit.documentId,source));
    const creationOptions=edit.absent?options:source===edit.beforeSource?await requestWandCreationVariants(edit.documentId):[];
    if(wandEdit!==edit||snapshot?.revision!==edit.revision)return;
-   wandEdit={...edit,before:edit.absent?[source,0]:edit.before,appearance:{...edit.appearance,sourceItemId:source},options,creationOptions};
+   wandEdit={...edit,before:edit.absent?[source,0]:edit.before,appearance:{...edit.appearance,sourceItemId:source,sourceUnique:null},options,creationOptions,ownedFurnitureSource:undefined,ownedFurnitureWitness:undefined};
    wandSelection=options.length?0:-1;
+  }catch(e){error=describeError(e)}finally{busy=false}
+ }
+ async function chooseOwnedFurnitureWandSource(value:string){
+  const id=Number(value),edit=wandEdit;
+  if(busy||!snapshot||!edit?.absent||!edit.ownedFurnitureChoices?.includes(id)||snapshot.revision!==edit.revision)return;
+  const row=snapshot.inventory.find(r=>r.documentId===id),materials=furnitureVariantOf(row?.unique);
+  if(!row||!materials)return;
+  busy=true;error='';
+  try{
+   const options=await requestOwnedFurnitureWandPairs(id);
+   if(wandEdit!==edit||snapshot?.revision!==edit.revision||!options.length)return;
+   const witness:WandNested=[row.itemId,0,0,...materials];
+   wandEdit={...edit,before:[row.itemId,0],appearance:{...edit.appearance,sourceItemId:row.itemId,sourceUnique:{tag:8,words:[...materials]}},options,creationOptions:options,ownedFurnitureSource:id,ownedFurnitureWitness:witness};
+   wandSelection=0;wandMaterialSelection=-1;
   }catch(e){error=describeError(e)}finally{busy=false}
  }
  async function openWandEditor(row:InventoryEntry){
@@ -880,6 +894,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function canAddWandVariant():boolean{
   const edit=wandEdit;if(!edit)return false;
   const pair=edit.options[wandSelection],materials=edit.nestedOptions?.[wandMaterialSelection];
+  if(edit.ownedFurnitureWitness)return Boolean(pair&&edit.ownedFurnitureSource&&edit.creationOptions.some(v=>v.every((n,i)=>n===pair[i])));
   if(edit.absent&&edit.sourceChoices&&!edit.sourceChoices.includes(edit.before[0]))return false;
   if(edit.nestedBefore)return Boolean(materials&&edit.nestedCreationOptions?.some(v=>v.every((n,i)=>n===materials[i])));
   return Boolean(pair&&edit.creationOptions.some(v=>v.every((n,i)=>n===pair[i])));
@@ -891,7 +906,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const next=edit.options[wandSelection]??edit.before;
   const materials=edit.nestedOptions?.[wandMaterialSelection];
   busy=true;error='';
-  try{update(await (edit.nestedBefore?createInventoryWandNested(edit.documentId,edit.nestedBefore,[edit.nestedBefore[0],...next,...(materials??[edit.nestedBefore[3],edit.nestedBefore[4],edit.nestedBefore[5]])] as WandNested,quantity):createInventoryWandVariant(edit.documentId,edit.before,next,quantity)));closeWandEditor();await persistDraft()}
+  try{update(await (edit.ownedFurnitureWitness&&edit.ownedFurnitureSource?createInventoryWandNested(edit.ownedFurnitureSource,edit.ownedFurnitureWitness,[edit.ownedFurnitureWitness[0],...next,...edit.ownedFurnitureWitness.slice(3)] as WandNested,quantity):edit.nestedBefore?createInventoryWandNested(edit.documentId,edit.nestedBefore,[edit.nestedBefore[0],...next,...(materials??[edit.nestedBefore[3],edit.nestedBefore[4],edit.nestedBefore[5]])] as WandNested,quantity):createInventoryWandVariant(edit.documentId,edit.before,next,quantity)));closeWandEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
  }
  function closeWandEditor(){if(wandDialogEl?.open)wandDialogEl.close()}
@@ -1944,11 +1959,24 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#if edit.sourceChoices}
      <label class="date-dialog-field">
       <input type="search" name="wand-source-search" bind:value={wandSourceQuery} placeholder={iCopy.search} aria-label={iCopy.search} disabled={busy}/>
-      <select name="wand-source" aria-label={iCopy.search} value={edit.appearance.sourceItemId} onchange={e=>chooseAbsentWandSource(e.currentTarget.value)} disabled={busy}>
+      <select name="wand-source" aria-label={iCopy.search} value={edit.ownedFurnitureSource?0:edit.appearance.sourceItemId} onchange={e=>chooseAbsentWandSource(e.currentTarget.value)} disabled={busy}>
        <option value={0} disabled>—</option>
-       {#if edit.appearance.sourceItemId>0}<option value={edit.appearance.sourceItemId}>{inventoryName(edit.appearance.sourceItemId)}</option>{/if}
-       {#each edit.sourceChoices.filter(id=>id!==edit.appearance.sourceItemId&&(!wandSourceQuery.trim()||String(id).includes(wandSourceQuery.trim())||inventoryName(id).toLocaleLowerCase().includes(wandSourceQuery.trim().toLocaleLowerCase()))).slice(0,200) as source}
+       {#if edit.appearance.sourceItemId>0&&!edit.ownedFurnitureSource}<option value={edit.appearance.sourceItemId}>{inventoryName(edit.appearance.sourceItemId)}</option>{/if}
+       {#each edit.sourceChoices.filter(id=>(edit.ownedFurnitureSource||id!==edit.appearance.sourceItemId)&&(!wandSourceQuery.trim()||String(id).includes(wandSourceQuery.trim())||inventoryName(id).toLocaleLowerCase().includes(wandSourceQuery.trim().toLocaleLowerCase()))).slice(0,200) as source}
         <option value={source}>{inventoryName(source)}</option>
+       {/each}
+      </select>
+     </label>
+    {/if}
+    {#if edit.ownedFurnitureChoices?.length}
+     <label class="date-dialog-field">
+      <span>{furnitureCopy.material}</span>
+      <select name="wand-owned-furniture" value={edit.ownedFurnitureSource??0} onchange={e=>void chooseOwnedFurnitureWandSource(e.currentTarget.value)} disabled={busy}>
+       <option value={0} disabled>—</option>
+       {#each edit.ownedFurnitureChoices as id}
+        {@const row=snapshot?.inventory.find(r=>r.documentId===id)}
+        {@const materials=furnitureVariantOf(row?.unique)}
+        {#if row&&materials}<option value={id}>{inventoryName(row.itemId)} · {furnitureVariantTitle(furnitureDisplay,row.itemId,materials,furnitureCopy.defaultMaterial)}</option>{/if}
        {/each}
       </select>
      </label>

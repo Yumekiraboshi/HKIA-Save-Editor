@@ -257,6 +257,12 @@ export function requestWandEditSources(documentId:number):Promise<number[]>{
 export function changeInventoryWandIdentity(documentId:number,beforeWandIdentity:WandIdentity,nextWandIdentity:WandIdentity):Promise<SaveSnapshot>{
  return rpc('wand-identity-change',{documentId,beforeWandIdentity:[...beforeWandIdentity],nextWandIdentity:[...nextWandIdentity]}) as Promise<SaveSnapshot>;
 }
+export function requestOwnedFurnitureWandSources(documentId:number):Promise<number[]>{
+ return rpc('wand-absent-sources',{documentId,target:2}) as Promise<number[]>;
+}
+export function requestOwnedFurnitureWandPairs(documentId:number):Promise<WandVariant[]>{
+ return rpc('wand-create-variants',{documentId,target:2}) as Promise<WandVariant[]>;
+}
 export function requestAbsentWandSources(documentId:number):Promise<number[]>{
  return rpc('wand-absent-sources',{documentId}) as Promise<number[]>;
 }
