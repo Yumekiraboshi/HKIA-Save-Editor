@@ -45,7 +45,7 @@ import {searchAchievementRows} from './achievement-search';
  import {inventoryChefAppearance} from './inventory-chef-display';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,paletteCreationSelection,type PaletteVariant} from './inventory-palette-display';
  import {cafeSlotLabel,cafeVariantLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
- import {bobaVariantLabel,bobaBaseKey,bobaBaseChoices,bobaBaseLabel,fullBobaLabel,type BobaVariant} from './inventory-boba-display';
+ import {bobaVariantLabel,bobaBaseKey,bobaBaseChoices,bobaBaseLabel,bobaSelectionForBase,fullBobaLabel,type BobaVariant} from './inventory-boba-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {toAchievementDateTimeValue,fromAchievementDateTimeValue} from './achievement-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
@@ -1861,6 +1861,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
      </label>
     {/if}
+    {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeWandEditor}>{copy.cancel}</button>
      {#if edit.creationOptions.length}
@@ -1883,7 +1884,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     </div>
     <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}}/></div>
     <div class="date-dialog-field">
-     <select name="boba-base" aria-label={inventoryName(edit.itemId)} bind:value={bobaBase} onchange={()=>bobaSelection=-1} disabled={busy}>
+     <select name="boba-base" aria-label={inventoryName(edit.itemId)} bind:value={bobaBase} onchange={e=>{bobaSelection=bobaSelectionForBase(edit.before,edit.options,bobaSelection,e.currentTarget.value);error=''}} disabled={busy}>
       {#each bobaBaseChoices(edit.before,edit.options) as base}
        <option value={bobaBaseKey(base)}>{bobaBaseLabel(base,locale,snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
       {/each}
@@ -1902,6 +1903,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
      </label>
     {/if}
+    {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeBobaEditor}>{copy.cancel}</button>
      {#if edit.creationOptions.length}
@@ -2017,6 +2019,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
      </label>
     {/if}
+    {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
     {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFurnitureEditor}>{copy.cancel}</button>
