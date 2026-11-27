@@ -216,7 +216,7 @@ export function createFurnitureForwardRenderer(gl:WebGL2RenderingContext){
    for(const [i,k] of textureNames.entries()){
     gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(i<4?gl.TEXTURE_2D:gl.TEXTURE_CUBE_MAP,textures[k]);gl.uniform1i(u(k),i);
    }
-   gl.drawElements(gl.TRIANGLES,range.indexCount,gl.UNSIGNED_SHORT,range.firstByte);
+   gl.drawElements(gl.TRIANGLES,range.indexCount,mesh.indexFormat===1?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT,range.firstByte);
    if(gl.getError()!==gl.NO_ERROR)throw Error('FURNITURE_FORWARD_DRAW');
   },
   dispose(){if(!disposed){disposed=true;gl.deleteProgram(program);}}
