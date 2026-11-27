@@ -1,7 +1,8 @@
 /** Enumerate default and independent native slot choices without creating
  * the Cartesian product of all slots. This is a diagnostic test schedule,
  * not a save edit rule, a production icon index, or a completeness claim. */
-export function furniturePackDiagnosticCases(catalog,modelIds,itemId){
+export function furniturePackDiagnosticCases(catalog,modelIds,itemId,defaultsOnly=false){
+ if(typeof defaultsOnly!=='boolean')throw Error('FURNITURE_PACK_CASE_MODE');
  const ids=new Set(modelIds),sets=new Map(catalog.sets.map(s=>[s[0],s[2]]));
  if(ids.size!==modelIds.length||sets.size!==catalog.sets.length)throw Error('FURNITURE_PACK_CASE_DUPLICATE');
  if(itemId!==undefined&&(!Number.isSafeInteger(itemId)||itemId<=0||!ids.has(itemId)))throw Error('FURNITURE_PACK_CASE_ITEM');
@@ -25,7 +26,7 @@ export function furniturePackDiagnosticCases(catalog,modelIds,itemId){
     }
    }
    for(const choice of [...allowed].sort((a,b)=>a-b)){
-    if(choice===sourceDefault)continue;
+    if(defaultsOnly||choice===sourceDefault)continue;
     const indices=[0,0,0];indices[i]=choice;rows.push({itemId:id,indices});
    }
   }
