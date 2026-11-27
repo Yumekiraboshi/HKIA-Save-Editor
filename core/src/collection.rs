@@ -511,12 +511,6 @@ impl Editor {
   if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:2}))&&self.unique_quantity_ids.contains(&row.id){
    return self.flower_variant_changes.get(&row.id).copied().or_else(||Self::legacy_flower_variant(&self.slot.envelope.decoded,row)).map(flower_unique)
   }
-   if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:2})){
-    self.unique_row_source(row,4)?;
-    self.legacy_flower_source(row)?;
-    let v=Self::legacy_flower_variant(&self.slot.envelope.decoded,row)?;
-    return (variant_counts.get(&(item,v))==Some(&1)).then_some(row.id)
-   }
   self.flower_variant_changes.get(&row.id).copied().map(flower_unique)
    .or_else(||self.furniture_variant_changes.get(&row.id).copied().map(|materials|InventoryUniqueData::Furniture{materials}))
    .or_else(||self.palette_variant_changes.get(&row.id).copied().map(|rgba_bits|InventoryUniqueData::Palette{rgba_bits}))
@@ -2261,6 +2255,12 @@ impl Editor {
     return (crate::inventory_source::is_uncapped_required_unique_stack(item)&&self.legacy_wand_zero_reference_safe(row)).then_some(row.id)
    }
    if ambiguous.contains(&item){return None}
+   if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:2})){
+    self.unique_row_source(row,4)?;
+    self.legacy_flower_source(row)?;
+    let v=Self::legacy_flower_variant(&self.slot.envelope.decoded,row)?;
+    return (variant_counts.get(&(item,v))==Some(&1)).then_some(row.id)
+   }
    if Self::palette_identity(row).is_some(){
     self.unique_row_source(row,3)?;
     return (!palette_conflicts.contains(&row.id)).then_some(row.id)
