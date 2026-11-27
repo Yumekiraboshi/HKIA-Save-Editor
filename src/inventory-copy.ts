@@ -98,3 +98,16 @@ const showZeroLabels:Record<Locale,string>={
  ar:'إظهار العناصر ذات الكمية صفر',de:'Gegenstände mit Anzahl 0 anzeigen',en:'Show zero quantity','en-GB':'Show zero quantity',es:'Mostrar cantidad cero',fr:'Afficher les quantités nulles','fr-CA':'Afficher les quantités nulles',it:'Mostra quantità zero',ja:'数量0を表示',ko:'수량 0 표시',nl:'Aantal 0 tonen','pt-BR':'Mostrar quantidade zero',ru:'Показать нулевые количества',tr:'Miktarı 0 olanları göster','zh-Hans':'显示数量为0的物品','zh-Hant':'顯示數量為0的物品'
 };
 export function inventoryShowZeroCopy(locale:Locale):string{return showZeroLabels[locale]}
+
+const zeroStackLabels:Record<Locale,string>={
+ ar:'تعيين الكمية إلى صفر',de:'Anzahl auf 0 setzen',en:'Set quantity to 0','en-GB':'Set quantity to 0',es:'Poner cantidad a 0',fr:'Mettre la quantité à 0','fr-CA':'Mettre la quantité à 0',it:'Imposta quantità a 0',ja:'数量を0にする',ko:'수량을 0으로 설정',nl:'Aantal op 0 zetten','pt-BR':'Definir quantidade como 0',ru:'Установить количество 0',tr:'Miktarı 0 yap','zh-Hans':'数量设为0','zh-Hant':'數量設為0'
+};
+const removeEntryLabels:Record<Locale,string>={
+ ar:'حذف السجل بالكامل',de:'Eintrag vollständig entfernen',en:'Remove entire entry','en-GB':'Remove entire entry',es:'Eliminar el registro completo',fr:'Supprimer toute l’entrée','fr-CA':'Supprimer toute l’entrée',it:'Elimina intera voce',ja:'エントリーごと削除',ko:'항목 전체 삭제',nl:'Volledige vermelding verwijderen','pt-BR':'Remover registro inteiro',ru:'Удалить запись целиком',tr:'Kaydı tamamen sil','zh-Hans':'删除整个条目','zh-Hant':'刪除整個項目'
+};
+const removeEntryWarnings:Record<Locale,string>={
+ ar:'يُحذف السجل وبياناته الفريدة، ولا تتغير سجلات التقدم الأخرى.',de:'Der Eintrag einschließlich seiner individuellen Daten wird entfernt. Andere Fortschrittsdaten bleiben unverändert.',en:'Removes the entry and its unique data. Other progress records are not changed.','en-GB':'Removes the entry and its unique data. Other progress records are not changed.',es:'Elimina el registro y sus datos únicos. No cambia otros registros de progreso.',fr:'Supprime l’entrée et ses données uniques. Les autres données de progression restent intactes.','fr-CA':'Supprime l’entrée et ses données uniques. Les autres données de progression restent intactes.',it:'Elimina la voce e i suoi dati unici. Non modifica gli altri progressi.',ja:'エントリーとその固有データを完全に削除します。他の進行記録は変更しません。',ko:'항목과 고유 데이터를 삭제합니다. 다른 진행 기록은 변경하지 않습니다.',nl:'Verwijdert de vermelding en unieke gegevens. Andere voortgang blijft ongewijzigd.','pt-BR':'Remove o registro e seus dados únicos. Outros registros de progresso não mudam.',ru:'Удаляет запись и её уникальные данные. Остальной прогресс не изменяется.',tr:'Kaydı ve benzersiz verilerini siler. Diğer ilerleme kayıtları değişmez.','zh-Hans':'删除条目及其独有数据，不更改其他进度记录。','zh-Hant':'刪除項目及其獨有資料，不變更其他進度記錄。'
+};
+export function inventoryZeroStackCopy(locale:Locale):string{return zeroStackLabels[locale]}
+export function inventoryRemoveEntryCopy(locale:Locale):string{return removeEntryLabels[locale]}
+export function inventoryRemoveEntryWarning(locale:Locale):string{return removeEntryWarnings[locale]}
