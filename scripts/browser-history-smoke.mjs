@@ -1719,8 +1719,10 @@ async function inventoryRareCandleSmoke(){
   assert.equal(await dialog.locator('button[type="submit"]').count(),0);
   assert.equal(await dialog.locator('[data-flower-grow]').count(),0);
   const choices=await dialog.locator('option[data-flower-variant]').evaluateAll(rows=>rows.map(row=>row.getAttribute('data-flower-variant').split(',').map(Number)));
-  assert.ok(choices.length>0);assert.ok(choices.every(v=>v[0]===6&&[1,2,10,11,12,13,14,16].includes(v[2])&&v[3]!==0&&v[3]!==v[1]));
-  const target=choices[0],value=await dialog.locator('option[data-flower-variant="'+target.join(',')+'"]').getAttribute('value');assert.ok(value!==null);
+  assert.ok(choices.length>0);assert.ok(choices.every(v=>v[0]===6&&([1,2,10,11,12,13,14,16].includes(v[2])?v[3]!==0&&v[3]!==v[1]:[3,4,5,7,8,9].includes(v[2])&&v[3]===0)));
+  for(const pattern of [3,4,5,7,8,9])assert.ok(choices.some(v=>v[2]===pattern&&v[3]===0));
+  const target=choices.find(v=>v[2]===3&&v[3]===0);assert.ok(target);
+  const value=await dialog.locator('option[data-flower-variant="'+target.join(',')+'"]').getAttribute('value');assert.ok(value!==null);
   await dialog.locator('select').selectOption(value);
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-flower:not([disabled])').click();await dialog.waitFor({state:'hidden'});
@@ -1738,7 +1740,7 @@ async function inventoryRareCandleSmoke(){
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
   assert.equal(v.getUint32(0,true),1);assert.deepEqual(Array.from({length:4},(_,i)=>v.getInt32(8+i*4,true)),target);
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM RARE CANDLE PASS: native colored-pattern selection, recovery, export reparse');
+  console.log('CHROMIUM RARE CANDLE PASS: native effect-pattern selection, recovery, export reparse');
  }finally{await context.close();}
 }
 async function inventoryFlowerClothingCreationSmoke(){

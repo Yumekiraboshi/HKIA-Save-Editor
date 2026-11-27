@@ -39,7 +39,8 @@ pub(crate) fn ordinary_membership_ids()->impl Iterator<Item=i32>{
 }
 /// The 12 Currency-rarity source definitions with native ownership flags
 /// Tradable|DevInboxGiftable, Stackable, no required payload/custom cap.
-/// Authorizes only existing-row zero/refill, not absent-item generation.
+/// Existing-row zero/refill includes the DLC-bearing Jemmies definition.
+/// Absent generation uses the narrower independently verified source set below.
 const EXISTING_CURRENCY_IDS:&[i32]=&[
  348154640,391038680,460708033,483381991,646065996,833471261,
  1205887707,1486918074,1763799360,1774854033,1956968187,2079616823,
@@ -47,17 +48,39 @@ const EXISTING_CURRENCY_IDS:&[i32]=&[
 pub(crate) fn existing_currency_item(item_id:i32)->bool{
  EXISTING_CURRENCY_IDS.binary_search(&item_id).is_ok()&&ordinary_quantity_limit(item_id)==Some(i32::MAX)
 }
+// Original Switch v3.0.1 typed definitions: exact unrestricted currency slice.
+// Jemmies (1205887707) has non-null RequiredDlcContent and is not included.
+const CURRENCY_CREATION_IDS:&[i32]=&[
+ 348154640,391038680,460708033,483381991,646065996,833471261,
+ 1486918074,1763799360,1774854033,1956968187,2079616823,
+];
+fn currency_creation_item(item_id:i32)->bool{
+ CURRENCY_CREATION_IDS.binary_search(&item_id).is_ok()&&existing_currency_item(item_id)
+}
+pub(crate) fn ordinary_bag_creation_item(item_id:i32)->bool{
+ ordinary_creation_item(item_id)||currency_creation_item(item_id)
+}
+pub(crate) fn ordinary_bag_creation_ids()->impl Iterator<Item=i32>{
+ ordinary_creation_ids().chain(CURRENCY_CREATION_IDS.iter().copied().filter(|&id|currency_creation_item(id)))
+}
 #[cfg(test)]
 mod currency_source_tests{
  use super::*;
- #[test]fn existing_currency_allowlist_is_pinned_and_does_not_authorize_absent_creation(){
+ #[test]fn existing_currency_and_unrestricted_creation_allowlists_are_separate(){
   assert_eq!(EXISTING_CURRENCY_IDS.len(),12);
   assert!(EXISTING_CURRENCY_IDS.windows(2).all(|w|w[0]<w[1]));
   let bytes:Vec<_>=EXISTING_CURRENCY_IDS.iter().flat_map(|id|id.to_le_bytes()).collect();
   let hash:String=crate::digest::sha256(&bytes).iter().map(|b|format!("{b:02x}")).collect();
   assert_eq!(hash,"c8a8cb3f726e288d4662d8c90b53b8f60b14a58ec35bca22fc8c8797aabf4b3a");
   assert!(EXISTING_CURRENCY_IDS.iter().all(|&id|existing_currency_item(id)&&!ordinary_creation_item(id)));
-  for id in [484139114,2092387705,615026760,709633628,1141761080]{assert!(!existing_currency_item(id));}
+  assert_eq!(CURRENCY_CREATION_IDS.len(),11);
+  let bytes:Vec<_>=CURRENCY_CREATION_IDS.iter().flat_map(|id|id.to_le_bytes()).collect();
+  let hash:String=crate::digest::sha256(&bytes).iter().map(|b|format!("{b:02x}")).collect();
+  assert_eq!(hash,"e7448e16aec60a8ffdd27a48b948b669d6b2dc364a821e86c56aae5e3b716634");
+  assert!(CURRENCY_CREATION_IDS.iter().all(|&id|ordinary_bag_creation_item(id)&&!ordinary_creation_item(id)));
+  assert_eq!(ordinary_bag_creation_ids().collect::<std::collections::HashSet<_>>().len(),6532);
+  assert!(existing_currency_item(1205887707)&&!ordinary_bag_creation_item(1205887707));
+  for id in [484139114,2092387705,615026760,709633628,1141761080]{assert!(!existing_currency_item(id)&&!ordinary_bag_creation_item(id));}
  }
 }
 /// FNV-1a of the four native little-endian Hash128 words. Only a denial key:

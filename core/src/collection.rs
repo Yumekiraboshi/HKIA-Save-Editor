@@ -194,12 +194,13 @@ fn flower_unique(v:FlowerVariant)->InventoryUniqueData{
 }
 // One source mapping for both existing and newly staged tag-7 records.
 const RARE_CANDLE_KEYS:&[(i32,u32)]=&[(22657460,0x3801512e),(1858821696,0xdf4cea79)];
-const RARE_CANDLE_PATTERNS:&[i32]=&[1,2,10,11,12,13,14,16];
+// Native IsPatterned compares the pattern definition GUID, not its accent or IsEffect.
+const RARE_CANDLE_PATTERNS:&[i32]=ALL_UNRESTRICTED_FLOWER_PATTERNS;
 fn rare_candle_key(item:i32)->Option<u32>{RARE_CANDLE_KEYS.iter().find(|&&(id,_)|id==item).map(|&(_,key)|key)}
 #[derive(Clone,Copy)]
-struct FlowerPolicy{patterns:&'static [i32],require_colored_pattern:bool}
+struct FlowerPolicy{patterns:&'static [i32],require_pattern:bool}
 impl FlowerPolicy{
- fn ordinary(patterns:&'static [i32])->Self{Self{patterns,require_colored_pattern:false}}
+ fn ordinary(patterns:&'static [i32])->Self{Self{patterns,require_pattern:false}}
 }
 fn flower_item_patterns(item:i32,grow:i32)->Option<FlowerPolicy>{
  if let Some((_,patterns))=FLOWER_SPECIES.iter().find(|(id,_)|*id==item){return Some(FlowerPolicy::ordinary(patterns))}
@@ -208,12 +209,12 @@ fn flower_item_patterns(item:i32,grow:i32)->Option<FlowerPolicy>{
   let species=FLOWER_CROWN_SPECIES[i].1;
   return FLOWER_SPECIES.iter().find(|(id,_)|*id==species).map(|&(_,p)|FlowerPolicy::ordinary(p))
  }
- if rare_candle_key(item).is_some(){Some(FlowerPolicy{patterns:RARE_CANDLE_PATTERNS,require_colored_pattern:true})}
+ if rare_candle_key(item).is_some(){Some(FlowerPolicy{patterns:RARE_CANDLE_PATTERNS,require_pattern:true})}
  else if FLOWER_CLOTHING_GENERIC.contains(&item){Some(FlowerPolicy::ordinary(ALL_UNRESTRICTED_FLOWER_PATTERNS))}
  else if item==FLOWER_CLOTHING_NO_PATTERN||flower_candle_source(item).is_some(){Some(FlowerPolicy::ordinary(&[]))}else{None}
 }
 fn valid_flower_variant(policy:FlowerPolicy,v:FlowerVariant)->bool{
- (!policy.require_colored_pattern||(v[0]==6&&policy.patterns.contains(&v[2])&&v[3]!=0))&&
+ (!policy.require_pattern||(v[0]==6&&policy.patterns.contains(&v[2])))&&
  matches!(v[0],0|6|7)&&FLOWER_COLORS.contains(&v[1])&&
  if v[2]==0{v[3]==0}
  else if !policy.patterns.contains(&v[2]){false}
@@ -894,7 +895,7 @@ impl Editor {
   crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1)?;
   (1..=MAX_UNDO as u32+4096).map(|n|PENDING_ITEM|n).find(|id|
    !self.inventory_changes.contains_key(id)&&!self.pending_flowers.contains_key(id)&&!self.pending_furniture.contains_key(id)&&!self.pending_palettes.contains_key(id)&&!self.pending_bobas.contains_key(id)&&!self.pending_cafes.contains_key(id)&&!self.pending_wands.contains_key(id)&&
-   !crate::inventory_source::ordinary_creation_item((id&!PENDING_ITEM) as i32)&&flower_item_patterns((id&!PENDING_ITEM) as i32,6).is_none()).ok_or(Error::Budget)
+   !crate::inventory_source::ordinary_bag_creation_item((id&!PENDING_ITEM) as i32)&&flower_item_patterns((id&!PENDING_ITEM) as i32,6).is_none()).ok_or(Error::Budget)
  }
  fn stage_new_flower(&mut self,source_id:u32,item_id:i32,expected:FlowerVariant,next:FlowerVariant,quantity:i32)->Result<u32,Error>{
   let document_id=self.allocate_staged_unique_handle()?;
@@ -2120,7 +2121,7 @@ impl Editor {
     .all(|r|self.permits_separate_ordinary_base(r))
  }
  fn can_create_inventory_item(&self,item_id:i32)->bool{
-  self.inventory_creation_source_valid()&&crate::inventory_source::ordinary_creation_item(item_id)&&
+  self.inventory_creation_source_valid()&&crate::inventory_source::ordinary_bag_creation_item(item_id)&&
    (!self.inventory_item_rows.contains_key(&item_id)||
     self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item_id)).all(|r|self.permits_separate_ordinary_base(r)))&&
    self.inventory_creation_payload_safe(item_id)&&
@@ -2175,7 +2176,7 @@ impl Editor {
   // ID, while verified nondefault customizable variants do not.
   let blocked:HashSet<i32>=self.slot.index.inventory.iter().filter_map(|r|
    (!self.permits_separate_ordinary_base(r)).then_some(r.item_id?)).collect();
-  crate::inventory_source::ordinary_creation_ids().filter_map(|item_id|{
+  crate::inventory_source::ordinary_bag_creation_ids().filter_map(|item_id|{
    let document_id=PENDING_ITEM|item_id as u32;
    if blocked.contains(&item_id)||referenced.contains(&item_id)||self.inventory_changes.contains_key(&document_id)||!self.inventory_creation_payload_safe(item_id){return None}
    Some(InventoryEntry{document_id,item_id,quantity:0,editable:true,quantity_limit:Some(i32::MAX),quantity_minimum:1})
