@@ -111,4 +111,4 @@ def extract(definitions,atlas,eligible,out,mesh,typed,audit):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
-    extract((a.root/'definitions.bin').read_bytes(),(a.root/'atlas_global.bin').read_bytes(),candidates(Path(__file__).resolve().parents[1]),module('extract-furniture-mesh-source'),module('extract-furniture-preview-camera'),module('unityfs-audit'))
+    extract((a.root/'definitions.bin').read_bytes(),(a.root/'atlas_global.bin').read_bytes(),candidates(Path(__file__).resolve().parents[1]),a.out,module('extract-furniture-mesh-source'),module('extract-furniture-preview-camera'),module('unityfs-audit'))
