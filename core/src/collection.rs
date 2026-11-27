@@ -2135,6 +2135,31 @@ impl Editor {
    ((square(0)+square(1))+square(2))+square(3)<f32::from_bits(0x2edbe6fe)
   })
  }
+ // Approximate native equality is not transitive. Sweep the coordinate with
+ // greatest spread and test only pairs that could be equal. A bound on actual
+ // comparisons, rather than row count, protects pathological dense inputs.
+ fn palette_peer_conflicts(peers:&mut [(u32,PaletteVariant)])->Option<HashSet<u32>>{
+  const MAX_COMPARISONS:usize=2_000_000;
+  if peers.len()<2{return Some(HashSet::new())}
+  let coordinate=|p:&PaletteVariant,i:usize|f32::from_bits(p[i/4][i%4]);
+  let mut low=[f32::INFINITY;12];let mut high=[f32::NEG_INFINITY;12];
+  for (_,p) in peers.iter(){for i in 0..12{
+   let v=coordinate(p,i);low[i]=low[i].min(v);high[i]=high[i].max(v);
+  }}
+  let axis=(0..12).max_by(|&a,&b|(high[a]-low[a]).total_cmp(&(high[b]-low[b])))?;
+  peers.sort_unstable_by(|a,b|coordinate(&a.1,axis).total_cmp(&coordinate(&b.1,axis)));
+  let mut conflicts=HashSet::new();let mut comparisons=0;
+  for i in 0..peers.len(){
+   let (id,p)=peers[i];
+   for &(other,q) in &peers[i+1..]{
+    let d=coordinate(&q,axis)-coordinate(&p,axis);
+    if d*d>=f32::from_bits(0x2edbe6fe){break}
+    comparisons+=1;if comparisons>MAX_COMPARISONS{return None}
+    if Self::palette_equal(p,q){conflicts.insert(id);conflicts.insert(other);}
+   }
+  }
+  Some(conflicts)
+ }
  // Source-limited initial endpoint: ordinary base flower colors and white
  // additives only. Black/Gray are event-restricted in FlowerSettings.
  fn palette_output_choices()->impl Iterator<Item=[u32;4]>{
@@ -2199,8 +2224,7 @@ impl Editor {
   if !quantity.is_some_and(|q|q>0){return None}
   let item=crate::inventory_source::CUSTOM_PALETTE_ID;
   if !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
-   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||
-   self.inventory_item_rows.get(&item).copied().unwrap_or(0)+self.pending_palettes.len()>=256{return None}
+   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
   self.palette_context(id)
  }
  // A native source-defined starter is independent of a positive saved
@@ -2209,7 +2233,6 @@ impl Editor {
   let item=crate::inventory_source::CUSTOM_PALETTE_ID;
   let index=&self.slot.index;
   if !crate::inventory_source::is_uncapped_required_unique_stack(item)||
-   self.inventory_item_rows.get(&item).copied().unwrap_or(0)+self.pending_palettes.len()>=256||
    self.pending_palettes.keys().any(|id|self.inventory_changes.contains_key(id))||
    index.inventory_palette_context_incomplete||index.inventory_palette_copies_incomplete||
    !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
@@ -2301,7 +2324,6 @@ impl Editor {
   let mut chef_counts=HashMap::<(i32,Vec<i32>,Vec<i32>),usize>::new();
   let mut wand_counts=HashMap::<(i32,WandData),usize>::new();
   let mut palette_peers=Vec::new();
-  let mut palette_conflicts=HashSet::new();
   let mut ambiguous=HashSet::new();
   for row in &self.slot.index.inventory{
    if let Some(uid)=row.unique_id{*uid_counts.entry(uid).or_default()+=1}
@@ -2313,13 +2335,8 @@ impl Editor {
     match key{Some(v)=>{*furniture_counts.entry((item,v)).or_default()+=1;},None=>{ambiguous.insert(item);}}
    }
    if item==crate::inventory_source::CUSTOM_PALETTE_ID{
-    // Approximate equality is not transitive and cannot use a hash key.
-    // Bound pairwise work even for hostile or unusually large save files.
-    if palette_peers.len()>=256{ambiguous.insert(item);}
-    else if let Some(key)=Self::palette_identity(row){
-     for &(other,peer) in &palette_peers{if Self::palette_equal(key,peer){palette_conflicts.insert(other);palette_conflicts.insert(row.id);}}
-     palette_peers.push((row.id,key));
-    }else{ambiguous.insert(item);}
+    if let Some(key)=Self::palette_identity(row){palette_peers.push((row.id,key));}
+    else{ambiguous.insert(item);}
    }
    if crate::inventory_source::CAFE_IDS.binary_search(&item).is_ok()||item==crate::inventory_source::BOBA_ID{
     match self.chef_identity(row){Some((a,b))=>{*chef_counts.entry((item,a,b)).or_default()+=1;},None=>{ambiguous.insert(item);}}
@@ -2335,6 +2352,9 @@ impl Editor {
    }
    *variant_counts.entry((item,v)).or_default()+=1;
   }
+  let palette_conflicts=Self::palette_peer_conflicts(&mut palette_peers).unwrap_or_else(||{
+   ambiguous.insert(crate::inventory_source::CUSTOM_PALETTE_ID);HashSet::new()
+  });
   self.slot.index.inventory.iter().filter_map(|row|{
    let item=row.item_id?;let uid=row.unique_id?;
    if uid_counts.get(&uid)!=Some(&1)||self.slot.index.inventory_payload_item_refs.contains(&item)||
