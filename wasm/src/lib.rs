@@ -1002,6 +1002,18 @@ pub extern "C" fn hkia_inventory_absent_wand_sources(id:u32)->u32{
  })
 }
 #[no_mangle]
+pub extern "C" fn hkia_inventory_wand_source_creation_variants(id:u32,source:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_wand_source_creation_variants(id,source);
+  if rows.len()>36{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*8);out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for word in row{out.extend(word.to_le_bytes());}}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
 pub extern "C" fn hkia_inventory_wand_creation_variants(id:u32)->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();

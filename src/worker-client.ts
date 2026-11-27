@@ -242,8 +242,8 @@ export function createInventoryBobaVariant(documentId:number,beforeBobaVariant:B
 export function requestAbsentWandSources(documentId:number):Promise<number[]>{
  return rpc('wand-absent-sources',{documentId}) as Promise<number[]>;
 }
-export function requestWandCreationVariants(documentId:number):Promise<WandVariant[]>{
- return rpc('wand-create-variants',{documentId}) as Promise<WandVariant[]>;
+export function requestWandCreationVariants(documentId:number,sourceItemId?:number):Promise<WandVariant[]>{
+ return rpc('wand-create-variants',{documentId,itemId:sourceItemId}) as Promise<WandVariant[]>;
 }
 export function createInventoryWandVariant(documentId:number,beforeWandVariant:WandVariant,nextWandVariant:WandVariant,nextQuantity:number):Promise<SaveSnapshot>{
  return rpc('wand-create',{documentId,beforeWandVariant:[...beforeWandVariant],nextWandVariant:[...nextWandVariant],nextQuantity}) as Promise<SaveSnapshot>;

@@ -354,14 +354,24 @@ async function inventoryFirstItemWandSmoke(){
   assert.ok(option!==null);await select.selectOption(option);
   await dialog.locator('input[name="variant-add-quantity"]').fill('2');
   await add.click();await dialog.waitFor({state:'hidden'});
-  await card.locator('.inventory-add-source').waitFor();
+  await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  await dialog.locator('input[name="wand-source-search"]').fill('1185152302');
+  await dialog.locator('select[name="wand-source"]').selectOption('1185152302');
+  await page.waitForFunction(()=>document.querySelector('select[name="wand-variant"]')?.options.length===35);
+  assert.equal(await select.locator('option[data-wand-variant="106:127"]').count(),0);
+  await dialog.locator('input[name="wand-source-search"]').fill('315822');
+  await dialog.locator('select[name="wand-source"]').selectOption('315822');
+  await page.waitForFunction(()=>document.querySelector('select[name="wand-variant"]')?.options.length===36);
+  await select.selectOption(await select.locator('option[data-wand-variant="106:127"]').getAttribute('value'));
+  await dialog.locator('input[name="variant-add-quantity"]').fill('4');
+  await add.click();await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();
-  await card.locator('input[name="quantity"]').waitFor();
-  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'2');
+  await card.locator('input[name="quantity"]').nth(1).waitFor();
+  assert.deepEqual((await card.locator('input[name="quantity"]').evaluateAll(els=>els.map(e=>e.value))).sort(),['2','4']);
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('384749651');
-  await card.locator('input[name="quantity"]').waitFor();
-  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'2');
+  await card.locator('input[name="quantity"]').nth(1).waitFor();
+  assert.deepEqual((await card.locator('input[name="quantity"]').evaluateAll(els=>els.map(e=>e.value))).sort(),['2','4']);
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
   const output=readFileSync(await download.path());
@@ -372,6 +382,7 @@ async function inventoryFirstItemWandSmoke(){
   const u=()=>{const n=v.getUint32(at,true);at+=4;return n};const count=u(),rows=[];
   for(let i=0;i<count;i++){const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();const words=Array.from({length:n},()=>u()|0);u();if(tag===9)rows.push(words)}
   assert.ok(rows.some(w=>w.join(':')==='1185152302:106:127:0:-1:0'));
+  assert.ok(rows.some(w=>w.join(':')==='315822:106:127:0:-1:0'));
   assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST ITEM WAND PASS: explicit source selection, recovery and reparse');
  }finally{await context.close()}
 }

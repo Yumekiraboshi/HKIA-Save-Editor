@@ -835,10 +835,16 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(wandDialogEl&&!wandDialogEl.open)wandDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
  }
- function chooseAbsentWandSource(value:string){
+ async function chooseAbsentWandSource(value:string){
   const source=Number(value),edit=wandEdit;
-  if(!edit?.sourceChoices?.includes(source))return;
-  wandEdit={...edit,before:[source,0],appearance:{...edit.appearance,sourceItemId:source}};
+  if(busy||!snapshot||!edit?.sourceChoices?.includes(source)||snapshot.revision!==edit.revision)return;
+  busy=true;error='';
+  try{
+   const options=await requestWandCreationVariants(edit.documentId,source);
+   if(wandEdit!==edit||snapshot?.revision!==edit.revision)return;
+   wandEdit={...edit,before:[source,0],appearance:{...edit.appearance,sourceItemId:source},options,creationOptions:options};
+   wandSelection=options.length?0:-1;
+  }catch(e){error=describeError(e)}finally{busy=false}
  }
  async function openWandEditor(row:InventoryEntry){
   const before=wandVariantOf(row.unique),appearance=inventoryWandAppearance(row.itemId,row.unique);
@@ -1881,7 +1887,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  <dialog class="date-dialog" bind:this={wandDialogEl} aria-labelledby="wand-editor-title" onclose={()=>{wandEdit=null;wandSelection=-1}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if wandEdit}
    {@const edit=wandEdit}
-   {@const selected=edit.options[wandSelection]??edit.before}
+   {@const selected=edit.options[wandSelection]??(edit.sourceChoices?[edit.appearance.magicCharacteristicId,edit.appearance.fleckCharacteristicId]:edit.before)}
    <form class="date-dialog-inner" onsubmit={applyInventoryWandVariant}>
     <div class="date-dialog-heading">
      <h2 id="wand-editor-title">{inventoryName(edit.itemId)}</h2>
@@ -1902,7 +1908,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {/if}
     <label class="date-dialog-field">
      <span>{edit.absent?inventoryName(edit.itemId):wandName(edit.before)}</span>
-     <select name="wand-variant" aria-label={inventoryName(edit.itemId)} bind:value={wandSelection} disabled={busy}>
+     <select name="wand-variant" aria-label={inventoryName(edit.itemId)} bind:value={wandSelection} disabled={busy||Boolean(edit.sourceChoices&&!edit.appearance.sourceItemId)}>
       {#if !edit.absent}<option value={-1}>{wandName(edit.before)}</option>{/if}
       {#each edit.options as option,i}<option value={i} data-wand-variant={option.join(':')}>{wandName(option)}</option>{/each}
      </select>

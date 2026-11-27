@@ -1136,8 +1136,10 @@ impl Editor {
  fn absent_wand_source_gate(&self,item:i32)->bool{
   crate::inventory_source::wand_output_item(item)&&
    crate::inventory_source::is_uncapped_required_unique_stack(item)&&
-   !self.inventory_item_rows.contains_key(&item)&&
-   !self.pending_wands.iter().any(|(&id,&(i,_,_))|i==item&&self.inventory_changes.contains_key(&id))&&
+   (if crate::inventory_source::magic_wand_style(item).is_some(){
+    !self.inventory_item_rows.contains_key(&item)&&
+    !self.pending_wands.iter().any(|(&id,&(i,_,_))|i==item&&self.inventory_changes.contains_key(&id))
+   }else{self.wand_family_count(item)<256&&self.wand_source_reservations(item).is_some()})&&
    !self.slot.index.inventory_wand_copies&&self.inventory_creation_payload_safe(item)&&
    !self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)&&self.absent_flower_budget_available()
  }
@@ -1153,6 +1155,33 @@ impl Editor {
   source>0&&crate::inventory_source::wand_source_style(item,source)==Some(0)&&
    (crate::inventory_source::ordinary_creation_item(source)||self.has_owned_wand_source(source))
  }
+ // Reserve both original and effective identities, including original zero rows.
+ // Any unverified original peer makes the whole source family unsafe to extend.
+ fn wand_source_reservations(&self,item:i32)->Option<HashMap<i32,HashSet<WandVariant>>>{
+  let mut reservations:HashMap<i32,HashSet<WandVariant>>=HashMap::new();
+  for row in self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)){
+   if !self.unique_quantity_ids.contains(&row.id){return None}
+   let (source,v)=Self::wand_identity(row)?;
+   let keys=reservations.entry(source).or_default();
+   keys.insert(v);keys.insert(self.wand_variant_changes.get(&row.id).copied().unwrap_or(v));
+  }
+  for (&id,&(other,source,v)) in &self.pending_wands{
+   if other!=item||!self.inventory_changes.contains_key(&id){continue}
+   let keys=reservations.entry(source).or_default();
+   keys.insert(v);keys.insert(self.wand_variant_changes.get(&id).copied().unwrap_or(v));
+  }
+  Some(reservations)
+ }
+ pub fn inventory_wand_source_creation_variants(&self,id:u32,source:i32)->Vec<WandVariant>{
+  if id&PENDING_ITEM==0||self.pending_wands.contains_key(&id){return Vec::new()}
+  let item=(id&!PENDING_ITEM) as i32;
+  if !matches!(item,crate::inventory_source::ITEM_WAND_ID|crate::inventory_source::CRITTER_WAND_ID)||
+   !self.absent_wand_source_gate(item)||!self.absent_wand_source_allowed(item,source){return Vec::new()}
+  let Some(reserved)=self.wand_source_reservations(item)else{return Vec::new()};
+  crate::inventory_source::WAND_MAGIC.iter().flat_map(|&(magic,_)|
+   crate::inventory_source::WAND_FLECK.iter().map(move |&(fleck,_)|[magic,fleck]))
+   .filter(|v|!reserved.get(&source).is_some_and(|keys|keys.contains(v))).collect()
+ }
  pub fn inventory_absent_wand_sources(&self,id:u32)->Vec<i32>{
   if id&PENDING_ITEM==0||self.pending_wands.contains_key(&id){return Vec::new()}
   let item=(id&!PENDING_ITEM) as i32;
@@ -1165,6 +1194,8 @@ impl Editor {
     r.id>0&&r.id<PENDING_ITEM&&r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.fields.iter().all(Option::is_some)&&
     r.quantity.is_some_and(|q|q>0)&&self.inventory_changes.get(&r.id).copied().or(r.quantity).is_some_and(|q|q>0)).then_some(source)
   }));
+  let Some(reserved)=self.wand_source_reservations(item)else{return Vec::new()};
+  sources.retain(|source|reserved.get(source).map_or(true,|keys|keys.len()<36));
   sources.sort_unstable();sources.dedup();sources
  }
  fn absent_wand_choices(&self,item:i32)->Vec<WandVariant>{
@@ -1197,7 +1228,7 @@ impl Editor {
     if expected!=[0;2]{return Err(Error::Schema)}
     (item,0)
    }else{
-    if expected[1]!=0||!self.absent_wand_source_allowed(item,expected[0]){return Err(Error::Schema)}
+    if expected[1]!=0||!self.inventory_wand_source_creation_variants(source_id,expected[0]).contains(&next){return Err(Error::Schema)}
     (item,expected[0])
    }
   }else{

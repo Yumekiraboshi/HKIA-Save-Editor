@@ -3687,7 +3687,15 @@ fn first_source_wands_require_explicit_source_witness_and_replay_it(){
   let second=e.create_inventory_wand_variant(critter_candidate,[bug,0],[105,126],1).unwrap();
   assert!(matches!(e.inventory_unique_data(first),Some(U::WandAppearance{source_item_id:1185152302,style:0,magic:104,fleck:125,source_tag:-1,..})));
   assert!(matches!(e.inventory_unique_data(second),Some(U::WandAppearance{source_item_id:7285157,style:0,magic:105,fleck:126,source_tag:-1,..})));
-  assert!(e.inventory_absent_wand_sources(item_candidate).is_empty());
+  assert!(e.inventory_absent_wand_sources(item_candidate).contains(&stick));
+  assert_eq!(e.inventory_wand_source_creation_variants(item_candidate,stick).len(),35);
+  assert!(!e.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[104,125]));
+  assert!(e.create_inventory_wand_variant(item_candidate,[stick,0],[104,125],1).is_err());
+  let alternate=e.create_inventory_wand_variant(item_candidate,[315822,0],[104,125],4).unwrap();
+  assert!(matches!(e.inventory_unique_data(alternate),Some(U::WandAppearance{source_item_id:315822,style:0,magic:104,fleck:125,..})));
+  e.change_inventory_wand_variant(first,[104,125],[106,125]).unwrap();
+  assert!(!e.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[104,125]));
+  assert!(!e.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[106,125]));
   assert!(e.create_inventory_wand_variant(item_candidate,[stick,0],[106,125],1).is_err());
   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
   restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
@@ -3695,6 +3703,9 @@ fn first_source_wands_require_explicit_source_witness_and_replay_it(){
   assert_eq!(saved.inventory()[0].quantity,2);
   assert!(saved.inventory().iter().any(|r|r.quantity==3&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(first)));
   assert!(saved.inventory().iter().any(|r|r.quantity==1&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(second)));
+  assert!(saved.inventory().iter().any(|r|r.quantity==4&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(alternate)));
+  assert!(!saved.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[106,125]));
+  assert!(saved.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[104,125]));
  }
  let mut empty=Editor::open(slot("3.0.1")).unwrap();
  assert!(empty.inventory_absent_wand_sources(critter_candidate).is_empty());
