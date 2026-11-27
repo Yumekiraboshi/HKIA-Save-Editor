@@ -453,9 +453,12 @@ import {verifiedFloorplanName} from './floorplan-names';
    // when the wand itself has a native inventory-art entry.
    if(hasNativeWandArt(row.itemId))addWandSource(inventoryWandAppearance(row.itemId,row.unique)?.sourceItemId);
    const resultId=nativeResultIconTarget(row.itemId,snapshot.version);
-   if(resultId!==undefined&&!inventoryNativeArt?.entries.has(resultId)&&!inventoryNativeArt?.withheld.has(resultId)){
-    const result=inventorySourceItems.get(resultId);
-    if(result&&inventorySourceGroups.has(result[3]))groups.add(result[3]);
+   if(resultId!==undefined){
+    if(!inventoryNativeArt?.entries.has(resultId)&&!inventoryNativeArt?.withheld.has(resultId)){
+     const result=inventorySourceItems.get(resultId);
+     if(result&&inventorySourceGroups.has(result[3]))groups.add(result[3]);
+    }
+    continue;
    }
    if(inventoryNativeArt?.entries.has(row.itemId)||inventoryNativeArt?.withheld.has(row.itemId))continue;
    const item=inventorySourceItems.get(row.itemId);
@@ -1754,7 +1757,7 @@ import {verifiedFloorplanName} from './floorplan-names';
           <DynamicChefSprite itemId={item.itemId} appearance={chef} fallback={nativeSprite??sprite}/>
          {:else if item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicPaletteSprite itemId={item.itemId} palette={item.palette} fallback={nativeSprite??sprite}/>
-        {:else if (item.flower||hasNativeFlowerArt(item.itemId))&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+        {:else if hasNativeFlowerArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicFlowerSprite itemId={item.itemId} flower={item.flower} definitions={flowerDefinitions} fallback={nativeSprite??sprite}/>
         {:else if resultId!==undefined&&resultOriginal}
          <DyeSprite sprite={resultSprite} sourceKey={inventorySourceItems.get(resultId)?.[1]??''} originalArtUrl={resultOriginal}/>
@@ -1763,6 +1766,8 @@ import {verifiedFloorplanName} from './floorplan-names';
           style:background-position={'-'+resultSprite.x+'px -'+resultSprite.y+'px'}></span>
         {:else if resultPlaceholder}
          <DynamicArtSprite source="native-placeholder" render={renderNativePlaceholderArt}/>
+        {:else if resultId!==undefined}
+         <span class="item-art-empty" data-inventory-art="native-result-unavailable" data-result-icon-target={resultId}>✧</span>
         {:else if originalVariantArt[String(item.itemId)]||exactVariantArt[String(item.itemId)]||(!nativeSprite&&sprite&&nativeDyePalettes[String(item.itemId)])}
          <DyeSprite sprite={nativeSprite??sprite} palette={nativeDyePalettes[String(item.itemId)]}
           sourceKey={definition?.[1]??''} exactArtUrl={exactVariantArt[String(item.itemId)]} originalArtUrl={originalVariantArt[String(item.itemId)]}/>
