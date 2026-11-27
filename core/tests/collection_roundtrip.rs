@@ -5360,3 +5360,38 @@ fn large_critter_wand_family_preserves_distinct_native_source_and_pair_keys(){
   assert!(saved.inventory().iter().all(|r|r.editable&&r.quantity_minimum==0));
  }
 }
+
+#[test]
+fn mermaidifier_flower_copy_protects_exact_item_without_blocking_unrelated_inventory(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let flower=plain_flower(6);
+ let make=|g:[u32;4]|{
+  let mut p=synthetic_payload("3.0.1");p[2]=9;p[3]=0x99;
+  for (id,item,uid,payload) in [(4,897617923,21,flower.clone()),(5,105502901,22,flower.clone()),(6,71754032,0,vec![0xc0])]{
+   p.extend(doc(1,arr(vec![u(id),u(item),u(uid),u(2),payload])));
+  }
+  p.extend(doc(10,arr(vec![u(7),guid([1,2,3,4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([1,2,3,4]),vec![0xc3],vec![0xc0]])));
+  p.extend(doc(22,arr(vec![u(8),arr(vec![arr(vec![u(0),guid(g),flower.clone()])]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make([0x81356be7,0x4ffb6b6d,0xf71135bc,0x6bc8ed69]);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert!(!original[0].editable);
+  assert!(original[1].editable&&original[1].quantity_minimum==0);
+  assert!(original[2].editable&&original[2].quantity_minimum==0);
+  assert!(e.change_inventory_quantity(4,2,0).is_err());assert!(!e.dirty());
+  e.change_inventory_quantities(&[(5,2,0),(6,2,0)]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity,2);assert_eq!(saved.inventory()[1].quantity,0);assert_eq!(saved.inventory()[2].quantity,0);
+  assert_eq!(saved.inventory_original_unique_payload(4),Some(flower.as_slice()));
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(flower.as_slice()));
+  saved.change_inventory_quantities(&[(5,0,2),(6,0,2)]).unwrap();
+  assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),original);
+ }
+ let mut unknown=Editor::open(make([u32::MAX;4])).unwrap();
+ assert_ne!(unknown.inventory()[2].quantity_minimum,0);
+ assert!(unknown.change_inventory_quantity(6,2,0).is_err());assert!(!unknown.dirty());
+}
