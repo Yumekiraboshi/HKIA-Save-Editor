@@ -112,10 +112,7 @@ export function browseInventory(
  });
 }
 
-/** A known refillable empty stack is not an owned item for ordinary browsing.
- * Keep its native row intact and reachable through search and Add. Unknown
- * or read-only zero records remain visible in owned mode.
- */
+/** A known refillable empty stack remains a native record available in Add. */
 export function inventoryRefillable(row:InventoryEntry):boolean{
  return row.quantity===0&&row.editable&&row.quantityMinimum===0;
 }
@@ -130,6 +127,6 @@ export function inventoryAddRows(owned:readonly InventoryEntry[],creatable:reado
  const sources=owned.filter(row=>inventoryCustomizationSource(row)&&(!customCandidates.has(row.itemId)||(row.unique?.wandEditable&&row.unique.tag===9&&row.unique.words[4]===8))).map(row=>({...row,editable:false}));
  return [...owned.filter(inventoryRefillable),...creatable,...sources];
 }
-export function inventoryDisplayRows(rows:readonly InventoryEntry[],addMode:boolean,query:string):readonly InventoryEntry[]{
- return addMode||query.trim()?rows:rows.filter(row=>!inventoryRefillable(row));
+export function inventoryDisplayRows(rows:readonly InventoryEntry[],addMode:boolean,showZero:boolean):readonly InventoryEntry[]{
+ return addMode||showZero?rows:rows.filter(row=>row.quantity!==0);
 }
