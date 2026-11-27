@@ -82,7 +82,7 @@ test('item-derived overlays bind exact source definition and Sprite identities, 
 
  test('normal original collection cells are reused by exact Item ID, never a named dye sprite',async()=>{
  const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/wand-original-subicon.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
- const {selectWandOriginalCell,normalizedWandOverlayPixels}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+ const {selectWandOriginalCell,selectInventoryWandOriginalCell,normalizedWandOverlayPixels}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
  const group='collections_group_events',cell={url:'blob:original-sheet',x:96,y:0,group,sheet:0,cell:1};
  assert.deepEqual(selectWandOriginalCell(315822,group,{'315822':cell}),{itemId:315822,cell});
  assert.equal(selectWandOriginalCell(315823,group,{'315822':cell}),undefined);
@@ -94,5 +94,33 @@ test('item-derived overlays bind exact source definition and Sprite identities, 
  assert.deepEqual([p.width,p.height],[84,168]);
  assert.deepEqual([...p.rgba.slice(0,4)],[23,45,67,255]);
  assert.deepEqual([...p.rgba.slice(84*84*4,84*84*4+4)],[89,89,89,255]);
+ const nativeCell={url:'/HKIA-Save-Editor/inventory-art/sheet-003.webp',x:96,y:384,sheet:3,cell:49};
+ assert.deepEqual(selectInventoryWandOriginalCell(15761463,new Map([[15761463,nativeCell]])),{itemId:15761463,cell:nativeCell,kind:'inventory'});
+ assert.equal(selectInventoryWandOriginalCell(15761463,new Map([[15761463,{...nativeCell,url:'/dynamic-colorways/15761463.webp'}]])),undefined);
+ assert.equal(selectInventoryWandOriginalCell(803563219,new Map([[803563219,nativeCell]])),undefined);
+ const full=new Uint8ClampedArray(96*96*4);full.set([3,4,5,6],(96*96-1)*4);
+ const fullPlanes=normalizedWandOverlayPixels(full,96);
+ assert.deepEqual([fullPlanes.width,fullPlanes.height],[96,192]);
+ assert.deepEqual([...fullPlanes.rgba.slice(-4)],[6,6,6,255]);
  assert.throws(()=>normalizedWandOverlayPixels(new Uint8ClampedArray(8)));
+ assert.equal(sha(read('native-placeholder.webp')),'0adfe05aff08f9988167c8e8a04b47bfe01cfb1b955aee56a70a2c29edc638c2');
+ });
+
+ test('all original ordinary item-wand candidate IDs have one known source-art route',()=>{
+ const rule=readFileSync(new URL('../core/src/inventory_source_data.rs',import.meta.url),'utf8').split('pub(super) const RULES:')[1].split('];')[0];
+ const ids=[...rule.matchAll(/\((\d+),(\d+)\)/g)].map(x=>Number(x[1]));
+ const raw=readFileSync(new URL('../core/src/inventory_wand_ingredient_data.rs',import.meta.url),'utf8').split('=&[')[1].split('];')[0];
+ const bits=[...raw.matchAll(/0x([0-9a-f]{2})/g)].map(x=>parseInt(x[1],16));
+ const candidates=ids.filter((id,i)=>bits[i>>3]&(1<<(i&7)));
+ const native=JSON.parse(readFileSync(new URL('../public/inventory-art/index.json',import.meta.url)));
+ const catalog=JSON.parse(readFileSync(new URL('../public/catalog.json',import.meta.url)));
+ const cat=new Set(catalog.items.map(r=>r[0])),extra=new Set(native.records.map(r=>r[0]));
+ const withheld=new Map(native.withheld.map(r=>[r[0],r[2]]));
+ assert.equal(candidates.length,8601);
+ assert.equal(candidates.filter(id=>cat.has(id)).length,8205);
+ assert.equal(candidates.filter(id=>extra.has(id)).length,393);
+ assert.deepEqual(candidates.filter(id=>withheld.has(id)),[328475120,1254006907,1731977601]);
+ assert.ok(candidates.filter(id=>withheld.has(id)).every(id=>withheld.get(id)==='source-placeholder'));
+ assert.equal(candidates.filter(id=>[371479572,583339916,803563219,1057045178,1314269583].includes(id)).length,0);
+ assert.ok(candidates.every(id=>cat.has(id)||extra.has(id)||withheld.has(id)));
  });
