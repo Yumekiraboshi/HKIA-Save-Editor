@@ -378,6 +378,7 @@ pub struct Editor {
  pending_bobas:HashMap<u32,BobaVariant>,
  inventory_item_rows:HashMap<i32,usize>,
  unique_quantity_ids:HashSet<u32>,
+ legacy_wand_sources_resolved:bool,
  flower_variant_changes:HashMap<u32,FlowerVariant>,
  furniture_variant_changes:HashMap<u32,FurnitureVariant>,
  palette_variant_changes:HashMap<u32,PaletteVariant>,
@@ -414,7 +415,11 @@ impl Editor {
   for row in &slot.index.inventory{
    if let Some(id)=row.item_id{*inventory_item_rows.entry(id).or_insert(0usize)+=1;}
   }
-  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),pending_bobas:HashMap::new(),pending_cafes:HashMap::new(),pending_wands:HashMap::new(),inventory_item_rows,unique_quantity_ids:HashSet::new(),flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),boba_variant_changes:HashMap::new(),wand_variant_changes:HashMap::new(),cafe_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
+  // Original slot bytes and native index are immutable for the session.
+  let legacy_wand_sources_resolved=slot.index.inventory.iter().filter(|r|matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))).all(|r|
+   r.id>0&&r.id<PENDING_ITEM&&r.unique_id.is_some_and(|uid|uid>0)&&r.quantity.is_some_and(|q|q>=0)&&
+   r.fields.iter().all(Option::is_some)&&Self::legacy_wand_identity_in(&slot.envelope.decoded,r).is_some());
+  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),pending_bobas:HashMap::new(),pending_cafes:HashMap::new(),pending_wands:HashMap::new(),inventory_item_rows,unique_quantity_ids:HashSet::new(),legacy_wand_sources_resolved,flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),boba_variant_changes:HashMap::new(),wand_variant_changes:HashMap::new(),cafe_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
   editor.unique_quantity_ids=editor.index_unique_quantity_ids();
   Ok(editor)
  }
@@ -1341,15 +1346,9 @@ impl Editor {
  fn saved_wand_identity(&self,row:&crate::native::InventoryRow)->Option<WandData>{
   Self::wand_identity(row).or_else(||self.legacy_wand_identity(row))
  }
- // An unresolved historical source retains the original conservative block.
- fn legacy_wand_sources_resolved(&self)->bool{
-  self.slot.index.inventory.iter().filter(|r|matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))).all(|r|
-   r.id>0&&r.id<PENDING_ITEM&&r.unique_id.is_some_and(|uid|uid>0)&&r.quantity.is_some_and(|q|q>=0)&&
-   r.fields.iter().all(Option::is_some)&&self.legacy_wand_identity(r).is_some())
- }
  fn legacy_wand_zero_reference_safe(&self,row:&crate::native::InventoryRow)->bool{
   row.item_id.is_some_and(|item|self.wand_reference_safe(item))&&
-   self.legacy_wand_identity(row).is_some()&&self.legacy_wand_sources_resolved()
+   self.legacy_wand_identity(row).is_some()&&self.legacy_wand_sources_resolved
  }
  fn wand_reference_safe(&self,item:i32)->bool{
   let index=&self.slot.index;
@@ -1364,7 +1363,7 @@ impl Editor {
  }
  fn wand_zero_reference_safe(&self,row:&crate::native::InventoryRow)->bool{
   row.item_id.is_some_and(|item|self.wand_reference_safe(item))&&self.saved_wand_identity(row).is_some()&&
-   self.legacy_wand_sources_resolved()
+   self.legacy_wand_sources_resolved
  }
  fn wand_appearance(item:i32,v:WandData)->Option<InventoryUniqueData>{
   Self::wand_key(item,v)?;
