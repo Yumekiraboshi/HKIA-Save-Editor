@@ -2237,6 +2237,35 @@ async function inventoryNativeResultArtSmoke(){
  }
  console.log('CHROMIUM NATIVE RESULT ICON PASS: original result Sprite, original placeholder, unavailable target does not substitute source art');
 }
+async function originalArtIndexRetrySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();let online=false,sourceRequests=0,dynamicRequests=0;
+  await page.route('**/source-colorways/index.json',r=>{sourceRequests++;return r.continue();});
+  await page.route('**/dynamic-colorways/index.json',r=>{dynamicRequests++;return online?r.continue():r.fulfill({status:503,body:'unavailable'});});
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-original-index-retry.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({artInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('315822');
+  const art=page.locator('.inventory-card .item-sprite[data-dye-source="game-source-sprite"]');
+  await art.waitFor({timeout:30_000});
+  assert.ok((await art.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/source-colorways/315822.webp'));
+  await page.waitForLoadState('networkidle');
+  const failedRequests=dynamicRequests;assert.ok(failedRequests>=1);
+  online=true;
+  await chooseTab(page,'collections');
+  await chooseTab(page,'inventory');
+  await search.fill('315822');
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('.inventory-card .item-sprite')).some(el=>getComputedStyle(el).backgroundImage.includes('/dynamic-colorways/315822.webp?v=')));
+  assert.equal(sourceRequests,1,'validated original index is not fetched again');
+  assert.equal(dynamicRequests,failedRequests+1,'missing dynamic index is retried once');
+  await search.fill('54272482');
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('.inventory-card .item-sprite')).some(el=>getComputedStyle(el).backgroundImage.includes('/dynamic-colorways/54272482.webp?v=')));
+ }finally{await context.close();}
+ console.log('CHROMIUM ORIGINAL ART INDEX RETRY PASS: cached source index, recovered dynamic originals without reload');
+}
 async function inventoryOriginalArtSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -3027,6 +3056,7 @@ async function run(){
  await ordinaryClothingRemovalSmoke();
  await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
+ await originalArtIndexRetrySmoke();
  await inventoryNativeResultArtSmoke();
  await inventoryIconScaleSmoke();
  await inventoryDynamicFlowerArtSmoke();
