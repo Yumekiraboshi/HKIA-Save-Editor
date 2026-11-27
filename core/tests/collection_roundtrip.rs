@@ -1591,7 +1591,7 @@ fn unowned_flower_creation_uses_only_source_defaults_and_native_ids(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let input=slot_from_payload("3.0.1",synthetic_payload("3.0.1"));
  let mut e=Editor::open(input.clone()).unwrap();let item=43114910;let candidate=(1u32<<31)|item as u32;
- assert_eq!(e.inventory_absent_flower_ids().len(),50);
+ assert_eq!(e.inventory_absent_flower_ids().len(),96);
  assert_eq!(e.inventory_flower_creation_variants(candidate),vec![[6,2,0,0],[6,5,0,0],[6,10,0,0]]);
  for bad in [[6,1,0,0],[6,14,0,0],[6,2,1,16],[7,2,0,0]]{
   assert!(e.create_inventory_flower_variant(candidate,[0;4],bad,1).is_err());
@@ -1612,6 +1612,34 @@ fn unowned_flower_creation_uses_only_source_defaults_and_native_ids(){
  assert_eq!(reopened.inventory_unique_data(rows[1].document_id),e.inventory_unique_data(b));
  assert!(!reopened.inventory_absent_flower_ids().contains(&item));
 }
+#[test]
+fn native_unpatterned_candles_share_flower_add_edit_zero_refill(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ for zipped in [false,true]{
+  let raw=slot_from_payload("3.0.1",synthetic_payload("3.0.1"));
+  let input=if zipped{zip(&raw)}else{raw};let mut e=Editor::open(input.clone()).unwrap();
+  let mut handles=Vec::new();
+  for item in [65427158u32,1124067577]{
+   let candidate=(1u32<<31)|item;
+   assert!(e.inventory_absent_flower_ids().contains(&(item as i32)));
+   assert_eq!(e.inventory_flower_creation_variants(candidate),vec![[6,2,0,0],[6,5,0,0],[6,10,0,0]]);
+   assert!(e.create_inventory_flower_variant(candidate,[0;4],[6,2,1,16],1).is_err());
+   assert!(e.create_inventory_flower_variant(candidate,[0;4],[7,2,0,0],1).is_err());
+   let h=e.create_inventory_flower_variant(candidate,[0;4],[6,2,0,0],3).unwrap();
+   e.change_inventory_flower_variant(h,[6,2,0,0],[6,9,0,0]).unwrap();handles.push(h);
+  }
+  for id in [1377029192u32,22657460,1858821696]{assert!(!e.inventory_absent_flower_ids().contains(&(id as i32)));}
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();let rows=saved.inventory();assert_eq!(rows.len(),2);
+  assert!(rows.iter().all(|r|r.editable&&r.quantity_minimum==0&&r.quantity==3));
+  for row in &rows{saved.change_inventory_quantity(row.document_id,3,0).unwrap();}
+  let mut saved=Editor::open(saved.export().unwrap()).unwrap();
+  for row in &rows{saved.change_inventory_quantity(row.document_id,0,5).unwrap();}
+  assert!(Editor::open(saved.export().unwrap()).unwrap().inventory().iter().all(|r|r.quantity==5));
+ }
+}
+
 #[test]
 fn flower_clothing_creation_reuses_exact_processor_and_uid_rules(){
  use hkia_save_core::collection::HistoryScope::Inventory;
