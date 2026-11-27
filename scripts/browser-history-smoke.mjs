@@ -243,6 +243,7 @@ async function inventoryPaletteRemovalSmoke(){
    await page.locator('.inventory-empty-stack').waitFor();
    await page.locator('button[title="Undo"]:not([disabled])').click();
    await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});
+   await page.waitForFunction(expected=>document.querySelectorAll('.inventory-card .inventory-stack-delete:not([disabled])').length===expected,state===true?2:1);
    assert.equal(await cards.locator('.inventory-stack-delete:not([disabled])').count(),state===true?2:1);
    assert.deepEqual(errors,[]);
   }finally{await context.close()}
