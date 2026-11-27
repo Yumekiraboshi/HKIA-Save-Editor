@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({stdin:{contents:"export * from './src/furniture-multi-diagnostic';export * from './src/native-texture-upload';export * from './src/furniture-renderer-bounds';export * from './src/furniture-native-builtin-textures-v3.0.1';",resolveDir:fileURLToPath(new URL('../',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {resolveFurnitureMultiDiagnostic,fitFurnitureMultiStaticBounds,mergeStaticRendererBounds,drawFurnitureMultiDiagnostic,furnitureForwardAttributeLocations,nativeBaseIsOpaque,verifyNativeTexturePayload,validateNativeTextureLayout,furnitureNativeBuiltinTexture,furnitureNativeBuiltinBytes}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {resolveFurnitureMultiDiagnostic,fitFurnitureMultiStaticBounds,mergeStaticRendererBounds,drawFurnitureMultiDiagnostic,furnitureForwardAttributeLocations,nativeBaseIsOpaque,verifyFurnitureNullPatternOpacity,furnitureNullPatternRequiresOpacity,verifyNativeTexturePayload,validateNativeTextureLayout,furnitureNativeBuiltinTexture,furnitureNativeBuiltinBytes}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const read=p=>JSON.parse(readFileSync(new URL('../'+p,import.meta.url)));
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const additionalPath='data/furniture-chair-pattern-sources-v3.0.1.json';
@@ -67,6 +67,36 @@ test('missing native pattern may alias base only when all alpha samples are opaq
  assert.equal(nativeBaseIsOpaque({format:4,bytes:4},Uint8Array.of(1,2,3,255).buffer),true);
  assert.equal(nativeBaseIsOpaque({format:4,bytes:4},Uint8Array.of(1,2,3,254).buffer),false);
  assert.equal(nativeBaseIsOpaque({format:12,bytes:16},new ArrayBuffer(16)),false);
+});
+test('BC3 null-pattern opacity accepts only all-255 selected alpha entries across every block',()=>{
+ const block=(a0,a1,indices)=>{
+  const b=new Uint8Array(16);b[0]=a0;b[1]=a1;
+  let bits=0n;indices.forEach((v,i)=>{bits|=BigInt(v)<<BigInt(i*3)});
+  for(let i=0;i<6;i++)b[i+2]=Number((bits>>BigInt(i*8))&255n);
+  return b;
+ };
+ const all=v=>Array(16).fill(v),opaque=b=>nativeBaseIsOpaque({format:12,bytes:b.length},b.buffer);
+ assert.equal(opaque(block(255,0,all(0))),true);
+ assert.equal(opaque(block(0,255,all(1))),true);
+ assert.equal(opaque(block(0,0,all(7))),true);
+ assert.equal(opaque(block(255,255,Array.from({length:16},(_,i)=>i%6))),true);
+ for(const [a0,a1,index] of [[255,255,6],[255,254,2],[254,255,2],[255,0,7],[0,0,6]]){
+  for(let pos=0;pos<16;pos++){const selectors=all(a0===255?0:a1===255?1:7);selectors[pos]=index;assert.equal(opaque(block(a0,a1,selectors)),false);}
+ }
+ const two=new Uint8Array(32);two.set(block(255,0,all(0)));two.set(block(0,255,all(1)),16);assert.equal(opaque(two),true);
+ two.set(block(255,0,all(1)),16);assert.equal(opaque(two),false);
+ assert.equal(opaque(new Uint8Array(15)),false);assert.equal(opaque(new Uint8Array(0)),false);
+ assert.equal(nativeBaseIsOpaque({format:5,bytes:4},Uint8Array.of(0,255,255,255).buffer),false);
+});
+test('null-pattern byte proof is reusable and skips draws with no contributing mask',async()=>{
+ const baseMap={format:12,sha256:'a'.repeat(64),bytes:16},p={baseMap,patternMap:null,material:{useBaseMapMask:true}};
+ const valid=new Uint8Array(16);valid[0]=255;
+ let calls=0;const read=async ref=>{calls++;assert.deepEqual(ref,{kind:'texture',sha256:baseMap.sha256,bytes:16});return valid.buffer};
+ assert.equal(furnitureNullPatternRequiresOpacity(p),true);
+ await verifyFurnitureNullPatternOpacity(p,read);assert.equal(calls,1);
+ await verifyFurnitureNullPatternOpacity({...p,patternMap:baseMap},read);
+ await verifyFurnitureNullPatternOpacity({...p,material:{useBaseMapMask:false}},read);assert.equal(calls,1);
+ await assert.rejects(verifyFurnitureNullPatternOpacity(p,async()=>new ArrayBuffer(16)),/NULL_PATTERN_CONTRIBUTES/);
 });
 test('preflight refuses incomplete geometry payload before GPU work',async()=>{
  const d=sources(),r=request(d),requests=[];
