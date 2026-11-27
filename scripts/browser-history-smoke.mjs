@@ -1670,10 +1670,14 @@ async function inventoryAbsentFlowerCreationSmoke(){
   await dialog.locator('[data-flower-grow="6"][aria-pressed="true"]').waitFor();
   const firstPattern=await dialog.locator('option[data-flower-variant="6,2,1,16"]').getAttribute('value');assert.ok(firstPattern!==null);
   await dialog.locator('select').selectOption(firstPattern);
+  await dialog.locator('[data-native-decorator="11"] img[src$="pattern-1.webp"]').waitFor({timeout:30_000});
+  assert.deepEqual(await dialog.locator('[data-native-decorator]').evaluateAll(els=>els.map(e=>e.getAttribute('data-native-decorator'))),['12','11']);
   const reset=dialog.locator('.inventory-flower-reset:not([disabled])');
   await reset.waitFor();
   await reset.click();
   await dialog.locator('.inventory-flower-reset').waitFor({state:'hidden'});
+  await dialog.locator('[data-native-decorator="11"]').waitFor({state:'detached'});
+  await dialog.locator('[data-native-decorator="12"]').waitFor();
   const restoredPattern=await dialog.locator('option[data-flower-variant="6,2,1,16"]').getAttribute('value');
   assert.ok(restoredPattern!==null);
   await dialog.locator('select').selectOption(restoredPattern);
@@ -1730,6 +1734,8 @@ async function inventoryRareCandleSmoke(){
   const target=choices.find(v=>v[2]===3&&v[3]===0);assert.ok(target);
   const value=await dialog.locator('option[data-flower-variant="'+target.join(',')+'"]').getAttribute('value');assert.ok(value!==null);
   await dialog.locator('select').selectOption(value);
+  await dialog.locator('[data-native-decorator="11"] img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
+  await dialog.locator('[data-inventory-art="native-static-route"].item-sprite').waitFor({timeout:30_000});
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-flower:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('22657460');
