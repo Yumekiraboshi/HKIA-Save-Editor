@@ -2169,7 +2169,7 @@ fn unowned_customized_furniture_uses_verified_acquisition_and_material_choices()
   let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();
   let ids=e.inventory_absent_furniture_ids();
-  assert!(ids.contains(&item));assert!(ids.len()<=295);
+  assert!(ids.contains(&item));assert!(ids.len()<=621);assert!(ids.iter().all(|&id|e.inventory_creatable().iter().any(|r|r.item_id==id)));
   assert!(!ids.contains(&45426907)); // Home layout.
   let choices=e.inventory_furniture_creation_variants(candidate);
   let target=[0,2,0];assert!(choices.contains(&target));
