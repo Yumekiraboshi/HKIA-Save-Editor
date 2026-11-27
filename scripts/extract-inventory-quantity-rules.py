@@ -22,7 +22,7 @@ def cstr(b,p):
 
 def align(n): return (n+3)&~3
 
-def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_reference_rows=None,wand_ingredients=None):
+def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_reference_rows=None,wand_ingredients=None,owned_dlc_gathered=None):
     B=source.read_bytes()
     require(hashlib.sha256(B).hexdigest()==SOURCE,'unsupported source bundle')
     spec=importlib.util.spec_from_file_location('unityfs_audit',ROOT/'scripts/unityfs-audit.py')
@@ -130,6 +130,17 @@ def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_r
             h=2166136261
             for byte in s.pack('<4I',*words): h=((h^byte)*16777619)&0xffffffff
             tradeable_reference_rows.append((id,h))
+        if (owned_dlc_gathered is not None and d['ItemOwnership']==18 and stack and not unique and not custom
+            and not d['ReleaseVersion'] and d['RequiredDlcContent']!='0'*32
+            and d['CollectionEventYear']=='0'*32 and d['Rarity'] in (2,3,4)
+            and ((cat in (268451840,268435464) and d['CelebrationPeriodicity']==0)
+                 or (cat==269557760 and d['CelebrationPeriodicity']==1))):
+            guid=d['SerializedGuid']
+            require(len(guid)==32 and all(c in '0123456789abcdefABCDEF' for c in guid),'invalid gathered GUID')
+            words=[int(guid[i:i+8][::-1],16) for i in range(0,32,8)]
+            h=2166136261
+            for byte in s.pack('<4I',*words): h=((h^byte)*16777619)&0xffffffff
+            owned_dlc_gathered.append((id,h,cat))
         rows.append((id,int(stack)|unique*2|custom*4|int(bool(candidate))*8|int(bool(cosmetic))*16))
         if custom:caps.append((id,d['CustomMaxCount']))
         # Native raw masks: CreationStationIngredient | Fish / Critter.
@@ -229,8 +240,8 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source',type=Path);parser.add_argument('--check',action='store_true')
     args=parser.parse_args()
-    furniture_references=[];tradeable=[];tradeable_references=[];wand_ingredients=[]
-    rows,caps,gathered,food_bait=extract(args.source,furniture_references,tradeable,tradeable_references,wand_ingredients)
+    furniture_references=[];tradeable=[];tradeable_references=[];wand_ingredients=[];owned_dlc_gathered=[]
+    rows,caps,gathered,food_bait=extract(args.source,furniture_references,tradeable,tradeable_references,wand_ingredients,owned_dlc_gathered)
     generated=render(rows,caps)
     gathered_source=("// Generated from the pinned original Steam v3.0.1 definitions.\n"
                      "// 168 fish, 56 critters; native ordinary, always-periodic definitions.\n"
@@ -241,6 +252,15 @@ if __name__=='__main__':
                       f"// ID little-endian SHA256 {FOOD_BAIT}\n"
                       "pub(super) const FOOD_BAIT_IDS:&[i32]=&[\n"
                       +''.join(' '+','.join(str(id) for id in food_bait[i:i+8])+',\n' for i in range(0,len(food_bait),8))+'];\n')
+    owned_dlc_gathered.sort()
+    require(len(owned_dlc_gathered)==80 and [sum(cat==c for _,_,cat in owned_dlc_gathered) for c in (268451840,268435464,269557760)]==[18,14,48],'owned DLC gathered coverage')
+    pairs=[(id,key) for id,key,_ in owned_dlc_gathered]
+    fingerprint='a715d994976e7ca59657fdfa46de5f27e12a216ffdd501aeca6e96fb1c9c5ea3'
+    require(hashlib.sha256(b''.join(s.pack('<iI',id,key) for id,key in pairs)).hexdigest()==fingerprint,'owned DLC gathered fingerprint')
+    gathered_source+=("\n// Existing saved DLC food, fish and critters only. GUID fingerprints deny references.\n"
+                      f"// Sorted LE (i32 Item ID, u32 fingerprint) SHA256 {fingerprint}\n"
+                      "pub(super) const OWNED_DLC_GATHERED_REFERENCE_KEYS:&[(i32,u32)]=&[\n"
+                      +''.join(' '+','.join(f'({id},0x{key:08x})' for id,key in pairs[i:i+4])+',\n' for i in range(0,len(pairs),4))+'];\n')
     for name,content in [('inventory_source_data.rs',generated),('inventory_gathered_data.rs',gathered_source),('inventory_furniture_reference_data.rs',render_furniture_references(furniture_references)),('inventory_tradeable_data.rs',render_tradeable(rows,tradeable)),('inventory_tradeable_reference_data.rs',render_tradeable_references(tradeable_references)),('inventory_wand_ingredient_data.rs',render_wand_ingredients(rows,wand_ingredients))]:
         target=ROOT/'core/src'/name
         if args.check: require(target.read_text()==content,'checked-in source differs: '+name)

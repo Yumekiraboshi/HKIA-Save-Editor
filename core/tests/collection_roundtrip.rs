@@ -4770,3 +4770,52 @@ fn mixed_legacy_modern_and_nil_furniture_create_distinct_current_variant(){
   assert!(Editor::open(saved.export().unwrap()).is_ok());
  }
 }
+
+
+#[test]
+fn owned_dlc_food_fish_and_critters_zero_refill_without_absent_generation(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let ids=[7285157u32,92123106,784133270];
+ let make=|reference:Option<Vec<u8>>,duplicate:bool|{
+  let mut p=synthetic_payload("3.0.1");p[2]=9;p[3]=0x98+u8::from(reference.is_some())+u8::from(duplicate);
+  for (i,item) in ids.into_iter().enumerate(){p.extend(doc(1,arr(vec![u(i as u32+4),u(item),u(0),u(6),vec![0xc0]])));}
+  if duplicate{p.extend(doc(1,arr(vec![u(7),u(ids[0]),u(0),u(1),vec![0xc0]])));}
+  if let Some(h)=reference{p.extend(doc(32,arr(vec![u(8),guid([7,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![h])]))])])));}
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(None,false);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let before=e.inventory();
+  assert!(before.iter().all(|r|r.editable&&r.quantity_minimum==0));
+  e.change_inventory_quantities(&[(4,6,0),(5,6,0),(6,6,0)]).unwrap();
+  assert_eq!(e.history().len(),1);
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),before);
+  assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory().len(),3);
+  assert!(saved.inventory().iter().all(|r|r.quantity==0&&r.quantity_minimum==0&&saved.inventory_original_unique_payload(r.document_id)==Some([0xc0].as_slice())));
+  saved.change_inventory_quantities(&[(4,0,3),(5,0,4),(6,0,5)]).unwrap();
+  let reopened=Editor::open(saved.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory().iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![3,4,5]);
+  assert_eq!(reopened.entries(),e.entries());assert_eq!(reopened.achievements(),e.achievements());
+ }
+ let mut empty=Editor::open(slot("3.0.1")).unwrap();
+ for item in ids{
+  assert!(!empty.inventory_creatable().iter().any(|r|r.item_id==item as i32));
+  assert!(empty.change_inventory_quantity((1u32<<31)|item,0,1).is_err());
+ }
+ let mut duplicate=Editor::open(make(None,true)).unwrap();
+ assert!(duplicate.change_inventory_quantity(4,6,0).is_err());assert!(!duplicate.dirty());
+ let legacy=arr(vec![guid([0xf5db61cd,0x4d948560,0x5d7b78a1,0x4f2b0984]),guid([1,2,3,4]),u(0),u(0),u(0),u(0),u(0),u(0),
+  vec![0xc0],vec![0xc0],vec![0xc0],u(0),arr(vec![]),arr(vec![]),u(0)]);
+ let home=|legacy:Vec<Vec<u8>>,wall:u32|{
+  arr(vec![guid([41,42,43,44]),arr(legacy),u(wall),u(0),guid([0;4]),l(0),
+   vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])])
+ };
+ for h in [home(vec![legacy],0),home(vec![],ids[0])]{
+  let mut e=Editor::open(make(Some(h),false)).unwrap();
+  assert_eq!(e.inventory()[0].quantity_minimum,1);
+  assert!(e.change_inventory_quantities(&[(4,6,0),(5,6,0)]).is_err());assert!(!e.dirty());
+ }
+}

@@ -1157,6 +1157,13 @@ impl Editor {
  // never an identity or permission to change a referenced object.
  fn ordinary_tradeable_nonclothing_zero_reference_safe(&self,item:i32)->bool{
   let Some(key)=crate::inventory_source::ordinary_tradeable_nonclothing_reference(item)else{return false};
+  self.ordinary_nonclothing_reference_safe(item,key)
+ }
+ fn owned_dlc_gathered_zero_reference_safe(&self,item:i32)->bool{
+  crate::inventory_source::owned_dlc_gathered_reference(item)
+   .is_some_and(|key|self.ordinary_nonclothing_reference_safe(item,key))
+ }
+ fn ordinary_nonclothing_reference_safe(&self,item:i32,key:u32)->bool{
   let index=&self.slot.index;
   !index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
    !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_refs_incomplete&&
@@ -1198,6 +1205,7 @@ impl Editor {
    (crate::inventory_source::ordinary_membership_item(item_id)||
     ((crate::inventory_source::existing_currency_item(item_id)||
       self.furniture_zero_reference_safe(item_id)||self.ordinary_clothing_zero_reference_safe(item_id)||
+      self.owned_dlc_gathered_zero_reference_safe(item_id)||
       (self.ordinary_tradeable_nonclothing_zero_reference_safe(item_id)||
        self.extra_custom_furniture_zero_reference_safe(item_id)))&&
      !self.slot.index.inventory_payload_refs_incomplete&&

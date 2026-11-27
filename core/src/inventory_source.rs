@@ -6,7 +6,7 @@ use crate::inventory_tradeable_reference_data::TRADEABLE_NONCLOTHING_REFERENCE_K
 use crate::inventory_custom_furniture_reference_data::CUSTOM_FURNITURE_EXTRA_REFERENCE_KEYS;
 use crate::inventory_furniture_reference_data::FURNITURE_REFERENCE_KEYS;
 use crate::inventory_clothing_reference_data::{CLOTHING_REFERENCE_ROWS,CLOTHING_REFERENCE_GROUPS,FLOWER_CLOTHING_REFERENCE_KEYS};
-use crate::inventory_gathered_data::{GATHERED_IDS,FOOD_BAIT_IDS};
+use crate::inventory_gathered_data::{GATHERED_IDS,FOOD_BAIT_IDS,OWNED_DLC_GATHERED_REFERENCE_KEYS};
 /// Maximum from InventoryItemExtensions.MaxCount(IInventoryItemData):
 /// !Stackable -> 1; HasCustomMaxCount -> CustomMaxCount; otherwise Int32.MaxValue.
 /// None means no verified definition or a payload is required for this ID.
@@ -33,6 +33,27 @@ pub(crate) fn is_chef_color(id:i32)->bool{matches!(id,6..=34|46|47|140..=142)}
 pub(crate) fn ordinary_membership_item(item_id:i32)->bool{
  RULES.binary_search_by_key(&item_id,|row|row.0).ok().is_some_and(|i|RULES[i].1&8!=0)
   ||GATHERED_IDS.binary_search(&item_id).is_ok()||FOOD_BAIT_IDS.binary_search(&item_id).is_ok()
+}
+/// Existing saved ordinary DLC food/fish/critters, never absent creation.
+pub(crate) fn owned_dlc_gathered_reference(item:i32)->Option<u32>{
+ OWNED_DLC_GATHERED_REFERENCE_KEYS.binary_search_by_key(&item,|r|r.0).ok()
+  .map(|i|OWNED_DLC_GATHERED_REFERENCE_KEYS[i].1)
+  .filter(|_|ordinary_quantity_limit(item)==Some(i32::MAX))
+}
+#[cfg(test)]
+mod owned_dlc_gathered_tests{
+ use super::*;
+ #[test]fn exact_owned_dlc_gathered_definition_slice(){
+  let rows=OWNED_DLC_GATHERED_REFERENCE_KEYS;
+  assert_eq!(rows.len(),80);
+  assert!(rows.windows(2).all(|r|r[0].0<r[1].0));
+  let bytes:Vec<_>=rows.iter().flat_map(|&(id,key)|id.to_le_bytes().into_iter().chain(key.to_le_bytes())).collect();
+  let hash:String=crate::digest::sha256(&bytes).iter().map(|b|format!("{b:02x}")).collect();
+  assert_eq!(hash,"a715d994976e7ca59657fdfa46de5f27e12a216ffdd501aeca6e96fb1c9c5ea3");
+  assert!(rows.iter().all(|&(id,key)|owned_dlc_gathered_reference(id)==Some(key)&&!ordinary_bag_creation_item(id)&&!ordinary_membership_item(id)));
+  assert_eq!(owned_dlc_gathered_reference(7285157),Some(furniture_guid_fingerprint([0xf5db61cd,0x4d948560,0x5d7b78a1,0x4f2b0984])));
+  assert_eq!(owned_dlc_gathered_reference(315822),None);
+ }
 }
 pub(crate) fn ordinary_membership_ids()->impl Iterator<Item=i32>{
  RULES.iter().filter_map(|&(id,flags)|(flags&8!=0).then_some(id)).chain(GATHERED_IDS.iter().copied()).chain(FOOD_BAIT_IDS.iter().copied())
