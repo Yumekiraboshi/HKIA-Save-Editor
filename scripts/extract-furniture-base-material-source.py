@@ -4,6 +4,7 @@ Offline only; shader code and texture payloads stay in staging. No rendered icon
 """
 import argparse, hashlib, importlib.util, json, math, re, struct
 from pathlib import Path
+from collections import OrderedDict
 
 def load_module(name):
     spec=importlib.util.spec_from_file_location(name,Path(__file__).with_name(name+'.py'))
@@ -40,15 +41,60 @@ def shader_source(key,object_sha):
     require(source is not None and source[0]==object_sha,'unsupported shader identity '+key)
     return source
 
-def extract(bundles,scene,mesh,audit,shader_audit,out=None,resolve_cab=None):
+def parse_material_bundle(path,mesh,audit):
+    raw=path.read_bytes();_,pairs=audit.auditor.extract_nodes(raw);nodes=dict(pairs)
+    cabs=[x for x in nodes if re.fullmatch('CAB-[0-9a-f]{32}',x)];require(len(cabs)==1,'CAB identity');cab=cabs[0]
+    trees,externals,object_types=mesh.type_trees(nodes[cab],indexed=True)
+    objects={p:(c,b) for c,p,b,e in audit.serialized_objects(nodes[cab],classes=(21,28,48)) if e=='<'}
+    entry={'bundle':path.name.removesuffix('.bin'),'sha256':sha(raw),'trees':trees,'objectTypes':object_types,'externals':externals,'objects':objects,'stream':nodes.get(cab+'.resS',b'')}
+    # Conservative byte weight for retained binary data and parsed metadata.
+    # This is a cache budget, not a bound on process RSS or active model data.
+    weight=len(raw)+sum(map(len,nodes.values()))+sum(len(b) for _,b in objects.values())
+    return cab,entry,weight
+
+class MaterialBundleCache:
+    """Only share parsed source bytes inside one local extraction invocation.
+    No CAB-only lookup: callers must still resolve the exact allowed file.
+    """
+    def __init__(self,max_bytes=192*1024*1024,max_entries=8):
+        require(type(max_bytes) is int and max_bytes>=0 and type(max_entries) is int and max_entries>=0,'cache limits')
+        self.max_bytes=max_bytes;self.max_entries=max_entries
+        self.entries=OrderedDict();self.bytes=0
+    @staticmethod
+    def fingerprint(path):
+        s=path.stat()
+        return (s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+    def get(self,path,parse):
+        path=Path(path)
+        key=str(path.absolute())
+        require(not path.is_symlink() and path.is_file(),'original bundle path')
+        before=self.fingerprint(path)
+        if key in self.entries:
+            stamp,cab,entry,weight=self.entries.pop(key)
+            self.bytes-=weight
+            if stamp==before:
+                self.entries[key]=(stamp,cab,entry,weight);self.bytes+=weight
+                return cab,entry
+        cab,entry,weight=parse(path)
+        require(self.fingerprint(path)==before,'source bundle changed during parse')
+        require(type(weight) is int and weight>=0,'cache weight')
+        if self.max_entries and weight<=self.max_bytes:
+            while self.entries and (len(self.entries)>=self.max_entries or self.bytes+weight>self.max_bytes):
+                _,(_,_,_,old)=self.entries.popitem(last=False);self.bytes-=old
+            self.entries[key]=(before,cab,entry,weight);self.bytes+=weight
+        return cab,entry
+
+def extract(bundles,scene,mesh,audit,shader_audit,out=None,resolve_cab=None,bundle_cache=None):
     loaded={}
     def load(path,expected_cab=None):
-        raw=path.read_bytes();_,pairs=audit.auditor.extract_nodes(raw);nodes=dict(pairs)
-        cabs=[x for x in nodes if re.fullmatch('CAB-[0-9a-f]{32}',x)];require(len(cabs)==1,'CAB identity');cab=cabs[0]
+        parse=lambda p:parse_material_bundle(p,mesh,audit)
+        if bundle_cache is None:
+            cab,entry,_=parse(path)
+        else:
+            cab,entry=bundle_cache.get(path,parse)
         require(expected_cab is None or cab==expected_cab,'resolved CAB mismatch')
         require(cab not in loaded,'duplicate CAB')
-        trees,externals,object_types=mesh.type_trees(nodes[cab],indexed=True);objects={p:(c,b) for c,p,b,e in audit.serialized_objects(nodes[cab],classes=(21,28,48)) if e=='<'}
-        loaded[cab]={'bundle':path.name.removesuffix('.bin'),'sha256':sha(raw),'trees':trees,'objectTypes':object_types,'externals':externals,'objects':objects,'stream':nodes.get(cab+'.resS',b'')}
+        loaded[cab]=entry
     for path in bundles:load(path)
     def entry_for(cab):
         if cab not in loaded and resolve_cab is not None:

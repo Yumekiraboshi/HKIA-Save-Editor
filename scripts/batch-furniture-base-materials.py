@@ -47,10 +47,10 @@ class CabIndex:
             require(all(digest(p)==h for _,p in matches[1:]),'ambiguous native CAB '+cab)
         return first
 
-def extract_one(row,allowed,index,base,mesh,audit,shader,out):
+def extract_one(row,allowed,index,base,mesh,audit,shader,out,bundle_cache=None):
     # Exact material, texture and shader PPtrs determine which CABs are
     # opened. The original catalog limits all candidate source bundles.
-    result=base.extract([],{'rows':[row]},mesh,audit,shader,out,resolve_cab=lambda cab:index.resolve(cab,allowed))
+    result=base.extract([],{'rows':[row]},mesh,audit,shader,out,resolve_cab=lambda cab:index.resolve(cab,allowed),bundle_cache=bundle_cache)
     require(not result['unresolved'],'unresolved original objects: '+','.join(result['unresolved']))
     require(len(result['rows'])==1 and result['rows'][0]['itemId']==row['itemId'],'material row identity')
     for rid,key,slot in result['rows'][0]['bindings']:
@@ -104,12 +104,13 @@ def main():
     index=CabIndex(root,set().union(*(allowed for _,allowed in planned)),module('resolve-unityfs-cabs').node_names)
     out.parent.mkdir(parents=True,exist_ok=True);tmp=Path(tempfile.mkdtemp(prefix='.furniture-materials-',dir=out.parent))
     receipts=[]
+    bundle_cache=base.MaterialBundleCache()
     try:
         (tmp/'items').mkdir();(tmp/'texture').mkdir()
         for row,allowed in planned:
             id=row['itemId'];stage=Path(tempfile.mkdtemp(prefix='.item-',dir=tmp))
             try:
-                result=extract_one(row,allowed,index,base,mesh,audit,shader,stage)
+                result=extract_one(row,allowed,index,base,mesh,audit,shader,stage,bundle_cache)
                 for p in stage.glob('*.texture.bin'):
                     dest=tmp/'texture'/p.name
                     if dest.exists():require(digest(dest)==digest(p),'texture digest collision')

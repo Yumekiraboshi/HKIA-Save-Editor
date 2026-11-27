@@ -251,3 +251,17 @@ test('maximum native inventory batch and full history remain displayable',async(
  assert.equal(decoded[0].batch.length,HISTORY_MAX_BATCH_ROWS);
  assert.deepEqual(decodeHistoryDetails(log([make(HISTORY_MAX_BATCH_ROWS+1)],1),[records[0]]),[]);
 });
+
+test('wand native history accepts absent source handles and full source/material identities',()=>{
+ const item=384749651,candidate=2147483648+item,handle=2147483649,source=61381969;
+ const first=bytes([u8(20),u32(handle),u32(candidate),i32(item),...[source,0,104,125].map(i32),i32(2)]);
+ const change=bytes([u8(21),u32(handle),...[source,104,125,315822,104,125].map(i32)]);
+ const firstDetails=decodeHistoryDetails(log([first,change],2),[meta('inventory',candidate,null),meta('inventory',handle,null)]);
+ assert.equal(firstDetails.length,2);assert.equal(firstDetails[0].sourceItemId,source);assert.equal(firstDetails[1].afterSource,315822);
+ const before=[source,104,125,13,2,0],after=[source,104,125,13,3,0],child=[source,106,125,13,3,0];
+ const edit=bytes([u8(22),u32(4),...[...before,...after].map(i32)]);
+ const add=bytes([u8(23),u32(handle),u32(4),i32(item),...[...after,...child].map(i32),i32(3)]);
+ const details=decodeHistoryDetails(log([edit,add],2),[meta('inventory',4,null),meta('inventory',4,null)]);
+ assert.equal(details.length,2);assert.deepEqual(details[0].beforeMaterials,[13,2,0]);assert.deepEqual(details[0].afterMaterials,[13,3,0]);assert.deepEqual(details[1].nestedMaterials,[13,3,0]);
+ assert.equal(details[1].sourceItemId,source);
+});
