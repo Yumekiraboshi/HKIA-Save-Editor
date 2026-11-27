@@ -1,3 +1,4 @@
+import aliases from '../data/wand-original-sprite-aliases-v3.0.1.json';
 import type {PixelBuffer,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,type TextureAsset} from './dynamic-art-assets';
 
@@ -11,7 +12,7 @@ const HASH=/^[a-f0-9]{64}$/;
 type Transform=Pick<SpriteOverlay,'scale'|'offsetPercent'|'rotation'>;
 type Row=readonly [string,number,number,string,string,number];
 type Manifest={schema:string;version:string;definitionsSha256:string;atlasSha256:string;ingredientBitsetSha256:string;sampleSize:number;sampleOrigin:number[];logicalSize:number;scale:number;offsetPercent:number[];rotation:number;columns:number;rowsPerSheet:number;alphaOffsetY:number;textures:TextureAsset[];sprites:Row[];items:Record<string,string>};
-type Binding={manifest:Manifest;rows:ReadonlyMap<string,Row>};
+type Binding={manifest:Manifest;rows:ReadonlyMap<string,Row>;aliasRows:ReadonlyMap<number,Row>};
 export function decodeWandCandidateSource(raw:unknown):Binding{
  const m=raw as Manifest;
  if(!m||m.schema!=='HKIA.WandSampledOriginalSubIcon.1'||m.version!=='3.0.1'||
@@ -41,13 +42,24 @@ export function decodeWandCandidateSource(raw:unknown):Binding{
   referenced.add(pid);
  }
  if(referenced.size!==rows.size)throw Error('WAND_CANDIDATE_COVERAGE');
- return {manifest:m,rows};
+ const aliasRows=new Map<number,Row>();
+ if(aliases.schema!=='HKIA.WandOriginalSpriteAliases.1'||aliases.version!==m.version||
+  aliases.definitionsSha256!==m.definitionsSha256||aliases.candidateManifestSha256!==WAND_CANDIDATE_SOURCE_SHA||
+  aliases.count!==206||aliases.rows.length!==206)throw Error('WAND_ALIAS_SOURCE');
+ let last=0;const used=new Set<string>();
+ for(const [id,pid] of aliases.rows){
+  if(typeof id!=='number'||!Number.isInteger(id)||id<=last||id>0x7fffffff||Object.hasOwn(m.items,String(id))||
+   typeof pid!=='string'||pid==='-6646601456236922891')throw Error('WAND_ALIAS_ITEM');
+  const row=rows.get(pid);if(!row)throw Error('WAND_ALIAS_SPRITE');
+  aliasRows.set(id,row);used.add(pid);last=id;
+ }
+ if(used.size!==179)throw Error('WAND_ALIAS_COVERAGE');
+ return {manifest:m,rows,aliasRows};
 }
 export function candidateWandSprite(binding:Binding,itemId:number,transform:Transform):Row|undefined{
  if(!Number.isInteger(itemId)||itemId<=0||itemId>0x7fffffff||
-  transform.scale!==Math.fround(.4)||transform.offsetPercent[0]!==-.25||transform.offsetPercent[1]!==.25||transform.rotation!==0||
-  !Object.hasOwn(binding.manifest.items,String(itemId)))return;
- return binding.rows.get(binding.manifest.items[String(itemId)]);
+  transform.scale!==Math.fround(.4)||transform.offsetPercent[0]!==-.25||transform.offsetPercent[1]!==.25||transform.rotation!==0)return;
+ return Object.hasOwn(binding.manifest.items,String(itemId))?binding.rows.get(binding.manifest.items[String(itemId)]):binding.aliasRows.get(itemId);
 }
 /** The original source sprite was sampled once at the native transform's
  * 34 occupied pixel centers on this editor's fixed 84px content grid.
