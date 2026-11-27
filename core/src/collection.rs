@@ -1338,7 +1338,6 @@ impl Editor {
    if c.pos!=c.bytes.len(){return None}
   }
   let item=row.item_id?;
-  if item==crate::inventory_source::GENERIC_MAGIC_WAND_ID{return None}
   if crate::inventory_source::wand_source_style(item,source)!=Some(values[2]){return None}
   let identity=Self::wand_nil(source,[values[0],values[1]]);
   Self::wand_key(item,identity)?;Some(identity)
