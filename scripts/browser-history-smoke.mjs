@@ -393,10 +393,14 @@ async function inventoryBobaFullCreationSmoke(){
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();await dialog.waitFor();
   const baseSelect=dialog.locator('select[name="boba-base"]'),select=dialog.locator('select[name="boba-variant"]');
   assert.equal(await baseSelect.locator('option').count(),19);
-  await baseSelect.selectOption('46:39:78');await select.selectOption({label:'Without tapioca · Unsweetened'});
+  await baseSelect.selectOption('46:39:78');
+  assert.equal(await select.locator('option:checked').textContent(),'With tapioca · Sweet');
+  await select.selectOption({label:'Without tapioca · Unsweetened'});
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();await dialog.waitFor();
-  await baseSelect.selectOption('9:55:78');await select.selectOption({label:'With tapioca · Semi-sweet'});
+  await baseSelect.selectOption('9:55:78');
+  assert.equal(await select.locator('option:checked').textContent(),'Without tapioca · Unsweetened');
+  await select.selectOption({label:'With tapioca · Semi-sweet'});
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-boba:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
