@@ -2702,6 +2702,49 @@ fn dango_nigiri_and_new_cafe_stacks_roundtrip(){
 }
 
 #[test]
+fn first_chef_stacks_use_native_starters_and_full_recipe_validation(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let (item,before)=e.inventory_absent_boba_default().unwrap();
+  let candidate=0x80000000u32|item as u32;
+  let options=e.inventory_boba_creation_variants(candidate);assert_eq!(options.len(),152);
+  let target=*options.last().unwrap();
+  assert!(e.create_inventory_boba_variant(candidate,[0;5],target,1).is_err());
+  assert!(e.create_inventory_boba_variant(candidate,before,[0;5],1).is_err());
+  assert!(e.create_inventory_boba_variant(candidate,before,target,0).is_err());
+  let handle=e.create_inventory_boba_variant(candidate,before,target,2).unwrap();
+  assert!(e.inventory_absent_boba_default().is_none());
+  assert!(e.create_inventory_boba_variant(candidate,before,target,1).is_err());
+  let cafe=e.inventory_absent_cafe_defaults();assert_eq!(cafe.len(),9);
+  let mut ids=vec![(item,handle,2)];
+  for (item,before) in cafe{
+   let candidate=0x80000000u32|item as u32;
+   assert!(e.create_inventory_cafe_variant(candidate,[0;6],before,1).is_err());
+   assert!(e.create_inventory_cafe_variant(candidate,before,[0;6],1).is_err());
+   let target=e.inventory_cafe_creation_variants(candidate).first().map(|v|v.0).unwrap_or(before);
+   let handle=e.create_inventory_cafe_variant(candidate,before,target,3).unwrap();
+   assert!(e.create_inventory_cafe_variant(candidate,before,target,1).is_err());
+   ids.push((item,handle,3));
+  }
+  assert!(e.inventory_absent_cafe_defaults().is_empty());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert!(saved.inventory_absent_boba_default().is_none());assert!(saved.inventory_absent_cafe_defaults().is_empty());
+  let rows=saved.inventory();assert_eq!(rows.len(),10);
+  for (item,handle,quantity) in ids{
+   let row=rows.iter().find(|r|r.item_id==item).unwrap();
+   assert_eq!(row.quantity,quantity);assert_eq!(saved.inventory_unique_data(row.document_id),e.inventory_unique_data(handle));
+   assert_eq!(row.quantity_minimum,0);saved.change_inventory_quantity(row.document_id,quantity,0).unwrap();
+  }
+  assert!(Editor::open(saved.export().unwrap()).unwrap().inventory().iter().all(|r|r.quantity==0));
+ }
+}
+
+#[test]
 fn all_authored_boba_base_choices_and_new_stacks_roundtrip(){
  use hkia_save_core::collection::{HistoryScope::Inventory,BobaVariant};
  let original=[6,44,76,75,73];let changed=[46,39,79,78,71];let added=[9,55,76,78,72];let child=[32,43,76,75,74];

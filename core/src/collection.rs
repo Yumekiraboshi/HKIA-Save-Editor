@@ -1131,7 +1131,35 @@ impl Editor {
   }
   out
  }
+ // Missing chef stacks share the same source/identity gates as additional
+ // variants, but have no existing player payload to copy.
+ fn absent_chef_allowed(&self,item:i32)->bool{
+  crate::inventory_source::is_uncapped_required_unique_stack(item)&&
+   !self.inventory_item_rows.contains_key(&item)&&
+   self.absent_flower_budget_available()&&self.inventory_creation_payload_safe(item)&&
+   !self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)
+ }
+ pub fn inventory_absent_boba_default(&self)->Option<(i32,BobaVariant)>{
+  use crate::inventory_source as src;
+  if !self.absent_chef_allowed(src::BOBA_ID)||
+   self.pending_bobas.keys().any(|id|self.inventory_changes.contains_key(id)){return None}
+  let [color,flavor,milk]=*src::BOBA_SOURCE_TRIPLES.first()?;
+  Some((src::BOBA_ID,[color,flavor,src::BOBA_PEARLS[0],milk,src::BOBA_SWEETNESS[0]]))
+ }
+ fn absent_boba_default(&self,id:u32)->Option<BobaVariant>{
+  let (item,v)=self.inventory_absent_boba_default()?;
+  (id==(PENDING_ITEM|item as u32)&&!self.pending_bobas.contains_key(&id)).then_some(v)
+ }
  pub fn inventory_boba_creation_variants(&self,id:u32)->Vec<BobaVariant>{
+  if self.absent_boba_default(id).is_some(){
+   let mut out=Vec::new();
+   for &[color,flavor,milk] in crate::inventory_source::BOBA_SOURCE_TRIPLES{
+    for pearls in crate::inventory_source::BOBA_PEARLS{
+     for sweet in crate::inventory_source::BOBA_SWEETNESS{out.push([color,flavor,pearls,milk,sweet]);}
+    }
+   }
+   return out
+  }
   let Some((original,_,_))=self.boba_context(id)else{return Vec::new()};
   let item=crate::inventory_source::BOBA_ID;
   let quantity=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
@@ -1141,8 +1169,12 @@ impl Editor {
  }
  pub fn create_inventory_boba_variant(&mut self,source_id:u32,expected:BobaVariant,next:BobaVariant,quantity:i32)->Result<u32,Error>{
   if quantity<=0||!self.inventory_boba_creation_variants(source_id).contains(&next){return Err(Error::Schema)}
-  let (_,current,_)=self.boba_context(source_id).ok_or(Error::Schema)?;
-  if current!=expected{return Err(Error::Schema)}
+  if let Some(default)=self.absent_boba_default(source_id){
+   if expected!=default{return Err(Error::Schema)}
+  }else{
+   let (_,current,_)=self.boba_context(source_id).ok_or(Error::Schema)?;
+   if current!=expected{return Err(Error::Schema)}
+  }
   let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
   let change=Change::BobaCreated{document_id,source_id,expected,variant:next,quantity};
   self.restore_change(&change,false);self.undo.push(change);
@@ -1266,6 +1298,9 @@ impl Editor {
  /// pair in its final slot represents removal, not a serialized zero entry.
  pub fn inventory_cafe_variants(&self,id:u32)->Vec<(CafeVariant,i32,usize)>{
   let Some((item,original,current,reserved))=self.cafe_context(id)else{return Vec::new()};
+  self.cafe_choices(item,original,current,&reserved)
+ }
+ fn cafe_choices(&self,item:i32,original:CafeVariant,current:CafeVariant,reserved:&HashSet<CafeVariant>)->Vec<(CafeVariant,i32,usize)>{
   let mut out=Vec::new();let mut seen=HashSet::new();
   let slots=if item==crate::inventory_source::NIGIRI_ID{2}else{crate::inventory_source::cafe_slot_count(item).unwrap_or(0)};
   for i in 0..slots{
@@ -1286,14 +1321,45 @@ impl Editor {
    self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||self.cafe_family_count(item)>=256{return None}
   Some(context)
  }
+ fn absent_cafe_starter(&self,item:i32)->Option<CafeVariant>{
+  if !self.absent_chef_allowed(item)||
+   self.pending_cafes.iter().any(|(&id,&(i,_))|i==item&&self.inventory_changes.contains_key(&id)){return None}
+  let slots=crate::inventory_source::cafe_slot_count(item)?;
+  let mut v=[0;6];
+  for i in 0..slots{
+   let (_,f,c)=*self.cafe_slot_choices(item,i).first()?;
+   v[i]=f;v[i+3]=c;
+  }
+  self.valid_cafe_creation(item,v).then_some(v)
+ }
+ pub fn inventory_absent_cafe_defaults(&self)->Vec<(i32,CafeVariant)>{
+  crate::inventory_source::CAFE_IDS.iter().filter_map(|&item|
+   self.absent_cafe_starter(item).map(|v|(item,v))).collect()
+ }
+ fn absent_cafe_context(&self,id:u32)->Option<(i32,CafeVariant)>{
+  if id&PENDING_ITEM==0||self.pending_cafes.contains_key(&id){return None}
+  let item=(id&!PENDING_ITEM) as i32;
+  Some((item,self.absent_cafe_starter(item)?))
+ }
  pub fn inventory_cafe_creation_variants(&self,id:u32)->Vec<(CafeVariant,i32,usize)>{
+  if let Some((item,starter))=self.absent_cafe_context(id){
+   return self.cafe_choices(item,starter,starter,&HashSet::new()).into_iter()
+    .filter(|&(v,_,_)|self.valid_cafe_creation(item,v)).collect()
+  }
   let Some((item,original,current,_))=self.cafe_creation_context(id)else{return Vec::new()};
   self.inventory_cafe_variants(id).into_iter().filter(|&(v,_,_)|
    v!=original&&v!=current&&self.valid_cafe_creation(item,v)).collect()
  }
  pub fn create_inventory_cafe_variant(&mut self,source_id:u32,expected:CafeVariant,next:CafeVariant,quantity:i32)->Result<u32,Error>{
-  let (item,original,current,reserved)=self.cafe_creation_context(source_id).ok_or(Error::Schema)?;
-  if quantity<=0||current!=expected||next==current||next==original||reserved.contains(&next)||!self.valid_cafe_creation(item,next){return Err(Error::Schema)}
+  if quantity<=0{return Err(Error::Schema)}
+  let item=if let Some((item,starter))=self.absent_cafe_context(source_id){
+   if expected!=starter||!self.valid_cafe_creation(item,next){return Err(Error::Schema)}
+   item
+  }else{
+   let (item,original,current,reserved)=self.cafe_creation_context(source_id).ok_or(Error::Schema)?;
+   if current!=expected||next==current||next==original||reserved.contains(&next)||!self.valid_cafe_creation(item,next){return Err(Error::Schema)}
+   item
+  };
   let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
   let change=Change::CafeCreated{document_id,source_id,item_id:item,expected,variant:next,quantity};
   self.restore_change(&change,false);self.undo.push(change);

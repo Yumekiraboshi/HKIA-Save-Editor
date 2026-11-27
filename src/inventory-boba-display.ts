@@ -1,6 +1,6 @@
 /** Presentation of Rust-owned Boba tuples. No save eligibility or recipe planning. */
 export type BobaVariant=[number,number,number,number,number];
-export type InventoryBoba={variant:BobaVariant;editable:boolean};
+export type InventoryBoba={variant:BobaVariant;editable:boolean;creationOnly?:boolean};
 export type BobaWitness=[itemId:number,flavor:number,color:number];
 export function isBobaVariantWire(v:unknown):v is BobaVariant{
  return Array.isArray(v)&&v.length===5&&v.every(n=>Number.isInteger(n)&&n>=-2147483648&&n<=2147483647);
@@ -23,7 +23,7 @@ export function decodeBobaRows(bytes:Uint8Array,docIds:ReadonlySet<number>):{row
 export function decodeBobaVariants(bytes:Uint8Array):BobaVariant[]{
  if(bytes.length<4)throw Error('BOBA_OPTIONS_INVALID');
  const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),n=v.getUint32(0,true);
- if(n>151||bytes.length!==4+n*20)throw Error('BOBA_OPTIONS_INVALID');
+ if(n>152||bytes.length!==4+n*20)throw Error('BOBA_OPTIONS_INVALID');
  return Array.from({length:n},(_,i)=>Array.from({length:5},(_,j)=>v.getInt32(4+i*20+j*4,true)) as BobaVariant);
 }
 // Editor copy, not asserted to be original game localization.
