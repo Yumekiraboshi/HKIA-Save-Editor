@@ -2165,6 +2165,10 @@ async function inventoryOriginalArtSmoke(){
   await original.waitFor({timeout:30_000});
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'3');
   assert.equal(await original.getAttribute('data-icon-fidelity'),'game-original');
+  const dyeBadge=card.locator('[data-native-decorator="14"]');
+  await dyeBadge.waitFor({timeout:30_000});
+  const colors=await dyeBadge.evaluate(el=>({primary:getComputedStyle(el.querySelector('.plate-inner')).backgroundColor,secondary:getComputedStyle(el.querySelector('.native-dye-icon-tint')).backgroundColor,mask:getComputedStyle(el.querySelector('.native-dye-icon-tint')).maskImage}));
+  assert.equal(colors.primary,'rgb(255, 187, 250)');assert.equal(colors.secondary,'rgb(194, 254, 255)');assert.match(colors.mask,/decorator-14\.webp/);
   const inventoryUrl=await original.evaluate(el=>getComputedStyle(el).backgroundImage);
   assert.match(inventoryUrl,/\/(?:dynamic-colorways|source-colorways)\/1286846063\.webp/);
   await chooseTab(page,'collections');
@@ -2188,6 +2192,9 @@ async function inventoryOriginalArtSmoke(){
   await pajama.waitFor({timeout:30_000});
   assert.equal(await pajama.getAttribute('data-icon-fidelity'),'game-original');
   assert.ok((await pajama.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/source-colorways/315822.webp'));
+  const pajamaBadge=page.locator('.inventory-card [data-native-decorator="14"]');
+  await pajamaBadge.waitFor({timeout:30_000});
+  assert.deepEqual(await pajamaBadge.evaluate(el=>[getComputedStyle(el.querySelector('.plate-inner')).backgroundColor,getComputedStyle(el.querySelector('.native-dye-icon-tint')).backgroundColor]),['rgb(149, 250, 172)','rgb(249, 241, 244)']);
   await page.locator('.inventory-group-option[data-inventory-group="furniture"]').click();
   await page.locator('.inventory-controls input[type="search"]').fill('427689');
   const extra=page.locator('.inventory-card .item-sprite[data-inventory-art="native"]');

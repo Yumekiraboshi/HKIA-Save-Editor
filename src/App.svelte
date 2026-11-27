@@ -35,7 +35,7 @@ import {searchAchievementRows} from './achievement-search';
  import {localizedCopy} from './ui-locales';
  import {loadLocaleIndex,loadGameLabels,EMPTY_LABELS,type GameLabels} from './game-localization';
  import {loadIconPack,type IconPack} from './icon-packs';
- import {loadNativeDyePalettes,type NativeDyePalettes} from './native-dye-palettes';
+ import {loadNativeDyePalettes,dyeDecoratorFor,type NativeDyePalettes} from './native-dye-palettes';
  import {loadVariantArtSources} from './variant-art';
  import DyeSprite from './DyeSprite.svelte';
  import DynamicFlowerSprite from './DynamicFlowerSprite.svelte';
@@ -1669,6 +1669,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const growth=flowerGrowthKind(item.itemId,item.flower)}
      {@const flowerBadges=snapshot.version==='3.0.1'?flowerDecorators(item.flower,flowerDefinitions):[]}
      {@const customized=snapshot.version==='3.0.1'&&furnitureHasCustomizedAppearance(furnitureDisplay,furnitureVariantOf(item.unique))}
+     {@const dyeBadge=flowerBadges.length===0?dyeDecoratorFor(item.itemId,snapshot.version,nativeDyePalettes):null}
      {@const variantTitle=inventoryVariantSearchName(item)}
      {@const chef=inventoryChefAppearance(item.itemId,item.unique)}
      {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
@@ -1687,7 +1688,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          <button type="button" class="inventory-stack-delete" disabled={busy||item.quantityMinimum!==0||item.quantity<=0} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)+': '+inventoryName(item.itemId)} onclick={e=>requestInventoryDelete([item],false,e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
         {/if}
       <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
-       <span class="inventory-item-art" class:flower-variant={flowerBadges.length>0} style:position="relative" aria-hidden="true">
+       <span class="inventory-item-art" class:flower-variant={flowerBadges.length>0||!!dyeBadge} style:position="relative" aria-hidden="true">
         {#if wand&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite} originalCell={wandOriginalCell(wand.sourceItemId)}/>
          {:else if chef&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
@@ -1708,9 +1709,10 @@ import {verifiedFloorplanName} from './floorplan-names';
         {:else}
          <span class="item-art-empty">✧</span>
         {/if}
-        {#if customized||flowerBadges.length}
+        {#if customized||flowerBadges.length||dyeBadge}
          <span class="inventory-native-decorators">
           {#if customized}<InventoryDecorator type={9}/>{/if}
+          {#if dyeBadge}<InventoryDecorator type={14} primaryColor={dyeBadge.primaryColor} iconColor={dyeBadge.iconColor}/>{/if}
           {#each flowerBadges as badge (badge.type)}
            {#if badge.type===12}<InventoryDecorator type={12} primaryColor={badge.primaryColor}/>
            {:else}<InventoryDecorator type={11} patternUrl={badge.patternUrl}/>{/if}
