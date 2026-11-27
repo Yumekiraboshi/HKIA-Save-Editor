@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPaletteVariants,changeInventoryPaletteVariant,requestPaletteCreationVariants,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafeVariants,changeInventoryCafeVariant,requestCafeCreationVariants,createInventoryCafeVariant,requestWandVariants,changeInventoryWandVariant,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPalettePreview,changeInventoryPaletteVariant,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafeVariants,changeInventoryCafeVariant,requestCafeCreationVariants,createInventoryCafeVariant,requestWandVariants,changeInventoryWandVariant,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,inventoryPatchesEqual,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -43,7 +43,7 @@ import {searchAchievementRows} from './achievement-search';
  import DynamicWandSprite from './DynamicWandSprite.svelte';
  import {inventoryWandAppearance,wandVariantOf,wandVariantLabel,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance} from './inventory-chef-display';
- import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,paletteCreationSelection,type PaletteVariant} from './inventory-palette-display';
+ import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
  import {cafeSlotLabel,cafeVariantLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
  import {bobaVariantLabel,bobaBaseKey,bobaBaseChoices,bobaBaseLabel,fullBobaLabel,type BobaVariant} from './inventory-boba-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
@@ -85,7 +85,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let furnitureSelection=$state(-1);
  let furnitureDraft=$state<FurnitureVariant|null>(null);
  let paletteDialogEl:HTMLDialogElement|undefined=$state();
- let paletteEdit=$state<{documentId:number;itemId:number;revision:number;before:PaletteVariant;options:PaletteVariant[];creationOptions:PaletteVariant[]}|null>(null);
+ let paletteEdit=$state<{documentId:number;itemId:number;revision:number;before:PaletteVariant;options:PaletteVariant[]}|null>(null);
  let cafeDialogEl:HTMLDialogElement|undefined=$state();
  let cafeEdit=$state<{documentId:number;itemId:number;revision:number;before:CafeVariant;options:CafeOption[];creationOptions:CafeOption[]}|null>(null);
  let cafeSelection=$state(-1);
@@ -99,6 +99,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let bobaBase=$state('');
  let paletteSlot=$state(0);
  let paletteDraft=$state<PaletteVariant|null>(null);
+ let paletteDraftCreatable=$state(false);
  let inventoryNativeArt:InventoryNativeArt|null=$state(null);
  let inventoryEditableOnly=$state(false);
  let inventoryAddMode=$state(false);
@@ -866,10 +867,10 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||!row.unique?.paletteEditable||!before)return;
   const revision=snapshot.revision;busy=true;error='';
   try{
-   const [options,creationOptions]=await Promise.all([requestPaletteVariants(row.documentId),requestPaletteCreationVariants(row.documentId)]);
+   const preview=await requestPalettePreview(row.documentId,before,before);
    if(!snapshot||snapshot.revision!==revision)return;
-   paletteEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions};
-   paletteSlot=0;paletteDraft=[...before];variantAddQuantity=1;await tick();
+   paletteEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:preview.options};
+   paletteSlot=0;paletteDraft=[...before];paletteDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
    if(paletteDialogEl&&!paletteDialogEl.open)paletteDialogEl.showModal();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -877,10 +878,21 @@ import {verifiedFloorplanName} from './floorplan-names';
  async function addInventoryPaletteVariant(){
   const edit=paletteEdit,quantity=variantAddQuantity;
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
-  const next=paletteDraft;if(!next||!paletteCreationSelection(edit.before,next,edit.creationOptions))return;
+  const next=paletteDraft;if(!next||!paletteDraftCreatable)return;
   busy=true;error='';
   try{update(await createInventoryPaletteVariant(edit.documentId,edit.before,next,quantity));closePaletteEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
+ }
+ async function refreshPaletteDraft(next:PaletteVariant){
+  const edit=paletteEdit;
+  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
+  busy=true;error='';
+  try{
+   const preview=await requestPalettePreview(edit.documentId,edit.before,next);
+   if(!snapshot||snapshot.revision!==edit.revision||paletteEdit?.documentId!==edit.documentId)return;
+   paletteDraft=[...next];paletteDraftCreatable=preview.creatable;
+   paletteEdit={...edit,options:preview.options};
+  }catch(e){error=describeError(e)}finally{busy=false}
  }
  function closePaletteEditor(){if(paletteDialogEl?.open)paletteDialogEl.close()}
  async function applyInventoryPaletteVariant(event:SubmitEvent){
@@ -1887,12 +1899,12 @@ import {verifiedFloorplanName} from './floorplan-names';
   {/if}
  </dialog>
 
- <dialog class="date-dialog" bind:this={paletteDialogEl} aria-labelledby="palette-editor-title" onclose={()=>{paletteEdit=null;paletteDraft=null}} oncancel={e=>{if(busy)e.preventDefault()}}>
+ <dialog class="date-dialog" bind:this={paletteDialogEl} aria-labelledby="palette-editor-title" onclose={()=>{paletteEdit=null;paletteDraft=null;paletteDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if paletteEdit}
    {@const edit=paletteEdit}
    {@const selected=paletteDraft??edit.before}
    {@const changed=selected.some((n,i)=>n!==edit.before[i])}
-   {@const canCreate=paletteCreationSelection(edit.before,selected,edit.creationOptions)}
+   {@const canCreate=paletteDraftCreatable}
    <form class="date-dialog-inner" onsubmit={applyInventoryPaletteVariant}>
     <div class="date-dialog-heading">
      <h2 id="palette-editor-title">{inventoryName(edit.itemId)}</h2>
@@ -1911,12 +1923,12 @@ import {verifiedFloorplanName} from './floorplan-names';
      </div>
      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(32px,1fr));gap:5px;margin-top:8px">
       {#each edit.options as option,i}
-       {#if !paletteChannelEqual(option,edit.before,paletteSlot)}
-        <button class="inventory-palette-option" type="button" data-palette-option={i} aria-label={paletteColorHex(option,paletteSlot)} title={paletteColorHex(option,paletteSlot)} aria-pressed={paletteChannelEqual(option,selected,paletteSlot)} disabled={busy} onclick={()=>paletteDraft=paletteSelectChannel(selected,option,paletteSlot)} style:background-color={paletteColorHex(option,paletteSlot)} style="width:32px;height:32px;border:1px solid currentColor;border-radius:5px" style:outline={paletteChannelEqual(option,selected,paletteSlot)?'2px solid currentColor':'none'}></button>
+       {#if !paletteChannelEqual(option,selected,paletteSlot)&&!paletteChannelEqual(option,edit.before,paletteSlot)}
+        <button class="inventory-palette-option" type="button" data-palette-option={i} aria-label={paletteColorHex(option,paletteSlot)} title={paletteColorHex(option,paletteSlot)} aria-pressed={paletteChannelEqual(option,selected,paletteSlot)} disabled={busy} onclick={()=>void refreshPaletteDraft(paletteSelectChannel(selected,option,paletteSlot))} style:background-color={paletteColorHex(option,paletteSlot)} style="width:32px;height:32px;border:1px solid currentColor;border-radius:5px" style:outline={paletteChannelEqual(option,selected,paletteSlot)?'2px solid currentColor':'none'}></button>
        {/if}
       {/each}
       {#if !paletteChannelEqual(selected,edit.before,paletteSlot)}
-       <button class="inventory-palette-reset" type="button" title={paletteColorHex(edit.before,paletteSlot)} aria-label={paletteColorHex(edit.before,paletteSlot)} disabled={busy} onclick={()=>paletteDraft=paletteSelectChannel(selected,edit.before,paletteSlot)} style:background-color={paletteColorHex(edit.before,paletteSlot)} style="width:32px;height:32px;border:1px dashed currentColor;border-radius:5px"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>
+       <button class="inventory-palette-reset" type="button" title={paletteColorHex(edit.before,paletteSlot)} aria-label={paletteColorHex(edit.before,paletteSlot)} disabled={busy} onclick={()=>void refreshPaletteDraft(paletteSelectChannel(selected,edit.before,paletteSlot))} style:background-color={paletteColorHex(edit.before,paletteSlot)} style="width:32px;height:32px;border:1px dashed currentColor;border-radius:5px"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>
       {/if}
      </div>
      {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
@@ -1927,10 +1939,11 @@ import {verifiedFloorplanName} from './floorplan-names';
       <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
      </label>
     {/if}
+    {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closePaletteEditor}>{copy.cancel}</button>
-     {#if edit.creationOptions.length}
-      <button type="button" class="inventory-create-palette" disabled={busy||!validVariantAddQuantity||!canCreate} onclick={()=>void addInventoryPaletteVariant()}>{inventoryAddCopy(locale)}</button>
+     {#if canCreate}
+      <button type="button" class="inventory-create-palette" disabled={busy||!validVariantAddQuantity} onclick={()=>void addInventoryPaletteVariant()}>{inventoryAddCopy(locale)}</button>
      {/if}
      <button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>
     </div>

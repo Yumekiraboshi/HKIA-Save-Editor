@@ -1349,6 +1349,9 @@ impl Editor {
  /// Native one-color choices; complete targets also support atomic net replay.
  pub fn inventory_palette_variants(&self,id:u32)->Vec<PaletteVariant>{
   let Some((original,current,reserved))=self.palette_context(id)else{return Vec::new()};
+  Self::palette_choices(original,current,&reserved)
+ }
+ fn palette_choices(original:PaletteVariant,current:PaletteVariant,reserved:&[PaletteVariant])->Vec<PaletteVariant>{
   let mut out=Vec::new();
   for i in 0..3{
    for color in std::iter::once(original[i]).chain(Self::palette_output_choices()){
@@ -1377,11 +1380,21 @@ impl Editor {
    !Self::palette_equal(*v,original)&&!Self::palette_equal(*v,current)&&
    v.iter().all(|&c|Self::palette_output_choices().any(|x|x==c))).collect()
  }
+ fn palette_creation_target(original:PaletteVariant,current:PaletteVariant,reserved:&[PaletteVariant],next:PaletteVariant)->bool{
+  !Self::palette_equal(next,original)&&!Self::palette_equal(next,current)&&
+   !reserved.iter().any(|&p|Self::palette_equal(p,next))&&
+   next.iter().all(|&c|Self::palette_output_choices().any(|x|x==c))
+ }
+ /// Read-only native draft planning; identical final eligibility to creation CAS.
+ pub fn inventory_palette_preview(&self,id:u32,expected:PaletteVariant,draft:PaletteVariant)->Result<(Vec<PaletteVariant>,bool),Error>{
+  let (original,current,reserved)=self.palette_context(id).ok_or(Error::Schema)?;
+  if expected!=current||!Self::valid_palette_target(original,draft)||reserved.iter().any(|&p|Self::palette_equal(p,draft)){return Err(Error::Schema)}
+  let creatable=self.palette_creation_context(id).is_some()&&Self::palette_creation_target(original,current,&reserved,draft);
+  Ok((Self::palette_choices(original,draft,&reserved),creatable))
+ }
  pub fn create_inventory_palette_variant(&mut self,source_id:u32,expected:PaletteVariant,next:PaletteVariant,quantity:i32)->Result<u32,Error>{
   let (original,current,reserved)=self.palette_creation_context(source_id).ok_or(Error::Schema)?;
-  if quantity<=0||expected!=current||Self::palette_equal(next,original)||Self::palette_equal(next,current)||
-   reserved.iter().any(|&p|Self::palette_equal(p,next))||
-   !next.iter().all(|&c|Self::palette_output_choices().any(|x|x==c)){return Err(Error::Schema)}
+  if quantity<=0||expected!=current||!Self::palette_creation_target(original,current,&reserved,next){return Err(Error::Schema)}
   let document_id=self.allocate_staged_unique_handle()?;
   let revision=self.next_edit_revision()?;
   let change=Change::PaletteCreated{document_id,source_id,expected,variant:next,quantity};
