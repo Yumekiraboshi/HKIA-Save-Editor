@@ -124,7 +124,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(inventoryAddMode||!snapshot||inventoryBatchSelected.size===0)return 1;
   return inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantityMinimum!==0)?1:0;
  });
- const selectedInventoryRows=$derived(inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId)));
+ const selectedInventoryRows=$derived.by(()=>inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId)));
  const inventoryBatchCanQuantity=$derived(selectedInventoryRows.length>0&&selectedInventoryRows.every(row=>row.editable));
  const inventoryBatchCanDelete=$derived(!inventoryAddMode&&selectedInventoryRows.length>0&&selectedInventoryRows.length===inventoryBatchSelected.size&&((selectedInventoryRows.every(row=>row.editable&&row.quantityMinimum===0)&&selectedInventoryRows.some(row=>row.quantity>0))||selectedInventoryRows.every(row=>row.removable)));
  const inventoryBatchMaximum=$derived.by(()=>{
