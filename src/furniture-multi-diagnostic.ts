@@ -204,9 +204,10 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
   geometry=await uploadNativeGeometry(gl,resolved.geometry,await getBytes('geometry',resolved.geometry.geometrySha256,resolved.geometry.geometryBytes),
    resolved.locations,true);
   const texture=async(t:NativeTextureSource)=>{
-   const key=t.sha256+':'+t.colorSpace+':'+t.format+':'+JSON.stringify(t.sampler)+':'+(request.bc1Modes[t.sha256]??'');
+   const builtin=furnitureNativeBuiltinBytes(t);
+   const key=(builtin?'builtin:':'source:')+t.sha256+':'+t.colorSpace+':'+t.format+':'+JSON.stringify(t.sampler)+':'+(request.bc1Modes[t.sha256]??'');
    const cached=textures.get(key);if(cached)return cached;
-   let b=payloads.get(t.sha256);if(!b){b=furnitureNativeBuiltinBytes(t)??await getBytes('texture',t.sha256,t.bytes);payloads.set(t.sha256,b);}
+   let b=builtin??payloads.get(t.sha256);if(!b){b=await getBytes('texture',t.sha256,t.bytes);payloads.set(t.sha256,b);}
    const uploaded=await uploadNativeTexture(gl,t,b,request.bc1Modes[t.sha256]);owned.push(uploaded);textures.set(key,uploaded);return uploaded;
   };
   const cube=async(c:RugCubeRequest)=>{
@@ -223,7 +224,7 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
     const noiseMap=await texture(p.noiseMap),submeshIndex=get(p.submeshIndex,'SUBMESH');
     draws.push({cull:p.cull,run:()=>sparkleRenderer!.draw(mesh,{baseMap,normalMap,comboMap,noiseMap,reflectionPrimary,reflectionSecondary},p.scene,p.material,submeshIndex)});
    }else{
-    if(!p.patternMap&&p.material.useBaseMapMask&&!nativeBaseIsOpaque(p.baseMap,get(payloads.get(p.baseMap.sha256),'BASE_PAYLOAD')))fail('NULL_PATTERN_CONTRIBUTES');
+    if(!p.patternMap&&p.material.useBaseMapMask&&!nativeBaseIsOpaque(p.baseMap,get(furnitureNativeBuiltinBytes(p.baseMap)??payloads.get(p.baseMap.sha256),'BASE_PAYLOAD')))fail('NULL_PATTERN_CONTRIBUTES');
     // CustomLit never consumes patternMap; unused source binding can alias base.
     const patternMap=p.patternMap?await texture(p.patternMap):baseMap;
     draws.push({cull:p.cull,glassState:p.glassState,run:()=>{
