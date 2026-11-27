@@ -93,3 +93,8 @@ const deleteLabels:Record<Locale,string>={
  ar:'حذف',de:'Löschen',en:'Delete','en-GB':'Delete',es:'Eliminar',fr:'Supprimer','fr-CA':'Supprimer',it:'Elimina',ja:'削除',ko:'삭제',nl:'Verwijderen','pt-BR':'Excluir',ru:'Удалить',tr:'Sil','zh-Hans':'删除','zh-Hant':'刪除'
 };
 export function inventoryDeleteCopy(locale:Locale):string{return deleteLabels[locale]}
+
+const showZeroLabels:Record<Locale,string>={
+ ar:'إظهار العناصر ذات الكمية صفر',de:'Gegenstände mit Anzahl 0 anzeigen',en:'Show zero quantity','en-GB':'Show zero quantity',es:'Mostrar cantidad cero',fr:'Afficher les quantités nulles','fr-CA':'Afficher les quantités nulles',it:'Mostra quantità zero',ja:'数量0を表示',ko:'수량 0 표시',nl:'Aantal 0 tonen','pt-BR':'Mostrar quantidade zero',ru:'Показать нулевые количества',tr:'Miktarı 0 olanları göster','zh-Hans':'显示数量为0的物品','zh-Hant':'顯示數量為0的物品'
+};
+export function inventoryShowZeroCopy(locale:Locale):string{return showZeroLabels[locale]}
