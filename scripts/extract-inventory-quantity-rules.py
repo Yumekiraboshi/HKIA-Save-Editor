@@ -135,11 +135,23 @@ def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_r
         # key, future or required-payload definitions. Existing DLC rows need no
         # inferred entitlement; absent acquisition must be unrestricted.
         if bag_facts is not None:
-            bag=(not unique and cat>=0 and not cat&(1|2|134217728) and not d['ReleaseVersion']
-                 and (d['Rarity'] in (2,3,4) or (d['Rarity']==1 and d['ItemOwnership'] in (2,18))))
+            released_nil=(not unique and cat>=0 and not cat&(1|2|134217728) and not d['ReleaseVersion'])
+            bag=released_nil and (d['Rarity'] in (2,3,4) or
+                                (d['Rarity']==1 and d['ItemOwnership'] in (2,18)))
             add=(d['RequiredDlcContent']=='0'*32 and
                  (d['ItemOwnership'] in (2,18) or (d['ItemOwnership']==16 and d['Rarity'] in (2,3,4))))
-            flags=(1|2*bool(cat&256)|4*bool(add)) if bag else 0
+            # Quest is a rarity label, not the structure of the bag row.
+            # Tradable stackable cosmetics can retain/refill existing rows.
+            quest_cosmetic=(released_nil and d['Rarity']==5 and d['ItemOwnership'] in (2,18)
+                            and stack and cat&(64|256|131072|262144))
+            # Finite, explicitly defined reset effects, without invoking those effects.
+            reset=(released_nil and d['Rarity']==5 and cat==0 and stack and custom
+                   and d['CustomMaxCount']>0 and
+                   ((d['UseEffect'] in (1,2) and d['GiftEffect']==0) or
+                    (d['UseEffect']==0 and d['GiftEffect']==1)))
+            flags=(1|2*bool(cat&256)|4*bool(add)) if bag else (
+                (1|2*bool(cat&256)) if quest_cosmetic else
+                (1|4*bool(d['RequiredDlcContent']=='0'*32 and d['ItemOwnership']==16)) if reset else 0)
             guid=d['SerializedGuid']
             require(len(guid)==32 and all(c in '0123456789abcdefABCDEF' for c in guid),'invalid item GUID')
             words=[int(guid[i:i+8][::-1],16) for i in range(0,32,8)]
@@ -245,10 +257,10 @@ def render_bag_facts(facts,rows):
     facts=sorted(facts)
     require([id for id,_,_ in facts]==[id for id,_ in rows],'bag definition identity alignment')
     flags=bytes(f for _,f,_ in facts);keys=[key for _,_,key in facts]
-    fh='a437ecda069cb84f8536320787f02bd74c0dc83a98058690cfe97caf69e971be'
+    fh='00c61ee7aec852a2e627dfc8941c681fba1f768852fe586f4d22103b55156518'
     kh='0bd8235b2a3bad5263ec8a2144a0a84fa27d8bab4e27e60034190abc6d7a8396'
     require(hashlib.sha256(flags).hexdigest()==fh and hashlib.sha256(b''.join(s.pack('<I',key) for key in keys)).hexdigest()==kh,'bag facts fingerprint')
-    require(len(set(keys))==12163 and [sum(bool(f&mask) for f in flags) for mask in (1,2,4)]==[9077,5452,6706],'bag facts coverage')
+    require(len(set(keys))==12163 and [sum(bool(f&mask) for f in flags) for mask in (1,2,4)]==[9636,5963,6708],'bag facts coverage')
     return ("// Generated from the pinned Steam v3.0.1 definitions, ascending RULES Item ID order.\n"
             "// Flags: 1=released ordinary bag class, 2=outfit reference class, 4=unrestricted bag acquisition.\n"
             "// Native item GUID fingerprints are denial-only. See extract-inventory-quantity-rules.py.\n"
