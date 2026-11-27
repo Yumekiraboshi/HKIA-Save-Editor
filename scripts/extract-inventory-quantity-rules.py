@@ -158,6 +158,15 @@ def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_r
                 (1|2*bool(cat&256)|4*bool(d['RequiredDlcContent']=='0'*32 and d['UseEffect']==0 and d['GiftEffect']==0)) if quest_cosmetic else
                 (1|4*bool(d['RequiredDlcContent']=='0'*32 and d['ItemOwnership']==16)) if reset else
                 (1|2*bool(cat&256)) if ordinary_stack else 0)
+            effective=d['UiOverridenItemCategory'] if d['HasUiOverridenItemCategory'] else cat
+            no_effect=d['UseEffect']==0 and d['GiftEffect']==0
+            visible=released_nil and effective>=0 and not effective&(1|2|134217728) and no_effect
+            if not flags and visible:
+                flags=1|2*bool(cat&256)
+            if (flags&1 and released_nil and d['RequiredDlcContent']=='0'*32 and d['ItemOwnership'] in (2,18,16) and no_effect
+                    and effective>=0 and not effective&(1|2|134217728)
+                    and (d['Rarity']!=1 or d['ItemOwnership'] in (2,18))):
+                flags|=4
             guid=d['SerializedGuid']
             require(len(guid)==32 and all(c in '0123456789abcdefABCDEF' for c in guid),'invalid item GUID')
             words=[int(guid[i:i+8][::-1],16) for i in range(0,32,8)]
@@ -263,10 +272,10 @@ def render_bag_facts(facts,rows):
     facts=sorted(facts)
     require([id for id,_,_ in facts]==[id for id,_ in rows],'bag definition identity alignment')
     flags=bytes(f for _,f,_ in facts);keys=[key for _,_,key in facts]
-    fh='e0652f0d4db8cae44ad1c041846ec5f5e95e14de8a500d1dbf702d68a82a30b8'
+    fh='9ac02a6abed49424a8047a8c8b13bc24d5f9654a4c211c58c5da3f14d4e0825f'
     kh='0bd8235b2a3bad5263ec8a2144a0a84fa27d8bab4e27e60034190abc6d7a8396'
     require(hashlib.sha256(flags).hexdigest()==fh and hashlib.sha256(b''.join(s.pack('<I',key) for key in keys)).hexdigest()==kh,'bag facts fingerprint')
-    require(len(set(keys))==12163 and [sum(bool(f&mask) for f in flags) for mask in (1,2,4)]==[9835,6020,7213],'bag facts coverage')
+    require(len(set(keys))==12163 and [sum(bool(f&mask) for f in flags) for mask in (1,2,4)]==[9880,6057,7348],'bag facts coverage')
     return ("// Generated from the pinned Steam v3.0.1 definitions, ascending RULES Item ID order.\n"
             "// Flags: 1=released ordinary bag class, 2=outfit reference class, 4=unrestricted bag acquisition.\n"
             "// Native item GUID fingerprints are denial-only. See extract-inventory-quantity-rules.py.\n"

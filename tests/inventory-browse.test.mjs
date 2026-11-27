@@ -268,3 +268,13 @@ test('Add retains a verified nested wand witness alongside a nil-source candidat
  const nested={documentId:36,itemId:384749651,quantity:2,editable:true,unique:{wandEditable:true,tag:9,words:[61381969,104,125,0,8,3,13,2,0]}};
  assert.deepEqual(inventoryAddRows([nested],[candidate]),[candidate,{...nested,editable:false}]);
 });
+
+test('native positive-only ordinary zero rows remain refillable without enabling deletion',()=>{
+ const row={documentId:40,itemId:315822,quantity:0,editable:true,quantityMinimum:1,quantityLimit:2147483647,unique:{uniqueId:0,tag:-1,fieldCount:0,words:[],flowerEditable:false}};
+ assert.equal(inventoryRefillable(row),true);
+ assert.equal(inventoryRefillable({...row,unique:undefined}),true);
+ assert.equal(inventoryRefillable({...row,unique:{...row.unique,tag:7}}),true);
+ assert.equal(inventoryRefillable({...row,editable:false}),false);
+ assert.deepEqual(inventoryAddRows([row],[]),[row]);
+ assert.deepEqual(inventoryDisplayRows([row],false,false),[]);
+});

@@ -77,7 +77,7 @@ const CURRENCY_CREATION_IDS:&[i32]=&[
   #[test]fn complete_catalog_bag_policy_and_reference_fingerprints(){
    assert_eq!(BAG_FLAGS.len(),RULES.len());assert_eq!(ITEM_GUID_DENIAL_KEYS.len(),RULES.len());
    let hex=|b:&[u8]|crate::digest::sha256(b).iter().map(|x|format!("{x:02x}")).collect::<String>();
-   assert_eq!(hex(BAG_FLAGS),"e0652f0d4db8cae44ad1c041846ec5f5e95e14de8a500d1dbf702d68a82a30b8");
+   assert_eq!(hex(BAG_FLAGS),"9ac02a6abed49424a8047a8c8b13bc24d5f9654a4c211c58c5da3f14d4e0825f");
    let bytes:Vec<_>=ITEM_GUID_DENIAL_KEYS.iter().flat_map(|k|k.to_le_bytes()).collect();
    assert_eq!(hex(&bytes),"0bd8235b2a3bad5263ec8a2144a0a84fa27d8bab4e27e60034190abc6d7a8396");
    assert_eq!(ITEM_GUID_DENIAL_KEYS.iter().collect::<std::collections::HashSet<_>>().len(),12163);
@@ -94,7 +94,7 @@ const CURRENCY_CREATION_IDS:&[i32]=&[
     }
     if f&4!=0{absent+=1;assert!(ordinary_quantity_limit(id).is_some())}
    }
-   assert_eq!((total,outfits,absent),(9835,6020,7213));
+   assert_eq!((total,outfits,absent),(9880,6057,7348));
    assert!(ordinary_creation_ids().all(ordinary_bag_creation_item));
    assert!(ordinary_bag_creation_item(216433));assert!(ordinary_bag_creation_item(15761463));
    assert!(ordinary_bag_definition(4881112).is_some()&&!ordinary_bag_creation_item(4881112));
@@ -106,9 +106,9 @@ const CURRENCY_CREATION_IDS:&[i32]=&[
    assert!(ordinary_bag_creation_item(1093982586)&&ordinary_quantity_limit(1093982586)==Some(3));
    assert!(ordinary_bag_creation_item(1763678003)&&ordinary_quantity_limit(1763678003)==Some(3));
    assert!(ordinary_bag_definition(1144225647).is_some()&&!ordinary_bag_creation_item(1144225647));
-   assert!(ordinary_bag_definition(1455056332).is_some()&&!ordinary_bag_creation_item(1455056332));
+   assert!(ordinary_bag_definition(1455056332).is_some()&&ordinary_bag_creation_item(1455056332));
    assert!(ordinary_bag_definition(484139114).is_some()&&!ordinary_bag_creation_item(484139114));
-   assert!(ordinary_bag_definition(197197205).unwrap().0&&!ordinary_bag_creation_item(197197205));
+   assert!(ordinary_bag_definition(197197205).unwrap().0&&ordinary_bag_creation_item(197197205));
   }
  }
 #[cfg(test)]
@@ -126,9 +126,10 @@ mod currency_source_tests{
   let hash:String=crate::digest::sha256(&bytes).iter().map(|b|format!("{b:02x}")).collect();
   assert_eq!(hash,"e7448e16aec60a8ffdd27a48b948b669d6b2dc364a821e86c56aae5e3b716634");
   assert!(CURRENCY_CREATION_IDS.iter().all(|&id|ordinary_bag_creation_item(id)&&!ordinary_creation_item(id)));
-  assert_eq!(ordinary_bag_creation_ids().collect::<std::collections::HashSet<_>>().len(),7213);
+  assert_eq!(ordinary_bag_creation_ids().collect::<std::collections::HashSet<_>>().len(),7348);
   assert!(existing_currency_item(1205887707)&&!ordinary_bag_creation_item(1205887707));
-  for id in [484139114,2092387705,615026760,709633628,1141761080]{assert!(!existing_currency_item(id)&&!ordinary_bag_creation_item(id));}
+  for id in [484139114,2092387705,615026760,1141761080]{assert!(!existing_currency_item(id)&&!ordinary_bag_creation_item(id));}
+  assert!(!ordinary_bag_creation_item(709633628));
  }
 }
 /// FNV-1a of the four native little-endian Hash128 words. Only a denial key:
@@ -540,7 +541,7 @@ mod clothing_reference_tests{
   assert_eq!(hash,"8f303e60d27b8dcc69cac8161315f77a642d0aedc1b56be476d54a623e1d270c");
  }
  #[test]fn exact_source_clothing_crosswalk(){
-  assert_eq!(CLOTHING_REFERENCE_ROWS.len(),6020);
+  assert_eq!(CLOTHING_REFERENCE_ROWS.len(),6057);
   assert_eq!(FLOWER_CLOTHING_REFERENCE_KEYS.len(),27);
   assert!(FLOWER_CLOTHING_REFERENCE_KEYS.windows(2).all(|w|w[0].0<w[1].0));
   let mut flower=Vec::new();
@@ -553,7 +554,7 @@ mod clothing_reference_tests{
   }
   let flower_hash=crate::digest::sha256(&flower).iter().map(|x|format!("{x:02x}")).collect::<String>();
   assert_eq!(flower_hash,"80aa4103198c492cb9e670b21c397e7f94dba77730b99cdf257d8bf46abfc16a");
-  assert_eq!(CLOTHING_REFERENCE_GROUPS.len(),1006);
+  assert_eq!(CLOTHING_REFERENCE_GROUPS.len(),1043);
   assert!(CLOTHING_REFERENCE_ROWS.windows(2).all(|w|w[0].0<w[1].0));
   assert!(CLOTHING_REFERENCE_GROUPS.windows(2).all(|w|w[0].0<w[1].0));
   let mut rows=Vec::new();let mut groups=Vec::new();
@@ -566,8 +567,8 @@ mod clothing_reference_tests{
    groups.extend(p.to_le_bytes());groups.push(keys.len() as u8);for k in keys{groups.extend(k.to_le_bytes());}
   }
   let hex=|b:&[u8]|crate::digest::sha256(b).iter().map(|x|format!("{x:02x}")).collect::<String>();
-  assert_eq!(hex(&rows),"eb520a17a147ac80b03800c9009f87e066e8828321f2f2e759288fc27b28fd40");
-  assert_eq!(hex(&groups),"d61d637c0f495da7f0c98ce3c49b461c1fd23353405990dc947b1bf1abb80df6");
+  assert_eq!(hex(&rows),"688eb46fc205fc9d47678a78b4d0786ca5b4f2690dfb7be173b6964832edd2de");
+  assert_eq!(hex(&groups),"ca67710930262c2fdeb745a64034add939e17d0571140355487e51c1ada47a84");
   let (event_own,event_keys)=ordinary_clothing_reference_keys(517031).unwrap();
   assert_eq!(event_own,2305082351);assert!(event_keys.contains(&furniture_guid_fingerprint([0xf19cbde5,0x482caed7,0x2797ac8b,0xe22f46e9])));
   assert_eq!(CLOTHING_REFERENCE_ROWS.iter().filter(|&&(id,_,_)|ordinary_creation_item(id)).count()+TRADEABLE_NONCLOTHING_REFERENCE_KEYS.len(),ordinary_creation_ids().count());

@@ -1184,7 +1184,7 @@ impl Editor {
  fn ordinary_nonclothing_reference_safe(&self,item:i32,key:u32)->bool{
   let index=&self.slot.index;
   !index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
-   !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_refs_incomplete&&
+   !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_item_refs_incomplete&&
    !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
    !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)&&
    !index.inventory_item_refs.iter().any(|&(i,_)|i==item)
@@ -2410,7 +2410,10 @@ impl Editor {
   if self.unique_quantity_ids.contains(&r.id){return Some(i32::MAX)}
   if self.slot.envelope.version!=Version::V301||r.id==0||r.id>i32::MAX as u32||
    r.quantity?<0||r.unique_is_nil!=Some(true)||r.fields[2].is_none()||
-   (r.quantity==Some(0)&&!self.inventory_can_empty(r)){return None}
+   (r.quantity==Some(0)&&!self.inventory_can_empty(r)&&
+    !(crate::inventory_source::ordinary_bag_definition(r.item_id?).is_some()&&r.unique_id==Some(0)&&
+      r.fields.iter().all(Option::is_some)&&(self.inventory_item_rows.get(&r.item_id?)==Some(&1)||
+      self.ordinary_furniture_base_distinct(r,r.item_id?)))){return None}
   let item_id=r.item_id?;
   let cap=crate::inventory_source::ordinary_quantity_limit(item_id)?;
   // A finite definition limit must not be treated as an independent cap for
@@ -2442,8 +2445,12 @@ impl Editor {
  // A single UID-zero nil base can coexist with distinct verified tag-8 peers.
  // Require the stricter complete item-wide reference gate for this extension.
  fn ordinary_furniture_base_zero_with_peers(&self,row:&crate::native::InventoryRow,item:i32)->bool{
-  self.ordinary_bag_zero_reference_safe(item)&&
-   crate::inventory_source::ordinary_quantity_limit(item)==Some(i32::MAX)&&
+  self.ordinary_bag_zero_reference_safe(item)&&self.ordinary_furniture_base_distinct(row,item)
+ }
+ // Identity proof is independent of last-copy removal permission. A saved
+ // empty nil base can be refilled beside distinct verified nondefault peers.
+ fn ordinary_furniture_base_distinct(&self,row:&crate::native::InventoryRow,item:i32)->bool{
+  crate::inventory_source::ordinary_quantity_limit(item)==Some(i32::MAX)&&
    furniture_source::item(item).is_some_and(|s|!s.is_home_layout)&&
    self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)&&r.id!=row.id)
     .all(|r|self.permits_separate_ordinary_base(r))
@@ -3542,6 +3549,21 @@ fn replace_zip(raw:&[u8],z:&ZipIndex,replacement:&[u8])->Result<Vec<u8>,Error>{
 
 #[cfg(test)]
 mod tests {
+ #[test]
+ fn required_unique_source_catalog_has_no_unclassified_bag_family(){
+  use crate::inventory_source as source;
+  let mut counts=[0;4];
+  for &(item,flags) in crate::inventory_source_data::RULES{
+   if flags!=3{continue}
+   let classes=[super::Editor::is_flower_quantity_definition(item),
+    source::CAFE_IDS.binary_search(&item).is_ok()||item==source::BOBA_ID,
+    item==source::CUSTOM_PALETTE_ID,source::wand_output_item(item)];
+   assert_eq!(classes.iter().filter(|&&v|v).count(),1,"required-unique Item ID {item}");
+   for (i,found) in classes.into_iter().enumerate(){if found{counts[i]+=1;}}
+  }
+  assert_eq!(counts.iter().sum::<usize>(),136);
+ }
+
  use super::*;
  #[test]
  fn reencode_and_decode_lz4_roundtrip(){

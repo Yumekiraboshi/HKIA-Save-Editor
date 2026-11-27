@@ -146,6 +146,8 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
  /// Extra clothing reference keys from actual saved avatar/outfit models.
  pub inventory_clothing_guid_refs:HashSet<u32>,
  pub inventory_clothing_refs_incomplete:bool,
+ /// Missing item-bearing outfit records, distinct from missing piece/outfit GUID lists.
+ pub inventory_clothing_item_refs_incomplete:bool,
  pub inventory_clothing_avatar_models:usize,
  pub inventory_clothing_general_models:usize,
  /// Source preset definitions outside the pinned bundle remain unresolved.
@@ -476,7 +478,16 @@ impl<'a> Walk<'a>{
        "Sunblink.UserData.MermaidifierOutfitModel"=>3,
        _=>0,
       };
-      if n<clothing_min_fields{self.index.inventory_clothing_refs_incomplete=true;}
+      if n<clothing_min_fields{
+       self.index.inventory_clothing_refs_incomplete=true;
+       // These models may omit direct ItemId/copied-payload records, not
+       // merely outfit/piece GUIDs. Keep their uncertainty item-wide.
+       if matches!(name,"Sunblink.UserData.AvatarGeneralSettingsModel"|
+        "Sunblink.UserData.OutfitPresetModel"|"Sunblink.UserData.NpcTraitModel"|
+        "Sunblink.UserData.MermaidifierOutfitModel"){
+        self.index.inventory_clothing_item_refs_incomplete=true;
+       }
+      }
       if name=="Sunblink.UserData.AvatarSpeciesSettingsModel"{self.index.inventory_clothing_avatar_models+=1;}
       if name=="Sunblink.UserData.AvatarGeneralSettingsModel"{self.index.inventory_clothing_general_models+=1;}
       // A truncated avatar or preset could omit its palette snapshot.
