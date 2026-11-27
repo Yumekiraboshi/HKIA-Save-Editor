@@ -133,3 +133,34 @@ for s in (struct.pack('<I',2)+row(0,3,0,3)+row(6,3,65535,3),struct.pack('<I',2)+
 `;
  execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
 });
+
+test('duplicate furniture visual slots require exact authored identities and matching empty component',()=>{
+ const py=String.raw`
+import struct,importlib.util
+spec=importlib.util.spec_from_file_location('mesh','scripts/extract-furniture-mesh-source.py')
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+pin='d9369ec54b220d739a32e161dee90c6f44e78f86341c60a04a1e561b308fcd1e'
+assert set(m.SCHOOL_DUPLICATE_VISUAL_SLOTS)=={309658643,679070378,925764558}
+root,first,fh,empty,eh=m.SCHOOL_DUPLICATE_VISUAL_SLOTS[309658643]
+# Exercise the identity gate with a synthetic object witness; actual source
+# hashes and serialized component arrays were checked separately on the game.
+objects={first:b'first',empty:b'empty'}
+m.SCHOOL_DUPLICATE_VISUAL_SLOTS[309658643]=(root,first,m.sha(objects[first]),empty,m.sha(objects[empty]))
+common={'m_GameObject':struct.pack('<iq',0,int(root)),'m_Enabled':bytes([1,0,0,0]),'CustomizedPreviewId':bytes(4)}
+fields={first:{**common,'VisualSlots':struct.pack('<I',1)+bytes(20)},empty:{**common,'VisualSlots':bytes(4)}}
+obj=lambda p,c:objects[p]
+f=lambda p,c:fields[p]
+assert m.select_visual_slot_object(309658643,root,pin,[first,empty],obj,f)==(first,{'pathId':empty,'objectSha256':m.sha(objects[empty])})
+assert m.select_visual_slot_object(99,root,pin,[first],obj,f)==(first,None)
+def reject(id=309658643,r=root,h=pin,s=None):
+    try:
+        m.select_visual_slot_object(id,r,h,[first,empty] if s is None else s,obj,f)
+        raise AssertionError('unverified duplicate accepted')
+    except ValueError:pass
+reject(id=99);reject(r='0');reject(h='0'*64);reject(s=[empty,first]);reject(s=[first,empty,first]);reject(s=[])
+objects[empty]=b'changed';reject();objects[empty]=b'empty'
+fields[empty]['VisualSlots']=struct.pack('<I',1)+bytes(20);reject();fields[empty]['VisualSlots']=bytes(4)
+fields[empty]['CustomizedPreviewId']=struct.pack('<I',1);reject()
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
+});

@@ -195,12 +195,13 @@ fn flower_unique(v:FlowerVariant)->InventoryUniqueData{
 }
 // One source mapping for both existing and newly staged tag-7 records.
 const RARE_CANDLE_KEYS:&[(i32,u32)]=&[(22657460,0x3801512e),(1858821696,0xdf4cea79)];
-const RARE_CANDLE_PATTERNS:&[i32]=&[1,2,10,11,12,13,14,16];
+// Native IsPatterned compares the pattern definition GUID, not its accent or IsEffect.
+const RARE_CANDLE_PATTERNS:&[i32]=ALL_UNRESTRICTED_FLOWER_PATTERNS;
 fn rare_candle_key(item:i32)->Option<u32>{RARE_CANDLE_KEYS.iter().find(|&&(id,_)|id==item).map(|&(_,key)|key)}
 #[derive(Clone,Copy)]
-struct FlowerPolicy{patterns:&'static [i32],require_colored_pattern:bool,retained_effect:Option<i32>}
+struct FlowerPolicy{patterns:&'static [i32],require_pattern:bool,retained_effect:Option<i32>}
 impl FlowerPolicy{
- fn ordinary(patterns:&'static [i32])->Self{Self{patterns,require_colored_pattern:false,retained_effect:None}}
+ fn ordinary(patterns:&'static [i32])->Self{Self{patterns,require_pattern:false,retained_effect:None}}
 }
 fn flower_item_patterns(item:i32,grow:i32)->Option<FlowerPolicy>{
  if let Some((_,patterns))=FLOWER_SPECIES.iter().find(|(id,_)|*id==item){return Some(FlowerPolicy::ordinary(patterns))}
@@ -209,12 +210,12 @@ fn flower_item_patterns(item:i32,grow:i32)->Option<FlowerPolicy>{
   let species=FLOWER_CROWN_SPECIES[i].1;
   return FLOWER_SPECIES.iter().find(|(id,_)|*id==species).map(|&(_,p)|FlowerPolicy::ordinary(p))
  }
- if rare_candle_key(item).is_some(){Some(FlowerPolicy{patterns:RARE_CANDLE_PATTERNS,require_colored_pattern:true,retained_effect:None})}
+ if rare_candle_key(item).is_some(){Some(FlowerPolicy{patterns:RARE_CANDLE_PATTERNS,require_pattern:true,retained_effect:None})}
  else if FLOWER_CLOTHING_GENERIC.contains(&item){Some(FlowerPolicy::ordinary(ALL_UNRESTRICTED_FLOWER_PATTERNS))}
  else if item==FLOWER_CLOTHING_NO_PATTERN||flower_candle_source(item).is_some(){Some(FlowerPolicy::ordinary(&[]))}else{None}
 }
 fn valid_flower_variant(policy:FlowerPolicy,v:FlowerVariant)->bool{
- (!policy.require_colored_pattern||(v[0]==6&&policy.patterns.contains(&v[2])&&v[3]!=0))&&
+ (!policy.require_pattern||(v[0]==6&&policy.patterns.contains(&v[2])))&&
  matches!(v[0],0|6|7)&&FLOWER_COLORS.contains(&v[1])&&
  if v[2]==0{v[3]==0}
  else if !policy.patterns.contains(&v[2])&&policy.retained_effect!=Some(v[2]){false}
