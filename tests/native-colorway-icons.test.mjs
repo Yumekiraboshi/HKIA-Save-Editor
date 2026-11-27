@@ -67,7 +67,7 @@ test('all native colorway UI views use original game-icon assets and keep per-it
  const sprite=readFileSync(new URL('../src/DyeSprite.svelte',import.meta.url),'utf8');
  const generator=readFileSync(new URL('../scripts/generate-native-dye-icons.mjs',import.meta.url),'utf8');
  assert.doesNotMatch(app,/loadNativeColorwayIcons|previewUrl=\{nativeColorwayIcons/);
- assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,5);
+ assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,6);
  assert.match(sprite,/imageSource='game-source-sprite'/);
  assert.match(sprite,/showExact\(exact,showSharedReference\)/);
  assert.doesNotMatch(sprite,/renderDyeSprite|renderApproximation|source-fit|native-icon|createObjectURL/);

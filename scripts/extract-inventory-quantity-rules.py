@@ -22,7 +22,7 @@ def cstr(b,p):
 
 def align(n): return (n+3)&~3
 
-def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_reference_rows=None,wand_ingredients=None):
+def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_reference_rows=None,wand_ingredients=None,bag_facts=None):
     B=source.read_bytes()
     require(hashlib.sha256(B).hexdigest()==SOURCE,'unsupported source bundle')
     spec=importlib.util.spec_from_file_location('unityfs_audit',ROOT/'scripts/unityfs-audit.py')
@@ -130,6 +130,22 @@ def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_r
             h=2166136261
             for byte in s.pack('<4I',*words): h=((h^byte)*16777619)&0xffffffff
             tradeable_reference_rows.append((id,h))
+        # One uniform predicate over every typed native item definition.
+        # Regular rarity or independently verified tradable currency; not internal,
+        # key, future or required-payload definitions. Existing DLC rows need no
+        # inferred entitlement; absent acquisition must be unrestricted.
+        if bag_facts is not None:
+            bag=(not unique and cat>=0 and not cat&(1|2|134217728) and not d['ReleaseVersion']
+                 and (d['Rarity'] in (2,3,4) or (d['Rarity']==1 and d['ItemOwnership'] in (2,18))))
+            add=(d['RequiredDlcContent']=='0'*32 and
+                 (d['ItemOwnership'] in (2,18) or (d['ItemOwnership']==16 and d['Rarity'] in (2,3,4))))
+            flags=(1|2*bool(cat&256)|4*bool(add)) if bag else 0
+            guid=d['SerializedGuid']
+            require(len(guid)==32 and all(c in '0123456789abcdefABCDEF' for c in guid),'invalid item GUID')
+            words=[int(guid[i:i+8][::-1],16) for i in range(0,32,8)]
+            h=2166136261
+            for byte in s.pack('<4I',*words): h=((h^byte)*16777619)&0xffffffff
+            bag_facts.append((id,flags,h))
         rows.append((id,int(stack)|unique*2|custom*4|int(bool(candidate))*8|int(bool(cosmetic))*16))
         if custom:caps.append((id,d['CustomMaxCount']))
         # Native raw masks: CreationStationIngredient | Fish / Critter.
@@ -225,12 +241,29 @@ def render_wand_ingredients(rows,ids):
             "pub(super) const WAND_ITEM_SOURCE_BITS:&[u8]=&[\n"
             +''.join(' '+','.join(f'0x{v:02x}' for v in bits[i:i+16])+',\n' for i in range(0,len(bits),16))+'];\n')
 
+def render_bag_facts(facts,rows):
+    facts=sorted(facts)
+    require([id for id,_,_ in facts]==[id for id,_ in rows],'bag definition identity alignment')
+    flags=bytes(f for _,f,_ in facts);keys=[key for _,_,key in facts]
+    fh='a437ecda069cb84f8536320787f02bd74c0dc83a98058690cfe97caf69e971be'
+    kh='0bd8235b2a3bad5263ec8a2144a0a84fa27d8bab4e27e60034190abc6d7a8396'
+    require(hashlib.sha256(flags).hexdigest()==fh and hashlib.sha256(b''.join(s.pack('<I',key) for key in keys)).hexdigest()==kh,'bag facts fingerprint')
+    require(len(set(keys))==12163 and [sum(bool(f&mask) for f in flags) for mask in (1,2,4)]==[9077,5452,6706],'bag facts coverage')
+    return ("// Generated from the pinned Steam v3.0.1 definitions, ascending RULES Item ID order.\n"
+            "// Flags: 1=released ordinary bag class, 2=outfit reference class, 4=unrestricted bag acquisition.\n"
+            "// Native item GUID fingerprints are denial-only. See extract-inventory-quantity-rules.py.\n"
+            f"// Flags SHA256 {fh}\n// GUID LE SHA256 {kh}\n"
+            "pub(super) const BAG_FLAGS:&[u8]=&[\n"
+            +''.join(' '+','.join(str(f) for f in flags[i:i+32])+',\n' for i in range(0,len(flags),32))
+            +'];\npub(super) const ITEM_GUID_DENIAL_KEYS:&[u32]=&[\n'
+            +''.join(' '+','.join(f'0x{k:08x}' for k in keys[i:i+8])+',\n' for i in range(0,len(keys),8))+'];\n')
+
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source',type=Path);parser.add_argument('--check',action='store_true')
     args=parser.parse_args()
-    furniture_references=[];tradeable=[];tradeable_references=[];wand_ingredients=[]
-    rows,caps,gathered,food_bait=extract(args.source,furniture_references,tradeable,tradeable_references,wand_ingredients)
+    furniture_references=[];tradeable=[];tradeable_references=[];wand_ingredients=[];bag_facts=[]
+    rows,caps,gathered,food_bait=extract(args.source,furniture_references,tradeable,tradeable_references,wand_ingredients,bag_facts)
     generated=render(rows,caps)
     gathered_source=("// Generated from the pinned original Steam v3.0.1 definitions.\n"
                      "// 168 fish, 56 critters; native ordinary, always-periodic definitions.\n"
@@ -241,7 +274,7 @@ if __name__=='__main__':
                       f"// ID little-endian SHA256 {FOOD_BAIT}\n"
                       "pub(super) const FOOD_BAIT_IDS:&[i32]=&[\n"
                       +''.join(' '+','.join(str(id) for id in food_bait[i:i+8])+',\n' for i in range(0,len(food_bait),8))+'];\n')
-    for name,content in [('inventory_source_data.rs',generated),('inventory_gathered_data.rs',gathered_source),('inventory_furniture_reference_data.rs',render_furniture_references(furniture_references)),('inventory_tradeable_data.rs',render_tradeable(rows,tradeable)),('inventory_tradeable_reference_data.rs',render_tradeable_references(tradeable_references)),('inventory_wand_ingredient_data.rs',render_wand_ingredients(rows,wand_ingredients))]:
+    for name,content in [('inventory_source_data.rs',generated),('inventory_bag_data.rs',render_bag_facts(bag_facts,rows)),('inventory_gathered_data.rs',gathered_source),('inventory_furniture_reference_data.rs',render_furniture_references(furniture_references)),('inventory_tradeable_data.rs',render_tradeable(rows,tradeable)),('inventory_tradeable_reference_data.rs',render_tradeable_references(tradeable_references)),('inventory_wand_ingredient_data.rs',render_wand_ingredients(rows,wand_ingredients))]:
         target=ROOT/'core/src'/name
         if args.check: require(target.read_text()==content,'checked-in source differs: '+name)
         else: target.write_text(content)
