@@ -35,6 +35,7 @@ import {searchAchievementRows} from './achievement-search';
  import {localizedCopy} from './ui-locales';
  import {loadLocaleIndex,loadGameLabels,EMPTY_LABELS,type GameLabels} from './game-localization';
  import {loadIconPack,type IconPack} from './icon-packs';
+ import {createIconPackRequests} from './icon-pack-requests';
  import {loadNativeDyePalettes,dyeDecoratorFor,type NativeDyePalettes} from './native-dye-palettes';
  import {loadVariantArtSources} from './variant-art';
  import DyeSprite from './DyeSprite.svelte';
@@ -135,6 +136,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  // Source-verified game UiIcon ZIP packs are shared by Collection/Inventory.
  // Inventory loads only groups currently needed by visible owned rows.
  const inventoryIconPending=new Set<string>();
+ const inventoryIconRequests=new Map<string,Promise<IconPack|null>>();
+ const iconPackRequests=createIconPackRequests(group=>loadIconPack(group,import.meta.env.BASE_URL));
  const inventoryIconFailed=new Set<string>();
  let inventoryIconPacks:Record<string,IconPack>=$state({});
  let inventoryIconPulse=$state(0);
@@ -307,7 +310,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   return ()=>{
    media.removeEventListener?.('change',listener);
    window.removeEventListener('beforeunload',beforeUnload);
-   iconEpoch++;iconPack?.dispose();
+   iconEpoch++;iconLoadingGroup=null;iconPack=null;
    inventoryIconEpoch++;
    for(const pack of Object.values(inventoryIconPacks))pack.dispose();
    inventoryIconPacks={};
@@ -525,19 +528,27 @@ import {verifiedFloorplanName} from './floorplan-names';
  function inventoryName(itemId:number):string{
   return sourceNames[String(itemId)]??'#'+String(itemId);
  }
- async function fetchInventoryIcons(group:string){
+ function fetchInventoryIcons(group:string):Promise<IconPack|null>{
+  const cached=inventoryIconPacks[group];if(cached)return Promise.resolve(cached);
+  const existing=inventoryIconRequests.get(group);if(existing)return existing;
   const epoch=inventoryIconEpoch;
   inventoryIconPending.add(group);
-  try{
-   const pack=await loadIconPack(group,import.meta.env.BASE_URL);
-   if(epoch!==inventoryIconEpoch){pack.dispose();return}
-   inventoryIconPacks={...inventoryIconPacks,[group]:pack};
-  }catch{
-   if(epoch===inventoryIconEpoch)inventoryIconFailed.add(group);
-  }finally{
-   inventoryIconPending.delete(group);
-   if(epoch===inventoryIconEpoch)inventoryIconPulse++;
-  }
+  const task=(async()=>{
+   try{
+    const pack=await iconPackRequests.request(group);
+    if(epoch!==inventoryIconEpoch){pack.dispose();return null}
+    inventoryIconPacks={...inventoryIconPacks,[group]:pack};
+    return pack;
+   }catch{
+    if(epoch===inventoryIconEpoch)inventoryIconFailed.add(group);
+    return null;
+   }finally{
+    inventoryIconPending.delete(group);inventoryIconRequests.delete(group);
+    if(epoch===inventoryIconEpoch)inventoryIconPulse++;
+   }
+  })();
+  inventoryIconRequests.set(group,task);
+  return task;
  }
  function openInventoryTab(){
   clearInventoryBatch();inventoryAddMode=false;
@@ -610,17 +621,19 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function goHome(){
   activeTool='collections';selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
-  editId=null;query='';collectionSearchDrilldown=false;filter='all';iconEpoch++;iconLoadingGroup=null;iconPack?.dispose();iconPack=null;iconError=false;
+  editId=null;query='';collectionSearchDrilldown=false;filter='all';iconEpoch++;iconLoadingGroup=null;iconPack=null;iconError=false;
   if(snapshot)void persistDraft();
  }
  function askFile(){if(busy||!restored)return;fileMenu&&(fileMenu.open=false);fileInput?.click();}
  async function fetchImages(key:string){
   if((iconPack?.group===key||iconLoadingGroup===key)&&!iconError)return;
   const epoch=++iconEpoch;
-  iconLoadingGroup=key;iconPack?.dispose();iconPack=null;iconError=false;
+  iconLoadingGroup=key;iconPack=null;iconError=false;
   try{
-   const pack=await loadIconPack(key,import.meta.env.BASE_URL);
-   if(epoch!==iconEpoch||selectedGroup!==key){pack.dispose();return}
+   inventoryIconFailed.delete(key);
+   const pack=await fetchInventoryIcons(key);
+   if(epoch!==iconEpoch||selectedGroup!==key)return;
+   if(!pack){iconError=true;return}
    iconPack=pack;
   }catch{if(epoch===iconEpoch)iconError=true}
   finally{if(epoch===iconEpoch)iconLoadingGroup=null}
@@ -745,7 +758,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    clearInventoryBatch();inventoryAddMode=false;
    original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;inventoryBaseline=session.inventory;update(session);
    selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';collectionSearchDrilldown=false;filter='all';
-   iconEpoch++;iconPack?.dispose();iconPack=null;iconError=false;
+   iconEpoch++;iconLoadingGroup=null;iconPack=null;iconError=false;
    try{await saveOriginalLocally(file);draftReady=true;draftWarning=false}
    catch{draftReady=false;draftWarning=true}
   }catch(e){
@@ -776,7 +789,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      if(priorGroup&&(!iconPack||iconPack.group!==priorGroup))void fetchImages(priorGroup);
     }catch{
      original=null;snapshot=null;recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];
-     selectedGroup=null;selectedSubgroup=null;showVariants=false;iconEpoch++;iconPack?.dispose();iconPack=null;
+     selectedGroup=null;selectedSubgroup=null;showVariants=false;iconEpoch++;iconLoadingGroup=null;iconPack=null;
     }
    }
    error=reason;
@@ -2302,7 +2315,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  </dialog>
  <dialog class="date-dialog" bind:this={dateDialogEl} onclose={onDateDialogClosed} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if dateDialogItem && dateDialogTick!==null}
-   {@const sprite=iconPack?.group===selectedGroup?iconPack.entries[String(dateDialogItem[0])]:undefined}
+   {@const sprite=(iconPack?.group===dateDialogItem[3]?iconPack.entries:inventoryIconPacks[dateDialogItem[3]]?.entries)?.[String(dateDialogItem[0])]}
    <form class="date-dialog-inner" onsubmit={e=>{e.preventDefault();void applyDate()}}>
     <div class="date-dialog-heading">
      <h2>{copy.editDate}</h2>

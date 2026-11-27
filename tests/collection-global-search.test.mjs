@@ -90,3 +90,12 @@ test('achievement filter and manual show-all control are gone; infinite scroll l
  assert.match(app,/\{#if typeof IntersectionObserver==='undefined'\}/);
  assert.doesNotMatch(app,/achievementShowAll/);
 });
+
+test('collection navigation and date dialogs reuse verified packs without revoking shared URLs',()=>{
+ assert.match(app,/const pack=await fetchInventoryIcons\(key\)/);
+ assert.match(app,/const cached=inventoryIconPacks\[group\];if\(cached\)return Promise.resolve\(cached\)/);
+ assert.match(app,/const existing=inventoryIconRequests.get\(group\);if\(existing\)return existing/);
+ assert.doesNotMatch(app,/iconPack\?\.dispose\(/);
+ assert.match(app,/inventoryIconPacks\[dateDialogItem\[3\]\]\?\.entries/);
+ assert.match(app,/for\(const pack of Object.values\(inventoryIconPacks\)\)pack.dispose\(\)/);
+});
