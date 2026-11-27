@@ -14,6 +14,7 @@ import {chromium} from 'playwright-core';
 import {chefRuntimeSmoke} from './chef-runtime-smoke.mjs';
 import {wandRuntimeSmoke} from './wand-runtime-smoke.mjs';
 import {flowerRuntimeCoverage} from './flower-runtime-coverage.mjs';
+import {furnitureLdrGpuSmoke} from './furniture-ldr-gpu-smoke.mjs';
 
 const append=(...arrays)=>Uint8Array.from(arrays.flatMap(x=>Array.from(x)));
 const u32=n=>append([0xce],Array.from({length:4},(_,i)=>n>>>(24-8*i)&255));
@@ -1365,6 +1366,12 @@ async function inventoryAbsentFlowerCreationSmoke(){
   const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');
   await dialog.waitFor();
   assert.equal(await dialog.locator('button[type="submit"]').count(),0);
+  await dialog.locator('[data-flower-grow="0"]:not([disabled])').click();
+  await dialog.locator('[data-flower-grow="0"][aria-pressed="true"]').waitFor();
+  await dialog.locator('[data-flower-grow="7"]:not([disabled])').click();
+  await dialog.locator('[data-flower-grow="7"][aria-pressed="true"]').waitFor();
+  await dialog.locator('[data-flower-grow="6"]:not([disabled])').click();
+  await dialog.locator('[data-flower-grow="6"][aria-pressed="true"]').waitFor();
   const firstPattern=await dialog.locator('option[data-flower-variant="6,2,1,16"]').getAttribute('value');assert.ok(firstPattern!==null);
   await dialog.locator('select').selectOption(firstPattern);
   const reset=dialog.locator('.inventory-flower-reset:not([disabled])');
@@ -2039,6 +2046,7 @@ async function achievementAtlasRetrySmoke(){
 }
 
 async function run(){
+ if(!livePages)await furnitureLdrGpuSmoke();
  await waitForServer();
  browser=await chromium.launch({headless:true,executablePath:installedChrome(),args:['--no-sandbox','--disable-dev-shm-usage']});
  const context=await browser.newContext({locale:'en-US',viewport:{width:1360,height:840},acceptDownloads:true});

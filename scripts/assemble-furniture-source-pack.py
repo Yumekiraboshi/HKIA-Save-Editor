@@ -28,7 +28,7 @@ def normalized(z):
     require(not ('local-source-manifest.json' in z.namelist() and 'sources.json' in z.namelist()),'AMBIGUOUS_MANIFEST')
     if 'local-source-manifest.json' in z.namelist():
         m=json_entry(z,'local-source-manifest.json');require(m['schema']=='HKIA.LocalFurnitureSourceStage.1' and m['catalogSha256']==CATALOG and m['renderFidelity']=='unverified','STAGE_SOURCE')
-        return m['version'],[x['geometry'] for x in m['models']],[x['base'] for x in m['models']],m['patterns'],{}
+        return m['version'],[x['geometry'] for x in m['models']],[x['base'] for x in m['models']],m['patterns'],m.get('cubemaps',{})
     m=json_entry(z,'sources.json');require(m['schema'] in ('HKIA.CenterpieceStaticSourcePack.1','HKIA.FurnitureSourcePack.1') and m.get('renderFidelity')=='unverified','PACK_SCHEMA')
     require(m.get('catalogSha256',CATALOG)==CATALOG,'CATALOG_SOURCE')
     require(m['geometry']['schema']=='HKIA.FurnitureStaticMeshSamples.1' and m['base']['schema']=='HKIA.FurnitureBaseMaterialSource.1' and m['additionalPatterns']['schema']=='HKIA.FurniturePatternTextureSources.1','SOURCE_SCHEMA')

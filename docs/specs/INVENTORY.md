@@ -284,3 +284,7 @@ A positive verified nil/UID-zero furniture base remains an eligible customizatio
 #### Expanded ordinary tradeable addition (v3.0.1)
 
 The ordinary Add catalog uses the complete source-verified 6,521-ID tradeable, non-DLC, ordinary nil/uncapped definition slice in inventory-quantity-source.md, superseding the 4,046-ID initial creation allowlist. Tradeable event-year items may be added as inventory records; do not create event registration, reward or entitlement state. Use existing Rust identity, reference, quantity, history and export gates. No expansion of saved-stack zero/refill authorization is implied; unsupported reference families and special payloads require separate native support. Game acceptance remains unverified.
+
+#### First seed and uprooted plant stacks
+
+For the 23 unrestricted species with verified default color definitions and source-native SeedIcon/GrownTroweledIcon bindings (see flower-growth-art.md), the absent-flower editor may create the first complete tag-7 stack in the native inventory states Seed (0), Plucked (6), or GrownTroweled (7). A currently offered plucked default remains the source witness, and Rust validates the full chosen tuple and reserves all active peer identities. Legacy zero-witness requests remain plucked-default-only. Crafted clothing remains state 6; existing stack growth state edits remain unsupported. No new species, recipe, entitlement, planted garden state or placement mutation. Raw/ZIP tests and reparse are required; real game acceptance remains unverified.
