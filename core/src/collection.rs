@@ -1257,7 +1257,7 @@ impl Editor {
      words.push(cursor.int(i32::MIN as i128,i32::MAX as i128).ok()? as i32);
      if cursor.pos!=data.len(){return None}
     }
-    if !is_chef_color(words[0])||words[1]<=0||words[4]<=0{return None}
+    // The full native Equals key is independent of recipe membership.
     Some((words,Vec::new()))
    }
    _=>None
@@ -1773,26 +1773,20 @@ impl Editor {
  pub fn inventory_boba_witnesses(&self)->&'static [(i32,i32,i32)]{
   if self.slot.envelope.version==Version::V301{crate::inventory_source::BOBA_WITNESSES}else{&[]}
  }
- fn boba_family_count(&self)->usize{
-  self.inventory_item_rows.get(&crate::inventory_source::BOBA_ID).copied().unwrap_or(0)+self.pending_bobas.len()
- }
  pub fn inventory_boba_rows(&self)->impl Iterator<Item=(u32,BobaVariant,bool)>+'_{
-  let family_count=self.boba_family_count();
   self.slot.index.inventory.iter().filter_map(move |r|{
    if self.slot.envelope.version!=Version::V301{return None}
    let original=Self::boba_words(&self.slot.envelope.decoded,r)?;
-   let editable=family_count<=256&&self.unique_quantity_ids.contains(&r.id)&&crate::inventory_source::supported_boba_base(original);
+   let editable=self.unique_quantity_ids.contains(&r.id);
    Some((r.id,self.boba_variant_changes.get(&r.id).copied().unwrap_or(original),editable))
   }).chain(self.pending_bobas.iter().filter(|(id,_)|self.inventory_changes.contains_key(*id)).map(|(&id,&v)|
    (id,self.boba_variant_changes.get(&id).copied().unwrap_or(v),true)))
  }
  fn boba_context(&self,id:u32)->Option<(BobaVariant,BobaVariant,HashSet<BobaVariant>)>{
-  if self.boba_family_count()>256{return None}
   if self.pending_bobas.contains_key(&id){
    if !self.inventory_changes.contains_key(&id){return None}
   }else if !self.unique_quantity_ids.contains(&id){return None}
   let original=self.original_boba_variant(id)?;
-  if !crate::inventory_source::supported_boba_base(original){return None}
   let current=self.boba_variant_changes.get(&id).copied().unwrap_or(original);
   let mut reserved=HashSet::new();
   for other in &self.slot.index.inventory{
@@ -1827,7 +1821,6 @@ impl Editor {
  // variants, but have no existing player payload to copy.
  fn absent_chef_allowed(&self,item:i32)->bool{
   crate::inventory_source::is_uncapped_required_unique_stack(item)&&
-   self.inventory_item_rows.get(&item).copied().unwrap_or(0)<256&&
    self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)).all(|r|
     self.unique_quantity_ids.contains(&r.id)&&self.inventory_can_empty(r)&&
     self.inventory_changes.get(&r.id).copied().or(r.quantity)==Some(0))&&
@@ -1836,7 +1829,7 @@ impl Editor {
  }
  fn boba_starter_choices(&self)->Vec<BobaVariant>{
   use crate::inventory_source as src;
-  if !self.absent_chef_allowed(src::BOBA_ID)||self.boba_family_count()>=256||
+  if !self.absent_chef_allowed(src::BOBA_ID)||
    self.pending_bobas.keys().any(|id|self.inventory_changes.contains_key(id)){return Vec::new()}
   let mut reserved=HashSet::new();
   for row in self.slot.index.inventory.iter().filter(|r|r.item_id==Some(src::BOBA_ID)){
@@ -1869,7 +1862,7 @@ impl Editor {
   let Some((original,_,_))=self.boba_context(id)else{return Vec::new()};
   let item=crate::inventory_source::BOBA_ID;
   let quantity=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
-  if !quantity.is_some_and(|q|q>0)||self.boba_family_count()>=256||!self.absent_flower_budget_available()||
+  if !quantity.is_some_and(|q|q>0)||!self.absent_flower_budget_available()||
    !self.inventory_creation_payload_safe(item)||self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item){return Vec::new()}
   self.inventory_boba_variants(id).into_iter().filter(|&v|v!=original).collect()
  }
@@ -2377,6 +2370,8 @@ impl Editor {
    }
    if let Some((a,b))=self.chef_identity(row){
     self.unique_row_source(row,if item==crate::inventory_source::BOBA_ID{5}else{2})?;
+    if item==crate::inventory_source::BOBA_ID&&
+     (!crate::inventory_source::is_chef_color(a[0])||a[1]<=0||a[4]<=0){return None}
     return (chef_counts.get(&(item,a,b))==Some(&1)).then_some(row.id)
    }
    if let Some(source)=self.furniture_source(row){
