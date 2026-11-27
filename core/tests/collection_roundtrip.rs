@@ -3313,6 +3313,39 @@ fn new_flower_variants_refuse_unresolved_copied_payloads(){
 }
 
 #[test]
+fn ordinary_furniture_zero_refill_with_distinct_customized_peers(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=61381969u32;
+ let make=|peer:Vec<u8>,uid:u32,placed:bool|{
+  let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=if placed{0x98}else{0x97};
+  p.extend(doc(1,arr(vec![u(4),u(item),u(0),u(3),vec![0xc0]])));
+  p.extend(doc(1,arr(vec![u(5),u(item),u(uid),u(2),peer])));
+  if placed{
+   let home=arr(vec![guid([41,42,43,44]),arr(vec![]),u(item),u(0),guid([0;4]),l(0),vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])]);
+   p.extend(doc(32,arr(vec![u(6),guid([7,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![home])]))])])));
+  }
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(furniture_payload([13,2,0]),11,false);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert!(original.iter().all(|r|r.quantity_minimum==0));
+  e.change_inventory_quantities(&[(4,3,0),(5,2,0)]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory(),e.inventory());assert_eq!(saved.inventory_original_unique_payload(4),Some([0xc0].as_slice()));
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(furniture_payload([13,2,0]).as_slice()));
+  saved.change_inventory_quantities(&[(4,0,3),(5,0,2)]).unwrap();
+  assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),original);
+ }
+ for raw in [make(vec![0xc0],0,false),make(furniture_payload([503,1,0]),11,false),make(furniture_payload([13,2,0]),11,true),make(arr(vec![vec![1],arr(vec![guid([1,2,3,4]),guid([0;4]),guid([0;4])])]),11,false)]{
+  let mut e=Editor::open(raw).unwrap();assert_eq!(e.inventory()[0].quantity_minimum,1);
+  assert!(e.change_inventory_quantity(4,3,0).is_err());assert!(!e.dirty());
+ }
+}
+
+#[test]
 fn ordinary_furniture_source_remains_available_after_custom_stack_export(){
  use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
  let item=61381969;let staged=(1u32<<31)|item as u32;

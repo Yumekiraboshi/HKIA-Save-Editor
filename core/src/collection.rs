@@ -903,7 +903,11 @@ impl Editor {
      !self.slot.index.inventory_payload_refs_incomplete&&
      !self.slot.index.inventory_payload_item_refs.contains(&item_id)))&&
    r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.quantity.is_some_and(|q|q>=0)&&
-   r.fields.iter().all(Option::is_some)&&self.inventory_item_rows.get(&item_id)==Some(&1)&&
+   r.fields.iter().all(Option::is_some)&&
+   (self.inventory_item_rows.get(&item_id)==Some(&1)||
+    (self.furniture_zero_reference_safe(item_id)&&
+     self.slot.index.inventory.iter().filter(|peer|peer.item_id==Some(item_id)&&peer.id!=r.id)
+      .all(|peer|self.permits_separate_ordinary_base(peer))))&&
    !self.slot.index.inventory_item_refs_incomplete&&
    !self.slot.index.inventory_item_refs.contains(&(item_id,0))
  }
