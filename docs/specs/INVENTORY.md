@@ -542,3 +542,8 @@ For the nine source-verified cafe outputs and Boba, the existing source-defined 
 #### Native cafe draft preview
 
 Compose each complete ordered cafe tuple through the same Rust preview and creation predicate used by CAS. Recompute legal slot choices from the current draft rather than combining stale single-slot suggestions in TypeScript. Reserve original/effective peers, allow legitimate intermediate edits (including retained original ingredient pairs), and enable creation only when the full target passes source and ownership validation. A preview does not write inventory/history. Existing row mutation, first-add, zero-family addition and final export stay on their existing native paths. Synthetic raw/ZIP coverage includes a slot pair becoming selectable after changing another slot, and collision denial before commit.
+
+
+#### Large saved palette families
+
+Native palette approximate equality is not transitive; a hash of exact float words is insufficient. Replace the fixed 256 saved palette cutoff with a sorted sweep over the widest of the 12 original RGBA coordinates, rejecting a pair early only if its squared coordinate distance alone is at least the native equality threshold. Every possible collision is checked by the original complete equality predicate. Bound actual candidate comparisons at 2,000,000; if exceeded, fail closed for that family. Unknown payloads, copied palette guards, exact UID and original/effective reservation checks remain unchanged. Creation uses the existing global budgets rather than a fixed family size. Raw/ZIP regression covers 257 distinct palettes, exact duplicate isolation, quantity CAS, original payload preservation and recovery. Actual game acceptance remains unverified.

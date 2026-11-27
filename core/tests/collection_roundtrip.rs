@@ -5303,3 +5303,32 @@ fn saved_restricted_furniture_material_is_a_row_local_witness_not_an_unlock(){
  let mut collision=Editor::open(make(287,true)).unwrap();
  assert!(collision.change_inventory_furniture_variant(4,[287,0,0],[286,0,0]).is_err());assert!(!collision.dirty());
 }
+
+#[test]
+fn large_palette_families_use_native_approximate_equality_not_row_count(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=1835273963u32;
+ let rgba=|r:f32|{let mut a=vec![0x94];for x in [r,0.5f32,0.25f32,1.0f32]{a.push(0xca);a.extend(x.to_bits().to_be_bytes());}a};
+ let encode=|r:f32|arr(vec![vec![6],arr(vec![rgba(r),rgba(0.5),rgba(0.25)])]);
+ let make=|duplicate:bool|{
+  let base=synthetic_payload("3.0.1");let mut p=vec![0x93,0];p.extend(u(300));p.push(0xdc);p.extend(262u16.to_be_bytes());p.extend(&base[4..]);
+  for i in 0..257u32{
+   let r=if duplicate&&i==256{0.0}else{i as f32/512.0};
+   p.extend(doc(1,arr(vec![u(4+i),u(item),u(301+i),u(2),encode(r)])));
+  }
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(false);let input=if zipped{zip(&raw)}else{raw};let mut e=Editor::open(input.clone()).unwrap();let before=e.inventory();
+  assert_eq!(before.iter().filter(|r|r.editable).count(),257);
+  assert_eq!(e.inventory_palette_edit_hints().count(),257);
+  let original=e.inventory_palette_variants(4);assert!(!original.is_empty());
+  e.change_inventory_quantity(4,2,9).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),before);assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();assert_eq!(saved.inventory()[0].quantity,9);assert_eq!(saved.inventory_original_unique_payload(4),Some(encode(0.0).as_slice()));
+  let mut collision=Editor::open(make(true)).unwrap();assert!(!collision.inventory()[0].editable);assert!(!collision.inventory()[256].editable);assert!(collision.inventory()[1..256].iter().all(|r|r.editable));
+  assert!(collision.change_inventory_quantity(4,2,9).is_err());assert!(!collision.dirty());
+  collision.change_inventory_quantity(5,2,9).unwrap();
+ }
+}
