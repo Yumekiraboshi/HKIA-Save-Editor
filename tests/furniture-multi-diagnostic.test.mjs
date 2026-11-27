@@ -4,8 +4,8 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-const {outputFiles}=await build({stdin:{contents:"export * from './src/furniture-multi-diagnostic';export * from './src/native-texture-upload';export * from './src/furniture-renderer-bounds';",resolveDir:fileURLToPath(new URL('../',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {resolveFurnitureMultiDiagnostic,fitFurnitureMultiStaticBounds,mergeStaticRendererBounds,drawFurnitureMultiDiagnostic,furnitureForwardAttributeLocations,nativeBaseIsOpaque,verifyNativeTexturePayload,validateNativeTextureLayout}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {outputFiles}=await build({stdin:{contents:"export * from './src/furniture-multi-diagnostic';export * from './src/native-texture-upload';export * from './src/furniture-renderer-bounds';export * from './src/furniture-native-builtin-textures-v3.0.1';",resolveDir:fileURLToPath(new URL('../',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+const {resolveFurnitureMultiDiagnostic,fitFurnitureMultiStaticBounds,mergeStaticRendererBounds,drawFurnitureMultiDiagnostic,furnitureForwardAttributeLocations,nativeBaseIsOpaque,verifyNativeTexturePayload,validateNativeTextureLayout,furnitureNativeBuiltinTexture,furnitureNativeBuiltinBytes}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const read=p=>JSON.parse(readFileSync(new URL('../'+p,import.meta.url)));
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const additionalPath='data/furniture-chair-pattern-sources-v3.0.1.json';
@@ -165,7 +165,31 @@ test('combined plans preflight all three fixed/customized material ranges and re
  assert.throws(()=>resolveFurnitureMultiDiagnostic(d,request(d,id)),/SHADER_UNSUPPORTED/);
 });
 
-test('exact null BaseMap may alias selected original pattern only when base contribution is zero',()=>{
+test('original UnityPlayer constant maps retain the exact bytes and verify through the native texture validator',async()=>{
+ const shader='cdb64e92e92cbc2b88b3ce48c8a3ed302a16972a23528c27e766b7a646d852d0';
+ for(const [name,pixel,digest] of [['_BaseMap',[255,255,255,255],'8667e718294e9e0df1d30600ba3eeb201f764aad2dad72748643e4a285e1d1f7'],['_BumpMap',[127,127,255,255],'33869922b91375cf2b77363e8858a3aee06bae988641ad07f99e817b272d2c35']]){
+  const t=furnitureNativeBuiltinTexture(shader,name),b=furnitureNativeBuiltinBytes(t);
+  assert.equal(t.sha256,digest);assert.equal(sha(Buffer.from(b)),digest);
+  assert.deepEqual([...new Uint8Array(b)],Array.from({length:16},()=>pixel).flat());
+  await verifyNativeTexturePayload(t,b);
+  assert.equal(furnitureNativeBuiltinBytes({...t}),undefined);
+  new Uint8Array(b)[0]=1;
+  assert.equal(new Uint8Array(furnitureNativeBuiltinBytes(t))[0],pixel[0]);
+ }
+ assert.equal(furnitureNativeBuiltinTexture(shader,'_BaseMap'),furnitureNativeBuiltinTexture(shader,'_MetallicGlossMap'));
+ assert.throws(()=>furnitureNativeBuiltinTexture('0'.repeat(64),'_BaseMap'),/BUILTIN_SHADER/);
+ assert.throws(()=>furnitureNativeBuiltinTexture(shader,'_PatternMap'),/BUILTIN_PROPERTY/);
+ const d=sources(),id=32709745,r=request(d,id,[207,0,0]),bind=d.base.rows.find(x=>x.itemId===id).bindings[0],m=d.base.materials[bind[1]];
+ m.textures._BumpMap.texture=null;m.textures._MetallicGlossMap.texture=null;
+ const plan=resolveFurnitureMultiDiagnostic(d,r).plans[0];
+ assert.equal(plan.normalMap,furnitureNativeBuiltinTexture(shader,'_BumpMap'));
+ assert.equal(plan.comboMap,furnitureNativeBuiltinTexture(shader,'_MetallicGlossMap'));
+ m.textures._BumpMap.texture='missing-source-normal';
+ assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/FURNITURE_MULTI_TEXTURE/);
+});
+
+
+test('exact null BaseMap aliases unused pattern or uses verified original white, never a dangling reference',()=>{
  const d=sources(),id=32709745,r=request(d,id,[207,0,0]);
  const g=d.geometry.rows.find(x=>x.itemId===id),node=g.nodes.find(x=>x.rendererPathId);
  const bind=d.base.rows.find(x=>x.itemId===id).bindings[0],m=d.base.materials[bind[1]];
@@ -179,7 +203,8 @@ test('exact null BaseMap may alias selected original pattern only when base cont
  assert.equal(p.normalMap,original.normalMap);assert.equal(p.comboMap,original.comboMap);
  assert.equal(p.material.baseColor[3],0);
  row[3]=[1,1,1,1];
- assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/TEXTURE_NULL/);
+ const white=resolveFurnitureMultiDiagnostic(d,r).plans[0].baseMap;
+ assert.equal(white,furnitureNativeBuiltinTexture(d.base.shaders[m.shader].objectSha256,'_BaseMap'));
  row[3]=[1,1,1,0];m.textures._BaseMap.texture='absent-source-texture';
  assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/FURNITURE_MULTI_TEXTURE/);
  m.textures._BaseMap.texture=null;d.additionalPatterns.rows=[];d.patterns.rows=[];
