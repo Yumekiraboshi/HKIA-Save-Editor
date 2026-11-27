@@ -4,12 +4,9 @@ import type {PixelBuffer,Rect,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
 import {originalWandOverlay,originalWandCellKey,type WandOriginalCell} from './wand-original-subicon';
 import {loadSampledWandOverlay,WAND_CANDIDATE_SOURCE_SHA} from './wand-candidate-source';
-import {loadNativePlaceholderTexture,PLACEHOLDER_ASSET} from './native-placeholder-art';
+import {hasNativePlaceholderArt,loadNativePlaceholderTexture,NATIVE_PLACEHOLDER_SPRITE,PLACEHOLDER_ASSET} from './native-placeholder-art';
 
 const ROOT=import.meta.env.BASE_URL+'dynamic-wand-art/';
-// Three ordinary item-wand source candidates reference this exact native
-// icon_placeholder Sprite. It is not an individual item-specific image.
-const PLACEHOLDER_SOURCE_IDS=new Set([328475120,1254006907,1731977601]);
 
 export const WAND_MANIFEST_SHA='5d4d42d95417c8e6222747433b784a32ee9aaebb91216366a70645a33085f0bb';
 type Row={itemId:number;maskGuid:string;base:{spritePathId:string;sampleRect:Rect;trimTopLeft:Rect;logicalSize:number};mask:{spritePathId:string;sampleRect:Rect;colorSpace:number;filterMode:number;mipCount:number}};
@@ -126,9 +123,9 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
    const guarded=await guardedItemOverlay(appearance.sourceItemId,transform);
    if(guarded){
     ({spritePathId,sourceHash,overlay}=guarded);
-   }else if(PLACEHOLDER_SOURCE_IDS.has(appearance.sourceItemId)){
+   }else if(hasNativePlaceholderArt(appearance.sourceItemId)){
     // Native GetUiIcon returns the same original placeholder Sprite.
-    spritePathId='-6646601456236922891';sourceHash=PLACEHOLDER_ASSET.sha256;
+    spritePathId=NATIVE_PLACEHOLDER_SPRITE;sourceHash=PLACEHOLDER_ASSET.sha256;
     overlay={texture:await loadNativePlaceholderTexture(),
      sampleRect:[1,1,256,256],trim:[0,0,256,256],alphaOffsetY:258,
      logicalWidth:256,logicalHeight:256,sampleClamp:[.5,.5,257.5,257.5],
@@ -141,9 +138,10 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
     if(direct){
      sourceHash=WAND_CANDIDATE_SOURCE_SHA;spritePathId=direct.spritePathId;overlay=direct.overlay;
     }else{
-     // Retain the existing normalized-cell fallback scope; never infer
-     // a new source identity from the saved wand's shape.
-     if(itemId!==384749651||!originalCell||originalCell.itemId!==appearance.sourceItemId)return null;
+     // Every shape can reuse the independently selected original cell.
+     // The existing cell selector excludes non-square/withheld sources;
+     // only use a cell bearing the same saved source ID.
+     if(!originalCell||originalCell.itemId!==appearance.sourceItemId)return null;
      sourceHash='original-item-cell-v2';spritePathId=originalWandCellKey(originalCell);
      overlay=await originalWandOverlay(originalCell,transform);
     }

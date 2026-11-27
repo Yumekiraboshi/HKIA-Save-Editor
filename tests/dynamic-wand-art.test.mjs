@@ -124,3 +124,25 @@ test('item-derived overlays bind exact source definition and Sprite identities, 
  assert.equal(candidates.filter(id=>[371479572,583339916,803563219,1057045178,1314269583].includes(id)).length,0);
  assert.ok(candidates.every(id=>cat.has(id)||extra.has(id)||withheld.has(id)));
  });
+
+test('all native shared placeholder identities are reused by saved wand source selection',async()=>{
+ const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/native-placeholder-art.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent',define:{'import.meta.env.BASE_URL':'"/"'}});
+ const {hasNativePlaceholderArt,NATIVE_PLACEHOLDER_SPRITE}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+ const source=JSON.parse(readFileSync(new URL('../data/native-placeholder-main-routes-v3.0.1.json',import.meta.url)));
+ const catalog=JSON.parse(readFileSync(new URL('../public/catalog.json',import.meta.url)));
+ const native=JSON.parse(readFileSync(new URL('../public/inventory-art/index.json',import.meta.url)));
+ const known=new Set([...catalog.items.map(r=>r[0]),...native.records.map(r=>r[0]),...native.withheld.map(r=>r[0])]);
+ assert.equal(known.size,12163);
+ assert.equal(NATIVE_PLACEHOLDER_SPRITE,source.sourceSpritePathId);
+ assert.equal(source.ids.length,152);
+ for(const id of known)assert.equal(hasNativePlaceholderArt(id),source.ids.includes(id));
+ assert.equal(hasNativePlaceholderArt(0),false);
+ assert.equal(hasNativePlaceholderArt(315823),false);
+ for(const id of source.dynamicExcludedIds)assert.equal(hasNativePlaceholderArt(id),false);
+ const runtime=readFileSync(new URL('../src/wand-runtime-art.ts',import.meta.url),'utf8');
+ assert.ok(runtime.includes('hasNativePlaceholderArt(appearance.sourceItemId)'));
+ assert.ok(runtime.includes('if(!originalCell||originalCell.itemId!==appearance.sourceItemId)return null;'));
+ const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
+ assert.ok(app.includes('if(hasNativeWandArt(row.itemId))addWandSource('));
+ assert.ok(app.includes('if(wandEdit&&hasNativeWandArt(wandEdit.itemId))addWandSource('));
+});

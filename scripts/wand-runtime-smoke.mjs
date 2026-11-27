@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 export async function wandRuntimeSmoke(browser,origin,base){
  const {outputFiles}=await build({
-  stdin:{contents:"export * from './wand-runtime-art'; export * from './wand-original-subicon'; export {loadIconPack} from './icon-packs'; export {loadInventoryNativeArt} from './inventory-native-art';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
+  stdin:{contents:"export * from './wand-runtime-art'; export * from './wand-original-subicon'; export {initialInventoryNativeArt} from './inventory-native-art'; export {loadIconPack} from './icon-packs'; export {loadInventoryNativeArt} from './inventory-native-art';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
   bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env.BASE_URL':JSON.stringify(base)}
  });
  const context=await browser.newContext();
@@ -16,7 +16,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
   await page.route(root+'__wand_runtime_fixture__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
   await page.goto(root+'__wand_runtime_fixture__.html');
   const out=await page.evaluate(async base=>{
-   const {renderWandBaseArt,renderWandOriginalBaseArt,renderWandMagicArt,renderWandArt,selectWandOriginalCell,selectInventoryWandOriginalCell,loadIconPack,loadInventoryNativeArt}=await import(base+'__wand_runtime_fixture__.mjs');
+   const {renderWandBaseArt,renderWandOriginalBaseArt,renderWandMagicArt,renderWandArt,selectWandOriginalCell,selectInventoryWandOriginalCell,loadIconPack,loadInventoryNativeArt,initialInventoryNativeArt}=await import(base+'__wand_runtime_fixture__.mjs');
    const m=await (await fetch(base+'dynamic-wand-art/wand-runtime-source-v3.0.1.json')).json();
    const sha=async b=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b)),v=>v.toString(16).padStart(2,'0')).join('');
    const pixels=async blob=>{
@@ -77,9 +77,21 @@ export async function wandRuntimeSmoke(browser,origin,base){
     directSources.push({pixels:await pixels(blob),cached:blob===await renderWandArt(384749651,a)});
    }
    const placeholders=[];
-   for(const sourceItemId of [328475120,1254006907,1731977601]){
+   for(const sourceItemId of initialInventoryNativeArt().placeholders){
     const blob=await renderWandArt(384749651,{...invAppearance,sourceItemId});
     placeholders.push({pixels:await pixels(blob),same:blob===await renderWandArt(384749651,{...invAppearance,sourceItemId:328475120})});
+   }
+   // Nul Rug is a verified inventory-only UiIcon outside the sampled set.
+   // Its display does not imply a legal wand creation ingredient.
+   const outsideId=427689,cell=selectInventoryWandOriginalCell(outsideId,inventory.entries);
+   const outside=[];
+   for(const row of m.rows){
+    const a={...invAppearance,sourceItemId:outsideId};
+    const blob=await renderWandArt(row.itemId,a,cell);
+    outside.push({id:row.itemId,art:await pixels(blob),plain:await pixels(await renderWandBaseArt(row.itemId,a)),
+     cached:blob===await renderWandArt(row.itemId,a,cell),
+     noCell:await renderWandArt(row.itemId,a)===null,
+     mismatched:await renderWandArt(row.itemId,{...a,sourceItemId:315823},cell)===null});
    }
    // The native saved source selection is independent of the wand shape.
    // This proves rendering only, not creation eligibility for these pairs.
@@ -94,10 +106,12 @@ export async function wandRuntimeSmoke(browser,origin,base){
     }
     if(await renderWandArt(row.itemId,{...a,sourceItemId:315823})!==null)throw Error('UNKNOWN_SOURCE_RENDERED');
    }
-   return {rows,composed,itemRows,added,inv,directSources,placeholders,allShapes,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315823,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
+   return {rows,composed,itemRows,added,inv,directSources,placeholders,outside,allShapes,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315823,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
   },base);
   assert.equal(out.rows.length,9);assert.ok(out.unknown&&out.unknownOriginal);
   assert.equal(out.composed.length,13);assert.ok(out.unsupportedSource);
+  assert.equal(out.outside.length,9);
+  for(const row of out.outside){assert.ok(row.art.visible&&row.cached&&row.noCell&&row.mismatched);assert.notEqual(row.art.rgba,row.plain.rgba);}
   assert.equal(out.allShapes.length,36);assert.equal(new Set(out.allShapes.map(r=>r.id)).size,9);
   for(const row of out.allShapes){assert.ok(row.art.visible&&row.cached);if(row.sourceItemId!==328475120)assert.notEqual(row.art.rgba,row.plain);}
   for(const id of new Set(out.allShapes.map(r=>r.id)))assert.equal(new Set(out.allShapes.filter(r=>r.id===id&&r.sourceItemId!==328475120).map(r=>r.art.rgba)).size,3);
@@ -107,7 +121,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
   assert.ok(out.inv.art.visible&&out.inv.cache);assert.notEqual(out.inv.art.rgba,out.inv.plain.rgba);
   assert.equal(out.directSources.length,9);assert.ok(out.directSources.every(r=>r.pixels.visible&&r.cached));
   assert.equal(new Set(out.directSources.map(r=>r.pixels.rgba)).size,9);
-  assert.equal(out.placeholders.length,3);assert.ok(out.placeholders.every(r=>r.pixels.visible&&r.same));
+  assert.equal(out.placeholders.length,152);assert.ok(out.placeholders.every(r=>r.pixels.visible&&r.same));
   assert.notEqual(out.placeholders[0].pixels.rgba,out.inv.plain.rgba);
   for(const r of out.itemRows){assert.ok(r.result.visible&&r.cache);assert.notEqual(r.result.rgba,r.plain.rgba);}
   assert.equal(new Set(out.itemRows.map(r=>r.result.rgba)).size,25);
@@ -147,6 +161,36 @@ export async function wandRuntimeSmoke(browser,origin,base){
     assert.notDeepEqual(failed.first,failed.guarded,pattern);
    }finally{await failurePage.close();}
   }
+  // If the preferred sample index is unavailable, both already-published
+  // original collection and inventory cells remain usable for every shape.
+  const fallbackPage=await context.newPage();
+  try{
+   await fallbackPage.route(root+'__wand_runtime_fixture__.html',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html><body></body></html>'}));
+   await fallbackPage.route(root+'__wand_runtime_fixture__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
+   await fallbackPage.route('**/dynamic-wand-art/candidate-source/index.json',r=>r.fulfill({status:503,body:'unavailable'}));
+   await fallbackPage.goto(root+'__wand_runtime_fixture__.html');
+   const results=await fallbackPage.evaluate(async base=>{
+    const {renderWandArt,renderWandBaseArt,selectWandOriginalCell,selectInventoryWandOriginalCell,loadIconPack,loadInventoryNativeArt}=await import(base+'__wand_runtime_fixture__.mjs');
+    const catalog=await (await fetch(base+'catalog.json')).json();
+    const definition=catalog.items.find(r=>r[0]===315822),pack=await loadIconPack(definition[3],base);
+    try{
+     const native=await loadInventoryNativeArt(base);
+     const cells=[selectWandOriginalCell(315822,definition[3],pack.entries),selectInventoryWandOriginalCell(15761463,native.entries)];
+     const manifest=await (await fetch(base+'dynamic-wand-art/wand-runtime-source-v3.0.1.json')).json();
+     const out=[];
+     for(const row of manifest.rows)for(const cell of cells){
+      if(!cell)throw Error('missing original cell');
+      const a={sourceItemId:cell.itemId,magicCharacteristicId:104,fleckCharacteristicId:125};
+      const blob=await renderWandArt(row.itemId,a,cell),plain=await renderWandBaseArt(row.itemId,a);
+      if(!blob||!plain)throw Error('missing fallback art');
+      const sha=async b=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await b.arrayBuffer()))).join(',');
+      out.push({different:await sha(blob)!==await sha(plain),cached:blob===await renderWandArt(row.itemId,a,cell),missing:await renderWandArt(row.itemId,a)===null});
+     }
+     return out;
+    }finally{pack.dispose();}
+   },base);
+   assert.equal(results.length,18);assert.ok(results.every(r=>r.different&&r.cached&&r.missing));
+  }finally{await fallbackPage.close();}
   console.log('CHROMIUM DYNAMIC WAND BASE PASS: 9 native wand base layers, color variants, alpha, shared cache and unknown-ID refusal');
  }finally{await context.close();}
 }

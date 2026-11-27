@@ -1173,17 +1173,24 @@ impl Editor {
   let Some((outfit,key))=crate::inventory_source::ordinary_bag_definition(item)else{
    // Preserve previously verified optional furniture base rows outside the
    // ordinary bag class; the material definition has its own source proof.
-   return self.extra_custom_furniture_zero_reference_safe(item)
+   return crate::inventory_source::custom_furniture_extra_reference(item).is_some_and(|key|
+    self.ordinary_item_reference_scope_safe(item)&&self.nonclothing_reference_context_safe(item,key))
   };
   if outfit{
    return self.ordinary_clothing_zero_reference_safe(item)&&
     !self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)
   }
-  self.ordinary_nonclothing_reference_safe(item,key)
+  self.ordinary_item_reference_scope_safe(item)&&self.nonclothing_reference_context_safe(item,key)
+ }
+ fn ordinary_item_reference_scope_safe(&self,item:i32)->bool{
+  !self.slot.index.inventory_item_refs_unscoped&&!self.slot.index.inventory_partial_item_refs.contains(&item)
  }
  fn ordinary_nonclothing_reference_safe(&self,item:i32,key:u32)->bool{
+  !self.slot.index.inventory_item_refs_incomplete&&self.nonclothing_reference_context_safe(item,key)
+ }
+ fn nonclothing_reference_context_safe(&self,item:i32,key:u32)->bool{
   let index=&self.slot.index;
-  !index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
+  !index.inventory_payload_refs_incomplete&&
    !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_item_refs_incomplete&&
    !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
    !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)&&
@@ -1197,13 +1204,16 @@ impl Editor {
  }
  fn ordinary_clothing_zero_reference_safe(&self,item:i32)->bool{
   let Some((own,group))=crate::inventory_source::ordinary_clothing_reference_keys(item)else{return false};
-  self.clothing_zero_reference_safe(item,std::iter::once(&own).chain(group.iter()))
+  self.ordinary_item_reference_scope_safe(item)&&self.clothing_reference_context_safe(item,std::iter::once(&own).chain(group.iter()))
  }
- fn clothing_zero_reference_safe<'a>(&self,item:i32,mut keys:impl Iterator<Item=&'a u32>)->bool{
+ fn clothing_zero_reference_safe<'a>(&self,item:i32,keys:impl Iterator<Item=&'a u32>)->bool{
+  !self.slot.index.inventory_item_refs_incomplete&&self.clothing_reference_context_safe(item,keys)
+ }
+ fn clothing_reference_context_safe<'a>(&self,item:i32,mut keys:impl Iterator<Item=&'a u32>)->bool{
   let index=&self.slot.index;
   index.inventory_clothing_avatar_models>0&&index.inventory_clothing_general_models==1&&
    !index.inventory_clothing_refs_incomplete&&!index.inventory_clothing_unknown_preset&&
-   !index.inventory_furniture_refs_incomplete&&!index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
+   !index.inventory_furniture_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
    !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
    keys.all(|k|
     !index.inventory_clothing_guid_refs.contains(k)&&!index.inventory_furniture_guid_refs.contains(k))
@@ -1219,7 +1229,7 @@ impl Editor {
    r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.quantity.is_some_and(|q|q>=0)&&
    r.fields.iter().all(Option::is_some)&&(self.inventory_item_rows.get(&item_id)==Some(&1)||
     self.ordinary_furniture_base_zero_with_peers(r,item_id))&&
-   !self.slot.index.inventory_item_refs_incomplete&&
+   self.ordinary_item_reference_scope_safe(item_id)&&
    !self.slot.index.inventory_item_refs.contains(&(item_id,0))
  }
  // Index the original unique identities once, rather than scanning all
@@ -2422,8 +2432,13 @@ impl Editor {
   Some(cap)
  }
  fn inventory_creation_source_valid(&self)->bool{
-  self.slot.envelope.version==Version::V301&&!self.slot.index.inventory_item_refs_incomplete&&
-   self.slot.index.inventory.iter().all(|r|r.item_id.is_some()&&r.id<PENDING_ITEM)
+  !self.slot.index.inventory_item_refs_incomplete&&self.inventory_creation_rows_valid()
+ }
+ fn inventory_creation_rows_valid(&self)->bool{
+  self.slot.envelope.version==Version::V301&&self.slot.index.inventory.iter().all(|r|r.item_id.is_some()&&r.id<PENDING_ITEM)
+ }
+ fn ordinary_inventory_creation_source_valid(&self)->bool{
+  !self.slot.index.inventory_item_refs_unscoped&&self.inventory_creation_rows_valid()
  }
  // Ordinary cosmetic definitions can also occur as copied outfit or placement
  // payloads without a UID reference. An absent row is not proof of absence.
@@ -2456,7 +2471,7 @@ impl Editor {
     .all(|r|self.permits_separate_ordinary_base(r))
  }
  fn can_create_inventory_item(&self,item_id:i32)->bool{
-  self.inventory_creation_source_valid()&&crate::inventory_source::ordinary_bag_creation_item(item_id)&&
+  self.ordinary_inventory_creation_source_valid()&&self.ordinary_item_reference_scope_safe(item_id)&&crate::inventory_source::ordinary_bag_creation_item(item_id)&&
    (!self.inventory_item_rows.contains_key(&item_id)||
     self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item_id)).all(|r|self.permits_separate_ordinary_base(r)))&&
    self.inventory_creation_payload_safe(item_id)&&
@@ -2508,7 +2523,7 @@ impl Editor {
  }
  /// Candidate rows are source-checked and absent, not persisted inventory records.
  pub fn inventory_creatable(&self)->Vec<InventoryEntry>{
-  if !self.inventory_creation_source_valid()||crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
+  if !self.ordinary_inventory_creation_source_valid()||crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
   let referenced:HashSet<i32>=self.slot.index.inventory_item_refs.iter().map(|&(item,_)|item).collect();
   // One pass over saved rows; ordinary/opaque/default rows block their Item
   // ID, while verified nondefault customizable variants do not.
@@ -2516,7 +2531,7 @@ impl Editor {
    (!self.permits_separate_ordinary_base(r)).then_some(r.item_id?)).collect();
   crate::inventory_source::ordinary_bag_creation_ids().filter_map(|item_id|{
    let document_id=PENDING_ITEM|item_id as u32;
-   if blocked.contains(&item_id)||referenced.contains(&item_id)||self.inventory_changes.contains_key(&document_id)||!self.inventory_creation_payload_safe(item_id){return None}
+   if blocked.contains(&item_id)||referenced.contains(&item_id)||!self.ordinary_item_reference_scope_safe(item_id)||self.inventory_changes.contains_key(&document_id)||!self.inventory_creation_payload_safe(item_id){return None}
    Some(InventoryEntry{document_id,item_id,quantity:0,editable:true,quantity_limit:Some(crate::inventory_source::ordinary_quantity_limit(item_id)?),quantity_minimum:1})
   }).collect()
  }

@@ -1,4 +1,9 @@
 import {loadOpaqueArtTexture,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
+import placeholderSource from '../data/native-placeholder-main-routes-v3.0.1.json';
+
+const placeholderIds:ReadonlySet<number>=new Set(placeholderSource.ids);
+export function hasNativePlaceholderArt(itemId:number):boolean{return placeholderIds.has(itemId);}
+export const NATIVE_PLACEHOLDER_SPRITE=placeholderSource.sourceSpritePathId;
 
 const ROOT=import.meta.env.BASE_URL+'dynamic-wand-art/';
 export const PLACEHOLDER_ASSET:TextureAsset={file:'native-placeholder.webp',bytes:202,

@@ -16,6 +16,7 @@
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,flowerGrowthKind,hasNativeFlowerArt,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {initialInventoryNativeArt,loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
+ import {nativeInventoryIconScale} from './native-inventory-icon-scale';
  import {inventoryGroupLabel} from './inventory-native-category-copy';
  import {loadSourceItemNames,type SourceItemNames} from './source-names';
  import {decodeHistoryDetails,formatHistoryChange} from './history-details';
@@ -450,7 +451,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   for(const row of inventoryRows.slice(0,inventoryLimit)){
    // Native TryGetSubIcon returns the source item's normal UiIcon, even
    // when the wand itself has a native inventory-art entry.
-   if(row.itemId===384749651)addWandSource(inventoryWandAppearance(row.itemId,row.unique)?.sourceItemId);
+   if(hasNativeWandArt(row.itemId))addWandSource(inventoryWandAppearance(row.itemId,row.unique)?.sourceItemId);
    const resultId=nativeResultIconTarget(row.itemId,snapshot.version);
    if(resultId!==undefined&&!inventoryNativeArt?.entries.has(resultId)&&!inventoryNativeArt?.withheld.has(resultId)){
     const result=inventorySourceItems.get(resultId);
@@ -460,7 +461,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const item=inventorySourceItems.get(row.itemId);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
-  if(wandEdit?.itemId===384749651)addWandSource(wandEdit.appearance.sourceItemId);
+  if(wandEdit&&hasNativeWandArt(wandEdit.itemId))addWandSource(wandEdit.appearance.sourceItemId);
   // A dialog may outlive its visible inventory row or be opened from Add.
   // Load its own original definition group using the same bounded pack queue.
   for(const edit of [flowerEdit,paletteEdit,cafeEdit,bobaEdit,wandEdit]){
@@ -1746,7 +1747,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          <button type="button" class="inventory-stack-delete" disabled={busy||item.quantityMinimum!==0||item.quantity<=0} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)+': '+inventoryName(item.itemId)} onclick={e=>requestInventoryDelete([item],false,e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
         {/if}
       <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
-       <span class="inventory-item-art" class:flower-variant={flowerBadges.length>0||!!dyeBadge} style:position="relative" aria-hidden="true">
+       <span class="inventory-item-art" class:flower-variant={flowerBadges.length>0||!!dyeBadge} style:position="relative" style:--inventory-icon-scale={nativeInventoryIconScale(item.itemId,snapshot.version)} aria-hidden="true">
         {#if hasNativeWandArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite} originalCell={wand?wandOriginalCell(wand.sourceItemId):undefined}/>
          {:else if hasNativeChefArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
