@@ -44,7 +44,7 @@ import {searchAchievementRows} from './achievement-search';
  import DynamicWandSprite from './DynamicWandSprite.svelte';
  import {selectWandOriginalCell,selectInventoryWandOriginalCell} from './wand-original-subicon';
  import {inventoryWandAppearance,wandVariantOf,wandVariantLabel,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
- import {inventoryChefAppearance} from './inventory-chef-display';
+ import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
  import {cafeSlotLabel,cafeVariantLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
  import {bobaVariantLabel,bobaBaseKey,bobaBaseChoices,bobaBaseLabel,bobaSelectionForBase,fullBobaLabel,type BobaVariant} from './inventory-boba-display';
@@ -1691,9 +1691,9 @@ import {verifiedFloorplanName} from './floorplan-names';
        <span class="inventory-item-art" class:flower-variant={flowerBadges.length>0||!!dyeBadge} style:position="relative" aria-hidden="true">
         {#if wand&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite} originalCell={wandOriginalCell(wand.sourceItemId)}/>
-         {:else if chef&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+         {:else if hasNativeChefArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicChefSprite itemId={item.itemId} appearance={chef} fallback={nativeSprite??sprite}/>
-         {:else if item.palette&&item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+         {:else if item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicPaletteSprite itemId={item.itemId} palette={item.palette} fallback={nativeSprite??sprite}/>
         {:else if item.flower&&flowerDefinitions&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicFlowerSprite itemId={item.itemId} flower={item.flower} definitions={flowerDefinitions} fallback={nativeSprite??sprite}/>

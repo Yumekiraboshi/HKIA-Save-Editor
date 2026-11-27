@@ -3,6 +3,8 @@ import type {ChefAppearance} from './chef-appearance';
 // Exact Item ID/kind binding from chef-runtime-source-v3.0.1.json.
 const CAFE_IDS=new Set([203331651,406277059,905853141,973085470,1053426049,1061947263,1237708874,1338995084,1932639321]);
 const BOBA_ID=1798633565;
+/** Source-bound main-icon route even when no individual appearance is available. */
+export function hasNativeChefArt(itemId:number):boolean{return CAFE_IDS.has(itemId)||itemId===BOBA_ID;}
 /** Display-only projection of the typed Rust snapshot, not a save parser. */
 export function inventoryChefAppearance(itemId:number,unique:InventoryUniqueInfo|undefined):ChefAppearance|null{
  if(!unique)return null;
