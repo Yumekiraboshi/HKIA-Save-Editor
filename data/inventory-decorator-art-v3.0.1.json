@@ -1,0 +1,486 @@
+{
+  "schema": "HKIA.InventoryDecoratorArt.1",
+  "version": "3.0.1",
+  "definitionsSha256": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0",
+  "atlasSha256": "04c1f4c191b0a821a0bbcb15e67a75bec85cf343a0b2e875ee8e525e1e8dfc7b",
+  "prefabSha256": "061a47ae598d0bcc8c067463e19e18b360ba37d0124b94e08c484818e24d280d",
+  "plate": {
+    "pathId": "-5122375309027973358",
+    "objectSha256": "752b3d6cf12efe58fbfd8817f75780f68b719fb42c3ffae6f95284c31b1c1e55",
+    "texturePathId": "-1891808304291715310",
+    "textureSha256": "6c2010fa860e1c024e8577027231ad05ad051fe8e19a11abf3f4631aef095db1",
+    "width": 40,
+    "height": 40,
+    "border": [
+      20,
+      20,
+      20,
+      20
+    ],
+    "file": "plate.webp",
+    "bytes": 248,
+    "sha256": "b6c8e4bd371987d459c7a7bd04afb1b76819b2115e9b793693f5dca6942b2b85"
+  },
+  "geometry": {
+    "outer": 22,
+    "inner": 18,
+    "offsetY": 7,
+    "viewPathId": "-7275195831386656788",
+    "viewSha256": "5166d0a0785f6c3008190b5fcc93a3a93c77d44780da5a4b44dd101f0d6d10b8"
+  },
+  "rows": [
+    {
+      "type": 1,
+      "name": "tag.ItemDecorator",
+      "definitionPathId": "215746210613096996",
+      "definitionSha256": "f3769ae895be93436a6f2c5531b344ac6262838cbdcbd49d474a5eb9ad73acf8",
+      "primary": [
+        0.9450980424880981,
+        0.47058823704719543,
+        0.6745098233222961,
+        1
+      ],
+      "accent": [
+        0.9372549057006836,
+        0.24705882370471954,
+        0.3921568691730499,
+        1
+      ],
+      "sprite": {
+        "pathId": "-634056717704943585",
+        "name": "mod_icon_heart",
+        "objectSha256": "0447c640391c80c19cb65a14603dbe6682ce5455c1918259c81fa93eb2ed90b4",
+        "texturePathId": "-1357341422963513313",
+        "textureSha256": "f9ebdb3f628e4f0c5cb677c28ba1dde33f30983fa05bcf47e0eb51550e3eb72b",
+        "source": "definitions",
+        "width": 54,
+        "height": 54,
+        "bytes": 212,
+        "sha256": "72bcc8db44582316f166f8a3542668c57ca2c659875d9f183d4835ca99967160",
+        "file": "decorator-01.webp"
+      }
+    },
+    {
+      "type": 2,
+      "name": "mission.ItemDecorator",
+      "definitionPathId": "-7832805630604832036",
+      "definitionSha256": "a7ee654ff05d326b5c8c5dce183e7c36b2fc504a742e80851d8357e47abc3420",
+      "primary": [
+        0.9686274528503418,
+        0.5803921818733215,
+        0.11372549086809158,
+        1
+      ],
+      "accent": [
+        1,
+        0.9490196108818054,
+        0,
+        1
+      ],
+      "sprite": {
+        "pathId": "5918606437975910905",
+        "name": "mod_icon_excl",
+        "objectSha256": "12809b4d82ffa0322e0b782d1cf0996f3c53d65188f302c114e6dadb05219470",
+        "texturePathId": "-2263685013025986055",
+        "textureSha256": "9ddb3d44054249ff07d6da126f8e1a2015a17998fc4abf05c6d59b0dd86ee50d",
+        "source": "definitions",
+        "width": 54,
+        "height": 54,
+        "bytes": 182,
+        "sha256": "15805b0f2ca96255abbbfef7cf7c29db72e36efbd6170e789740beb83407b85a",
+        "file": "decorator-02.webp"
+      }
+    },
+    {
+      "type": 3,
+      "name": "bait.ItemDecorator",
+      "definitionPathId": "7074587138239847612",
+      "definitionSha256": "ccdd972603d6485ddae46b04ca0b588d0b1f538991dd203086bfa4b3aeebf47a",
+      "primary": [
+        0.15294118225574493,
+        0.6666666865348816,
+        0.8823529481887817,
+        1
+      ],
+      "accent": [
+        0.10980392247438431,
+        0.4588235318660736,
+        0.7372549176216125,
+        1
+      ],
+      "sprite": {
+        "pathId": "7457915699536031675",
+        "name": "ui_icon_bait",
+        "objectSha256": "f9fb5e62d040b2624d926d6d41a394c52578e8428836e3db1d3beabe383801d5",
+        "texturePathId": "-159232487938166853",
+        "textureSha256": "b224cdd506b2cb54f562dfbf416fdb96073996acb8eba7d6d1578fe5b237c550",
+        "source": "definitions",
+        "width": 117,
+        "height": 117,
+        "bytes": 594,
+        "sha256": "a0cad0c988a04ab296c33cc431087752ba0a40e228ae602b865aa2c86f7b0d84",
+        "file": "decorator-03.webp"
+      }
+    },
+    {
+      "type": 4,
+      "name": "trade.ItemDecorator",
+      "definitionPathId": "-3212521119326180139",
+      "definitionSha256": "dc6dba5c0460d6c1db14c15cfaf1f23be6bf13bad8ca8110e1079c80b5567c29",
+      "primary": [
+        0.15294118225574493,
+        0.6666666865348816,
+        0.8823529481887817,
+        1
+      ],
+      "accent": [
+        0.10980392247438431,
+        0.4588235318660736,
+        0.7372549176216125,
+        1
+      ],
+      "sprite": {
+        "pathId": "5012408128138072034",
+        "name": "mod_icon_trade",
+        "objectSha256": "6250df525237e551548b67275e8562d2d1838d068802a5e45503ebc6a260a999",
+        "texturePathId": "3233939520158584802",
+        "textureSha256": "fc8dd68383e37dca34925d3d9f992ff18dfa1358aaf92fd4ae6ac3e4086a922c",
+        "source": "definitions",
+        "width": 54,
+        "height": 54,
+        "bytes": 540,
+        "sha256": "c0743eff370db05133f6b86478cc7cc57cdc9ec67c668b6a58e7039c86220b91",
+        "file": "decorator-04.webp"
+      }
+    },
+    {
+      "type": 5,
+      "name": "clothes.ItemDecorator",
+      "definitionPathId": "-7780377933597336364",
+      "definitionSha256": "35529fc87a45c272631e02bbf9b434d4153257e2bc97ff5567d7f0225d95d8d4",
+      "primary": [
+        0.529411792755127,
+        0.3450980484485626,
+        0.7176470756530762,
+        1
+      ],
+      "accent": [
+        0.4274509847164154,
+        0.3450980484485626,
+        0.6470588445663452,
+        1
+      ],
+      "sprite": {
+        "pathId": "-4202293656776991524",
+        "name": "mod_icon_shirt",
+        "objectSha256": "435c8877a94feb182e439b907f52c5064aaaf642d5eb4ed8026172f6ded8ffbb",
+        "texturePathId": "2731274424902884572",
+        "textureSha256": "243e64291309de55805e5406b6b53379f6c834a4a09e19946f6edca65a57cf7e",
+        "source": "definitions",
+        "width": 54,
+        "height": 54,
+        "bytes": 190,
+        "sha256": "ec967019c50269a19c278e4ef6a89c06468f2454f82c0d6cf46781a6bb79f08b",
+        "file": "decorator-05.webp"
+      }
+    },
+    {
+      "type": 6,
+      "name": "critter.ItemDecorator",
+      "definitionPathId": "-2514068427966901518",
+      "definitionSha256": "d68d554ef22e89734d40c42f76d606bc5c740896e4186f4cdefee9f4e02ddcec",
+      "primary": [
+        0.2235294133424759,
+        0.7098039388656616,
+        0.29019609093666077,
+        1
+      ],
+      "accent": [
+        0,
+        0.5803921818733215,
+        0.2666666805744171,
+        1
+      ],
+      "sprite": {
+        "pathId": "5349083637810085169",
+        "name": "ui_icon_critters",
+        "objectSha256": "39ac950c02b52093aae474879da9089f738d927c1ebf1d35be3e9c726aca028d",
+        "texturePathId": "3007367072896400689",
+        "textureSha256": "09970952587e20bdf1630c3f689f06bf33b6995e83af1152c70f28c2619bdc17",
+        "source": "definitions",
+        "width": 117,
+        "height": 117,
+        "bytes": 688,
+        "sha256": "9566e42f723758328e960fbb4d802750242475ca172773b486907943ab98d4af",
+        "file": "decorator-06.webp"
+      }
+    },
+    {
+      "type": 7,
+      "name": "check.ItemDecorator",
+      "definitionPathId": "-1392199684753762729",
+      "definitionSha256": "96618ef513fca36a7848aa78567d8fc376c1e697b48c67f5566d338074107e08",
+      "primary": [
+        0.04313725605607033,
+        0.5803921818733215,
+        0.2666666805744171,
+        1
+      ],
+      "accent": [
+        0.019607843831181526,
+        0.4470588266849518,
+        0.23529411852359772,
+        1
+      ],
+      "sprite": {
+        "pathId": "-1515120177446466265",
+        "name": "mod_icon_check",
+        "objectSha256": "119e4758cbd0efeed721d6b365c0a7d01cf179bd4e7f8118e465aed5702be548",
+        "texturePathId": "3867735517339503911",
+        "textureSha256": "8298da97120025ea6cd09828061699b2b6127002110e07fd03084931a24ce13a",
+        "source": "definitions",
+        "width": 54,
+        "height": 54,
+        "bytes": 178,
+        "sha256": "01aa90d38d5dded6b46fa1f487898fab1dec106b84fee4d337e20663ce86d0c9",
+        "file": "decorator-07.webp"
+      }
+    },
+    {
+      "type": 8,
+      "name": "plan.ItemDecorator",
+      "definitionPathId": "-2085028419746586854",
+      "definitionSha256": "b376a426c605aa304ca249a86a4060b3ed96f49c94aa983cf51530e8bc631a18",
+      "primary": [
+        0.15294118225574493,
+        0.6666666865348816,
+        0.8823529481887817,
+        1
+      ],
+      "accent": [
+        0.10980392247438431,
+        0.4588235318660736,
+        0.7372549176216125,
+        1
+      ],
+      "sprite": {
+        "pathId": "973684600144313423",
+        "name": "mod_icon_blueprint",
+        "objectSha256": "1c3d302d03c31b758c37174158c09db32bde8fd6a5687d6d4a7b59ef05027257",
+        "texturePathId": "7241861448321580111",
+        "textureSha256": "b3c3ec3796a39eda35f7f08fe225421ac0d84e4697df460d18972f0e2ffd66d1",
+        "source": "definitions",
+        "width": 54,
+        "height": 54,
+        "bytes": 268,
+        "sha256": "8f52f510caa34619ca004645ce9a723454492a11bbe38ad18e2060789e082502",
+        "file": "decorator-08.webp"
+      }
+    },
+    {
+      "type": 9,
+      "name": "customized.ItemDecorator",
+      "definitionPathId": "-401664569015495826",
+      "definitionSha256": "1faf41d8e5d096101e8aedcc44f8d9d1664f1a2d2ed95cfbcd1a1e335fa91689",
+      "primary": [
+        0.32156863808631897,
+        0.6392157077789307,
+        0.6509804129600525,
+        1
+      ],
+      "accent": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "sprite": {
+        "pathId": "-2011153620495332812",
+        "name": "ui_tag_icon_scissors",
+        "objectSha256": "592a1e14144d4d19aa3ba85d05f470dff0b32d03ed1f78d8f6172060761d4ede",
+        "texturePathId": "-2990977810379805954",
+        "textureSha256": "2236404b27f0bd02d56cab62d5bc9582b5287452d70cb2824ad0827fac2b19ee",
+        "source": "atlas_global",
+        "width": 54,
+        "height": 54,
+        "bytes": 420,
+        "sha256": "ef7ae9fd82c96b7b4c43a3c021d296a81fdf9b1a8dd7e621327c1c35cfc6180b",
+        "file": "decorator-09.webp"
+      }
+    },
+    {
+      "type": 10,
+      "name": "clothesMermaidifier.ItemDecorator",
+      "definitionPathId": "8769603441777035631",
+      "definitionSha256": "a9d3e1711115cc3f6eb4b18720057b46b4bd3ac9babee6ab9d03cce5d121249d",
+      "primary": [
+        0.529411792755127,
+        0.3450980484485626,
+        0.7176470756530762,
+        1
+      ],
+      "accent": [
+        0.4274509847164154,
+        0.3450980484485626,
+        0.6470588445663452,
+        1
+      ],
+      "sprite": {
+        "pathId": "-5993559072987984642",
+        "name": "mod_icon_scales",
+        "objectSha256": "537c549ebc79ff96d4b5e420328193291439d34fb95e2aa285d35f827a2f3ed1",
+        "texturePathId": "8407493247169678590",
+        "textureSha256": "39337db59b96ac27627e10706c622b35ab4037feae1f2adfdaf1341f91221c9d",
+        "source": "definitions",
+        "width": 54,
+        "height": 54,
+        "bytes": 490,
+        "sha256": "dcb04a270a22aac53225797f2125b7b0bfa7ace5dd88a60793b791af3e1a8a3c",
+        "file": "decorator-10.webp"
+      }
+    },
+    {
+      "type": 11,
+      "name": "flowerPattern.ItemDecorator",
+      "definitionPathId": "7308820757742804870",
+      "definitionSha256": "2d626ab93500aeeac64dcbbef9de1041dbbf4f6fca345eef63848faaff3a01b7",
+      "primary": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "accent": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "sprite": null
+    },
+    {
+      "type": 12,
+      "name": "flowerColor.ItemDecorator",
+      "definitionPathId": "-8789005624070269594",
+      "definitionSha256": "7243af815ef752071bf65dad32f905b916f1fe574beed604dce644adafe4552a",
+      "primary": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "accent": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "sprite": {
+        "pathId": "8129120947815875402",
+        "name": "mod_square_transparent",
+        "objectSha256": "27d52000b36df4df56ca819e58835af92f58853ec7b43b63eebc94aceed3ca27",
+        "texturePathId": "-7054373223291124918",
+        "textureSha256": "b229773a5f4935d74582cf999516caed0873b4a6c3aba841226139eeec5d7c34",
+        "source": "definitions",
+        "width": 2,
+        "height": 2,
+        "bytes": 36,
+        "sha256": "9512b842cccacd182277017db69be60b41fe02c4971a1079aa5c29f3784fcdfd",
+        "file": "decorator-12.webp"
+      }
+    },
+    {
+      "type": 13,
+      "name": "customPalette.ItemDecorator",
+      "definitionPathId": "8107004373809322088",
+      "definitionSha256": "d9c8683f53fec21c050ca71e0bd748976c3d0e2adfbdb5187309edc8a9baac10",
+      "primary": [
+        0.3137255012989044,
+        0.6470588445663452,
+        0.6666666865348816,
+        1
+      ],
+      "accent": [
+        0.27450981736183167,
+        0.501960813999176,
+        0.5137255191802979,
+        1
+      ],
+      "sprite": {
+        "pathId": "57845780657152039",
+        "name": "ui_avatar_creator_icon_color",
+        "objectSha256": "fc702c9b3d636687716ea6d331f5632d0b52b9e78cc2e3617e787d19d57a7d15",
+        "texturePathId": "-4411023540225368025",
+        "textureSha256": "fd91b2e02a4ebe23d587e1389307438e8c47ebcf84e8cfdeb32eb7fa821cc826",
+        "source": "definitions",
+        "width": 108,
+        "height": 109,
+        "bytes": 1130,
+        "sha256": "9ac8738a938285b54682ca2e71a9cc57de4f6c2c33c57ae919db9599bde4a3e3",
+        "file": "decorator-13.webp"
+      }
+    },
+    {
+      "type": 14,
+      "name": "dyeColor.ItemDecorator",
+      "definitionPathId": "-599652346996799140",
+      "definitionSha256": "958684bc5c0dc351fd85eccbf9d4be5bdcec25a92979bc69feaeddd06519d06d",
+      "primary": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "accent": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "sprite": {
+        "pathId": "-8762540804276115579",
+        "name": "dye_color2",
+        "objectSha256": "e1ffdf45abc8c5621f2a25e70dc229b17a877781e209b1a369e97b58b041c9cb",
+        "texturePathId": "-726012638776481915",
+        "textureSha256": "d0d85ac9fc6c3f3d1a5b9be1a2ced9c64e9eb94ca0a822a9f4e533056567c675",
+        "source": "definitions",
+        "width": 256,
+        "height": 256,
+        "bytes": 816,
+        "sha256": "291b9812bc7953bba4f1a6b40fc0a0e43470a154543b1d631f19e2cfd0cd1d4c",
+        "file": "decorator-14.webp"
+      }
+    },
+    {
+      "type": 15,
+      "name": "showEars.ItemDecorator",
+      "definitionPathId": "-5997762476643137444",
+      "definitionSha256": "8fa5bc90b460578c2945adca8305d7f56d7d59df5e5262a1b3f36b57b7a65f91",
+      "primary": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "accent": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "sprite": {
+        "pathId": "6578114743101274227",
+        "name": "mod_icon_ears",
+        "objectSha256": "55edd2ada0b62f266514bbeb628590d426e511ea7979611350de54b5a7e36250",
+        "texturePathId": "-3329503247892957069",
+        "textureSha256": "0fd2edfb4a782002a226ebf32e521da3a4f336f2904537225e55b55c2a5106c9",
+        "source": "definitions",
+        "width": 108,
+        "height": 108,
+        "bytes": 718,
+        "sha256": "e100eefd7b53f3a29e8a12bc25d8f007ea60813e303683221d14ca5350deea2c",
+        "file": "decorator-15.webp"
+      }
+    }
+  ]
+}
