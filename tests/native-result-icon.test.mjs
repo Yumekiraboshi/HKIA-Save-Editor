@@ -59,3 +59,17 @@ test('native result route cannot fall through to an unrelated source item icon',
  const preload=app.slice(app.indexOf('const resultId=nativeResultIconTarget(row.itemId,snapshot.version)'),app.indexOf('if(inventoryNativeArt?.entries.has(row.itemId)'));
  assert.ok(preload.includes('if(resultId!==undefined)')&&preload.includes('continue;'));
 });
+
+test('original blueprint pattern is used only for version-gated native result routes',()=>{
+ const bytes=readFileSync(new URL('../public/inventory-ui/bp-grid.webp',import.meta.url));
+ assert.equal(bytes.length,206);
+ assert.equal(createHash('sha256').update(bytes).digest('hex'),'529cb6869d62df33e19d72a376fe472e882b6edb35901ba0042904aec0c1e63f');
+ const app=read('src/App.svelte'),css=read('src/style.css');
+ const start=app.indexOf('class:inventory-blueprint={resultId!==undefined}');
+ const end=app.indexOf('{#if hasNativeWandArt',start);
+ assert.ok(start>=0&&end>start);
+ assert.ok(app.slice(start,end).includes('{#if resultId!==undefined}'));
+ assert.ok(app.slice(start,end).includes('data-native-blueprint-pattern="bp_grid"'));
+ assert.equal(app.match(/data-native-blueprint-pattern=/g)?.length,1);
+ assert.match(css,/\.inventory-blueprint-pattern\{[^}]*opacity:0\.392156869/);
+});
