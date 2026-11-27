@@ -89,6 +89,17 @@ export async function renderWandBaseArt(itemId:number,appearance:WandBaseAppeara
  }catch{return null;}
 }
 
+async function guardedItemOverlay(itemId:number,transform:WandTransform):Promise<{spritePathId:string;sourceHash:string;overlay:SpriteOverlay}|null>{
+ try{
+  const source=await itemSubSources(),icon=source.rows.find(x=>x.itemId===itemId);
+  if(!icon)return null;
+  return {spritePathId:icon.spritePathId,sourceHash:WAND_ITEM_SUBICON_SHA,
+   overlay:{texture:await loadOpaqueArtTexture(ROOT,source.textures[icon.pack]),sampleRect:icon.sampleRect,trim:icon.trimTopLeft,
+    alphaOffsetY:source.alphaOffsetY,logicalWidth:icon.logicalSize,logicalHeight:icon.logicalSize,
+    scale:transform.scale,offsetPercent:transform.offsetPercent,rotation:transform.rotation,sampleClamp:icon.sampleClamp}};
+ }catch{return null;}
+}
+
 /** SourceItemId==0 selects MagicDisplay.Icon. Otherwise select the exact
  * original definition UiIcon; nested unique-data colors are intentionally
  * not used by native TryGetSubIcon. Unknown/unextracted IDs remain withheld.
@@ -110,13 +121,11 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
     scale:transform.scale,offsetPercent:transform.offsetPercent,rotation:transform.rotation,
     sampleClamp:[x+.5,y+.5,x+icon.guardRect[2]-.5,y+icon.guardRect[3]-.5]};
   }else{
-   const itemSource=await itemSubSources();
-   const icon=itemSource.rows.find(x=>x.itemId===appearance.sourceItemId);
-   if(icon){
-    spritePathId=icon.spritePathId;sourceHash=WAND_ITEM_SUBICON_SHA;
-    overlay={texture:await loadOpaqueArtTexture(ROOT,itemSource.textures[icon.pack]),sampleRect:icon.sampleRect,trim:icon.trimTopLeft,
-     alphaOffsetY:itemSource.alphaOffsetY,logicalWidth:icon.logicalSize,logicalHeight:icon.logicalSize,
-     scale:transform.scale,offsetPercent:transform.offsetPercent,rotation:transform.rotation,sampleClamp:icon.sampleClamp};
+   // A missing or corrupt optional guarded pack must not suppress the
+   // independently verified candidate source for the same item.
+   const guarded=await guardedItemOverlay(appearance.sourceItemId,transform);
+   if(guarded){
+    ({spritePathId,sourceHash,overlay}=guarded);
    }else if(itemId===384749651&&PLACEHOLDER_SOURCE_IDS.has(appearance.sourceItemId)){
     // Native GetUiIcon returns the same original placeholder Sprite.
     spritePathId='-6646601456236922891';sourceHash=PLACEHOLDER_ASSET.sha256;
