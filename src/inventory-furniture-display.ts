@@ -28,3 +28,10 @@ export function furnitureVariantTitle(display:FurnitureDisplay|null,itemId:numbe
  if(!display||!slots||!variant||variant.length!==3)return '';
  return variant.flatMap((index,slot)=>slots.has(slot)||index!==0?[materialLabel(display,index,defaultLabel)]:[]).join(' / ');
 }
+
+/** Read-only decoration: native IsCustomized compares each resolved material
+ * GUID with the zero GUID. Only source-known positive indices qualify.
+ * This does not grant edit permission or change any stored material. */
+export function furnitureHasCustomizedAppearance(display:FurnitureDisplay|null,variant:readonly number[]|null):boolean{
+ return !!display&&!!variant&&variant.length===3&&variant.some(index=>Number.isInteger(index)&&index>0&&display.materials.has(index));
+}
