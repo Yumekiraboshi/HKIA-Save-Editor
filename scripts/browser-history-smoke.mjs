@@ -249,6 +249,42 @@ async function inventoryPaletteRemovalSmoke(){
  }
  console.log('CHROMIUM PALETTE REMOVAL PASS: copied avatar palette protected; zero, recovery and undo');
 }
+async function inventoryFirstPaletteSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-first-palette.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
+  const search=page.locator('.inventory-controls input[type="search"]');await search.fill('1835273963');
+  const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="palette-editor-title"]');
+  await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  assert.equal(await dialog.locator('button[type="submit"]').count(),0);
+  await dialog.locator('.inventory-palette-option:not([disabled])').first().click();
+  await dialog.locator('[data-palette-slot="1"]:not([disabled])').click();
+  await dialog.locator('.inventory-palette-option:not([disabled])').first().click();
+  await dialog.locator('input[name="variant-add-quantity"]:not([disabled])').fill('2');
+  await dialog.locator('.inventory-create-palette:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await card.locator('.inventory-add-source').waitFor();
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('1835273963');
+  const qty=card.locator('input[name="quantity"]');await qty.waitFor();assert.equal(await qty.inputValue(),'2');
+  await page.locator('button[title="Undo"]:not([disabled])').click();await card.waitFor({state:'detached'});
+  await page.locator('button[title="Redo"]:not([disabled])').click();await qty.waitFor();
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('1835273963');await qty.waitFor();assert.equal(await qty.inputValue(),'2');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_absent_palette_default(),0);
+  assert.equal(new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len()).getUint32(0,true),0);
+  assert.equal(e.hkia_inventory_palettes_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(v.getUint32(0,true),1);
+  assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST PALETTE PASS: absent chooser, history, recovery and export');
+ }finally{await context.close()}
+}
 async function inventoryPaletteCreationSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -2509,6 +2545,7 @@ async function run(){
  await achievementExportReopenRoundtrip();
  await inventoryDynamicPaletteArtSmoke();
  await inventoryPaletteCreationSmoke();
+ await inventoryFirstPaletteSmoke();
  await inventoryPaletteRemovalSmoke();
  await chefRuntimeSmoke(browser,origin,base);
  await inventoryChefArtSmoke();
