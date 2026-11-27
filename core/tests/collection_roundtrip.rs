@@ -4115,6 +4115,56 @@ fn rare_candle_effect_only_patterns_roundtrip_and_preserve_native_identity(){
 
 
 #[test]
+fn original_dlc_flower_effect_can_be_retained_but_not_granted_or_cloned(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let species=1331175279;
+ let make=|effect:u8,accent:u8|{
+  let mut p=synthetic_payload("3.0.1");p[2]=6;p[3]=0x97;
+  p.extend(doc(1,arr(vec![u(4),u(species),u(11),u(93),arr(vec![vec![7],arr(vec![vec![6],vec![6],vec![effect],vec![accent]])])])));
+  p.extend(doc(1,arr(vec![u(5),u(species),u(12),u(2),plain_flower(9)])));
+  slot_from_payload("3.0.1",p)
+ };
+ for effect in [6,15]{
+  let other=if effect==6{15}else{6};
+  for zipped in [false,true]{
+   let raw=make(effect,0);let input=if zipped{zip(&raw)}else{raw};
+   let mut e=Editor::open(input.clone()).unwrap();let before=[6,6,i32::from(effect),0];
+   let changed=[6,8,i32::from(effect),0];let plain=[6,8,0,0];
+   assert!(e.inventory().iter().find(|r|r.document_id==4).unwrap().editable);
+   assert!(e.inventory_flower_variants(4).contains(&changed));
+   assert!(!e.inventory_flower_variants(4).iter().any(|v|v[2]==other));
+   assert!(!e.inventory_flower_variants(5).iter().any(|v|[6,15].contains(&v[2])));
+   assert!(!e.inventory_flower_creation_variants(4).iter().any(|v|[6,15].contains(&v[2])));
+   assert!(!e.inventory_flower_preview(4,before,changed).unwrap().1);
+   assert!(e.create_inventory_flower_variant(4,before,changed,1).is_err());
+   assert!(e.change_inventory_flower_variant(4,before,[6,8,other,0]).is_err());
+   assert!(e.change_inventory_flower_variant(4,before,[6,8,i32::from(effect),16]).is_err());
+   assert!(e.change_inventory_flower_variant(5,[6,9,0,0],[6,9,i32::from(effect),0]).is_err());
+   assert!(!e.dirty());
+   e.change_inventory_flower_variant(4,before,changed).unwrap();
+   e.change_inventory_flower_variant(4,changed,plain).unwrap();
+   assert!(e.inventory_flower_variants(4).contains(&changed));
+   e.change_inventory_flower_variant(4,plain,changed).unwrap();
+   let child=e.create_inventory_flower_variant(4,changed,[6,8,3,0],2).unwrap();
+   assert!(e.change_inventory_flower_variant(child,[6,8,3,0],changed).is_err());
+   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+   restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+   let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+   assert_eq!(saved.inventory_unique_data(4),Some(U::Flower{grow_state:6,base_color:8,pattern:i32::from(effect),pattern_color:0}));
+   saved.change_inventory_quantity(4,93,0).unwrap();
+   let mut zero=Editor::open(saved.export().unwrap()).unwrap();
+   zero.change_inventory_quantity(4,0,3).unwrap();
+   assert_eq!(zero.inventory_unique_data(4),saved.inventory_unique_data(4));
+   zero.change_inventory_flower_variant(4,changed,plain).unwrap();
+   let reopened=Editor::open(zero.export().unwrap()).unwrap();
+   assert!(!reopened.inventory_flower_variants(4).iter().any(|v|[6,15].contains(&v[2])));
+  }
+  let e=Editor::open(make(effect,16)).unwrap();assert!(e.inventory_flower_variants(4).is_empty());
+ }
+}
+
+
+#[test]
 fn first_item_wand_copies_verified_owned_furniture_without_touching_source(){
  use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
  let item=384749651i32;let source=61381969i32;let candidate=0x80000000|item as u32;
@@ -4195,5 +4245,53 @@ fn only_complete_verified_bag_furniture_wand_copies_release_source_reference(){
   assert!(!e.inventory()[0].editable);
   assert!(e.change_inventory_quantity(4,93,0).is_err());
   assert!(e.inventory_furniture_creation_variants(4).is_empty());
+ }
+}
+
+
+#[test]
+fn saved_event_flower_colors_are_editable_per_original_channel_without_new_restricted_rows(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=43114910u32;
+ let make=|original:[u32;4]|{
+  let mut p=synthetic_payload("3.0.1");p[2]=6;p[3]=0x97;
+  p.extend(doc(1,arr(vec![u(4),u(item),u(11),u(6),arr(vec![vec![7],arr(original.into_iter().map(u).collect())])])));
+  p.extend(doc(1,arr(vec![u(5),u(item),u(12),u(2),plain_flower(9)])));
+  slot_from_payload("3.0.1",p)
+ };
+ for (original,ordinary) in [
+  ([6,14,0,0],[6,8,0,0]),
+  ([6,15,1,16],[6,8,1,16]),
+  ([6,8,1,14],[6,8,1,16]),
+  ([6,14,1,15],[6,8,1,16]),
+ ]{
+  let original:[i32;4]=original;let ordinary:[i32;4]=ordinary;
+  for zipped in [false,true]{
+   let raw=make(original.map(|v|v as u32));let input=if zipped{zip(&raw)}else{raw};
+   let mut e=Editor::open(input.clone()).unwrap();
+   assert!(e.inventory().iter().find(|r|r.document_id==4).unwrap().editable);
+   assert!(e.inventory_flower_preview(4,original,ordinary).is_ok());
+   assert!(e.inventory_flower_creation_variants(4).iter().all(|v|![14,15].contains(&v[1])&&![14,15].contains(&v[3])));
+   assert!(e.inventory_flower_variants(5).iter().all(|v|![14,15].contains(&v[1])&&![14,15].contains(&v[3])));
+   let mut forbidden=original;forbidden[1]=if original[1]==14{15}else{14};
+   assert!(e.change_inventory_flower_variant(4,original,forbidden).is_err());
+   assert!(e.change_inventory_flower_variant(5,[6,9,0,0],[6,14,0,0]).is_err());
+   e.change_inventory_quantity(4,6,3).unwrap();
+   e.change_inventory_flower_variant(4,original,ordinary).unwrap();
+   assert!(e.inventory_flower_preview(4,ordinary,original).is_ok());
+   assert!(!e.inventory_flower_preview(4,ordinary,original).unwrap().1);
+   assert!(e.create_inventory_flower_variant(4,ordinary,original,1).is_err());
+   e.change_inventory_flower_variant(4,ordinary,original).unwrap();
+   let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();
+   recovered.restore_history(&cp).unwrap();assert!(recovered.undo_scope(Inventory));assert!(recovered.redo_scope(Inventory));
+   let mut saved=Editor::open(recovered.export().unwrap()).unwrap();
+   assert_eq!(saved.inventory_unique_data(4),Some(U::Flower{grow_state:6,base_color:original[1],pattern:original[2],pattern_color:original[3]}));
+   saved.change_inventory_quantity(4,3,0).unwrap();
+   let mut zero=Editor::open(saved.export().unwrap()).unwrap();
+   zero.change_inventory_quantity(4,0,5).unwrap();
+   zero.change_inventory_flower_variant(4,original,ordinary).unwrap();
+   let reopened=Editor::open(zero.export().unwrap()).unwrap();
+   assert!(reopened.inventory_flower_variants(4).iter().all(|v|![14,15].contains(&v[1])&&![14,15].contains(&v[3])));
+  }
  }
 }

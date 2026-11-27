@@ -16,7 +16,12 @@ const PENDING_ITEM:u32=1<<31;
 // Native pattern choices: species default + CrosstypePatterns, excluding
 // definitions requiring DLC. No inference from rendered masks or names.
 const FLOWER_COLORS:&[i32]=&[1,2,3,4,5,6,7,8,9,10,11,12,13,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30];
-const FLOWER_EFFECTS:&[i32]=&[3,4,5,7,8,9];
+const FLOWER_EFFECTS:&[i32]=&[3,4,5,6,7,8,9,15];
+const RESTRICTED_FLOWER_EFFECTS:&[i32]=&[6,15];
+const RESTRICTED_FLOWER_COLORS:&[i32]=&[14,15];
+fn restricted_flower_appearance(v:FlowerVariant)->bool{
+ RESTRICTED_FLOWER_EFFECTS.contains(&v[2])||RESTRICTED_FLOWER_COLORS.contains(&v[1])||RESTRICTED_FLOWER_COLORS.contains(&v[3])
+}
 const FLOWER_SPECIES:&[(i32,&[i32])]=&[
  (43114910,&[1,2,3,4,5,7,8,9,10,11,13,16]),
  (183701770,&[2,3,4,5,7,8,9,10,11,12,13,14,16]),
@@ -199,9 +204,9 @@ const RARE_CANDLE_KEYS:&[(i32,u32)]=&[(22657460,0x3801512e),(1858821696,0xdf4cea
 const RARE_CANDLE_PATTERNS:&[i32]=ALL_UNRESTRICTED_FLOWER_PATTERNS;
 fn rare_candle_key(item:i32)->Option<u32>{RARE_CANDLE_KEYS.iter().find(|&&(id,_)|id==item).map(|&(_,key)|key)}
 #[derive(Clone,Copy)]
-struct FlowerPolicy{patterns:&'static [i32],require_pattern:bool}
+struct FlowerPolicy{patterns:&'static [i32],require_pattern:bool,retained_effect:Option<i32>,retained_colors:[Option<i32>;2]}
 impl FlowerPolicy{
- fn ordinary(patterns:&'static [i32])->Self{Self{patterns,require_pattern:false}}
+ fn ordinary(patterns:&'static [i32])->Self{Self{patterns,require_pattern:false,retained_effect:None,retained_colors:[None;2]}}
 }
 fn flower_item_patterns(item:i32,grow:i32)->Option<FlowerPolicy>{
  if let Some((_,patterns))=FLOWER_SPECIES.iter().find(|(id,_)|*id==item){return Some(FlowerPolicy::ordinary(patterns))}
@@ -210,17 +215,17 @@ fn flower_item_patterns(item:i32,grow:i32)->Option<FlowerPolicy>{
   let species=FLOWER_CROWN_SPECIES[i].1;
   return FLOWER_SPECIES.iter().find(|(id,_)|*id==species).map(|&(_,p)|FlowerPolicy::ordinary(p))
  }
- if rare_candle_key(item).is_some(){Some(FlowerPolicy{patterns:RARE_CANDLE_PATTERNS,require_pattern:true})}
+ if rare_candle_key(item).is_some(){Some(FlowerPolicy{patterns:RARE_CANDLE_PATTERNS,require_pattern:true,retained_effect:None,retained_colors:[None;2]})}
  else if FLOWER_CLOTHING_GENERIC.contains(&item){Some(FlowerPolicy::ordinary(ALL_UNRESTRICTED_FLOWER_PATTERNS))}
  else if item==FLOWER_CLOTHING_NO_PATTERN||flower_candle_source(item).is_some(){Some(FlowerPolicy::ordinary(&[]))}else{None}
 }
 fn valid_flower_variant(policy:FlowerPolicy,v:FlowerVariant)->bool{
  (!policy.require_pattern||(v[0]==6&&policy.patterns.contains(&v[2])))&&
- matches!(v[0],0|6|7)&&FLOWER_COLORS.contains(&v[1])&&
+ matches!(v[0],0|6|7)&&(FLOWER_COLORS.contains(&v[1])||policy.retained_colors[0]==Some(v[1]))&&
  if v[2]==0{v[3]==0}
- else if !policy.patterns.contains(&v[2]){false}
+ else if !policy.patterns.contains(&v[2])&&policy.retained_effect!=Some(v[2]){false}
  else if FLOWER_EFFECTS.contains(&v[2]){v[3]==0}
- else{FLOWER_COLORS.contains(&v[3])&&v[3]!=v[1]}
+ else{(FLOWER_COLORS.contains(&v[3])||policy.retained_colors[1]==Some(v[3]))&&v[3]!=v[1]}
 }
 // FlowerSettings.GetPatternColor: White unless the main color is White,
 // then WarmPink. Do not choose a random value for an explicit editor action.
@@ -458,7 +463,16 @@ impl Editor {
   // Copied outfit/placement payload references also block clothing.
   if !FLOWER_SPECIES.iter().any(|&(id,_)|id==item)&&
    (self.slot.index.inventory_payload_refs_incomplete||self.slot.index.inventory_payload_item_refs.contains(&item)){return None}
-  let patterns=flower_item_patterns(item,original[0])?;
+  let mut patterns=flower_item_patterns(item,original[0])?;
+  // Both DLC effect definitions occur in all 25 verified species CrosstypePatterns.
+  // A saved original effect is a row-local witness, not proof of a DLC right.
+  if FLOWER_SPECIES.iter().any(|&(id,_)|id==item)&&RESTRICTED_FLOWER_EFFECTS.contains(&original[2]){
+   patterns.retained_effect=Some(original[2]);
+  }
+  // Exact original color in the same channel is a local witness only.
+  for (slot,color) in [original[1],original[3]].into_iter().enumerate(){
+   if RESTRICTED_FLOWER_COLORS.contains(&color){patterns.retained_colors[slot]=Some(color);}
+  }
   if !valid_flower_variant(patterns,original){return None}
   Some(patterns)
  }
@@ -739,19 +753,19 @@ impl Editor {
  fn flower_choices(patterns:FlowerPolicy,current:FlowerVariant,reserved:&HashSet<FlowerVariant>)->Vec<FlowerVariant>{
   let mut out=Vec::new();
   let mut add=|v:FlowerVariant|{if v!=current&&valid_flower_variant(patterns,v)&&!reserved.contains(&v)&&!out.contains(&v){out.push(v)}};
-  for &color in FLOWER_COLORS{
+  for color in FLOWER_COLORS.iter().copied().chain(patterns.retained_colors[0]){
    let mut v=current;v[1]=color;
    if v[2]!=0&&!FLOWER_EFFECTS.contains(&v[2])&&v[1]==v[3]{v[3]=default_flower_accent(color)}
    add(v);
   }
-  for pattern in std::iter::once(0).chain(patterns.patterns.iter().copied()){
+  for pattern in std::iter::once(0).chain(patterns.patterns.iter().copied()).chain(patterns.retained_effect){
    if pattern==current[2]{continue}
    let mut v=current;v[2]=pattern;
    v[3]=if pattern==0||FLOWER_EFFECTS.contains(&pattern){0}else{default_flower_accent(v[1])};
    add(v);
   }
   if current[2]!=0&&!FLOWER_EFFECTS.contains(&current[2]){
-   for &color in FLOWER_COLORS{let mut v=current;v[3]=color;add(v);}
+   for color in FLOWER_COLORS.iter().copied().chain(patterns.retained_colors[1]){let mut v=current;v[3]=color;add(v);}
   }
   out
  }
@@ -760,7 +774,7 @@ impl Editor {
  pub fn inventory_flower_creation_variants(&self,id:u32)->Vec<FlowerVariant>{
   if let Some(f)=self.pending_flowers.get(&id){
    if !self.inventory_changes.contains_key(&id)||!self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(f.item_id){return Vec::new()}
-   return self.inventory_flower_variants(id).into_iter().filter(|&v|v!=f.variant).collect()
+   return self.inventory_flower_variants(id).into_iter().filter(|&v|v!=f.variant&&!restricted_flower_appearance(v)).collect()
   }
   if id&PENDING_ITEM!=0{return self.absent_flower_options((id&!PENDING_ITEM) as i32)}
   if !self.inventory_creation_source_valid()||!self.unique_quantity_ids.contains(&id)||self.undo.len()+self.redo.len()>=MAX_UNDO||
@@ -772,7 +786,7 @@ impl Editor {
    !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return Vec::new()}
   if !self.inventory_creation_payload_safe(item){return Vec::new()}
   let Some(original)=row.unique_data.and_then(flower_variant)else{return Vec::new()};
-  self.inventory_flower_variants(id).into_iter().filter(|&v|v!=original).collect()
+  self.inventory_flower_variants(id).into_iter().filter(|&v|v!=original&&!restricted_flower_appearance(v)).collect()
  }
  /// Stage an explicitly chosen, different native flower tuple from an
  /// existing validated species row. No persisted UID is assigned until
@@ -783,7 +797,7 @@ impl Editor {
   self.stage_new_flower(source_id,item_id,expected,next,quantity)
  }
  fn flower_creation_item(&self,id:u32,expected:FlowerVariant,next:FlowerVariant)->Option<i32>{
-  if !self.absent_flower_budget_available(){return None}
+  if restricted_flower_appearance(next)||!self.absent_flower_budget_available(){return None}
   if let Some(f)=self.pending_flowers.get(&id){
    if !self.inventory_changes.contains_key(&id)||!self.inventory_creation_payload_safe(f.item_id){return None}
    let (patterns,current,reserved)=self.flower_context(id)?;
