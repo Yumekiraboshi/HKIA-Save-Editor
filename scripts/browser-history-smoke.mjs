@@ -276,6 +276,7 @@ async function inventoryFirstPaletteSmoke(){
   await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
   const search=page.locator('.inventory-controls input[type="search"]');await search.fill('1835273963');
   const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="palette-editor-title"]');
+  await card.locator('.item-sprite[data-dynamic-art-source="native-palette"][data-icon-fidelity="source-derived-base-only"]').waitFor({timeout:30_000});
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
   assert.equal(await dialog.locator('button[type="submit"]').count(),0);
   await dialog.locator('.inventory-palette-option:not([disabled])').first().click();
@@ -644,7 +645,9 @@ async function inventoryFirstChefSmoke(){
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
   const search=page.locator('.inventory-controls input[type="search"]'),card=page.locator('.inventory-card');
-  await search.fill('1798633565');await card.locator('.inventory-unique-edit-button').click();
+  await search.fill('1798633565');
+  await card.locator('.item-sprite[data-dynamic-art-source="native-chef"][data-icon-fidelity="source-derived-base-only"]').waitFor({timeout:30_000});
+  await card.locator('.inventory-unique-edit-button').click();
   const boba=page.locator('dialog[aria-labelledby="boba-editor-title"]');await boba.waitFor();
   assert.equal(await boba.locator('button[type="submit"]').count(),0);
   const bs=boba.locator('select[name="boba-base"]'),vs=boba.locator('select[name="boba-variant"]');
