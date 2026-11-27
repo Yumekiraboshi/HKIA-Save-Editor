@@ -4,6 +4,7 @@ import type {PixelBuffer,Rect,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
 import {originalWandOverlay,originalWandCellKey,type WandOriginalCell} from './wand-original-subicon';
 import {loadSampledWandOverlay} from './wand-candidate-source';
+import {loadRemainingWandOverlay} from './wand-remaining-source';
 import {hasNativePlaceholderArt,loadNativePlaceholderTexture,NATIVE_PLACEHOLDER_SPRITE,PLACEHOLDER_ASSET} from './native-placeholder-art';
 
 import {loadChefOriginalOverlay} from './chef-runtime-art';
@@ -147,7 +148,7 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
     // Every native wand uses TryGetSubIcon and the same source transform.
     // The sampled route checks exact source identity and geometry. It is
     // read-only artwork, not permission to create or edit a wand variant.
-    const direct=await loadSampledWandOverlay(appearance.sourceItemId,transform);
+    const direct=await loadSampledWandOverlay(appearance.sourceItemId,transform)??await loadRemainingWandOverlay(appearance.sourceItemId,transform);
     if(direct){
      sourceHash=direct.sourceHash;spritePathId=direct.spritePathId;overlay=direct.overlay;
     }else{
