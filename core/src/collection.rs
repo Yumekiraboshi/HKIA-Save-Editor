@@ -160,7 +160,8 @@ const ABSENT_FLOWER_DEFAULTS:&[(i32,&[i32])]=&[
 ];
 // Original generic processors accept any flower; the HK-style bow explicitly
 // clears both pattern fields (IgnorePatternOnOutputItem=true).
-const FLOWER_CLOTHING_GENERIC:&[i32]=&[105502901,1110255162,1227385139];
+// Includes seven event-year floral outfits with unrestricted native tradable outputs.
+const FLOWER_CLOTHING_GENERIC:&[i32]=&[41105179,105502901,313677564,528401863,809985659,811189976,965037291,1110255162,1227385139,1646153125];
 const FLOWER_CLOTHING_NO_PATTERN:i32=1482119840;
 // Switch v3.0.1: DLC output rows require an original owned witness.
 const OWNED_DLC_FLOWER_GENERIC:&[i32]=&[401804031,1776250358,1797473773];
