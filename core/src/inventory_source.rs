@@ -93,7 +93,7 @@ pub(crate) fn ordinary_creation_item(item_id:i32)->bool{
  RULES.binary_search_by_key(&item_id,|row|row.0).ok().is_some_and(ordinary_tradeable_creation_index)
 }
 pub(crate) fn ordinary_creation_ids()->impl Iterator<Item=i32>{
- RULES.iter().enumerate().filter_map(|(i,&(id,_))|ordinary_tradeable_creation_index(i).then_some(id))
+ ordinary_membership_ids().chain(RULES.iter().enumerate().filter_map(|(i,&(id,_))|(ordinary_tradeable_creation_index(i)&&!ordinary_membership_item(id)).then_some(id)))
 }
 #[cfg(test)]
 mod tests{
@@ -146,7 +146,7 @@ mod tests{
  #[test]fn full_tradeable_creation_mask_is_pinned_and_preserves_original_candidates(){
   assert_eq!(TRADEABLE_CREATION_BITS.len(),1521);
   assert_eq!(hex(&crate::digest::sha256(TRADEABLE_CREATION_BITS)),"3a9e06f1b2385881ebcd3db406a39120913b798902cdf4482876a44f7b206824");
-  let ids:Vec<_>=ordinary_creation_ids().collect();
+  let mut ids:Vec<_>=ordinary_creation_ids().collect();ids.sort_unstable();
   assert_eq!(ids.len(),6521);assert!(ids.windows(2).all(|p|p[0]<p[1]));
   let bytes:Vec<_>=ids.iter().flat_map(|&id|id.to_le_bytes()).collect();
   assert_eq!(hex(&crate::digest::sha256(&bytes)),"4dc7ed5ce734e90cf6777d4310c55352f5cd04c5759df3b47d860be4f6973d5b");
