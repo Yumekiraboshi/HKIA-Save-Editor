@@ -135,6 +135,11 @@ pub struct VisitorManagerScopedSourceLink{
 pub(crate) struct DocumentSpan{pub key:(i32,u32),pub bytes:Range<usize>}
 #[derive(Debug,Default)]
 pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievements:Vec<Model>,pub counters:Vec<Model>,pub collections:Vec<CollectionEntry>,pub deprecated_count:usize,pub dictionary_entries:usize,pub collection_map:Option<Range<usize>>,pub root_documents_span:Option<Range<usize>>,pub celebrations:Vec<CelebrationSpan>,pub inventory:Vec<InventoryRow>,pub inventory_item_refs:HashSet<(i32,i32)>,pub inventory_legacy_uid_refs:HashSet<i32>,pub inventory_item_refs_incomplete:bool,pub deprecated:Vec<DeprecatedEntry>,pub deprecated_map:Option<Range<usize>>,pub collection_version:Option<CollectionVersion>,
+ /// A partial native ItemId/UID reference can name an exact ItemId without
+ /// identifying its individual variant. Ordinary nil operations can protect
+ /// that item alone; unique operations still use the full incomplete flag.
+ pub inventory_partial_item_refs:HashSet<i32>,
+ pub inventory_item_refs_unscoped:bool,
  /// ItemId-based references with a copied unique payload (outfits, stands,
  /// presets, placed items, mail and wand sources), separate from UID refs.
  pub inventory_payload_item_refs:HashSet<i32>,
@@ -565,11 +570,11 @@ impl<'a> Walk<'a>{
         let item=i32::try_from(item.int()?).map_err(|_|Error::Schema)?;
         let uid=i32::try_from(uid.int()?).map_err(|_|Error::Schema)?;
         if uid>0{self.index.inventory_item_refs.insert((item,uid));}
-       }else{self.index.inventory_item_refs_incomplete=true;}
+       }else{self.index.inventory_item_refs_incomplete=true;self.index.inventory_item_refs_unscoped=true;}
       }
       if name=="Sunblink.UserData.HomeObjectModelDeprecatedV71" {
        if let Some((v,_))=fields.get(7){let uid=i32::try_from(v.int()?).map_err(|_|Error::Schema)?;if uid>0{self.index.inventory_legacy_uid_refs.insert(uid);}}
-       else{self.index.inventory_item_refs_incomplete=true;}
+       else{self.index.inventory_item_refs_incomplete=true;self.index.inventory_item_refs_unscoped=true;}
       }
       if name=="Sunblink.UserData.UniqueItemIdModel" {
        if n==2 {
@@ -578,7 +583,14 @@ impl<'a> Walk<'a>{
         self.index.inventory_item_refs.insert((item,uid));
         // Furniture zero must also deny a same-item reference with a different UID.
         if item>0{self.index.inventory_furniture_item_refs.insert(item);}
-       }else{self.index.inventory_item_refs_incomplete=true;}
+       }else{
+        self.index.inventory_item_refs_incomplete=true;
+        if self.version==Version::V301&&n==1{
+         let item=i32::try_from(fields[0].0.int()?).map_err(|_|Error::Schema)?;
+         if item>0{self.index.inventory_partial_item_refs.insert(item);}
+         else{self.index.inventory_item_refs_unscoped=true;}
+        }else{self.index.inventory_item_refs_unscoped=true;}
+       }
       }
       if name==HOME {
        // A full 15-field walk uses the existing generated typed schema,
