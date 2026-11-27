@@ -531,11 +531,17 @@ impl Editor {
  }
  fn unique_row_source(&self,row:&crate::native::InventoryRow,fields:usize)->Option<i32>{
   if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<0||
-   (row.quantity==Some(0)&&!self.is_emptyable_unique_family(row)&&!self.palette_zero_reference_safe(row))||
    row.unique_is_nil!=Some(false)||row.unique_fields.len()!=fields{return None}
   let item=row.item_id?;let uid=row.unique_id?;
   if item<=0||uid<=0||!self.item_reference_scope_safe(item)||self.slot.index.inventory_item_refs.contains(&(item,uid))||self.slot.index.inventory_legacy_uid_refs.contains(&uid){return None}
   Some(item)
+ }
+ // A verified saved zero stack can be replenished without authorizing its
+ // last-copy removal. Keep previously protected empty rows out of appearance
+ // editing until they have actually been refilled; no new UID is issued.
+ fn unique_appearance_available(&self,row:&crate::native::InventoryRow)->bool{
+  row.quantity!=Some(0)||self.inventory_changes.get(&row.id).is_some_and(|&q|q>0)||
+   self.is_emptyable_unique_family(row)||self.palette_zero_reference_safe(row)
  }
  fn legacy_flower_variant(decoded:&[u8],row:&crate::native::InventoryRow)->Option<FlowerVariant>{
   if !matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:2}))||row.unique_fields.len()!=4{return None}
@@ -566,6 +572,10 @@ impl Editor {
   valid_flower_variant(policy,v).then_some(policy)
  }
  fn flower_source(&self,row:&crate::native::InventoryRow)->Option<FlowerPolicy>{
+  if !self.unique_appearance_available(row){return None}
+  self.flower_quantity_source(row)
+ }
+ fn flower_quantity_source(&self,row:&crate::native::InventoryRow)->Option<FlowerPolicy>{
   let item=self.unique_row_source(row,4)?;
   if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:2})){
    return self.unique_quantity_ids.contains(&row.id).then(||self.legacy_flower_source(row)).flatten()
@@ -589,6 +599,10 @@ impl Editor {
   Some(patterns)
  }
  fn furniture_source(&self,row:&crate::native::InventoryRow)->Option<&'static FurnitureItemSource>{
+  if !self.unique_appearance_available(row){return None}
+  self.furniture_quantity_source(row)
+ }
+ fn furniture_quantity_source(&self,row:&crate::native::InventoryRow)->Option<&'static FurnitureItemSource>{
   let source=furniture_source::item(self.unique_row_source(row,3)?)?;
   // Existing inventory furniture only. Home layout/exterior edits and
   // pattern unlock grants remain outside this operation.
@@ -1411,7 +1425,9 @@ impl Editor {
    item
   }else{
    if !self.unique_quantity_ids.contains(&id){return None}
-   self.slot.index.inventory.iter().find(|r|r.id==id)?.item_id?
+   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+   if !self.unique_appearance_available(row){return None}
+   row.item_id?
   };
   let original=self.original_wand_identity(id)?;
   let current=self.wand_variant_changes.get(&id).copied().unwrap_or(original);
@@ -1440,7 +1456,7 @@ impl Editor {
   self.slot.index.inventory.iter().filter_map(move |r|{
    let item=r.item_id?;
    let identity=Self::wand_identity(r).or_else(||self.legacy_wand_identity(r))?;
-   (self.unique_quantity_ids.contains(&r.id)&&!self.slot.index.inventory_wand_copies&&
+   (self.unique_quantity_ids.contains(&r.id)&&self.unique_appearance_available(r)&&!self.slot.index.inventory_wand_copies&&
     (Self::wand_materials(identity)==WAND_NIL_MATERIALS||self.wand_source_edit_safe(r.id,item))).then_some(r.id)
   }).chain(self.pending_wands.keys().copied().filter(|id|self.inventory_changes.contains_key(id)))
  }
@@ -2189,7 +2205,11 @@ impl Editor {
   if self.slot.index.inventory_palette_copies_incomplete{return None}
   if self.pending_palettes.contains_key(&id){
    if !self.inventory_changes.contains_key(&id){return None}
-  }else if !self.unique_quantity_ids.contains(&id){return None}
+  }else{
+   if !self.unique_quantity_ids.contains(&id){return None}
+   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+   if !self.unique_appearance_available(row){return None}
+  }
   let original=self.original_palette_variant(id)?;
   let current=self.palette_variant_changes.get(&id).copied().unwrap_or(original);
   let mut reserved=self.slot.index.inventory_palette_copies.clone();
@@ -2211,7 +2231,7 @@ impl Editor {
  }
  pub fn inventory_palette_edit_hints(&self)->impl Iterator<Item=u32>+'_{
   self.slot.index.inventory.iter().filter_map(move |r|{
-   if !self.unique_quantity_ids.contains(&r.id)||self.slot.index.inventory_palette_copies_incomplete{return None}
+   if !self.unique_quantity_ids.contains(&r.id)||!self.unique_appearance_available(r)||self.slot.index.inventory_palette_copies_incomplete{return None}
    let original=Self::palette_identity(r)?;
    (!self.slot.index.inventory_palette_copies.iter().any(|&p|Self::palette_equal(p,original))).then_some(r.id)
   }).chain(self.pending_palettes.keys().copied().filter(|id|self.inventory_changes.contains_key(id)))
@@ -2412,13 +2432,13 @@ impl Editor {
     }else if !a.iter().all(|&n|n>0)||!b.iter().all(|&n|crate::inventory_source::is_chef_color(n)){return None}
     return (chef_counts.get(&(item,a,b))==Some(&1)).then_some(row.id)
    }
-   if let Some(source)=self.furniture_source(row){
+   if let Some(source)=self.furniture_quantity_source(row){
     if crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX){return None}
     let key=furniture_key(source,furniture_variant(row.unique_data?)?)?;
     return (furniture_counts.get(&(item,key))==Some(&1)).then_some(row.id)
    }
    if !Self::is_flower_quantity_definition(item)||!crate::inventory_source::is_uncapped_required_unique_stack(item){return None}
-   self.flower_source(row)?;
+   self.flower_quantity_source(row)?;
    let v=flower_variant(row.unique_data?)?;
    // flower_source already validates state 0/6/7 for species, and
    // state 6 only for the source-verified crafted clothing outputs.

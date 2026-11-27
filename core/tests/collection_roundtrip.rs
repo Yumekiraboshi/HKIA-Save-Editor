@@ -5805,3 +5805,50 @@ fn large_exact_boba_and_approximate_palette_families_share_unbounded_stack_seman
   assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory().len(),516);
  }
 }
+
+#[test]
+fn existing_verified_unique_zero_refill_is_independent_of_last_copy_removal(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let palette=arr(vec![vec![6],arr(vec![arr(vec![f(0.25),f(0.5),f(-0.0),f(1.0)]);3])]);
+ let rows=[(897617923u32,plain_flower(6)),(61381969,furniture_payload([13,2,0])),
+  (1835273963,palette.clone()),(1429161083,arr(vec![vec![9],arr(vec![u(0),vec![0xc0],u(104),u(125),u(118)])]))];
+ let make=|reference:Option<Vec<u8>>,quantity:u32|{
+  let mut p=synthetic_payload("3.0.1");p[2]=30;p[3]=0x9c+u8::from(reference.is_some());
+  for (i,(item,payload)) in rows.iter().enumerate(){
+   p.extend(doc(1,arr(vec![u(4+i as u32),u(*item),u(21+i as u32),u(quantity),payload.clone()])));
+  }
+  // Matching equipped flower piece and copied palette. A partial HomeModel
+  // additionally protects the furniture/wand removal context, not their UIDs.
+  p.extend(doc(10,arr(vec![u(10),guid([1,2,3,4]),arr(vec![guid([0x7f2bd4e4,0x4c45f5cf,0x7f4ec1b4,0xa1107995])]),arr(vec![]),arr(vec![]),guid([1,2,3,4]),vec![0xc3],palette.clone()])));
+  p.extend(doc(22,arr(vec![u(11),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
+  let home=arr(vec![guid([41,42,43,44]),arr(vec![]),u(0)]);
+  p.extend(doc(32,arr(vec![u(12),guid([7,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![home])]))])])));
+  if let Some(reference)=reference{
+   let cafe=arr(vec![vec![0xc2],vec![0x80],u(0),u(0),guid([0;4]),arr(vec![reference]),u(0),u(0),u(0),l(0)]);
+   p.extend(doc(32,arr(vec![u(13),guid([8,0,0,0]),u(0),arr(vec![doc(38,cafe)])])));
+  }
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(None,0);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let before=e.inventory();
+  assert_eq!(before.len(),4);
+  assert!(before.iter().all(|r|r.editable&&r.quantity==0&&r.quantity_minimum==1));
+  assert!(e.inventory_flower_variants(4).is_empty());assert!(e.inventory_furniture_variants(5).is_empty());
+  assert!(e.inventory_palette_variants(6).is_empty());assert!(e.inventory_wand_variants(7).is_empty());
+  assert!(e.inventory_furniture_creation_variants(5).is_empty());assert!(e.inventory_wand_creation_variants(7).is_empty());
+  e.change_inventory_quantities(&[(4,0,2),(5,0,2),(6,0,2),(7,0,2)]).unwrap();
+  assert!(e.change_inventory_quantities(&[(4,2,0),(5,2,0),(6,2,0),(7,2,0)]).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),before);assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert!(saved.inventory().iter().all(|r|r.editable&&r.quantity==2&&r.quantity_minimum==1));
+  for (i,(_,payload)) in rows.iter().enumerate(){assert_eq!(saved.inventory_original_unique_payload(4+i as u32),Some(payload.as_slice()));}
+  assert!(saved.change_inventory_quantity(6,2,0).is_err());assert!(saved.inventory_palette_variants(6).is_empty());
+  assert_eq!(saved.inventory_unique_rows().map(|r|r.1).collect::<Vec<_>>(),vec![Some(21),Some(22),Some(23),Some(24)]);
+ }
+ for (i,(item,_)) in rows.iter().enumerate(){
+  let mut e=Editor::open(make(Some(arr(vec![u(*item),u(21+i as u32)])),0)).unwrap();
+  assert!(!e.inventory()[i].editable);assert!(e.change_inventory_quantity(4+i as u32,0,1).is_err());assert!(!e.dirty());
+ }
+}
