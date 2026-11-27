@@ -42,3 +42,11 @@ const materialIds=new Map<number,number>([
 export function wandVariantLabel(v:WandVariant,name:(item:number)=>string):string{
  return v.map(n=>materialIds.has(n)?name(materialIds.get(n)!):'—').join(' · ');
 }
+
+export type WandIdentity=[number,number,number];
+export function isWandIdentityWire(v:unknown):v is WandIdentity{
+ return Array.isArray(v)&&v.length===3&&v.every(n=>Number.isInteger(n)&&n>=0&&n<=2147483647);
+}
+export function wandIdentityOf(info:InventoryUniqueInfo|undefined):WandIdentity|null{
+ const pair=wandVariantOf(info);return pair&&info?[info.words[0]|0,...pair]:null;
+}

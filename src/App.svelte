@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPalettePreview,changeInventoryPaletteVariant,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafeVariants,changeInventoryCafeVariant,requestCafeCreationVariants,createInventoryCafeVariant,requestWandVariants,changeInventoryWandVariant,requestAbsentWandSources,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPalettePreview,changeInventoryPaletteVariant,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafeVariants,changeInventoryCafeVariant,requestCafeCreationVariants,createInventoryCafeVariant,requestWandVariants,changeInventoryWandIdentity,requestWandEditSources,requestAbsentWandSources,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,inventoryPatchesEqual,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -92,7 +92,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let cafeDraft=$state<CafeVariant|null>(null);
  let cafeSlot=$state(0);
  let wandDialogEl:HTMLDialogElement|undefined=$state();
- let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[];absent?:boolean;sourceChoices?:number[]}|null>(null);
+ let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[];absent?:boolean;sourceChoices?:number[];beforeSource?:number}|null>(null);
  let wandSelection=$state(-1);
  let wandSourceQuery=$state('');
  let bobaDialogEl:HTMLDialogElement|undefined=$state();
@@ -840,9 +840,10 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(busy||!snapshot||!edit?.sourceChoices?.includes(source)||snapshot.revision!==edit.revision)return;
   busy=true;error='';
   try{
-   const options=await requestWandCreationVariants(edit.documentId,source);
+   const options=await (edit.absent?requestWandCreationVariants(edit.documentId,source):requestWandVariants(edit.documentId,source));
+   const creationOptions=edit.absent?options:source===edit.beforeSource?await requestWandCreationVariants(edit.documentId):[];
    if(wandEdit!==edit||snapshot?.revision!==edit.revision)return;
-   wandEdit={...edit,before:[source,0],appearance:{...edit.appearance,sourceItemId:source},options,creationOptions:options};
+   wandEdit={...edit,before:edit.absent?[source,0]:edit.before,appearance:{...edit.appearance,sourceItemId:source},options,creationOptions};
    wandSelection=options.length?0:-1;
   }catch(e){error=describeError(e)}finally{busy=false}
  }
@@ -851,16 +852,16 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||!row.unique?.wandEditable||!before||!appearance)return;
   const revision=snapshot.revision;busy=true;error='';
   try{
-   const [options,creationOptions]=await Promise.all([requestWandVariants(row.documentId),requestWandCreationVariants(row.documentId)]);
+   const [options,creationOptions,sources]=await Promise.all([requestWandVariants(row.documentId),requestWandCreationVariants(row.documentId),!inventoryAddMode&&appearance.sourceItemId>0?requestWandEditSources(row.documentId):Promise.resolve([])]);
    if(!snapshot||snapshot.revision!==revision)return;
-   wandEdit={documentId:row.documentId,itemId:row.itemId,revision,before,appearance,options,creationOptions};wandSelection=-1;variantAddQuantity=1;await tick();
+   wandEdit={documentId:row.documentId,itemId:row.itemId,revision,before,appearance,options,creationOptions,beforeSource:appearance.sourceItemId,sourceChoices:sources.length?sources:undefined};wandSourceQuery='';wandSelection=-1;variantAddQuantity=1;await tick();
    if(wandDialogEl&&!wandDialogEl.open)wandDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
  }
  async function addInventoryWandVariant(){
   const edit=wandEdit,quantity=variantAddQuantity;
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
-  const next=edit.options[wandSelection];if(!next||!edit.creationOptions.some(v=>v.every((n,i)=>n===next[i]))||(edit.sourceChoices&&!edit.sourceChoices.includes(edit.before[0])))return;
+  const next=edit.options[wandSelection];if(!next||!edit.creationOptions.some(v=>v.every((n,i)=>n===next[i]))||(edit.absent&&edit.sourceChoices&&!edit.sourceChoices.includes(edit.before[0])))return;
   busy=true;error='';
   try{update(await createInventoryWandVariant(edit.documentId,edit.before,next,quantity));closeWandEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
@@ -871,7 +872,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
   const next=edit.options[wandSelection];if(!next)return;
   busy=true;error='';
-  try{update(await changeInventoryWandVariant(edit.documentId,edit.before,next));closeWandEditor();await persistDraft()}
+  try{update(await changeInventoryWandIdentity(edit.documentId,[edit.beforeSource??0,...edit.before],[edit.appearance.sourceItemId,...next]));closeWandEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
  }
  async function openBobaEditor(row:InventoryEntry){
@@ -1911,7 +1912,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     <label class="date-dialog-field">
      <span>{edit.absent?inventoryName(edit.itemId):wandName(edit.before)}</span>
      <select name="wand-variant" aria-label={inventoryName(edit.itemId)} bind:value={wandSelection} disabled={busy||Boolean(edit.sourceChoices&&!edit.appearance.sourceItemId)}>
-      {#if !edit.absent}<option value={-1}>{wandName(edit.before)}</option>{/if}
+      {#if !edit.absent&&edit.appearance.sourceItemId===edit.beforeSource}<option value={-1}>{wandName(edit.before)}</option>{/if}
       {#each edit.options as option,i}<option value={i} data-wand-variant={option.join(':')}>{wandName(option)}</option>{/each}
      </select>
     </label>
@@ -1926,7 +1927,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeWandEditor}>{copy.cancel}</button>
      {#if edit.creationOptions.length}
-      <button type="button" class="inventory-create-wand" disabled={busy||!validVariantAddQuantity||wandSelection<0||(edit.sourceChoices&&!edit.sourceChoices.includes(edit.before[0]))||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[wandSelection]?.[i]))} onclick={()=>void addInventoryWandVariant()}>{inventoryAddCopy(locale)}</button>
+      <button type="button" class="inventory-create-wand" disabled={busy||!validVariantAddQuantity||wandSelection<0||(edit.absent&&edit.sourceChoices&&!edit.sourceChoices.includes(edit.before[0]))||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[wandSelection]?.[i]))} onclick={()=>void addInventoryWandVariant()}>{inventoryAddCopy(locale)}</button>
      {/if}
      {#if !inventoryAddMode}<button type="submit" formnovalidate class="primary" disabled={busy||wandSelection<0}>{copy.apply}</button>{/if}
     </div>

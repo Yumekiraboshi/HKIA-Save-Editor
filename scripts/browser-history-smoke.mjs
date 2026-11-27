@@ -405,6 +405,15 @@ async function inventoryFirstItemWandSmoke(){
   await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('384749651');
   await card.locator('input[name="quantity"]').nth(1).waitFor();
   assert.deepEqual((await card.locator('input[name="quantity"]').evaluateAll(els=>els.map(e=>e.value))).sort(),['2','4']);
+  const firstIndex=(await card.locator('input[name="quantity"]').evaluateAll(els=>els.map(e=>e.value))).indexOf('2');
+  assert.ok(firstIndex>=0);
+  await card.nth(firstIndex).locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  await dialog.locator('input[name="wand-source-search"]').fill('315822');
+  await dialog.locator('select[name="wand-source"]').selectOption('315822');
+  await page.waitForFunction(()=>document.querySelector('select[name="wand-variant"]')?.options.length===35);
+  assert.equal(await select.locator('option[data-wand-variant="106:127"]').count(),0);
+  await select.selectOption(await select.locator('option[data-wand-variant="104:125"]').getAttribute('value'));
+  await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('384749651');
   await card.locator('input[name="quantity"]').nth(1).waitFor();
@@ -418,7 +427,8 @@ async function inventoryFirstItemWandSmoke(){
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());let at=0;
   const u=()=>{const n=v.getUint32(at,true);at+=4;return n};const count=u(),rows=[];
   for(let i=0;i<count;i++){const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();const words=Array.from({length:n},()=>u()|0);u();if(tag===9)rows.push(words)}
-  assert.ok(rows.some(w=>w.join(':')==='1185152302:106:127:0:-1:0'));
+  assert.ok(rows.some(w=>w.join(':')==='315822:104:125:0:-1:0'));
+  assert.ok(!rows.some(w=>w.join(':')==='1185152302:106:127:0:-1:0'));
   assert.ok(rows.some(w=>w.join(':')==='315822:106:127:0:-1:0'));
   assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST ITEM WAND PASS: explicit source selection, recovery and reparse');
  }finally{await context.close()}

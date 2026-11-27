@@ -2,7 +2,7 @@ import {HISTORY_MAX_BYTES,HISTORY_MAX_ROWS,MAX_INVENTORY_DRAFT_PATCHES} from './
 import {flowerVariantOf,isFlowerVariantWire,furnitureVariantOf,isFurnitureVariantWire} from './inventory-unique';
 import {paletteVariantOf,isPaletteVariantWire} from './inventory-palette-display';
 import {isCafeVariantWire} from './inventory-cafe-display';
-import {isWandVariantWire,wandVariantOf} from './inventory-wand-display';
+import {isWandVariantWire,wandVariantOf,isWandIdentityWire,wandIdentityOf} from './inventory-wand-display';
 import {isBobaVariantWire} from './inventory-boba-display';
 import {cloneStoredAchievementPatches,type StoredPatch} from './achievement-draft';
 import type {InventoryEntry,InventoryPatch} from './worker-client';
@@ -42,7 +42,9 @@ export function diffInventory(before:readonly InventoryEntry[],after:readonly In
    const cafeBefore=source.cafe?.variant,cafeAfter=row.cafe?.variant;
    if(cafeBefore&&cafeAfter&&cafeBefore.some((v,i)=>v!==cafeAfter[i]))result.push({documentId:row.documentId,before:cafeBefore,after:cafeAfter,kind:'cafe-variant'});
    const wandBefore=wandVariantOf(source.unique),wandAfter=wandVariantOf(row.unique);
-   if(wandBefore&&wandAfter&&wandBefore.some((v,i)=>v!==wandAfter[i]))result.push({documentId:row.documentId,kind:'wand-variant',before:wandBefore,after:wandAfter});
+   const identityBefore=wandIdentityOf(source.unique),identityAfter=wandIdentityOf(row.unique);
+   if(identityBefore&&identityAfter&&identityBefore[0]!==identityAfter[0])result.push({documentId:row.documentId,kind:'wand-identity',before:identityBefore,after:identityAfter});
+   else if(wandBefore&&wandAfter&&wandBefore.some((v,i)=>v!==wandAfter[i]))result.push({documentId:row.documentId,kind:'wand-variant',before:wandBefore,after:wandAfter});
    const bobaBefore=source.boba?.variant,bobaAfter=row.boba?.variant;
    if(bobaBefore&&bobaAfter&&bobaBefore.some((v,i)=>v!==bobaAfter[i]))result.push({documentId:row.documentId,before:bobaBefore,after:bobaAfter,kind:'boba-variant'});
    const paletteBefore=paletteVariantOf(source.unique),paletteAfter=paletteVariantOf(row.unique);
@@ -114,6 +116,10 @@ export function safeInventoryPatches(value:unknown):InventoryPatch[]{
   }else if(p.kind==='cafe-variant'){
    const before:unknown=p.before,after:unknown=p.after;
    if(!isCafeVariantWire(before)||!isCafeVariantWire(after)||before.every((v,i)=>v===after[i]))throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,kind:p.kind,before:[...before],after:[...after]});
+  }else if(p.kind==='wand-identity'){
+   const before:unknown=p.before,after:unknown=p.after;
+   if(!isWandIdentityWire(before)||!isWandIdentityWire(after)||before[0]===after[0])throw Error('DRAFT_INVALID');
    result.push({documentId:p.documentId,kind:p.kind,before:[...before],after:[...after]});
   }else if(p.kind==='wand-variant'){
    const before:unknown=p.before,after:unknown=p.after;

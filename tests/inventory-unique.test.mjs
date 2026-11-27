@@ -126,3 +126,13 @@ test('editable nil-source-payload wand accepts nonzero native source and draft c
  assert.throws(()=>decodeInventoryUnique(wire([1,8,0,0,9,5,6,0xffffffff,104,125,0,-1,0,4]),new Set([8])));
  assert.throws(()=>decodeInventoryUnique(wire([1,8,0,0,9,5,10,1185152302,104,125,0,7,4,6,6,0,0,4]),new Set([8])));
 });
+
+test('existing wand source CAS net draft distinguishes source replacement from pair edit',async()=>{
+ const {inventoryPatchesEqual}=await load('../src/draft-store.ts');
+ const a={documentId:8,itemId:384749651,quantity:2,editable:true,unique:{uniqueId:21,tag:9,fieldCount:5,words:[1185152302,104,125,0,0xffffffff,0],flowerEditable:false,wandEditable:true}};
+ const b={...a,unique:{...a.unique,words:[315822,106,127,0,0xffffffff,0]}};
+ const patches=diffInventory([a],[b]);
+ assert.deepEqual(patches,[{documentId:8,kind:'wand-identity',before:[1185152302,104,125],after:[315822,106,127]}]);
+ assert.ok(inventoryPatchesEqual(patches,safeInventoryPatches(patches)));
+ assert.ok(!inventoryPatchesEqual(patches,[{...patches[0],after:[315823,106,127]}]));
+});
