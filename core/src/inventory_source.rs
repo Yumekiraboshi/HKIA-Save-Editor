@@ -77,7 +77,7 @@ const CURRENCY_CREATION_IDS:&[i32]=&[
   #[test]fn complete_catalog_bag_policy_and_reference_fingerprints(){
    assert_eq!(BAG_FLAGS.len(),RULES.len());assert_eq!(ITEM_GUID_DENIAL_KEYS.len(),RULES.len());
    let hex=|b:&[u8]|crate::digest::sha256(b).iter().map(|x|format!("{x:02x}")).collect::<String>();
-   assert_eq!(hex(BAG_FLAGS),"a616a5ae6a5268a00ef79ebe0f6c23d4b40f1a55c5db94f49c1f7cbf6bb26b5a");
+   assert_eq!(hex(BAG_FLAGS),"0875fb94334dae0ab69fc90d715784375bc613fb9a6afad57804baa069687b0b");
    let bytes:Vec<_>=ITEM_GUID_DENIAL_KEYS.iter().flat_map(|k|k.to_le_bytes()).collect();
    assert_eq!(hex(&bytes),"0bd8235b2a3bad5263ec8a2144a0a84fa27d8bab4e27e60034190abc6d7a8396");
    assert_eq!(ITEM_GUID_DENIAL_KEYS.iter().collect::<std::collections::HashSet<_>>().len(),12163);
@@ -94,7 +94,7 @@ const CURRENCY_CREATION_IDS:&[i32]=&[
     }
     if f&4!=0{absent+=1;assert!(ordinary_quantity_limit(id).is_some())}
    }
-   assert_eq!((total,outfits,absent),(9920,6057,7551));
+   assert_eq!((total,outfits,absent),(9920,6057,7601));
    assert!(ordinary_creation_ids().all(ordinary_bag_creation_item));
    assert!(ordinary_bag_creation_item(216433));assert!(ordinary_bag_creation_item(15761463));
    for id in [12136138,20514331,15467283,47306696]{assert!(ordinary_bag_definition(id).is_some()&&ordinary_bag_creation_item(id));}
@@ -113,7 +113,7 @@ const CURRENCY_CREATION_IDS:&[i32]=&[
    assert!(ordinary_bag_creation_item(1763678003)&&ordinary_quantity_limit(1763678003)==Some(3));
    assert!(ordinary_bag_definition(1144225647).is_some()&&!ordinary_bag_creation_item(1144225647));
    assert!(ordinary_bag_definition(1455056332).is_some()&&ordinary_bag_creation_item(1455056332));
-   assert!(ordinary_bag_definition(484139114).is_some()&&!ordinary_bag_creation_item(484139114));
+   assert!(ordinary_bag_definition(484139114).is_some()&&ordinary_bag_creation_item(484139114));
    assert!(ordinary_bag_definition(197197205).unwrap().0&&ordinary_bag_creation_item(197197205));
   }
  }
@@ -132,9 +132,10 @@ mod currency_source_tests{
   let hash:String=crate::digest::sha256(&bytes).iter().map(|b|format!("{b:02x}")).collect();
   assert_eq!(hash,"e7448e16aec60a8ffdd27a48b948b669d6b2dc364a821e86c56aae5e3b716634");
   assert!(CURRENCY_CREATION_IDS.iter().all(|&id|ordinary_bag_creation_item(id)&&!ordinary_creation_item(id)));
-  assert_eq!(ordinary_bag_creation_ids().collect::<std::collections::HashSet<_>>().len(),7551);
+  assert_eq!(ordinary_bag_creation_ids().collect::<std::collections::HashSet<_>>().len(),7601);
   assert!(existing_currency_item(1205887707)&&!ordinary_bag_creation_item(1205887707));
-  for id in [484139114,2092387705,615026760,1141761080]{assert!(!existing_currency_item(id)&&!ordinary_bag_creation_item(id));}
+  for id in [484139114,2092387705,1141761080]{assert!(!existing_currency_item(id)&&ordinary_bag_creation_item(id));}
+  assert!(!existing_currency_item(615026760)&&!ordinary_bag_creation_item(615026760));
   assert!(!ordinary_bag_creation_item(709633628));
  }
 }
