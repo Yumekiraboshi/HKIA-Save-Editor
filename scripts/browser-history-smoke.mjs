@@ -26,7 +26,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -51,6 +51,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
  const model=arr([0],cafeCreateInventory?[10]:(editableFlower||editableFurniture||paletteCreationInventory||bobaCreateInventory||wandEditInventory||nestedWandInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(scaleInventory?[2064380032,1806222956,142358610].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
+  ...(resultArtInventory?[10455890,1217231008].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
   ...(paletteRemovalInventory?[doc(10,arr([8],hash(1,2,3,4),arr(),arr(),arr(),hash(1,2,3,4),[0xc3],
    paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
    doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
@@ -2205,6 +2206,37 @@ async function inventoryIconScaleSmoke(){
   console.log('CHROMIUM INVENTORY ICON SCALE PASS: three sizes of original fish and ordinary item');
  }finally{await context.close();}
 }
+async function inventoryNativeResultArtSmoke(){
+ // The first recipe/schematic result is in the original inventory atlas,
+ // the second resolves to the original shared placeholder.
+ for(const missing of [false,true]){
+  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+  try{
+   const page=await context.newPage();
+   if(missing)await page.route('**/inventory-art/index.json',r=>r.fulfill({status:503,body:'unavailable'}));
+   await page.goto(origin+base,{waitUntil:'networkidle'});
+   await page.locator('input[type="file"]').setInputFiles({name:'synthetic-native-result-art.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({resultArtInventory:true}))});
+   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+   await chooseTab(page,'inventory');
+   const search=page.locator('.inventory-controls input[type="search"]');
+   await search.fill('10455890');
+   const card=page.locator('.inventory-card').first();
+   await card.locator('[data-result-icon-target="357184380"][data-inventory-art="'+(missing?'native-result-unavailable':'native-result')+'"]').waitFor({timeout:30_000});
+   if(missing)assert.equal(await card.locator('.inventory-item-art .item-sprite').count(),0);
+   else{
+    const art=card.locator('[data-result-icon-target="357184380"]');
+    assert.ok(await art.evaluate(async el=>{
+     const css=getComputedStyle(el),url=css.backgroundImage.match(/^url\("(.+)"\)$/)?.[1];
+     if(!url||!url.includes('/inventory-art/sheet-008.webp')||css.backgroundPosition!=='-672px -672px')return false;
+     const image=new Image();image.src=url;await image.decode();return image.naturalWidth===1152&&image.naturalHeight===1152;
+    }));
+   }
+   await search.fill('1217231008');
+   await page.locator('.inventory-card .inventory-item-art [data-icon-fidelity="game-original-placeholder"]').waitFor({timeout:30_000});
+  }finally{await context.close();}
+ }
+ console.log('CHROMIUM NATIVE RESULT ICON PASS: original result Sprite, original placeholder, unavailable target does not substitute source art');
+}
 async function inventoryOriginalArtSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -2995,6 +3027,7 @@ async function run(){
  await ordinaryClothingRemovalSmoke();
  await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
+ await inventoryNativeResultArtSmoke();
  await inventoryIconScaleSmoke();
  await inventoryDynamicFlowerArtSmoke();
  await inventoryFlowerGrowthDisplaySmoke();
