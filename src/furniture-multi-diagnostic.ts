@@ -6,7 +6,7 @@ import type {RugNativeSources} from './furniture-rug-source';
 import type {RugCubeRequest,RugPayload,ReadRugPayload} from './furniture-rug-diagnostic';
 import {authoredRendererModel} from './furniture-authored-transforms';
 import {mergeStaticRendererBounds} from './furniture-renderer-bounds';
-import {uploadNativeGeometry,validateNativeGeometryLayout,type NativeMeshSource,type MeshAttributeLocations} from './native-furniture-mesh';
+import {uploadNativeGeometry,validateNativeGeometryLayout,nativeMissingUv1AliasesUv0,type NativeMeshSource,type MeshAttributeLocations} from './native-furniture-mesh';
 import {uploadNativeTexture,validateNativeTextureLayout,type NativeTextureSource,type Bc1Mode} from './native-texture-upload';
 import {uploadNativeCube,validateNativeCubeOrientation} from './native-cube-upload';
 import {createFurnitureForwardRenderer,validateFurnitureForwardInputs,type FurnitureForwardMaterial,type FurnitureForwardScene} from './furniture-forwardlit-gpu';
@@ -53,7 +53,8 @@ export function nativeBaseIsOpaque(s:NativeTextureSource,bytes:ArrayBuffer){
  * or when the only pattern sample is provably constant/unused. The one
  * original white ARGB32 texture is verified again at GPU upload. A null
  * masked pattern still requires the existing payload opacity proof before draw.
- * Never synthesize UV0 as UV1 or accept a missing UV for a spatial pattern. */
+ * Spatial patterns can use the source-proven UnityPlayer descriptor alias
+ * for the verified half2 layout only; no synthesized UV bytes. */
 export function furnitureForwardAttributeLocations(mesh:NativeMeshSource,material:FurnitureForwardMaterial,pattern:NativeTextureSource|null):MeshAttributeLocations{
  const active=(i:number)=>!!(mesh.channels[i]?.[3]&15);
  if([0,1,2,4].some(i=>!active(i)))fail('MESH_CHANNEL');
@@ -61,7 +62,10 @@ export function furnitureForwardAttributeLocations(mesh:NativeMeshSource,materia
  if(active(5)){locations[5]=5;return locations;}
  const white=pattern!==null&&pattern.format===5&&pattern.sha256==='9a8dcd3f9ff7aa3114e141f03c12989d363ea81fd74c02eea63c5f41489cb17a';
  if(white)validateNativeTextureLayout(pattern);
- if(!material.worldUV&&!white&&!(pattern===null&&material.baseColor[3]>0))fail('MESH_CHANNEL');
+ if(!material.worldUV&&!white&&!(pattern===null&&material.baseColor[3]>0)){
+  if(pattern!==null&&nativeMissingUv1AliasesUv0(mesh))locations[5]=5;
+  else fail('MESH_CHANNEL');
+ }
  return locations;
 }
 export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:FurnitureMultiRequest){
@@ -205,7 +209,7 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
  let blendState:{enabled:boolean;srcRGB:number;dstRGB:number;srcAlpha:number;dstAlpha:number;eqRGB:number;eqAlpha:number;depthMask:boolean;depthTest:boolean;depthFunc:number}|undefined;
  try{
   geometry=await uploadNativeGeometry(gl,resolved.geometry,await getBytes('geometry',resolved.geometry.geometrySha256,resolved.geometry.geometryBytes),
-   resolved.locations,true);
+   resolved.locations,true,true);
   const texture=async(t:NativeTextureSource)=>{
    const builtin=furnitureNativeBuiltinBytes(t);
    const key=(builtin?'builtin:':'source:')+t.sha256+':'+t.colorSpace+':'+t.format+':'+JSON.stringify(t.sampler)+':'+(request.bc1Modes[t.sha256]??'');

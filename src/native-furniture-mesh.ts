@@ -1,5 +1,5 @@
 /** Original interleaved static mesh transport for display-only WebGL2 previews.
- * No save rules, substitute UVs, or inferred geometry. */
+ * No save rules, synthetic vertex data, or inferred geometry. */
 export type MeshRange=readonly [offset:number,bytes:number,sha256:string];
 export type NativeSubmesh={firstByte:number;indexCount:number;firstVertex:number;vertexCount:number;bounds:readonly number[]};
 export type NativeMeshSource={submeshes?:readonly NativeSubmesh[];vertexCount:number;indexCount:number;stride:number;channels:readonly (readonly number[])[];vertexBytes:MeshRange;indexBytes:MeshRange;bounds:readonly (readonly number[])[]};
@@ -85,15 +85,21 @@ export function nativeMeshDrawRange(mesh:UploadedNativeMesh,submeshIndex?:number
  if(end!==mesh.indexCount*2)fail('DRAW_RANGE');
  return mesh.submeshes[submeshIndex];
 }
+/** Steam 3.0.1 UnityPlayer RVA 0x4a6f10: the layout builder retains the
+ * last nonzero UV descriptor and copies it for a requested missing UV.
+ * Scope this alias to the verified original single-stream half2 layout. */
+export function nativeMissingUv1AliasesUv0(m:NativeMeshSource){
+ return m.stride===32&&m.channels[4]?.join(',')==='0,28,1,2'&&m.channels[5]?.join(',')==='0,0,0,0';
+}
 /** Caller maps verified shader semantic channels to attribute locations.
- * Missing UV1 etc. must not be silently replaced with UV0. */
-export async function uploadNativeGeometry(gl:WebGL2RenderingContext,source:NativeGeometrySource,bytes:ArrayBuffer,locations:Readonly<Record<string,MeshAttributeLocations>>,allowSubmeshes=false):Promise<{meshes:ReadonlyMap<string,UploadedNativeMesh>;dispose:()=>void}>{
+ * Only the explicit native UV1 alias opt-in can bind a missing attribute. */
+export async function uploadNativeGeometry(gl:WebGL2RenderingContext,source:NativeGeometrySource,bytes:ArrayBuffer,locations:Readonly<Record<string,MeshAttributeLocations>>,allowSubmeshes=false,allowNativeUv1Alias=false):Promise<{meshes:ReadonlyMap<string,UploadedNativeMesh>;dispose:()=>void}>{
  await verifyNativeGeometry(source,bytes,allowSubmeshes);
  const max=gl.getParameter(gl.MAX_VERTEX_ATTRIBS) as number;
  if(Object.keys(locations).length!==Object.keys(source.meshes).length)fail('ATTRIBUTES');
  for(const [pid,m] of Object.entries(source.meshes)){
   const loc=locations[pid];if(!loc||loc[0]===undefined)fail('ATTRIBUTES');
-  const used=new Set<number>();for(const [channel,location] of Object.entries(loc)){const i=Number(channel);if(!int(i,0,13)||!(m.channels[i][3]&15)||!int(location,0,max-1)||used.has(location))fail('ATTRIBUTES');used.add(location);}
+  const used=new Set<number>();for(const [channel,location] of Object.entries(loc)){const i=Number(channel);if(!int(i,0,13)||(!(m.channels[i][3]&15)&&!(allowNativeUv1Alias&&i===5&&loc[4]!==undefined&&nativeMissingUv1AliasesUv0(m)))||!int(location,0,max-1)||used.has(location))fail('ATTRIBUTES');used.add(location);}
  }
  if(gl.getError()!==gl.NO_ERROR)fail('GPU_DIRTY');
  const oldVAO=gl.getParameter(gl.VERTEX_ARRAY_BINDING) as WebGLVertexArrayObject|null,oldBuffer=gl.getParameter(gl.ARRAY_BUFFER_BINDING) as WebGLBuffer|null;
@@ -105,7 +111,7 @@ export async function uploadNativeGeometry(gl:WebGL2RenderingContext,source:Nati
    for(const [target,r] of [[gl.ARRAY_BUFFER,m.vertexBytes],[gl.ELEMENT_ARRAY_BUFFER,m.indexBytes]] as const){
     const b=gl.createBuffer();if(!b)throw Error('NATIVE_MESH_GPU_CREATE');buffers.push(b);gl.bindBuffer(target,b);gl.bufferData(target,new Uint8Array(bytes,r[0],r[1]),gl.STATIC_DRAW);
    }
-   for(const [channel,location] of Object.entries(locations[pid])){const [,off,fmt,rawDim]=m.channels[Number(channel)];gl.enableVertexAttribArray(location);gl.vertexAttribPointer(location,rawDim&15,[gl.FLOAT,gl.HALF_FLOAT,gl.UNSIGNED_BYTE][fmt],fmt===2,m.stride,off);}
+   for(const [channel,location] of Object.entries(locations[pid])){const i=Number(channel);const [,off,fmt,rawDim]=m.channels[i===5&&allowNativeUv1Alias&&nativeMissingUv1AliasesUv0(m)?4:i];gl.enableVertexAttribArray(location);gl.vertexAttribPointer(location,rawDim&15,[gl.FLOAT,gl.HALF_FLOAT,gl.UNSIGNED_BYTE][fmt],fmt===2,m.stride,off);}
    if(gl.getError()!==gl.NO_ERROR)fail('GPU_UPLOAD');uploaded.set(pid,{vao,indexCount:m.indexCount,...(m.submeshes?{submeshes:Object.freeze(m.submeshes.map(s=>Object.freeze({firstByte:s.firstByte,indexCount:s.indexCount})))}:{})});
   }
   return {meshes:uploaded,dispose};

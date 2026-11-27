@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/native-furniture-mesh.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {validateNativeGeometryLayout,verifyNativeGeometry,uploadNativeGeometry,nativeMeshDrawRange}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {validateNativeGeometryLayout,verifyNativeGeometry,uploadNativeGeometry,nativeMeshDrawRange,nativeMissingUv1AliasesUv0}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const sha=b=>createHash('sha256').update(new Uint8Array(b)).digest('hex');
 function fixture(){
  const bytes=new ArrayBuffer(42),v=new DataView(bytes);v.setFloat32(12,1,true);v.setFloat32(28,1,true);v.setUint16(38,1,true);v.setUint16(40,2,true);
@@ -67,4 +67,23 @@ test('opt-in original submesh ranges validate every vertex window and refuse imp
  assert.throws(()=>nativeMeshDrawRange(mesh,2),/DRAW_SUBMESH/);
  assert.equal(nativeMeshDrawRange(mesh,1).firstByte,6);
  assert.equal(nativeMeshDrawRange(mesh,1).indexCount,3);
+});
+
+test('verified missing UV1 binds the exact same original half2 buffer range as UV0, only on opt-in',async()=>{
+ const bytes=new ArrayBuffer(102),view=new DataView(bytes);
+ view.setUint16(98,1,true);view.setUint16(100,2,true);
+ const mesh={vertexCount:3,indexCount:3,stride:32,channels:Array.from({length:14},()=>[0,0,0,0]),vertexBytes:[0,96,sha(bytes.slice(0,96))],indexBytes:[96,6,sha(bytes.slice(96))],bounds:[[0,0,0,1,1,1]]};
+ mesh.channels[0]=[0,0,0,3];mesh.channels[1]=[0,12,1,52];mesh.channels[2]=[0,20,1,4];mesh.channels[4]=[0,28,1,2];
+ const source={geometryBytes:102,geometrySha256:sha(bytes),meshes:{'1':mesh}};
+ assert.equal(nativeMissingUv1AliasesUv0(mesh),true);
+ const loc={'1':{0:0,1:1,2:2,4:4,5:5}},calls=[];
+ const gl={MAX_VERTEX_ATTRIBS:1,VERTEX_ARRAY_BINDING:2,ARRAY_BUFFER_BINDING:3,ARRAY_BUFFER:4,ELEMENT_ARRAY_BUFFER:5,STATIC_DRAW:6,FLOAT:7,HALF_FLOAT:8,UNSIGNED_BYTE:9,NO_ERROR:0,
+ getParameter:k=>k===1?16:null,getError:()=>0,createVertexArray:()=>({}),createBuffer:()=>({}),bindVertexArray(){},bindBuffer(){},bufferData(){},enableVertexAttribArray(){},vertexAttribPointer(...a){calls.push(a)},deleteVertexArray(){},deleteBuffer(){}};
+ await assert.rejects(uploadNativeGeometry(gl,source,bytes,loc,true),/ATTRIBUTES/);
+ const h=await uploadNativeGeometry(gl,source,bytes,loc,true,true);
+ assert.deepEqual(calls.filter(x=>x[0]===4||x[0]===5),[[4,2,8,false,32,28],[5,2,8,false,32,28]]);
+ assert.deepEqual(mesh.channels[5],[0,0,0,0]);h.dispose();
+ await assert.rejects(uploadNativeGeometry(gl,source,bytes,{'1':{0:0,5:5}},true,true),/ATTRIBUTES/);
+ const wrong=structuredClone(mesh);wrong.channels[5]=[0,0,0,16];assert.equal(nativeMissingUv1AliasesUv0(wrong),false);
+ wrong.channels[5]=[0,0,0,0];wrong.stride=36;assert.equal(nativeMissingUv1AliasesUv0(wrong),false);
 });
