@@ -1399,31 +1399,43 @@ impl Editor {
    Self::wand_key(item,next).is_some()
  }
  pub fn inventory_wand_nested_material_variants(&self,id:u32)->Vec<FurnitureVariant>{
+  self.wand_full_context(id).map_or_else(Vec::new,|(_,_,current,_)|
+   self.inventory_wand_nested_materials_for_pair(id,Self::wand_pair(current),false))
+ }
+ pub fn inventory_wand_nested_materials_for_pair(&self,id:u32,pair:WandVariant,creation:bool)->Vec<FurnitureVariant>{
   let Some((item,original,current,reserved))=self.wand_full_context(id)else{return Vec::new()};
-  if Self::wand_materials(current)==WAND_NIL_MATERIALS||!self.wand_source_edit_safe(id,item){return Vec::new()}
+  if Self::wand_materials(current)==WAND_NIL_MATERIALS||!self.wand_source_edit_safe(id,item)||
+   !crate::inventory_source::magic_wand_choices(pair)||(creation&&!self.wand_creation_gate(id,item)){return Vec::new()}
   let Some(source)=Self::wand_material_source(item,current[0])else{return Vec::new()};
-  let mut out=Vec::new();let old=Self::wand_key(item,current);
+  let mut out=Vec::new();let mut seen=HashSet::new();let old=Self::wand_key(item,current);
+  let original_key=Self::wand_key(item,original);
+  let mut target=current;target[1..3].copy_from_slice(&pair);
+  let mut offer=|target:WandData|{
+   let key=Self::wand_key(item,target);
+   if key!=old&&(!creation||key!=original_key)&&key.is_some_and(|k|!reserved.contains(&k))&&
+    Self::valid_furniture_target(source,Self::wand_materials(original),Self::wand_materials(target)){
+    let v=Self::wand_materials(target);if seen.insert(v){out.push(v)}
+   }
+  };
+  offer(target);
   for slot in source.slots{
    let i=slot.slot as usize+3;
    for n in std::iter::once(0).chain(slot.allowed.iter().copied()){
-    let mut target=current;target[i]=n;
-    let key=Self::wand_key(item,target);
-    if key!=old&&key.is_some_and(|k|!reserved.contains(&k))&&
-     Self::valid_furniture_target(source,Self::wand_materials(original),Self::wand_materials(target)){
-     let v=Self::wand_materials(target);if !out.contains(&v){out.push(v)}
-    }
+    let mut next=target;next[i]=n;offer(next);
    }
   }
   out
  }
  pub fn inventory_wand_nested_creation_material_variants(&self,id:u32)->Vec<FurnitureVariant>{
-  let Some((item,original,current,_))=self.wand_full_context(id)else{return Vec::new()};
-  if !self.wand_creation_gate(id,item){return Vec::new()}
-  let original_key=Self::wand_key(item,original);
-  self.inventory_wand_nested_material_variants(id).into_iter().filter(|&materials|{
-   let mut target=current;target[3..].copy_from_slice(&materials);
-   Self::wand_key(item,target)!=original_key
-  }).collect()
+  self.wand_full_context(id).map_or_else(Vec::new,|(_,_,current,_)|
+   self.inventory_wand_nested_materials_for_pair(id,Self::wand_pair(current),true))
+ }
+ pub fn inventory_wand_nested_pairs(&self,id:u32,creation:bool)->Vec<WandVariant>{
+  let Some((_,_,current,_))=self.wand_full_context(id)else{return Vec::new()};
+  if Self::wand_materials(current)==WAND_NIL_MATERIALS{return Vec::new()}
+  crate::inventory_source::WAND_MAGIC.iter().flat_map(|&(magic,_)|
+   crate::inventory_source::WAND_FLECK.iter().map(move |&(fleck,_)|[magic,fleck]))
+   .filter(|&pair|pair!=Self::wand_pair(current)&&!self.inventory_wand_nested_materials_for_pair(id,pair,creation).is_empty()).collect()
  }
  pub fn change_inventory_wand_nested(&mut self,id:u32,expected:WandData,next:WandData)->Result<(),Error>{
   let (item,original,current,reserved)=self.wand_full_context(id).ok_or(Error::Schema)?;

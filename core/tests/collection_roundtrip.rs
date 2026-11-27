@@ -3959,6 +3959,10 @@ fn furniture_source_wand_edits_and_additions_preserve_exact_nested_identity(){
   assert!(e.inventory_wand_nested_material_variants(4).contains(&[13,3,0]));
   assert!(e.inventory_wand_nested_creation_material_variants(4).contains(&[13,3,0]));
   assert!(!e.inventory_wand_nested_material_variants(4).contains(&[502,2,0]));
+  assert!(e.inventory_wand_nested_pairs(4,true).contains(&[106,127]));
+  let combined=e.inventory_wand_nested_materials_for_pair(4,[106,127],true);
+  assert!(combined.contains(&[13,2,0])&&combined.contains(&[502,2,0]));
+  assert!(e.inventory_wand_nested_materials_for_pair(4,[999,127],false).is_empty());
   assert!(!e.inventory_wand_source_creation_variants(candidate,source).contains(&[104,125]));
   assert!(e.change_inventory_wand_nested(4,before,[source,104,125,502,2,0]).is_err());
   assert!(e.change_inventory_wand_nested(4,before,[source,104,125,285,2,0]).is_err());
@@ -3974,6 +3978,10 @@ fn furniture_source_wand_edits_and_additions_preserve_exact_nested_identity(){
   let material_child=e.create_inventory_wand_nested(4,after,material_target,4).unwrap();
   assert!(!e.inventory_wand_nested_creation_material_variants(4).contains(&material));
   let child=e.create_inventory_wand_nested(4,after,[source,106,125,13,3,0],3).unwrap();
+  let combination=[source,106,127,502,3,0];
+  assert!(e.inventory_wand_nested_materials_for_pair(4,[106,127],true).contains(&[502,3,0]));
+  let combined_child=e.create_inventory_wand_nested(4,after,combination,5).unwrap();
+  assert!(!e.inventory_wand_nested_materials_for_pair(4,[106,127],true).contains(&[502,3,0]));
   assert!(matches!(e.inventory_unique_data(child),Some(U::WandAppearance{source_item_id:61381969,magic:106,fleck:125,source_tag:8,source_count:3,..})));
   assert_eq!(e.inventory_unique_data(child).unwrap().display_words().1,vec![61381969,106,125,0,8,3,13,3,0]);
   assert!(e.create_inventory_wand_nested(4,after,[source,106,125,13,3,0],1).is_err());
@@ -3987,6 +3995,7 @@ fn furniture_source_wand_edits_and_additions_preserve_exact_nested_identity(){
   assert_eq!(saved.inventory_original_unique_payload(5),Some(peer.as_slice()));
   assert!(saved.inventory().iter().any(|r|r.quantity==3&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(child)));
   assert!(saved.inventory().iter().any(|r|r.quantity==4&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(material_child)));
+  assert!(saved.inventory().iter().any(|r|r.quantity==5&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(combined_child)));
   saved.change_inventory_quantity(4,0,2).unwrap();assert!(Editor::open(saved.export().unwrap()).is_ok());
  }
  for peer in [wand(source,104,Some([13,2,0])),wand(source,104,Some([285,2,0])),wand(source,104,Some([0,0,0])),wand(315822,104,Some([13,2,0]))]{

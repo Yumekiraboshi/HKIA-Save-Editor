@@ -452,6 +452,9 @@ async function inventoryNestedWandSmoke(){
   const pair=dialog.locator('select[name="wand-variant"]');
   const choice=await pair.locator('option[data-wand-variant="106:127"]').getAttribute('value');assert.ok(choice!==null);
   await pair.selectOption(choice);
+  await materials.locator('option[data-wand-material="502:3:0"]').waitFor();
+  const combinedChoice=await materials.locator('option[data-wand-material="502:3:0"]').getAttribute('value');assert.ok(combinedChoice!==null);
+  await materials.selectOption(combinedChoice);
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-wand:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('384749651');
@@ -481,7 +484,7 @@ async function inventoryNestedWandSmoke(){
   const u=()=>{const n=v.getUint32(at,true);at+=4;return n};const count=u(),rows=[];
   for(let i=0;i<count;i++){const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();const words=Array.from({length:n},()=>u()|0);u();if(tag===9)rows.push(words)}
   assert.ok(rows.some(w=>w.join(':')==='61381969:104:125:0:8:3:13:3:0'));
-  assert.ok(rows.some(w=>w.join(':')==='61381969:106:127:0:8:3:13:3:0'));
+  assert.ok(rows.some(w=>w.join(':')==='61381969:106:127:0:8:3:502:3:0'));
   assert.ok(rows.some(w=>w[0]===61381969&&w[4]===8&&w.slice(6).join(':')===materialOnlyKey));
   assert.equal(rows.length,3);
   assert.deepEqual(errors,[]);console.log('CHROMIUM NESTED FURNITURE WAND PASS: material edit, new pair, material-only Add, recovery and reparse');
