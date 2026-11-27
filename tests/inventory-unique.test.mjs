@@ -136,3 +136,20 @@ test('existing wand source CAS net draft distinguishes source replacement from p
  assert.ok(inventoryPatchesEqual(patches,safeInventoryPatches(patches)));
  assert.ok(!inventoryPatchesEqual(patches,[{...patches[0],after:[315823,106,127]}]));
 });
+
+test('nested furniture wand snapshot and net draft preserve all three material words',async()=>{
+ const {wandNestedOf,wandVariantOf}=await load('../src/inventory-wand-display.ts');
+ const {inventoryPatchesEqual}=await load('../src/draft-store.ts');
+ const row=decodeInventoryUnique(wire([1,8,1,21,9,5,9,61381969,104,125,0,8,3,13,2,0,4]),new Set([8])).get(8);
+ assert.equal(row.wandEditable,true);assert.deepEqual(wandVariantOf(row),[104,125]);assert.deepEqual(wandNestedOf(row),[61381969,104,125,13,2,0]);
+ const a={documentId:8,itemId:384749651,quantity:2,editable:true,unique:row};
+ const b={...a,unique:{...row,words:[61381969,104,125,0,8,3,13,3,0]}};
+ const patch=diffInventory([a],[b]);
+ assert.deepEqual(patch,[{documentId:8,kind:'wand-nested',before:[61381969,104,125,13,2,0],after:[61381969,104,125,13,3,0]}]);
+ assert.ok(inventoryPatchesEqual(patch,safeInventoryPatches(patch)));
+ const add=diffInventory([],[{...b,documentId:2147483649,unique:{...b.unique,uniqueId:null}}]);
+ assert.deepEqual(add,[{documentId:2147483649,itemId:384749651,variant:[104,125],quantity:2,kind:'wand-create',sourceItemId:61381969,nestedMaterials:[13,3,0]}]);
+ assert.ok(inventoryPatchesEqual(add,safeInventoryPatches(add)));
+ assert.ok(!inventoryPatchesEqual(add,[{...add[0],nestedMaterials:[13,2,0]}]));
+ assert.throws(()=>decodeInventoryUnique(wire([1,8,1,21,9,5,10,61381969,104,125,0,7,4,6,6,0,0,4]),new Set([8])));
+});

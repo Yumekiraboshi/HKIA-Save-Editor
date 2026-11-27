@@ -27,7 +27,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -49,7 +49,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const placedFurniture=arr(u32(3202680),u32(0),u32(0),u32(0),u32(0),u32(0),[0xc0],[0xc0],arr(),arr(),u32(0),arr(),u32(0));
  const furnitureHome=arr(hash(41,42,43,44),arr(),u32(0),u32(0),hash(0,0,0,0),i64(0n),[0xc0],[0xc2],[0xc0],arr(placedFurniture),[0xc0],[0xc0],u32(0),u32(0),arr());
  const furnitureHomeObject=doc(32,arr([10],hash(10,0,0,0),[0],arr(doc(8,arr(arr(furnitureHome))))));
- const model=arr([0],cafeCreateInventory?[10]:(editableFlower||editableFurniture||paletteCreationInventory||bobaCreateInventory||wandEditInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
+ const model=arr([0],cafeCreateInventory?[10]:(editableFlower||editableFurniture||paletteCreationInventory||bobaCreateInventory||wandEditInventory||nestedWandInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(paletteRemovalInventory?[doc(10,arr([8],hash(1,2,3,4),arr(),arr(),arr(),hash(1,2,3,4),[0xc3],
    paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
@@ -64,6 +64,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
    ...(['flower','flower-equipped'].includes(ordinaryClothingInventory)?[doc(1,arr([8],u32(897617923),u32(11),u32(6),arr([7],arr([6],u32(6),u32(0),u32(0)))))]:[])]:[]),
   ...(emptyMaterialInventory?[doc(1,arr([9],u32(emptyMaterialInventory==='currency'?348154640:1877756618),[0],u32(6),[0xc0])),doc(1,arr([10],u32(emptyMaterialInventory==='currency'?1774854033:627013240),[0],u32(0),[0xc0]))]:[]),
   ...(wandEditInventory?[chef(8,1429161083,arr([9],arr([0],[0xc0],u32(104),u32(125),u32(118))))]:[]),
+  ...(nestedWandInventory?[chef(8,384749651,arr([9],arr(u32(61381969),arr([8],arr(u32(13),u32(2),u32(0))),u32(104),u32(125),u32(0))))]:[]),
   ...(editableFlower?[flower(8,1,0,0)]:[]),
   ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
   ...(cafeCreateInventory?[chef(8,1338995084,arr([3],arr(arr(u32(44),u32(49),u32(48)),arr(u32(6),u32(46),u32(9))))),chef(9,1932639321,arr([3],arr(arr(u32(44),u32(137)),arr(u32(6),u32(10))))),doc(1,arr([10],u32(1643431747),[0],u32(1),[0xc0]))]:[]),
@@ -431,6 +432,65 @@ async function inventoryFirstItemWandSmoke(){
   assert.ok(!rows.some(w=>w.join(':')==='1185152302:106:127:0:-1:0'));
   assert.ok(rows.some(w=>w.join(':')==='315822:106:127:0:-1:0'));
   assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST ITEM WAND PASS: explicit source selection, recovery and reparse');
+ }finally{await context.close()}
+}
+async function inventoryNestedWandSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-nested-wand.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({nestedWandInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');const search=page.locator('.inventory-controls input[type="search"]');await search.fill('384749651');
+  const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="wand-editor-title"]');
+  await card.locator('.inventory-unique-edit-button:not([disabled])').click();await dialog.waitFor();
+  const materials=dialog.locator('select[name="wand-nested-material"]');
+  const material=await materials.locator('option[data-wand-material="13:3:0"]').getAttribute('value');assert.ok(material!==null);
+  await materials.selectOption(material);
+  await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await card.locator('.inventory-unique-edit-button:not([disabled])').click();await dialog.waitFor();
+  const pair=dialog.locator('select[name="wand-variant"]');
+  const choice=await pair.locator('option[data-wand-variant="106:127"]').getAttribute('value');assert.ok(choice!==null);
+  await pair.selectOption(choice);
+  const combinedOption=dialog.locator('select[name="wand-nested-material"]:not([disabled]) option[data-wand-material="502:3:0"]');
+  await page.waitForFunction(()=>{const dialog=document.querySelector('dialog[aria-labelledby="wand-editor-title"]');return Boolean(dialog?.querySelector('select[name="wand-variant"]:not([disabled])'))});
+  assert.equal(await dialog.locator('[role="alert"]').count(),0,await dialog.locator('[role="alert"]').allTextContents().then(v=>v.join(' ')));
+  await combinedOption.waitFor({state:'attached'});
+  const combinedChoice=await combinedOption.getAttribute('value');assert.ok(combinedChoice!==null);
+  await materials.selectOption(combinedChoice);
+  await dialog.locator('input[name="variant-add-quantity"]').fill('3');
+  await dialog.locator('.inventory-create-wand:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('384749651');
+  await card.locator('.inventory-add-source:not([disabled])').first().click();await dialog.waitFor();
+  const materialOnly=materials.locator('option[data-wand-material]').first();
+  const materialOnlyKey=await materialOnly.getAttribute('data-wand-material'),materialOnlyValue=await materialOnly.getAttribute('value');
+  assert.ok(materialOnlyKey&&materialOnlyValue!==null);
+  await materials.selectOption(materialOnlyValue);
+  assert.equal(await pair.inputValue(),'-1');
+  await dialog.locator('input[name="variant-add-quantity"]').fill('4');
+  assert.equal(await dialog.locator('button[type="submit"]').count(),0);
+  await dialog.locator('.inventory-create-wand:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('384749651');
+  const quantities=card.locator('input[name="quantity"]');
+  await quantities.nth(2).waitFor();
+  assert.deepEqual((await quantities.evaluateAll(els=>els.map(e=>e.value))).sort(),['1','3','4']);
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('384749651');await quantities.nth(2).waitFor();
+  assert.deepEqual((await quantities.evaluateAll(els=>els.map(e=>e.value))).sort(),['1','3','4']);
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_unique_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());let at=0;
+  const u=()=>{const n=v.getUint32(at,true);at+=4;return n};const count=u(),rows=[];
+  for(let i=0;i<count;i++){const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();const words=Array.from({length:n},()=>u()|0);u();if(tag===9)rows.push(words)}
+  assert.ok(rows.some(w=>w.join(':')==='61381969:104:125:0:8:3:13:3:0'));
+  assert.ok(rows.some(w=>w.join(':')==='61381969:106:127:0:8:3:502:3:0'));
+  assert.ok(rows.some(w=>w[0]===61381969&&w[4]===8&&w.slice(6).join(':')===materialOnlyKey));
+  assert.equal(rows.length,3);
+  assert.deepEqual(errors,[]);console.log('CHROMIUM NESTED FURNITURE WAND PASS: material edit, new pair, material-only Add, recovery and reparse');
  }finally{await context.close()}
 }
 async function inventoryWandEditSmoke(){
@@ -2747,6 +2807,7 @@ async function run(){
  await inventoryWandEditSmoke();
  await inventoryFirstWandSmoke();
  await inventoryFirstItemWandSmoke();
+ await inventoryNestedWandSmoke();
  await inventoryBobaFullCreationSmoke();
  await inventoryFirstChefSmoke();
  await inventoryCafeEditSmoke();
