@@ -272,3 +272,7 @@ For the already supported 50 absent Item IDs only, a currently available origina
 #### Native preview for composed palette edits
 
 The palette dialog refreshes one-channel choices against its uncommitted full tuple, using the existing Rust source and peer checks. The Add action is offered only when the complete draft satisfies the same native creation predicate as the final CAS, including replacing all inherited non-source colors. Preview and per-channel reset do not mutate history or save data. No new color source, absent Item ID generation, or entitlement change is authorized.
+
+#### Empty and refill an ordinary furniture base alongside custom variants
+
+The existing ordinary furniture zero/refill gate also accepts a complete single nil/UID-zero base when every other saved stack of the same Item ID is a source-validated, distinct nondefault tag-8 variant. Reuse the existing normalized original/effective identity and reference checks; a second base, normalized default alias, opaque payload or referenced furniture blocks the operation. Preserve all native identities and payloads, including the base at zero. No physical removal, placement edit or entitlement change. Game acceptance remains unverified.
