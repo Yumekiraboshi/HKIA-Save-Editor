@@ -3,7 +3,8 @@
  * node scripts/furniture-pack-native-smoke.mjs --pack /tmp/staged-pack
  *   --manifest-sha256 <independent digest> --manifest-bytes <independent length>
  *   --item 302413286 --limit 64
- * Omit --item to scan staged models. Use --offset to resume bounded windows.
+ * Omit --item to scan staged models. Use --defaults-only for one case per model.
+ * Use --offset to resume bounded windows.
  */
 import assert from 'node:assert/strict';
 import {readFileSync,statSync,realpathSync} from 'node:fs';
@@ -15,7 +16,7 @@ import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
 import {chromium} from 'playwright-core';
 import {furniturePackDiagnosticCases,furniturePackDiagnosticWindow} from './furniture-pack-diagnostic-cases.mjs';
-const {values:a}=parseArgs({options:{pack:{type:'string'},'manifest-sha256':{type:'string'},'manifest-bytes':{type:'string'},item:{type:'string'},offset:{type:'string',default:'0'},limit:{type:'string',default:'64'},size:{type:'string',default:'160'}}});
+const {values:a}=parseArgs({options:{pack:{type:'string'},'manifest-sha256':{type:'string'},'manifest-bytes':{type:'string'},item:{type:'string'},'defaults-only':{type:'boolean',default:false},offset:{type:'string',default:'0'},limit:{type:'string',default:'64'},size:{type:'string',default:'160'}}});
 assert.ok(a.pack&&/^[0-9a-f]{64}$/.test(a['manifest-sha256']??''),'independent manifest SHA-256 required');
 const integer=(v,min,max)=>{assert.ok(typeof v==='string'&&/^\d+$/.test(v),'integer argument');const n=Number(v);assert.ok(Number.isSafeInteger(n)&&n>=min&&n<=max,'argument bounds');return n;};
 const expected={sha256:a['manifest-sha256'],bytes:integer(a['manifest-bytes'],1,32*1024*1024)};
@@ -33,7 +34,7 @@ const p=JSON.parse(manifest.toString('utf8'));
 const read=path=>JSON.parse(readFileSync(new URL('../'+path,import.meta.url)));
 const source={catalog:read('public/inventory-ui/furniture-customization-v3.0.1.json'),variants:read('data/furniture-material-render-source-v3.0.1.json')};
 const visual=read('data/furniture-visual-source-v3.0.1.json'),addressables=read('data/furniture-addressables-v3.0.1.json'),authored=read('data/furniture-preview-camera-v3.0.1.json');
-const window=furniturePackDiagnosticWindow(furniturePackDiagnosticCases(source.catalog,p.geometry.rows.map(x=>x.itemId),a.item===undefined?undefined:integer(a.item,1,Number.MAX_SAFE_INTEGER)),integer(a.offset,0,Number.MAX_SAFE_INTEGER),integer(a.limit,1,256));
+const window=furniturePackDiagnosticWindow(furniturePackDiagnosticCases(source.catalog,p.geometry.rows.map(x=>x.itemId),a.item===undefined?undefined:integer(a.item,1,Number.MAX_SAFE_INTEGER),a['defaults-only']),integer(a.offset,0,Number.MAX_SAFE_INTEGER),integer(a.limit,1,256));
 const allow=new Map();
 const add=(kind,sha,bytes)=>{
  assert.ok(/^[0-9a-f]{64}$/.test(sha)&&Number.isSafeInteger(bytes)&&bytes>0&&bytes<=96*1024*1024,'payload metadata');
@@ -76,7 +77,7 @@ try{
    try{
     const fit=api.fitFurnitureMultiStaticBounds(sources,{...common,...c});
     const frame=await api.renderFurnitureDiagnosticFrame(sources,fit.request,read,size);
-    out.push({...c,status:'rendered-diagnostic',sha256:await digest(frame.rgba),visiblePixels:frame.visiblePixels,hiddenRgbPixels:frame.hiddenRgbPixels,partialAlphaPixels:frame.partialAlphaPixels,renderers:frame.renderers,uniqueTextures:frame.uniqueTextures});
+    out.push({...c,status:'rendered-diagnostic',sha256:await digest(frame.rgba),visiblePixels:frame.visiblePixels,hiddenRgbPixels:frame.hiddenRgbPixels,partialAlphaPixels:frame.partialAlphaPixels,changedPixels:frame.changedPixels,hiddenChangedPixels:frame.hiddenChangedPixels,renderers:frame.renderers,uniqueTextures:frame.uniqueTextures});
    }catch(e){out.push({...c,status:'failed',reason:String(e instanceof Error?e.message:e).slice(0,300)});}
   }
   return out;
@@ -84,6 +85,6 @@ try{
  assert.equal(result.length,window.cases.length);
  const rendered=result.filter(x=>x.status==='rendered-diagnostic'),failures=result.filter(x=>x.status==='failed');
  const reasonCounts=Object.create(null);for(const x of failures)reasonCounts[x.reason]=(reasonCounts[x.reason]??0)+1;
- console.log(JSON.stringify({schema:'HKIA.FurniturePackDiagnostic.1',manifestPin:expected,sourceVersion:'3.0.1',models:p.geometry.rows.length,totalCases:window.total,offset:window.offset,nextOffset:window.nextOffset,size,camera:'authored-relative-diagnostic',lighting:'synthetic-diagnostic',cubeOrientation:'unverified',bc1Mode:'rgb-diagnostic',runtimeRoot:'identity-diagnostic',clear:'transparent-black-diagnostic',renderFidelity:'unverified',rendered:rendered.length,failed:failures.length,distinctRawFrames:new Set(rendered.map(x=>x.sha256)).size,requests:requests.size,reasonCounts,routeFailures,result},null,2));
+ console.log(JSON.stringify({schema:'HKIA.FurniturePackDiagnostic.1',manifestPin:expected,sourceVersion:'3.0.1',models:p.geometry.rows.length,caseMode:a['defaults-only']?'defaults-only':'default-and-independent-slots',totalCases:window.total,offset:window.offset,nextOffset:window.nextOffset,size,camera:'authored-relative-diagnostic',lighting:'synthetic-diagnostic',cubeOrientation:'unverified',bc1Mode:'rgb-diagnostic',runtimeRoot:'identity-diagnostic',clear:'transparent-black-diagnostic',renderFidelity:'unverified',rendered:rendered.length,failed:failures.length,distinctRawFrames:new Set(rendered.map(x=>x.sha256)).size,requests:requests.size,reasonCounts,routeFailures,result},null,2));
  if(failures.length||routeFailures.length||!rendered.length)process.exitCode=1;
 }finally{await browser.close();}
