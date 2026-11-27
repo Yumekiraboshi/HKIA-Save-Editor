@@ -302,7 +302,7 @@
 .inventory-card-heading{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;flex:1}
 .inventory-item-art{display:flex;align-items:center;justify-content:center;flex:none;width:64px;height:64px;overflow:hidden}
  /* Scale the entire original sprite cell, not its background coordinates. */
-.inventory-item-art .item-sprite{flex:0 0 96px;transform:scale(.6666667)}
+.inventory-item-art .item-sprite{flex:0 0 96px;transform:scale(calc(.6666667 * var(--inventory-icon-scale,1)))}
 .inventory-item-art .item-art-empty{font-size:24px}
 .inventory-name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;overflow-wrap:anywhere;text-align:center;font-size:11px;line-height:1.35;min-height:2.7em;width:100%}
 .inventory-quantity-form{display:flex;align-items:center;gap:4px}
