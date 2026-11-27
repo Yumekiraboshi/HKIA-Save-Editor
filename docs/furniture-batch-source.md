@@ -21,3 +21,14 @@ python scripts/batch-furniture-base-materials.py --root /path/to/Steam-source --
 python scripts/pack-furniture-batches.py --source /tmp/hkia-next --materials /tmp/hkia-next-materials --prior prior.zip --prior-sha256 <prior-sha256> --out /tmp/hkia-next-unified.zip
 ```
 Resume checks the pinned prior ZIP and exact Item ID / visual GUID / bundle and pattern GUID / bundle crosswalks. The full plan counts remain unchanged; the returned model and pattern lists contain only missing identities. Packing consumes the existing batch receipts and admits a model only with its complete material closure. The existing unified assembler revalidates the previous pack and the new geometry, texture and dependency graph. Unresolved results are reported, not fabricated. Omit --materials for a pattern-only delta. No automatic publication or proof of render fidelity.
+
+### Rebuild without the previous source pack
+
+The previous ZIP is optional. To include the two required original reflection cubemaps in a fresh pack, use the existing light-region extractor with its exact scene and preset bundles:
+
+```sh
+python scripts/extract-furniture-light-region-source.py <original-scene-bundle> <original-networkedprototypes-bundle> --out /tmp/hkia-light/furniture-light-region-source-v3.0.1.json --staging /tmp/hkia-light
+python scripts/pack-furniture-batches.py --source /tmp/hkia-batch --materials /tmp/hkia-materials --lighting-stage /tmp/hkia-light --out /tmp/hkia-unified.zip
+```
+
+The packer checks the full extracted manifest against the committed original scene evidence, both cubemap payload hashes and lengths, and the existing assembler's exact face/mip coverage. This eliminates dependence on a prior ZIP for the shared reflection payloads. Existing pattern-only and incremental packs remain supported. A pack still needs complete source model/material graphs before it can render; runtime lighting and face orientation are not inferred or verified by packing.
