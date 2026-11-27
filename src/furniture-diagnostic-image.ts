@@ -54,9 +54,10 @@ async function renderDiagnostic<T>(sources:FurnitureMultiSources,request:Furnitu
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   let clearRgba:readonly [number,number,number,number]=[0,0,0,0];
   if(clearRgb!==undefined){
-   const baseline=new Uint8Array(4);gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,baseline);
+   const baseline=new Uint8Array(size*size*4);gl.readPixels(0,0,size,size,gl.RGBA,gl.UNSIGNED_BYTE,baseline);
    if(gl.isContextLost()||gl.getError()!==gl.NO_ERROR||baseline[3]!==0)throw Error('FURNITURE_DIAGNOSTIC_CLEAR_READ');
    clearRgba=[baseline[0],baseline[1],baseline[2],baseline[3]];
+   if(compareFurnitureDiagnosticRgba(baseline,clearRgba).changedPixels)throw Error('FURNITURE_DIAGNOSTIC_CLEAR_NONUNIFORM');
   }
   const outcome=await draw(gl,sources,request,read);
   if(gl.isContextLost()||gl.getError()!==gl.NO_ERROR)throw Error('FURNITURE_DIAGNOSTIC_DRAW');
