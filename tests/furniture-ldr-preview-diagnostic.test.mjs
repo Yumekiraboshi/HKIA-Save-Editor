@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {fileURLToPath} from 'node:url';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/furniture-ldr-preview-diagnostic.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {prepareDefaultFurnitureLdrDiagnostic,applyFurnitureLdrDiagnostic,compositeFurnitureLdrDiagnostic,renderFurnitureLdrDiagnostic}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {prepareDefaultFurnitureLdrDiagnostic,applyFurnitureLdrDiagnostic,compositeFurnitureLdrDiagnostic,renderFurnitureLdrDiagnostic,applyFurnitureLdrGpuDiagnostic,renderFurnitureLdrGpuDiagnostic}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const clear=[49,77,121,0],size=32;
 const post={vignetteColor:[0,0,0],vignetteAspect:1,vignetteCenter:[.5,.5],vignetteIntensity:0,vignetteSmoothness:1,output:'linear',exposureMultiplier:1};
 const atlas=()=>{
@@ -60,5 +60,15 @@ test('one integrated call runs common draw, reads both raw and graded channels a
  });
  assert.deepEqual(events,['read','draw','read','release']);
  assert.deepEqual(result.source.rgba,frame.rgba);assert.deepEqual(result.rgba,frame.rgba);assert.equal(result.gradedHiddenChangedPixels,1);
+ assert.equal(canvas.width,0);assert.equal(canvas.height,0);
+});
+
+test('GPU grading refuses invalid frames, unsupported user LUTs and unavailable contexts',async()=>{
+ const frame=makeFrame(),plan={atlas:atlas(),post},never=()=>{throw Error('UNEXPECTED_CANVAS');};
+ assert.throws(()=>applyFurnitureLdrGpuDiagnostic({...frame,rgba:new Uint8Array(4)},plan,never),/FRAME/);
+ assert.throws(()=>applyFurnitureLdrGpuDiagnostic(frame,{...plan,post:{...post,userLut:{weight:0}}},never),/USER_LUT_UNSUPPORTED/);
+ await assert.rejects(renderFurnitureLdrGpuDiagnostic({}, {}, async()=>new ArrayBuffer(0),{...plan,post:{...post,userLut:{weight:0}}},{size:32,clearRgb:[0,0,0]},never),/GPU_USER_LUT_UNSUPPORTED/);
+ const canvas={width:0,height:0,getContext:()=>null};
+ assert.throws(()=>applyFurnitureLdrGpuDiagnostic(frame,plan,()=>canvas),/GPU_CONTEXT/);
  assert.equal(canvas.width,0);assert.equal(canvas.height,0);
 });
