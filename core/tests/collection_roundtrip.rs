@@ -3115,6 +3115,32 @@ fn existing_shaped_wand_zero_refill_preserves_identity_and_denies_copies(){
 }
 
 #[test]
+fn flower_uncommitted_preview_is_native_and_multifield_creation_is_atomic(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ for zipped in [false,true]{
+  let raw=flower_color_slot("3.0.1",None);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let before=[6,6,0,0];let patterned=[6,6,10,16];let target=[6,8,10,30];
+  let (choices,can_create)=e.inventory_flower_preview(4,before,patterned).unwrap();
+  assert!(can_create&&choices.contains(&[6,6,10,30]));
+  let (choices,can_create)=e.inventory_flower_preview(4,before,[6,6,10,30]).unwrap();
+  assert!(can_create&&choices.contains(&target));
+  assert!(e.inventory_flower_preview(4,before,[7,8,10,30]).is_err());
+  assert!(e.inventory_flower_preview(4,patterned,target).is_err());
+  assert!(!e.dirty());assert!(!e.can_undo());
+  let handle=e.create_inventory_flower_variant(4,before,target,3).unwrap();
+  assert_eq!(e.history().len(),1);
+  assert_eq!(e.inventory_unique_data(handle),Some(U::Flower{grow_state:6,base_color:8,pattern:10,pattern_color:30}));
+  assert!(e.inventory_flower_preview(4,before,target).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut r=Editor::open(input).unwrap();r.restore_history(&cp).unwrap();
+  assert!(r.undo_scope(Inventory));assert!(!r.dirty());assert!(r.redo_scope(Inventory));
+  let reopened=Editor::open(r.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory_unique_data(4),Some(U::Flower{grow_state:6,base_color:6,pattern:0,pattern_color:0}));
+  let row=&reopened.inventory()[1];assert_eq!(row.quantity,3);assert_eq!(reopened.inventory_unique_data(row.document_id),e.inventory_unique_data(handle));
+ }
+}
+
+#[test]
 fn cafe_multiple_ingredient_pairs_create_one_independent_stack(){
  use hkia_save_core::collection::{HistoryScope::Inventory,CafeVariant};
  let original=[44,49,48,6,46,9];let target=[62,50,48,6,46,9];

@@ -256,3 +256,7 @@ Use the established native RemoveItems zero clamp and SaveInventory identity pre
 #### Compose cafe ingredient selections
 
 For existing eligible cafe variants, the dialog retains the source-issued flavor/color pair for each independently selected ingredient slot. Choosing the original entry restores that slot, including the optional nigiri side. Combined choices preview through the shared artwork and commit in one existing CAS or creation transaction. Rust independently checks all pairs, count, order, peer reservations and creation/source eligibility; the UI's composed selection is not a save authorization. No absent cafe Item ID, recipe, ingredient consumption or entitlement change. Actual game acceptance remains unverified.
+
+#### Compose flower appearance before committing
+
+For existing eligible saved and staged flower/flower-crafted clothing variants, selecting a native color, pattern or accent refreshes the available choices against the uncommitted tuple in Rust. The shared preview updates without modifying the save or journal. The complete target is applied or added as one CAS/creation with the same source and peer gates, including final creation eligibility from Rust. Reset restores the dialog's original tuple without history mutation. Previously absent species/clothing candidates retain the existing source default-only choices; no growth-state conversion or new rights are inferred. Actual game acceptance remains unverified.

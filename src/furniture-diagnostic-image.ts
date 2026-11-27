@@ -9,7 +9,11 @@ export type FurnitureDiagnosticFrame={
  rgba:Uint8Array;width:number;height:number;rowOrder:'bottom-up';
  visiblePixels:number;hiddenRgbPixels:number;partialAlphaPixels:number;
  renderers:number;uniqueTextures:number;fidelity:'forward-diagnostic-only';
+ /** Exact cleared pixel read back from the context, not an inferred background. */
+ clearRgba:readonly [number,number,number,number];
+ changedPixels:number;hiddenChangedPixels:number;
 };
+export type FurnitureDiagnosticClearRgb=readonly [number,number,number];
 export function inspectFurnitureDiagnosticRgba(rgba:Uint8Array){
  if(rgba.length===0||rgba.length%4!==0)throw Error('FURNITURE_DIAGNOSTIC_RGBA');
  let visiblePixels=0,hiddenRgbPixels=0,partialAlphaPixels=0;
@@ -19,11 +23,24 @@ export function inspectFurnitureDiagnosticRgba(rgba:Uint8Array){
  }
  return {visiblePixels,hiddenRgbPixels,partialAlphaPixels};
 }
+/** Unlike hiddenRgbPixels, compare against the actual clear baseline:
+ * nonblack transparent clear RGB must not count as object coverage. */
+export function compareFurnitureDiagnosticRgba(rgba:Uint8Array,clear:readonly [number,number,number,number]){
+ if(rgba.length===0||rgba.length%4!==0||clear.length!==4||clear.some(v=>!Number.isInteger(v)||v<0||v>255))throw Error('FURNITURE_DIAGNOSTIC_RGBA');
+ let changedPixels=0,hiddenChangedPixels=0;
+ for(let i=0;i<rgba.length;i+=4){
+  if(rgba[i]!==clear[0]||rgba[i+1]!==clear[1]||rgba[i+2]!==clear[2]||rgba[i+3]!==clear[3]){
+   changedPixels++;if(rgba[i+3]===0)hiddenChangedPixels++;
+  }
+ }
+ return {changedPixels,hiddenChangedPixels};
+}
 /** Share one isolated context, including resource cleanup. Raw output preserves
  * all four native channel values; it is not a browser-compositable image. */
 async function renderDiagnostic<T>(sources:FurnitureMultiSources,request:FurnitureMultiRequest,read:ReadRugPayload,size:number,
- createCanvas:()=>HTMLCanvasElement,draw:Draw,finish:(canvas:HTMLCanvasElement,gl:WebGL2RenderingContext,frame:FurnitureDiagnosticFrame)=>Promise<T>):Promise<T>{
+ createCanvas:()=>HTMLCanvasElement,draw:Draw,clearRgb:FurnitureDiagnosticClearRgb|undefined,finish:(canvas:HTMLCanvasElement,gl:WebGL2RenderingContext,frame:FurnitureDiagnosticFrame)=>Promise<T>):Promise<T>{
  if(!Number.isInteger(size)||size<32||size>512)throw Error('FURNITURE_DIAGNOSTIC_SIZE');
+ if(clearRgb!==undefined&&(clearRgb.length!==3||clearRgb.some(v=>!Number.isFinite(v)||v<0||v>1)))throw Error('FURNITURE_DIAGNOSTIC_CLEAR');
  const canvas=createCanvas();canvas.width=size;canvas.height=size;
  let gl:WebGL2RenderingContext|null=null;
  try{
@@ -33,16 +50,24 @@ async function renderDiagnostic<T>(sources:FurnitureMultiSources,request:Furnitu
   gl.viewport(0,0,size,size);
   gl.disable(gl.BLEND);gl.disable(gl.CULL_FACE);gl.disable(gl.SCISSOR_TEST);
   gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.depthMask(true);
-  gl.colorMask(true,true,true,true);gl.clearColor(0,0,0,0);gl.clearDepth(1);
+  gl.colorMask(true,true,true,true);gl.clearColor(clearRgb?.[0]??0,clearRgb?.[1]??0,clearRgb?.[2]??0,0);gl.clearDepth(1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  let clearRgba:readonly [number,number,number,number]=[0,0,0,0];
+  if(clearRgb!==undefined){
+   const baseline=new Uint8Array(size*size*4);gl.readPixels(0,0,size,size,gl.RGBA,gl.UNSIGNED_BYTE,baseline);
+   if(gl.isContextLost()||gl.getError()!==gl.NO_ERROR||baseline[3]!==0)throw Error('FURNITURE_DIAGNOSTIC_CLEAR_READ');
+   clearRgba=[baseline[0],baseline[1],baseline[2],baseline[3]];
+   if(compareFurnitureDiagnosticRgba(baseline,clearRgba).changedPixels)throw Error('FURNITURE_DIAGNOSTIC_CLEAR_NONUNIFORM');
+  }
   const outcome=await draw(gl,sources,request,read);
   if(gl.isContextLost()||gl.getError()!==gl.NO_ERROR)throw Error('FURNITURE_DIAGNOSTIC_DRAW');
   const rgba=new Uint8Array(size*size*4);
   gl.readPixels(0,0,size,size,gl.RGBA,gl.UNSIGNED_BYTE,rgba);
   if(gl.isContextLost()||gl.getError()!==gl.NO_ERROR)throw Error('FURNITURE_DIAGNOSTIC_READ');
   const counts=inspectFurnitureDiagnosticRgba(rgba);
-  if(!counts.visiblePixels&&!counts.hiddenRgbPixels)throw Error('FURNITURE_DIAGNOSTIC_EMPTY');
-  return await finish(canvas,gl,{rgba,width:size,height:size,rowOrder:'bottom-up',...counts,
+  const changes=compareFurnitureDiagnosticRgba(rgba,clearRgba);
+  if(!changes.changedPixels)throw Error('FURNITURE_DIAGNOSTIC_EMPTY');
+  return await finish(canvas,gl,{rgba,width:size,height:size,rowOrder:'bottom-up',...counts,...changes,clearRgba,
    renderers:outcome.renderers,uniqueTextures:outcome.uniqueTextures,fidelity:'forward-diagnostic-only'});
  }finally{
   // A fresh canvas owns its context; never exhaust a browser's context limit
@@ -55,12 +80,12 @@ async function renderDiagnostic<T>(sources:FurnitureMultiSources,request:Furnitu
  * pixels is essential source evidence and must not be discarded or forced
  * opaque. No PNG or user-facing thumbnail is produced here. */
 export async function renderFurnitureDiagnosticFrame(sources:FurnitureMultiSources,request:FurnitureMultiRequest,read:ReadRugPayload,size=160,
- createCanvas:()=>HTMLCanvasElement=()=>document.createElement('canvas'),draw:Draw=drawFurnitureMultiDiagnostic):Promise<FurnitureDiagnosticFrame>{
- return renderDiagnostic(sources,request,read,size,createCanvas,draw,async(_canvas,_gl,frame)=>frame);
+ createCanvas:()=>HTMLCanvasElement=()=>document.createElement('canvas'),draw:Draw=drawFurnitureMultiDiagnostic,clearRgb?:FurnitureDiagnosticClearRgb):Promise<FurnitureDiagnosticFrame>{
+ return renderDiagnostic(sources,request,read,size,createCanvas,draw,clearRgb,async(_canvas,_gl,frame)=>frame);
 }
 export async function renderFurnitureDiagnosticImage(sources:FurnitureMultiSources,request:FurnitureMultiRequest,read:ReadRugPayload,size=160,
  createCanvas:()=>HTMLCanvasElement=()=>document.createElement('canvas'),draw:Draw=drawFurnitureMultiDiagnostic):Promise<FurnitureDiagnosticImage>{
- return renderDiagnostic(sources,request,read,size,createCanvas,draw,async(canvas,gl,frame)=>{
+ return renderDiagnostic(sources,request,read,size,createCanvas,draw,undefined,async(canvas,gl,frame)=>{
   // Source-authored blend modes can write RGB while retaining zero alpha.
   // Conventional PNG/browser compositing would erase these contributions.
   // Until native preview output resolution is reproduced, refuse this

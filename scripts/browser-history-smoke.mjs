@@ -1204,7 +1204,10 @@ async function inventoryFlowerVariantEditSmoke(){
   const value=await firstPattern.getAttribute('value');
   assert.ok(value!==null);
   await select.selectOption(value);
-  await dialog.locator('button[type="submit"]').click();
+  await dialog.locator('.inventory-flower-reset:not([disabled])').waitFor();
+  const second=await select.locator('optgroup').first().locator('option').first().getAttribute('value');assert.ok(second!==null);
+  await select.selectOption(second);
+  await dialog.locator('button[type="submit"]:not([disabled])').click();
   await dialog.waitFor({state:'hidden'});
   await page.locator('.state-dot.changed').waitFor();
   await page.waitForFunction(()=>!document.querySelector('.inventory-unique-edit-button')?.disabled);
@@ -1223,7 +1226,7 @@ async function inventoryFlowerVariantEditSmoke(){
   assert.equal(patch[0].documentId,8);
   assert.deepEqual(patch[0].before,[6,1,0,0]);
   assert.equal(patch[0].after[0],6);
-  assert.equal(patch[0].after[1],1);
+  assert.notEqual(patch[0].after[1],1);
   assert.ok(patch[0].after[2]>0);
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
