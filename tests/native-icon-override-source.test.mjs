@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 const read=p=>JSON.parse(readFileSync(new URL('../'+p,import.meta.url),'utf8'));
 test('native IconOverride GUID to actual source sprite and texture across eleven bundles',()=>{
  const source=read('data/native-icon-override-source-v3.0.1.json');
@@ -19,6 +20,8 @@ test('native IconOverride GUID to actual source sprite and texture across eleven
  assert.deepEqual([...all.keys()].filter(id=>id!=='1393962785').sort(),Object.keys(native.records).sort());
  const direct=source.rows.filter(r=>r[2]===0),dynamic=source.rows.filter(r=>r[2]!==0);
  assert.equal(direct.length,39);assert.equal(dynamic.length,5345);
+ assert.equal(source.directDefinitionRoutesVerifiedByContainer,true);
+ assert.equal(createHash('sha256').update(JSON.stringify(direct)).digest('hex'),'bf5b8aefa8f6da5f97c912684c319bcbecc412f28af0f4f941f35f6597d2774c');
  for(const [id,,n,sprite,texture] of direct){assert.equal(n,0);const r=original.records[id];assert.equal(r.sourceKind,'direct');assert.equal(r.sourceSpritePathId,sprite);assert.equal(r.texturePathId,texture);}
  let mapped=0,overlap=0;
  for(const [i,b] of index.sourceBundles.entries()){
@@ -40,4 +43,21 @@ test('all 152 placeholders are exact original Switch definitions, not assumed mi
  assert.equal(source.placeholderRows.filter(r=>r[10]==='OutfitItemDetails').length,19);
  assert.deepEqual(source.dynamicExcludedRows.map(r=>r[0]),[1061947263,1835273963]);
  assert.ok(source.dynamicExcludedRows.every(r=>r[4]===true&&/^[a-f0-9]{32}$/.test(r[5])));
+});
+
+test('all 323 atlas overlaps use their actual completed native IconOverride sprites',()=>{
+ const source=read('data/native-icon-override-source-v3.0.1.json');
+ const old=read('public/source-colorways/index.json');
+ const upgrade=read('data/native-override-colorway-packs/index.json');
+ const display=read('public/dynamic-colorways/index.json');
+ const routes=source.rows.filter(r=>r[2]>0&&Object.hasOwn(old.records,String(r[0])));
+ assert.equal(routes.length,323);
+ assert.equal(createHash('sha256').update(JSON.stringify(routes)).digest('hex'),'74004c2d7911bb047203966739af86b658fee8cd53f08d828e7de198be43c16e');
+ assert.equal(Object.keys(upgrade.records).length,323);
+ for(const [id,guid,n,sprite,texture] of routes){
+  const row=upgrade.records[id];
+  assert.deepEqual([row.assetGuid,row.bundleNumber,row.sourceSpritePathId,row.texturePathId],[guid,n,sprite,texture]);
+  assert.equal(display.records[id],row.sha256);
+  assert.equal(createHash('sha256').update(readFileSync(new URL('../public/dynamic-colorways/'+row.file,import.meta.url))).digest('hex'),row.sha256);
+ }
 });

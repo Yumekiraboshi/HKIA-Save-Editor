@@ -110,7 +110,7 @@ export function parseDynamicColorwayIndex(value:unknown,base:string):Record<stri
  const raw=value as {schema?:string;version?:string;definitionsSha256?:string;records?:Record<string,string>};
  if(!raw||raw.schema!=='HKIA.DynamicColorwayDisplay.1'||raw.version!=='3.0.1'||
   raw.definitionsSha256!==DEFINITIONS_SHA||!raw.records||typeof raw.records!=='object'||
-  Array.isArray(raw.records)||Object.keys(raw.records).length!==5021)
+  Array.isArray(raw.records)||Object.keys(raw.records).length!==5344)
   throw Error('DYNAMIC_COLORWAY_INDEX_INVALID');
  if(!base.startsWith('/')||!base.endsWith('/')||base.includes('..')||base.includes('\\')||base.includes('//'))
   throw Error('VARIANT_ART_BASE_INVALID');
@@ -163,8 +163,8 @@ export async function loadVariantArtSources(base:string):Promise<{primary:Record
  if(original.status==='rejected'&&dynamic.status==='rejected'&&verified.status==='rejected'&&!Object.keys(named).length)throw verified.reason;
  // A finished original source sprite outranks a reconstruction. A failed
  // optional index must not hide valid artwork from the other index.
- const originals={...named,...(dynamic.status==='fulfilled'?dynamic.value:{}),
-  ...(original.status==='fulfilled'?original.value:{})};
+ const originals={...named,...(original.status==='fulfilled'?original.value:{}),
+  ...(dynamic.status==='fulfilled'?dynamic.value:{})};
  const reconstructions=verified.status==='fulfilled'?verified.value:{};
  return {originals,reconstructions,primary:{...reconstructions,...originals}};
 }

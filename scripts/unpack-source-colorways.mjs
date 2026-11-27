@@ -87,9 +87,15 @@ export function unpackDynamicColorways(root){
  const originals=read(join(root,'public/source-colorways/index.json'));
  const catalog=read(join(root,'public/catalog.json'));
  const overrideSource=read(join(root,'data/native-icon-override-source-v3.0.1.json'));
- if(overrideSource.schema!=='HKIA.NativeIconOverrideSource.1'||overrideSource.version!=='3.0.1'||overrideSource.steamDefinitionsSha256!==index.definitionsSha256||overrideSource.dynamicRoutesVerifiedByContainer!==true||overrideSource.directDefinitionRoutesVerifiedByContainer!==false||overrideSource.rows.length!==5384)throw Error('NATIVE_OVERRIDE_SOURCE');
+ if(overrideSource.schema!=='HKIA.NativeIconOverrideSource.1'||overrideSource.version!=='3.0.1'||overrideSource.steamDefinitionsSha256!==index.definitionsSha256||overrideSource.dynamicRoutesVerifiedByContainer!==true||overrideSource.directDefinitionRoutesVerifiedByContainer!==true||overrideSource.rows.length!==5384)throw Error('NATIVE_OVERRIDE_SOURCE');
  const overrides=new Map(overrideSource.rows.map(row=>[String(row[0]),row]));
  if(overrides.size!==5384)throw Error('NATIVE_OVERRIDE_DUPLICATE');
+ const direct=overrideSource.rows.filter(row=>row[2]===0);
+ if(direct.length!==39||sha(JSON.stringify(direct))!=='bf5b8aefa8f6da5f97c912684c319bcbecc412f28af0f4f941f35f6597d2774c')throw Error('NATIVE_OVERRIDE_DIRECT_SOURCE');
+ for(const [id,, ,sprite,texture] of direct){
+  const r=originals.records[String(id)];
+  if(!r||r.sourceKind!=='direct'||r.sourceSpritePathId!==sprite||r.texturePathId!==texture)throw Error('NATIVE_OVERRIDE_DIRECT_PPTR '+id);
+ }
  const itemKeys=new Map(catalog.items.map(r=>[String(r[0]),r[1]]));
  const sourceBundles=Array.from({length:11},(_,i)=>'dynamicinventory_icons_'+String(i+1).padStart(2,'0'));
  const shards=Array.from({length:11},(_,i)=>'index-'+String(i+1).padStart(2,'0')+'.json');
@@ -148,6 +154,40 @@ export function unpackDynamicColorways(root){
    if(fileBytes.has(file))throw Error('DYNAMIC_SOURCE_DUPLICATE_FILE');fileBytes.set(file,data);
   }
  }
+ // The older atlas-derived images remain independently available as fallback.
+ // Native IconOverride points to these completed source images instead.
+ const upgradeDir=join(root,'data/native-override-colorway-packs');
+ const upgradeRaw=readFileSync(join(upgradeDir,'index.json'));
+ if(sha(upgradeRaw)!=='e485ce586175539605526175f88ddb7a6987879908d1a48fc428e91e54e1c8b7')throw Error('NATIVE_OVERRIDE_UPGRADE_INDEX_HASH');
+ const upgrade=JSON.parse(upgradeRaw.toString('utf8'));
+ if(upgrade.schema!=='HKIA.NativeIconOverrideUpgrade.1'||upgrade.version!=='3.0.1'||upgrade.definitionsSha256!==index.definitionsSha256||
+   !Array.isArray(upgrade.bundles)||upgrade.bundles.length!==11||!Array.isArray(upgrade.packs)||upgrade.packs.length!==3||
+   Object.keys(upgrade.records).length!==323)throw Error('NATIVE_OVERRIDE_UPGRADE_INDEX');
+ const upgradeExpected=new Map();
+ for(const [i,p] of upgrade.packs.entries()){
+  if(p.file!=='override-colorways-'+String(i).padStart(2,'0')+'.zip'||!HASH.test(p.sha256)||p.count<1||p.count>144)throw Error('NATIVE_OVERRIDE_UPGRADE_PACK');
+  upgradeExpected.set(p.file,new Map());
+ }
+ const routes=overrideSource.rows.filter(r=>r[2]>0&&Object.hasOwn(originals.records,String(r[0])));
+ if(routes.length!==323||sha(JSON.stringify(routes))!=='74004c2d7911bb047203966739af86b658fee8cd53f08d828e7de198be43c16e')throw Error('NATIVE_OVERRIDE_UPGRADE_ROUTES');
+ for(const [id,guid,n,sprite,texture] of routes){
+  const key=String(id),r=upgrade.records[key],b=index.sourceBundles[n-1],group=r&&upgradeExpected.get(r.pack);
+  if(!r||!group||records.has(key)||r.file!==key+'.webp'||!HASH.test(r.sha256)||!HASH.test(r.textureSha256)||
+   r.itemKey!==itemKeys.get(key)||r.assetGuid!==guid||r.bundleNumber!==n||r.sourceSpritePathId!==sprite||r.texturePathId!==texture||
+   r.sourceBundleSha256!==b.sha256)throw Error('NATIVE_OVERRIDE_UPGRADE_RECORD '+key);
+  records.set(key,r.sha256);group.set(r.file,r.sha256);
+ }
+ const upgradeListed=readdirSync(upgradeDir).filter(x=>x.endsWith('.zip'));
+ if(upgradeListed.length!==upgradeExpected.size||upgradeListed.some(x=>!upgradeExpected.has(x)))throw Error('NATIVE_OVERRIDE_UPGRADE_ORPHAN');
+ for(const p of upgrade.packs){
+  const bytes=readFileSync(join(upgradeDir,p.file)),entries=upgradeExpected.get(p.file);
+  if(sha(bytes)!==p.sha256||entries.size!==p.count)throw Error('NATIVE_OVERRIDE_UPGRADE_HASH');
+  for(const [name,data] of readStoredIconPack(bytes,entries)){
+   if(fileBytes.has(name))throw Error('NATIVE_OVERRIDE_UPGRADE_DUPLICATE');
+   fileBytes.set(name,data);
+  }
+ }
+ if(records.size!==5344||fileBytes.size!==5344)throw Error('NATIVE_OVERRIDE_UPGRADE_COVERAGE');
  mkdirSync(out,{recursive:true});
  for(const name of readdirSync(out).filter(x=>x.endsWith('.webp'))){
   if(!fileBytes.has(name)||sha(readFileSync(join(out,name)))!==records.get(name.slice(0,-5)))
