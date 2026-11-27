@@ -2250,14 +2250,19 @@ import {verifiedFloorplanName} from './floorplan-names';
       <select bind:value={furnitureSelection} onchange={e=>void selectFurniturePart(Number(e.currentTarget.value))} disabled={busy}>
        <option value={-1} disabled>{furnitureCopy.title}</option>
        {#each [0,1,2] as slot}
-        {#if edit.options.some(v=>v[slot]!==selected[slot])}
+        {#if edit.options.some(v=>v[slot]!==selected[slot]&&v.filter((n,j)=>n!==selected[j]).length===1)}
          <optgroup label={furnitureCopy.part+' '+String.fromCharCode(65+slot)}>
           {#each edit.options as v,i}
-           {#if v[slot]!==selected[slot]}
+           {#if v[slot]!==selected[slot]&&v.filter((n,j)=>n!==selected[j]).length===1}
             <option value={i} data-material-index={v[slot]}>{materialLabel(furnitureDisplay,v[slot],furnitureCopy.defaultMaterial)}</option>
            {/if}
           {/each}
          </optgroup>
+        {/if}
+       {/each}
+       {#each edit.options as v,i}
+        {#if v.filter((n,j)=>n!==selected[j]).length>1}
+         <option value={i}>{v.map((n,j)=>n!==selected[j]?String.fromCharCode(65+j)+': '+materialLabel(furnitureDisplay,n,furnitureCopy.defaultMaterial):'').filter(Boolean).join(' / ')}</option>
         {/if}
        {/each}
       </select>
