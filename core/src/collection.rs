@@ -2162,24 +2162,40 @@ impl Editor {
    self.inventory_item_rows.get(&item).copied().unwrap_or(0)+self.pending_palettes.len()>=256{return None}
   self.palette_context(id)
  }
- /// Offer a native default selection for a missing palette, not a saved identity.
- pub fn inventory_absent_palette_default(&self)->Option<(i32,PaletteVariant)>{
+ // A native source-defined starter is independent of a positive saved
+ // witness. Retain zero documents and reserve both their native identities.
+ fn palette_starter_reservations(&self)->Option<Vec<PaletteVariant>>{
   let item=crate::inventory_source::CUSTOM_PALETTE_ID;
   let index=&self.slot.index;
   if !crate::inventory_source::is_uncapped_required_unique_stack(item)||
-   self.inventory_item_rows.contains_key(&item)||
+   self.inventory_item_rows.get(&item).copied().unwrap_or(0)+self.pending_palettes.len()>=256||
    self.pending_palettes.keys().any(|id|self.inventory_changes.contains_key(id))||
    index.inventory_palette_context_incomplete||index.inventory_palette_copies_incomplete||
    !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
    index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
+  let mut reserved=index.inventory_palette_copies.clone();
+  for row in index.inventory.iter().filter(|r|r.item_id==Some(item)){
+   if !self.unique_quantity_ids.contains(&row.id)||!self.palette_zero_reference_safe(row)||
+    self.inventory_changes.get(&row.id).copied().or(row.quantity)!=Some(0){return None}
+   let original=Self::palette_identity(row)?;
+   reserved.push(original);
+   reserved.push(self.palette_variant_changes.get(&row.id).copied().unwrap_or(original));
+  }
+  Some(reserved)
+ }
+ fn palette_starter(reserved:&[PaletteVariant])->Option<PaletteVariant>{
   Self::palette_output_choices().map(|color|[color;3])
-   .find(|&v|!index.inventory_palette_copies.iter().any(|&p|Self::palette_equal(p,v)))
-   .map(|v|(item,v))
+   .find(|&v|!reserved.iter().any(|&p|Self::palette_equal(p,v)))
+ }
+ /// Offer a source-defined starter when no positive palette remains.
+ pub fn inventory_absent_palette_default(&self)->Option<(i32,PaletteVariant)>{
+  let reserved=self.palette_starter_reservations()?;
+  Some((crate::inventory_source::CUSTOM_PALETTE_ID,Self::palette_starter(&reserved)?))
  }
  fn absent_palette_context(&self,id:u32)->Option<(PaletteVariant,Vec<PaletteVariant>)>{
-  let (item,default)=self.inventory_absent_palette_default()?;
-  if id!=PENDING_ITEM|item as u32||self.pending_palettes.contains_key(&id){return None}
-  Some((default,self.slot.index.inventory_palette_copies.clone()))
+  if id!=PENDING_ITEM|crate::inventory_source::CUSTOM_PALETTE_ID as u32||self.pending_palettes.contains_key(&id){return None}
+  let reserved=self.palette_starter_reservations()?;
+  Some((Self::palette_starter(&reserved)?,reserved))
  }
  fn absent_palette_target(reserved:&[PaletteVariant],next:PaletteVariant)->bool{
   !reserved.iter().any(|&p|Self::palette_equal(p,next))&&
