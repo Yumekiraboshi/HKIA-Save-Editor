@@ -434,6 +434,42 @@ async function inventoryFirstItemWandSmoke(){
   assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST ITEM WAND PASS: explicit source selection, recovery and reparse');
  }finally{await context.close()}
 }
+async function inventoryFirstFurnitureWandSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-first-furniture-wand.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({editableFurniture:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');const search=page.locator('.inventory-controls input[type="search"]');
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('384749651');
+  const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="wand-editor-title"]');
+  await card.locator('.inventory-unique-edit-button:not([disabled])').click();await dialog.waitFor();
+  const source=dialog.locator('select[name="wand-owned-furniture"]');
+  await source.selectOption('8');
+  const pair=dialog.locator('select[name="wand-variant"]:not([disabled])');
+  const choice=await pair.locator('option[data-wand-variant="106:127"]').getAttribute('value');assert.ok(choice!==null);
+  await pair.selectOption(choice);
+  await dialog.locator('input[name="variant-add-quantity"]').fill('3');
+  await dialog.locator('.inventory-create-wand:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle:not([disabled])').click();
+  await search.fill('61381969');assert.equal(await card.locator('input[name="quantity"]').inputValue(),'93');
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('384749651');assert.equal(await card.locator('input[name="quantity"]').inputValue(),'3');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_unique_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());let at=0;
+  const u=()=>{const n=v.getUint32(at,true);at+=4;return n};const count=u(),rows=[];
+  for(let i=0;i<count;i++){const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();const words=Array.from({length:n},()=>u()|0);u();rows.push({id,tag,words})}
+  assert.ok(rows.some(r=>r.id===8&&r.tag===8&&r.words.join(':')==='13:2:0'));
+  assert.ok(rows.some(r=>r.tag===9&&r.words.join(':')==='61381969:106:127:0:8:3:13:2:0'));
+  assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST FURNITURE WAND PASS: copied owned customization, source unchanged, recovery and reparse');
+ }finally{await context.close()}
+}
 async function inventoryNestedWandSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -2809,6 +2845,7 @@ async function run(){
  await inventoryWandEditSmoke();
  await inventoryFirstWandSmoke();
  await inventoryFirstItemWandSmoke();
+ await inventoryFirstFurnitureWandSmoke();
  await inventoryNestedWandSmoke();
  await inventoryBobaFullCreationSmoke();
  await inventoryFirstChefSmoke();

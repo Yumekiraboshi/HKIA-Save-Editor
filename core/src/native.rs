@@ -361,7 +361,19 @@ impl<'a> Walk<'a>{
       };
        // V33 requires a two-field Celebration document with a non-null Hash128 list.
        // Record the full union token range, not a reconstructed value or a deduplicated list.
-       if tag==1{let a=a.as_ref().ok_or(Error::Schema)?;let int=|k:usize|->Result<Option<i32>,Error>{a.get(k).map(|v|i32::try_from(v.0.int()?).map_err(|_|Error::Schema)).transpose()};let fields=std::array::from_fn(|i|a.get(i+1).map(|v|v.1.clone()));let unique_is_nil=a.get(4).map(|v|matches!(&v.0,Value::Nil));let unique_data=a.get(4).and_then(|v|match &v.0{Value::InventoryUnique(data,_)=>Some(*data),_=>None});let unique_fields=a.get(4).and_then(|v|match &v.0{Value::InventoryUnique(_,fields)=>Some(fields.clone()),_=>None}).unwrap_or_default();self.index.inventory.push(InventoryRow{id,item_id:int(1)?,unique_id:int(2)?,quantity:int(3)?,fields,unique_is_nil,unique_data,unique_fields});}
+       if tag==1{let a=a.as_ref().ok_or(Error::Schema)?;let int=|k:usize|->Result<Option<i32>,Error>{a.get(k).map(|v|i32::try_from(v.0.int()?).map_err(|_|Error::Schema)).transpose()};let fields=std::array::from_fn(|i|a.get(i+1).map(|v|v.1.clone()));let unique_is_nil=a.get(4).map(|v|matches!(&v.0,Value::Nil));let unique_data=a.get(4).and_then(|v|match &v.0{Value::InventoryUnique(data,_)=>Some(*data),_=>None});let unique_fields=a.get(4).and_then(|v|match &v.0{Value::InventoryUnique(_,fields)=>Some(fields.clone()),_=>None}).unwrap_or_default();
+        let row=InventoryRow{id,item_id:int(1)?,unique_id:int(2)?,quantity:int(3)?,fields,unique_is_nil,unique_data,unique_fields};
+        // Complete direct modern bag wands defer their source Item ID here.
+        // Only a recognized nondefault tag-8 copy is independent of the bag
+        // source identity. Other references were indexed during the walk.
+        if self.version==Version::V301{
+         if let Some(InventoryUniqueData::WandAppearance{source_item_id,..})=row.unique_data{
+          if source_item_id>0&&!crate::collection::Editor::verified_bag_furniture_wand_copy(&row){
+           self.index.inventory_payload_item_refs.insert(source_item_id);
+          }
+         }
+        }
+        self.index.inventory.push(row);}
        if tag==8{let a=a.as_ref().ok_or(Error::Schema)?;if a.len()!=2{return Err(Error::Schema)}let guid_count=match &a[1].0{Value::Count(n)=>*n,_=>return Err(Error::Schema)};self.index.celebrations.push(CelebrationSpan{id,bytes:union_start..self.c.pos,guid_count});}
        // The schema already checked tag membership. Store each u32 only once in its tag bucket.
        if !self.ids.entry(tag).or_default().insert(id){return Err(Error::Duplicate)}
@@ -481,7 +493,7 @@ impl<'a> Walk<'a>{
       if opaque_flower_ref.is_some_and(|key|key>=n){self.index.inventory_payload_refs_incomplete=true;}
       let mut fields=Vec::new();let mut document_id=None;
       for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if clothing_guid_lists.contains(&i){Some(("clothing-guid-list",0))}else if clothing_preset_list==Some(i){Some(("clothing-preset-list",0))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else if short=="CafeCreationUniqueData"&&matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,3))|Some((WAND_SOURCE_CAPTURE,3)))&&i==1{Some(("chef-colors",0))}else if short=="WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&i==1{Some((WAND_SOURCE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
-       if payload_ref_keys.contains(&i){
+       if payload_ref_keys.contains(&i)&&!(self.version==Version::V301&&name=="Sunblink.Game.WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&n==5){
         let item=i32::try_from(value.int()?).map_err(|_|Error::Schema)?;
         if item>0{self.index.inventory_payload_item_refs.insert(item);}
        }
