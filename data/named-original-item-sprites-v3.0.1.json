@@ -1,0 +1,31 @@
+{
+  "schema": "HKIA.NamedOriginalItemSprites.1",
+  "version": "3.0.1",
+  "definitionsSha256": "ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0",
+  "runtimeUiIconReferenceMatches": false,
+  "records": {
+    "1393962785": {
+      "file": "1393962785.png",
+      "sha256": "02e0f0b56e89ca9cdf40b64b7a3474cb5995a8c75bb5f7a7c8c3ebc15defd886",
+      "bytes": 50307,
+      "itemKey": "item_player_balloons_scholastic_marchband",
+      "sourceSpriteName": "icon_item_player_balloons_scholastic_marchband",
+      "sourceSpriteBundle": "dynamicinventory_icons_11",
+      "sourceBundleSha256": "577fe5d045fd708c555da918d474cfad6f0fc9f6c51ee59c3c050873d7d39054",
+      "cab": "CAB-af26a07ca1fa75966cce3a3478ae3a2a",
+      "sourceSpritePathId": "2165996848017138422",
+      "sourceSpriteObjectSha256": "313c32f87533d48a6edb0cab68d9cfbb83b587aeaa8c00ad52e32c50ac1f6dcb",
+      "texturePathId": "397186739403121398",
+      "textureObjectSha256": "b0c52f5739411c4fc8d9b58d2e0d8e028c50eec26d6d048d05a5b27599f69214",
+      "textureName": "icon_item_player_balloons_scholastic_marchband",
+      "textureSha256": "94051bba7dc913e0ca18b8c5ba9e76d970fca40a5beaacc1c4edda267d103b45",
+      "rgbaSha256": "f6b87f7a69be05a9f259655f50ebe453e2883dc7ebf23b5f03d032021017f632",
+      "width": 256,
+      "height": 256,
+      "streamOffset": 13041664,
+      "streamBytes": 65536,
+      "visiblePixels": 22886,
+      "transparentPixels": 42650
+    }
+  }
+}
