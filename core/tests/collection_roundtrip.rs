@@ -1271,8 +1271,8 @@ fn flower_variants_are_source_bounded_atomic_and_recoverable(){
  assert!(options.contains(&[6,30,0,0]),"cross-color Brown is a native available color");
  assert!(options.contains(&[6,6,10,16]),"ombre uses native default White accent");
  assert!(options.contains(&[6,6,3,0]),"effect uses null accent");
- assert!(options.iter().all(|v|v[0]==6&&![14,15].contains(&v[1])&&![6,15].contains(&v[2])));
- for invalid in [[6,14,0,0],[6,15,0,0],[6,8,6,0],[6,8,15,0],[6,8,10,8],[6,8,3,16],[7,8,0,0],[6,8,0,16]]{
+ assert!(options.iter().all(|v|[0,6,7].contains(&v[0])&&![14,15].contains(&v[1])&&![6,15].contains(&v[2])));
+ for invalid in [[6,14,0,0],[6,15,0,0],[6,8,6,0],[6,8,15,0],[6,8,10,8],[6,8,3,16],[5,8,0,0],[6,8,0,16]]{
   assert!(e.change_inventory_flower_variant(4,before,invalid).is_err(),"{invalid:?}");
  }
  let patterned=[6,6,10,16];
@@ -1295,6 +1295,29 @@ fn flower_variants_are_source_bounded_atomic_and_recoverable(){
  assert!(e.undo_scope(Inventory));assert!(e.undo_scope(Inventory));assert!(!e.dirty());
 }
 
+#[test]
+fn existing_flower_growth_edit_and_add_preserve_native_identity(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ for zipped in [false,true]{
+  let raw=flower_color_slot("3.0.1",None);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let before=[6,6,0,0];let seed=[0,6,0,0];let uprooted=[7,6,0,0];
+  let (choices,can)=e.inventory_flower_preview(4,before,seed).unwrap();
+  assert!(can&&choices.contains(&before)&&choices.contains(&uprooted));
+  assert!(e.change_inventory_flower_variant(4,before,[5,6,0,0]).is_err());
+  e.change_inventory_flower_variant(4,before,seed).unwrap();
+  let new=e.create_inventory_flower_variant(4,seed,uprooted,2).unwrap();
+  assert!(e.change_inventory_flower_variant(4,seed,uprooted).is_err());
+  assert!(e.change_inventory_flower_variant(new,uprooted,before).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.undo_scope(Inventory));assert!(!restored.dirty());
+  assert!(restored.redo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].document_id,4);assert_eq!(saved.inventory()[0].quantity,93);
+  assert_eq!(saved.inventory_unique_data(4),Some(U::Flower{grow_state:0,base_color:6,pattern:0,pattern_color:0}));
+  assert_eq!(saved.inventory_unique_data(saved.inventory()[1].document_id),Some(U::Flower{grow_state:7,base_color:6,pattern:0,pattern_color:0}));
+ }
+}
 #[test]
 fn flower_edit_rejects_legacy_remote_cabin_reference_to_uid(){
  let mut payload=synthetic_payload("3.0.1");payload[3]=0x97;
@@ -1559,7 +1582,7 @@ fn create_flower_variants_allocates_distinct_native_uids_and_keeps_source(){
   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
   let before=[6,6,0,0];let first=[6,9,0,0];let second=[6,16,10,17];
   assert!(e.create_inventory_flower_variant(4,before,before,1).is_err());
-  assert!(e.create_inventory_flower_variant(4,before,[7,9,0,0],1).is_err());
+  assert!(e.create_inventory_flower_variant(4,before,[5,9,0,0],1).is_err());
   assert!(e.create_inventory_flower_variant(4,before,first,0).is_err());
   assert!(e.inventory_flower_creation_variants(4).contains(&first));
   let a=e.create_inventory_flower_variant(4,before,first,3).unwrap();
@@ -2327,7 +2350,7 @@ fn staged_flower_source_can_create_other_variants_and_replay_cancellation(){
   let a=e.create_inventory_flower_variant(candidate,[0;4],[6,2,0,0],3).unwrap();
   let next=[6,1,0,0];assert!(e.inventory_flower_creation_variants(a).contains(&next));
   assert!(e.create_inventory_flower_variant(a,[6,5,0,0],next,2).is_err());
-  assert!(e.create_inventory_flower_variant(a,[6,2,0,0],[7,1,0,0],2).is_err());
+  assert!(e.create_inventory_flower_variant(a,[6,2,0,0],[5,1,0,0],2).is_err());
   let b=e.create_inventory_flower_variant(a,[6,2,0,0],next,2).unwrap();
   assert_ne!(a,b);assert!(!e.inventory_flower_creation_variants(a).contains(&next));
   e.change_inventory_quantity(a,3,0).unwrap();
@@ -3156,7 +3179,7 @@ fn flower_uncommitted_preview_is_native_and_multifield_creation_is_atomic(){
   assert!(can_create&&choices.contains(&[6,6,10,30]));
   let (choices,can_create)=e.inventory_flower_preview(4,before,[6,6,10,30]).unwrap();
   assert!(can_create&&choices.contains(&target));
-  assert!(e.inventory_flower_preview(4,before,[7,8,10,30]).is_err());
+  assert!(e.inventory_flower_preview(4,before,[5,8,10,30]).is_err());
   assert!(e.inventory_flower_preview(4,patterned,target).is_err());
   assert!(!e.dirty());assert!(!e.can_undo());
   let handle=e.create_inventory_flower_variant(4,before,target,3).unwrap();

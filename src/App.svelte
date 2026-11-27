@@ -2070,7 +2070,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      </span>
      <div class="date-dialog-detail"><strong>{flowerVariantName(current)}</strong>{#if changed}<button type="button" class="inventory-flower-reset" disabled={busy} aria-label={flowerVariantName(edit.before)} title={flowerVariantName(edit.before)} onclick={()=>void refreshFlowerDraft(edit.before)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>{/if}</div>
     </div>
-    {#if edit.absent&&edit.options.some(v=>v[0]!==current[0])}
+    {#if edit.options.some(v=>v[0]!==current[0])}
      <div style="display:flex;gap:6px;flex-wrap:wrap">
       {#each [0,6,7] as grow}
        {@const target=edit.options.find(v=>v[0]===grow&&v[1]===current[1]&&v[2]===current[2]&&v[3]===current[3])}
