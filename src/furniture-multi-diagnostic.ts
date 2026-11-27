@@ -11,6 +11,7 @@ import {uploadNativeTexture,validateNativeTextureLayout,type NativeTextureSource
 import {uploadNativeCube,validateNativeCubeOrientation} from './native-cube-upload';
 import {createFurnitureForwardRenderer,validateFurnitureForwardInputs,type FurnitureForwardMaterial,type FurnitureForwardScene} from './furniture-forwardlit-gpu';
 import type {Vec3,Vec4} from './furniture-surface-v3.0.1';
+import {furnitureNativeBuiltinTexture,furnitureNativeBuiltinBytes} from './furniture-native-builtin-textures-v3.0.1';
 import {furnitureRimFromMaterial} from './furniture-rim-v3.0.1';
 import {resolveCustomLitFixedMaterial} from './furniture-customlit-v3.0.1';
 import {glassShaderId,resolveGlassFixedMaterial,type GlassState} from './furniture-glass-v3.0.1';
@@ -109,7 +110,12 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
   const rim=furnitureRimFromMaterial(base.validKeywords,f);
   const link=(name:string)=>get(base.textures[name],'TEXTURE_LINK');
   const st=(name:string):Vec4=>{const l=link(name);return [...l.scale,...l.offset] as Vec4;};
-  const tex=(name:string)=>get(d.base.textures[get(link(name).texture,'TEXTURE_NULL')],'TEXTURE');
+  const tex=(name:string)=>{
+   const ref=link(name).texture;
+   // Only an exact serialized null pointer uses the shader's original
+   // builtin. A dangling non-null reference still fails closed.
+   return ref===null?furnitureNativeBuiltinTexture(d.base.shaders[base.shader].objectSha256,name):get(d.base.textures[get(ref,'TEXTURE_NULL')],'TEXTURE');
+  };
   const n=tex('_BumpMap'),x=tex('_MetallicGlossMap');
   const baseST=st('_BaseMap');
   if(['_BumpMap','_MetallicGlossMap'].some(k=>st(k).some((v,i)=>v!==baseST[i])))fail('BASE_UV');
@@ -200,7 +206,7 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
   const texture=async(t:NativeTextureSource)=>{
    const key=t.sha256+':'+t.colorSpace+':'+t.format+':'+JSON.stringify(t.sampler)+':'+(request.bc1Modes[t.sha256]??'');
    const cached=textures.get(key);if(cached)return cached;
-   let b=payloads.get(t.sha256);if(!b){b=await getBytes('texture',t.sha256,t.bytes);payloads.set(t.sha256,b);}
+   let b=payloads.get(t.sha256);if(!b){b=furnitureNativeBuiltinBytes(t)??await getBytes('texture',t.sha256,t.bytes);payloads.set(t.sha256,b);}
    const uploaded=await uploadNativeTexture(gl,t,b,request.bc1Modes[t.sha256]);owned.push(uploaded);textures.set(key,uploaded);return uploaded;
   };
   const cube=async(c:RugCubeRequest)=>{
