@@ -18,6 +18,9 @@ pub(crate) fn ordinary_quantity_limit(item_id:i32)->Option<i32>{
 }
 /// Native MaxCount is independent of whether a definition requires unique
 /// data. This is only a bound, not permission to create or alter a payload.
+pub(crate) fn definition_requires_unique(item_id:i32)->Option<bool>{
+ Some(RULES[RULES.binary_search_by_key(&item_id,|row|row.0).ok()?].1&2!=0)
+}
 pub(crate) fn definition_quantity_limit(item_id:i32)->Option<i32>{
  let flags=RULES[RULES.binary_search_by_key(&item_id,|row|row.0).ok()?].1;
  if flags&1==0{return Some(1)}
