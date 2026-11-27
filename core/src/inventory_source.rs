@@ -77,7 +77,7 @@ const CURRENCY_CREATION_IDS:&[i32]=&[
   #[test]fn complete_catalog_bag_policy_and_reference_fingerprints(){
    assert_eq!(BAG_FLAGS.len(),RULES.len());assert_eq!(ITEM_GUID_DENIAL_KEYS.len(),RULES.len());
    let hex=|b:&[u8]|crate::digest::sha256(b).iter().map(|x|format!("{x:02x}")).collect::<String>();
-   assert_eq!(hex(BAG_FLAGS),"9ac02a6abed49424a8047a8c8b13bc24d5f9654a4c211c58c5da3f14d4e0825f");
+   assert_eq!(hex(BAG_FLAGS),"1c3a7b5308c92fffc88c698ebc066f2ab4ac9d0bbab9b1e93c757e0e5d630bd6");
    let bytes:Vec<_>=ITEM_GUID_DENIAL_KEYS.iter().flat_map(|k|k.to_le_bytes()).collect();
    assert_eq!(hex(&bytes),"0bd8235b2a3bad5263ec8a2144a0a84fa27d8bab4e27e60034190abc6d7a8396");
    assert_eq!(ITEM_GUID_DENIAL_KEYS.iter().collect::<std::collections::HashSet<_>>().len(),12163);
@@ -94,9 +94,11 @@ const CURRENCY_CREATION_IDS:&[i32]=&[
     }
     if f&4!=0{absent+=1;assert!(ordinary_quantity_limit(id).is_some())}
    }
-   assert_eq!((total,outfits,absent),(9880,6057,7348));
+   assert_eq!((total,outfits,absent),(9880,6057,7484));
    assert!(ordinary_creation_ids().all(ordinary_bag_creation_item));
    assert!(ordinary_bag_creation_item(216433));assert!(ordinary_bag_creation_item(15761463));
+   for id in [12136138,20514331,15467283,47306696]{assert!(ordinary_bag_definition(id).is_some()&&ordinary_bag_creation_item(id));}
+   assert!(!ordinary_bag_creation_item(120261453));
    assert!(ordinary_bag_definition(4881112).is_some()&&!ordinary_bag_creation_item(4881112));
    assert!(ordinary_bag_definition(2773515).unwrap().0&&!ordinary_bag_creation_item(2773515));
    assert!(ordinary_bag_definition(1900000001).is_none());
@@ -126,7 +128,7 @@ mod currency_source_tests{
   let hash:String=crate::digest::sha256(&bytes).iter().map(|b|format!("{b:02x}")).collect();
   assert_eq!(hash,"e7448e16aec60a8ffdd27a48b948b669d6b2dc364a821e86c56aae5e3b716634");
   assert!(CURRENCY_CREATION_IDS.iter().all(|&id|ordinary_bag_creation_item(id)&&!ordinary_creation_item(id)));
-  assert_eq!(ordinary_bag_creation_ids().collect::<std::collections::HashSet<_>>().len(),7348);
+  assert_eq!(ordinary_bag_creation_ids().collect::<std::collections::HashSet<_>>().len(),7484);
   assert!(existing_currency_item(1205887707)&&!ordinary_bag_creation_item(1205887707));
   for id in [484139114,2092387705,615026760,1141761080]{assert!(!existing_currency_item(id)&&!ordinary_bag_creation_item(id));}
   assert!(!ordinary_bag_creation_item(709633628));

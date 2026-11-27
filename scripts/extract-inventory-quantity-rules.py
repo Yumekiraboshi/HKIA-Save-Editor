@@ -167,6 +167,13 @@ def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_r
                     and effective>=0 and not effective&(1|2|134217728)
                     and (d['Rarity']!=1 or d['ItemOwnership'] in (2,18))):
                 flags|=4
+            # None denotes no transfer flags, not a separate DLC entitlement.
+            # Native ValidateItemToAdd checks RequiredDlcContent for ordinary
+            # nil payloads. Keep nontradeable normal items separate from key,
+            # internal, future, currency, quest-rarity and special-effect rows.
+            if (flags&1 and visible and d['RequiredDlcContent']=='0'*32
+                    and d['ItemOwnership']==0 and d['Rarity'] in (2,3,4)):
+                flags|=4
             guid=d['SerializedGuid']
             require(len(guid)==32 and all(c in '0123456789abcdefABCDEF' for c in guid),'invalid item GUID')
             words=[int(guid[i:i+8][::-1],16) for i in range(0,32,8)]
@@ -272,10 +279,10 @@ def render_bag_facts(facts,rows):
     facts=sorted(facts)
     require([id for id,_,_ in facts]==[id for id,_ in rows],'bag definition identity alignment')
     flags=bytes(f for _,f,_ in facts);keys=[key for _,_,key in facts]
-    fh='9ac02a6abed49424a8047a8c8b13bc24d5f9654a4c211c58c5da3f14d4e0825f'
+    fh='1c3a7b5308c92fffc88c698ebc066f2ab4ac9d0bbab9b1e93c757e0e5d630bd6'
     kh='0bd8235b2a3bad5263ec8a2144a0a84fa27d8bab4e27e60034190abc6d7a8396'
     require(hashlib.sha256(flags).hexdigest()==fh and hashlib.sha256(b''.join(s.pack('<I',key) for key in keys)).hexdigest()==kh,'bag facts fingerprint')
-    require(len(set(keys))==12163 and [sum(bool(f&mask) for f in flags) for mask in (1,2,4)]==[9880,6057,7348],'bag facts coverage')
+    require(len(set(keys))==12163 and [sum(bool(f&mask) for f in flags) for mask in (1,2,4)]==[9880,6057,7484],'bag facts coverage')
     return ("// Generated from the pinned Steam v3.0.1 definitions, ascending RULES Item ID order.\n"
             "// Flags: 1=released ordinary bag class, 2=outfit reference class, 4=unrestricted bag acquisition.\n"
             "// Native item GUID fingerprints are denial-only. See extract-inventory-quantity-rules.py.\n"
