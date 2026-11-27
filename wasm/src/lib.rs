@@ -1056,11 +1056,11 @@ pub extern "C" fn hkia_inventory_wand_identity_change(id:u32,s0:i32,b0:i32,b1:i3
  })
 }
 #[no_mangle]
-pub extern "C" fn hkia_inventory_wand_nested_material_variants(id:u32)->u32{
+pub extern "C" fn hkia_inventory_wand_nested_material_variants(id:u32,creation:u32)->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();
   let Some(e)=a.editor.as_ref()else{return 1};
-  let rows=e.inventory_wand_nested_material_variants(id);if rows.len()>2634{return 1}
+  let rows=match creation{0=>e.inventory_wand_nested_material_variants(id),1=>e.inventory_wand_nested_creation_material_variants(id),_=>return 1};if rows.len()>2634{return 1}
   let mut out=Vec::with_capacity(4+rows.len()*12);out.extend((rows.len() as u32).to_le_bytes());
   for row in rows{for word in row{out.extend(word.to_le_bytes());}}a.reply=out;0
  })

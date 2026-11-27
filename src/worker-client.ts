@@ -239,8 +239,8 @@ export function createInventoryBobaVariant(documentId:number,beforeBobaVariant:B
  return rpc('boba-create',{documentId,beforeBobaVariant:[...beforeBobaVariant],nextBobaVariant:[...nextBobaVariant],nextQuantity}) as Promise<SaveSnapshot>;
 }
 
-export function requestWandNestedMaterials(documentId:number):Promise<FurnitureVariant[]>{
- return rpc('wand-nested-materials',{documentId}) as Promise<FurnitureVariant[]>;
+export function requestWandNestedMaterials(documentId:number,creation=false):Promise<FurnitureVariant[]>{
+ return rpc('wand-nested-materials',{documentId,target:creation?1:0}) as Promise<FurnitureVariant[]>;
 }
 export function changeInventoryWandNested(documentId:number,beforeWandNested:WandNested,nextWandNested:WandNested):Promise<SaveSnapshot>{
  return rpc('wand-nested-change',{documentId,beforeWandNested:[...beforeWandNested],nextWandNested:[...nextWandNested]}) as Promise<SaveSnapshot>;

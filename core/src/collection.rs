@@ -1416,6 +1416,15 @@ impl Editor {
   }
   out
  }
+ pub fn inventory_wand_nested_creation_material_variants(&self,id:u32)->Vec<FurnitureVariant>{
+  let Some((item,original,current,_))=self.wand_full_context(id)else{return Vec::new()};
+  if !self.wand_creation_gate(id,item){return Vec::new()}
+  let original_key=Self::wand_key(item,original);
+  self.inventory_wand_nested_material_variants(id).into_iter().filter(|&materials|{
+   let mut target=current;target[3..].copy_from_slice(&materials);
+   Self::wand_key(item,target)!=original_key
+  }).collect()
+ }
  pub fn change_inventory_wand_nested(&mut self,id:u32,expected:WandData,next:WandData)->Result<(),Error>{
   let (item,original,current,reserved)=self.wand_full_context(id).ok_or(Error::Schema)?;
   let key=Self::wand_key(item,next).ok_or(Error::Schema)?;

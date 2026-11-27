@@ -92,7 +92,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let cafeDraft=$state<CafeVariant|null>(null);
  let cafeSlot=$state(0);
  let wandDialogEl:HTMLDialogElement|undefined=$state();
- let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[];absent?:boolean;sourceChoices?:number[];beforeSource?:number;nestedBefore?:WandNested;nestedOptions?:FurnitureVariant[]}|null>(null);
+ let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[];absent?:boolean;sourceChoices?:number[];beforeSource?:number;nestedBefore?:WandNested;nestedOptions?:FurnitureVariant[];nestedCreationOptions?:FurnitureVariant[]}|null>(null);
  let wandSelection=$state(-1);
  let wandMaterialSelection=$state(-1);
  let wandSourceQuery=$state('');
@@ -857,18 +857,27 @@ import {verifiedFloorplanName} from './floorplan-names';
   const revision=snapshot.revision;busy=true;error='';
   try{
    const nestedBefore=wandNestedOf(row.unique)??undefined;
-   const [options,creationOptions,sources,nestedOptions]=await Promise.all([requestWandVariants(row.documentId),requestWandCreationVariants(row.documentId),!inventoryAddMode&&!nestedBefore&&appearance.sourceItemId>0?requestWandEditSources(row.documentId):Promise.resolve([]),!inventoryAddMode&&nestedBefore?requestWandNestedMaterials(row.documentId):Promise.resolve([])]);
+   const [options,creationOptions,sources,nestedOptions,nestedCreationOptions]=await Promise.all([requestWandVariants(row.documentId),requestWandCreationVariants(row.documentId),!inventoryAddMode&&!nestedBefore&&appearance.sourceItemId>0?requestWandEditSources(row.documentId):Promise.resolve([]),!inventoryAddMode&&nestedBefore?requestWandNestedMaterials(row.documentId):Promise.resolve([]),nestedBefore?requestWandNestedMaterials(row.documentId,true):Promise.resolve([])]);
    if(!snapshot||snapshot.revision!==revision)return;
-   wandEdit={documentId:row.documentId,itemId:row.itemId,revision,before,appearance,options,creationOptions,beforeSource:appearance.sourceItemId,sourceChoices:sources.length?sources:undefined,nestedBefore,nestedOptions};wandSourceQuery='';wandSelection=-1;wandMaterialSelection=-1;variantAddQuantity=1;await tick();
+   wandEdit={documentId:row.documentId,itemId:row.itemId,revision,before,appearance,options,creationOptions,beforeSource:appearance.sourceItemId,sourceChoices:sources.length?sources:undefined,nestedBefore,nestedOptions:inventoryAddMode?nestedCreationOptions:nestedOptions,nestedCreationOptions};wandSourceQuery='';wandSelection=-1;wandMaterialSelection=-1;variantAddQuantity=1;await tick();
    if(wandDialogEl&&!wandDialogEl.open)wandDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
+ }
+ function canAddWandVariant():boolean{
+  const edit=wandEdit;if(!edit)return false;
+  const pair=edit.options[wandSelection],materials=edit.nestedOptions?.[wandMaterialSelection];
+  if(edit.absent&&edit.sourceChoices&&!edit.sourceChoices.includes(edit.before[0]))return false;
+  if(edit.nestedBefore&&materials&&!pair)return Boolean(edit.nestedCreationOptions?.some(v=>v.every((n,i)=>n===materials[i])));
+  return Boolean(pair&&edit.creationOptions.some(v=>v.every((n,i)=>n===pair[i])));
  }
  async function addInventoryWandVariant(){
   const edit=wandEdit,quantity=variantAddQuantity;
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
-  const next=edit.options[wandSelection];if(!next||!edit.creationOptions.some(v=>v.every((n,i)=>n===next[i]))||(edit.absent&&edit.sourceChoices&&!edit.sourceChoices.includes(edit.before[0])))return;
+  if(!canAddWandVariant())return;
+  const next=edit.options[wandSelection]??edit.before;
+  const materials=edit.nestedOptions?.[wandMaterialSelection];
   busy=true;error='';
-  try{update(await (edit.nestedBefore?createInventoryWandNested(edit.documentId,edit.nestedBefore,[edit.nestedBefore[0],...next,edit.nestedBefore[3],edit.nestedBefore[4],edit.nestedBefore[5]],quantity):createInventoryWandVariant(edit.documentId,edit.before,next,quantity)));closeWandEditor();await persistDraft()}
+  try{update(await (edit.nestedBefore?createInventoryWandNested(edit.documentId,edit.nestedBefore,[edit.nestedBefore[0],...next,...(materials??[edit.nestedBefore[3],edit.nestedBefore[4],edit.nestedBefore[5]])] as WandNested,quantity):createInventoryWandVariant(edit.documentId,edit.before,next,quantity)));closeWandEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
  }
  function closeWandEditor(){if(wandDialogEl?.open)wandDialogEl.close()}
@@ -1938,7 +1947,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      </select>
     </label>
     {#if !edit.options.length&&!edit.nestedOptions?.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
-    {#if edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[wandSelection]?.[i]))}
+    {#if canAddWandVariant()}
      <label class="date-dialog-field">
       <span>{inventoryAddCopy(locale)} · {iCopy.quantity}</span>
       <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
@@ -1947,8 +1956,8 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeWandEditor}>{copy.cancel}</button>
-     {#if edit.creationOptions.length}
-      <button type="button" class="inventory-create-wand" disabled={busy||!validVariantAddQuantity||wandSelection<0||(edit.absent&&edit.sourceChoices&&!edit.sourceChoices.includes(edit.before[0]))||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[wandSelection]?.[i]))} onclick={()=>void addInventoryWandVariant()}>{inventoryAddCopy(locale)}</button>
+     {#if edit.creationOptions.length||edit.nestedCreationOptions?.length}
+      <button type="button" class="inventory-create-wand" disabled={busy||!validVariantAddQuantity||!canAddWandVariant()} onclick={()=>void addInventoryWandVariant()}>{inventoryAddCopy(locale)}</button>
      {/if}
      {#if !inventoryAddMode}<button type="submit" formnovalidate class="primary" disabled={busy||(wandSelection<0&&wandMaterialSelection<0)}>{copy.apply}</button>{/if}
     </div>
