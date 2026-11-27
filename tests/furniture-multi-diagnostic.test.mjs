@@ -118,7 +118,7 @@ test('the extracted podium GUID matches the authored camera mount without inferr
  assert.equal(c.rendererPathId,'4695806416409439665');assert.equal(c.meshFilterPathId,'-1995439662326436431');
 });
 
-test('UV1 is optional only for world UV, exact original white pattern or proven-unused null pattern',()=>{
+test('UV1 omission is limited to nonspatial patterns, world UV or verified native descriptor alias',()=>{
  const d=sources(),p=resolveFurnitureMultiDiagnostic(d,request(d,32709745,[207,0,0])).plans[0];
  const mesh=structuredClone(d.geometry.rows.find(x=>x.itemId===32709745).meshes[p.meshPathId]);
  assert.deepEqual(furnitureForwardAttributeLocations(mesh,p.material,p.patternMap),{0:0,1:1,2:2,4:4,5:5});
@@ -132,6 +132,10 @@ test('UV1 is optional only for world UV, exact original white pattern or proven-
  assert.deepEqual(furnitureForwardAttributeLocations(mesh,{...p.material,worldUV:true},p.patternMap),expected);
  assert.deepEqual(furnitureForwardAttributeLocations(mesh,{...p.material,baseColor:[1,1,1,1]},null),expected);
  assert.throws(()=>furnitureForwardAttributeLocations(mesh,{...p.material,baseColor:[1,1,1,0]},null),/MESH_CHANNEL/);
+ const alias=structuredClone(mesh);alias.stride=32;alias.channels[4]=[0,28,1,2];
+ assert.deepEqual(furnitureForwardAttributeLocations(alias,p.material,p.patternMap),{...expected,5:5});
+ assert.deepEqual(furnitureForwardAttributeLocations(alias,p.material,white),expected);
+ assert.throws(()=>furnitureForwardAttributeLocations(alias,{...p.material,baseColor:[1,1,1,0]},null),/MESH_CHANNEL/);
  mesh.channels[4]=[0,0,0,0];assert.throws(()=>furnitureForwardAttributeLocations(mesh,p.material,white),/MESH_CHANNEL/);
 });
 
