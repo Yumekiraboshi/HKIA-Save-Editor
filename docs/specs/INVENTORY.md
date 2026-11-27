@@ -542,3 +542,8 @@ When all original saved rows of a source-defined shaped wand or unrestricted ord
 #### Native furniture material draft preview
 
 The Rust preview recomputes source-defined single-slot options from the complete current three-material draft, with normalized original/effective peer reservations. Existing row edit and creation use the same native target predicates as their final CAS, rather than composing stale initial one-slot options. The local preview writes no records and preserves row-local restricted material witnesses, default identity, acquisition, allocation, and legacy restrictions. Multi-slot edits and distinct creation commit atomically. Raw/ZIP synthetic regression covers a material combination becoming available after another slot changes, stale collision rejection, undo/redo and reparse. Actual game acceptance unverified.
+
+
+#### Chef creation after emptying all saved stacks
+
+For the nine source-verified cafe outputs and Boba, the existing source-defined first-add path is available when all original rows of that item are verified, independently zero/refill eligible and effectively zero, with no active staged row of that item. Reserve original and effective complete ordered identities; choose an unreserved native starter from source recipe pairs or Boba triples, and reject collisions in the same CAS. Unsupported cafe tuple lengths, missing references and family/allocation limits retain their prior denial. Zero rows are not positive witnesses; preserve their document, UID and original payload and refill independently. The same Add dialog, history and native reparse apply, without consuming or generating ingredients. Synthetic raw/ZIP regression; game acceptance unverified.
