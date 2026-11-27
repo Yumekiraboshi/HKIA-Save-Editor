@@ -135,7 +135,18 @@ def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_r
         # key, future or required-payload definitions. Existing DLC rows need no
         # inferred entitlement; absent acquisition must be unrestricted.
         if bag_facts is not None:
-            released_nil=(not unique and cat>=0 and not cat&(1|2|134217728) and not d['ReleaseVersion'])
+            # ComputeIsReleased compares System.Version.ParseVersion(ReleaseVersion)
+            # <= Application.version; empty is released. For the newly admitted
+            # versioned slice retain visible, non-key, ordinary source gates.
+            effective=d['UiOverridenItemCategory'] if d['HasUiOverridenItemCategory'] else cat
+            version=d['ReleaseVersion']
+            versioned_visible=(bool(version) and
+                len(version.split('.'))==3 and all(v.isascii() and v.isdecimal() for v in version.split('.')) and
+                tuple(map(int,version.split('.')))<=(3,0,1) and
+                d['ItemOwnership'] in (0,2,16,18) and effective>0 and
+                not effective&(1|2|134217728) and d['UseEffect']==0 and d['GiftEffect']==0)
+            released_nil=(not unique and cat>=0 and not cat&(1|2|134217728) and
+                          (not version or versioned_visible))
             bag=released_nil and (d['Rarity'] in (2,3,4) or
                                 (d['Rarity']==1 and d['ItemOwnership'] in (2,18)))
             add=(d['RequiredDlcContent']=='0'*32 and
@@ -158,7 +169,6 @@ def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_r
                 (1|2*bool(cat&256)|4*bool(d['RequiredDlcContent']=='0'*32 and d['UseEffect']==0 and d['GiftEffect']==0)) if quest_cosmetic else
                 (1|4*bool(d['RequiredDlcContent']=='0'*32 and d['ItemOwnership']==16)) if reset else
                 (1|2*bool(cat&256)) if ordinary_stack else 0)
-            effective=d['UiOverridenItemCategory'] if d['HasUiOverridenItemCategory'] else cat
             no_effect=d['UseEffect']==0 and d['GiftEffect']==0
             visible=released_nil and effective>=0 and not effective&(1|2|134217728) and no_effect
             if not flags and visible:
@@ -173,6 +183,10 @@ def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_r
             # internal, future, currency, quest-rarity and special-effect rows.
             if (flags&1 and visible and d['RequiredDlcContent']=='0'*32
                     and d['ItemOwnership']==0 and d['Rarity'] in (2,3,4)):
+                flags|=4
+            # Quest rarity alone does not make an ordinary nil outfit/comic a quest state.
+            if (flags&1 and visible and d['RequiredDlcContent']=='0'*32
+                    and d['ItemOwnership']==0 and d['Rarity']==5 and cat in (256,67108864)):
                 flags|=4
             guid=d['SerializedGuid']
             require(len(guid)==32 and all(c in '0123456789abcdefABCDEF' for c in guid),'invalid item GUID')
@@ -279,10 +293,10 @@ def render_bag_facts(facts,rows):
     facts=sorted(facts)
     require([id for id,_,_ in facts]==[id for id,_ in rows],'bag definition identity alignment')
     flags=bytes(f for _,f,_ in facts);keys=[key for _,_,key in facts]
-    fh='1c3a7b5308c92fffc88c698ebc066f2ab4ac9d0bbab9b1e93c757e0e5d630bd6'
+    fh='a616a5ae6a5268a00ef79ebe0f6c23d4b40f1a55c5db94f49c1f7cbf6bb26b5a'
     kh='0bd8235b2a3bad5263ec8a2144a0a84fa27d8bab4e27e60034190abc6d7a8396'
     require(hashlib.sha256(flags).hexdigest()==fh and hashlib.sha256(b''.join(s.pack('<I',key) for key in keys)).hexdigest()==kh,'bag facts fingerprint')
-    require(len(set(keys))==12163 and [sum(bool(f&mask) for f in flags) for mask in (1,2,4)]==[9880,6057,7484],'bag facts coverage')
+    require(len(set(keys))==12163 and [sum(bool(f&mask) for f in flags) for mask in (1,2,4)]==[9920,6057,7551],'bag facts coverage')
     return ("// Generated from the pinned Steam v3.0.1 definitions, ascending RULES Item ID order.\n"
             "// Flags: 1=released ordinary bag class, 2=outfit reference class, 4=unrestricted bag acquisition.\n"
             "// Native item GUID fingerprints are denial-only. See extract-inventory-quantity-rules.py.\n"
