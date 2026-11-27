@@ -3,6 +3,7 @@ import type {Rgba} from './dynamic-sprite-color';
 import type {PixelBuffer,Rect,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
 import {originalWandOverlay,originalWandCellKey,type WandOriginalCell} from './wand-original-subicon';
+import {loadSampledWandOverlay,WAND_CANDIDATE_SOURCE_SHA} from './wand-candidate-source';
 import {loadNativePlaceholderTexture,PLACEHOLDER_ASSET} from './native-placeholder-art';
 
 const ROOT=import.meta.env.BASE_URL+'dynamic-wand-art/';
@@ -126,9 +127,15 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
    }else{
     // The item wand can use a source definition's already-published normal
     // UiIcon cell; never substitute named dye-colorway art or nested colors.
-    if(itemId!==384749651||!originalCell||originalCell.itemId!==appearance.sourceItemId)return null;
-    sourceHash='original-item-cell-v2';spritePathId=originalWandCellKey(originalCell);
-    overlay=await originalWandOverlay(originalCell,transform);
+    if(itemId!==384749651)return null;
+    const direct=await loadSampledWandOverlay(appearance.sourceItemId,transform);
+    if(direct){
+     sourceHash=WAND_CANDIDATE_SOURCE_SHA;spritePathId=direct.spritePathId;overlay=direct.overlay;
+    }else{
+     if(!originalCell||originalCell.itemId!==appearance.sourceItemId)return null;
+     sourceHash='original-item-cell-v2';spritePathId=originalWandCellKey(originalCell);
+     overlay=await originalWandOverlay(originalCell,transform);
+    }
    }
   }
   return await renderCachedDynamicArt(JSON.stringify(['3.0.1','wand-composite-2',WAND_MANIFEST_SHA,WAND_SUBICON_MANIFEST_SHA,sourceHash,itemId,tints,spritePathId]),{
