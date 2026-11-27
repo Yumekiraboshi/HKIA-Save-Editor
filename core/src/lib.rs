@@ -123,6 +123,7 @@ pub mod inventory_palette_source;
 mod inventory_source_data;
 mod inventory_tradeable_data;
 mod inventory_wand_ingredient_data;
+mod inventory_legacy_wand_guid_data;
 mod inventory_tradeable_reference_data;
 mod inventory_custom_furniture_reference_data;
 mod inventory_furniture_reference_data;
