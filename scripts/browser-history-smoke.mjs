@@ -355,6 +355,7 @@ async function inventoryFirstWandSmoke(){
   const search=page.locator('.inventory-controls input[type="search"]');
   await search.fill('1429161083');
   const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="wand-editor-title"]');
+  await card.locator('.item-sprite[data-dynamic-art-source="native-wand"][data-icon-fidelity="source-derived-base-only"]').waitFor({timeout:30_000});
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
   assert.equal(await dialog.locator('button[type="submit"]').count(),0);
   const select=dialog.locator('select[name="wand-variant"]');
@@ -1511,6 +1512,13 @@ async function inventoryFlowerGrowthDisplaySmoke(){
    await page.locator('button[title="Undo"]:not([disabled])').waitFor();
    await page.waitForFunction(()=>document.querySelector('.inventory-card input[name="quantity"]')?.value==='0');
   }
+  // Growth-state sprites are native finished images, independent of tint definitions.
+  await page.route('**/inventory-ui/flowers.json',route=>route.fulfill({status:404,body:'missing'}));
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  await page.locator('[data-flower-growth="seed"] [data-flower-state-art="native-state-sprite"]').waitFor({timeout:30_000});
+  await page.locator('[data-flower-growth="uprooted"] [data-flower-state-art="native-state-sprite"]').waitFor({timeout:30_000});
+  await page.locator('[data-flower-growth="plucked"] [data-icon-fidelity="source-derived-base-only"]').waitFor({timeout:30_000});
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM FLOWER GROWTH PASS: native seed/troweled art, localized search, zero and Undo/Redo');
  }finally{await context.close();}
@@ -2501,7 +2509,11 @@ async function run(){
   return result;
  }
  await search.fill('Ice Cream Archer Hat');
- await page.locator('.collection-search-result').first().click();
+ const iceResult=page.locator('.collection-search-result').first();
+ const iceSearchArt=iceResult.locator('.collection-search-art .item-sprite[data-dye-source="game-source-sprite"]');
+ await iceSearchArt.waitFor({timeout:30_000});
+ assert.ok((await iceSearchArt.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/704486536.webp'));
+ await iceResult.click();
  const iceSprite=page.locator('#collection-item-704486536 .item-sprite[data-dye-source="game-source-sprite"]');
  await iceSprite.waitFor({timeout:30_000});
  const icePixels=await sampledSprite(iceSprite);
@@ -2705,6 +2717,7 @@ async function run(){
  await search.fill('Floorplan');
  const result=page.locator('.collection-search-result').first();
  await result.waitFor({timeout:20_000});
+ await result.locator('.collection-search-art .item-sprite').waitFor({timeout:30_000});
  await result.click();
  const item=page.locator('article.item-tile button.item-toggle:not([disabled])').first();
  await item.waitFor();

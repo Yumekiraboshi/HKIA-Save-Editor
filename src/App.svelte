@@ -13,7 +13,7 @@
  import InventoryDecorator from './InventoryDecorator.svelte';
  import {flowerDecorators} from './inventory-flower-display';
  import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryRefillable,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
- import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,flowerGrowthKind,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
+ import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,flowerGrowthKind,hasNativeFlowerArt,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
  import {inventoryGroupLabel} from './inventory-native-category-copy';
@@ -43,7 +43,7 @@ import {searchAchievementRows} from './achievement-search';
  import DynamicChefSprite from './DynamicChefSprite.svelte';
  import DynamicWandSprite from './DynamicWandSprite.svelte';
  import {selectWandOriginalCell,selectInventoryWandOriginalCell} from './wand-original-subicon';
- import {inventoryWandAppearance,wandVariantOf,wandVariantLabel,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
+ import {inventoryWandAppearance,hasNativeWandArt,wandVariantOf,wandVariantLabel,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
  import {cafeSlotLabel,cafeVariantLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
@@ -464,6 +464,17 @@ import {verifiedFloorplanName} from './floorplan-names';
   for(const group of groups){
    if(inventoryIconPending.size>=3)break;
    if(inventoryIconPacks[group]||inventoryIconPending.has(group)||inventoryIconFailed.has(group))continue;
+   void fetchInventoryIcons(group);
+  }
+ });
+ // Global collection results share the original pack cache and its bounded request queue.
+ $effect(()=>{
+  inventoryIconPulse;
+  if(activeTool!=='collections'||!snapshot||!catalog||!showingGlobalCollectionSearch)return;
+  const groups=new Set(collectionSearchResults.slice(0,visibleLimit).map(item=>item[3]));
+  for(const group of groups){
+   if(inventoryIconPending.size>=3)break;
+   if(iconPack?.group===group||inventoryIconPacks[group]||inventoryIconPending.has(group)||inventoryIconFailed.has(group))continue;
    void fetchInventoryIcons(group);
   }
  });
@@ -1689,13 +1700,13 @@ import {verifiedFloorplanName} from './floorplan-names';
         {/if}
       <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
        <span class="inventory-item-art" class:flower-variant={flowerBadges.length>0||!!dyeBadge} style:position="relative" aria-hidden="true">
-        {#if wand&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
-          <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite} originalCell={wandOriginalCell(wand.sourceItemId)}/>
+        {#if hasNativeWandArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+          <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite} originalCell={wand?wandOriginalCell(wand.sourceItemId):undefined}/>
          {:else if hasNativeChefArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicChefSprite itemId={item.itemId} appearance={chef} fallback={nativeSprite??sprite}/>
          {:else if item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicPaletteSprite itemId={item.itemId} palette={item.palette} fallback={nativeSprite??sprite}/>
-        {:else if item.flower&&flowerDefinitions&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+        {:else if (item.flower||hasNativeFlowerArt(item.itemId))&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicFlowerSprite itemId={item.itemId} flower={item.flower} definitions={flowerDefinitions} fallback={nativeSprite??sprite}/>
         {:else if originalVariantArt[String(item.itemId)]||exactVariantArt[String(item.itemId)]||(!nativeSprite&&sprite&&nativeDyePalettes[String(item.itemId)])}
          <DyeSprite sprite={nativeSprite??sprite} palette={nativeDyePalettes[String(item.itemId)]}
@@ -1800,7 +1811,17 @@ import {verifiedFloorplanName} from './floorplan-names';
      <div class="collection-search-results">
       {#each collectionSearchResults.slice(0,visibleLimit) as item (item[0])}
        {@const resultGroup=catalog.groups.find(g=>g[0]===item[3])}
+       {@const sprite=(iconPack?.group===item[3]?iconPack.entries:inventoryIconPacks[item[3]]?.entries)?.[String(item[0])]}
        <button type="button" class="collection-search-result" onclick={()=>jumpToCollectionItem(item)}>
+        <span class="collection-search-art" aria-hidden="true">
+         {#if originalVariantArt[String(item[0])]||exactVariantArt[String(item[0])]||(sprite&&nativeDyePalettes[String(item[0])])}
+          <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item[0])]} sourceKey={item[1]} exactArtUrl={exactVariantArt[String(item[0])]} originalArtUrl={originalVariantArt[String(item[0])]}/>
+         {:else if sprite}
+          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
+         {:else}
+          <span class="item-art-empty">✧</span>
+         {/if}
+        </span>
         <span class="collection-search-result-text">
          <span class="collection-search-result-name">{nameFor(item)}</span>
          <span class="collection-search-result-context">

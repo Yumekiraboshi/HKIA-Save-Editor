@@ -35,6 +35,10 @@ function sources():Promise<Sources>{
 }
 export async function renderFlowerOriginalBaseArt(itemId:number,flower:InventoryFlower):Promise<Blob|null>{
  if(flowerGrowthKind(itemId,flower)!=='plucked')return null;
+ return renderFlowerDefinitionBaseArt(itemId);
+}
+/** Definition template only: no growth state or individual color is inferred. */
+export async function renderFlowerDefinitionBaseArt(itemId:number):Promise<Blob|null>{
  try{
   const s=await sourceBinding(),row=s.rows.get(itemId);if(!row)return null;
   const base=await loadOpaqueArtTexture(ROOT,s.manifest.base);
