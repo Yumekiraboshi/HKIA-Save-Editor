@@ -1307,17 +1307,29 @@ impl Editor {
    row.fields.iter().all(Option::is_some)&&
    Self::wand_identity(row).is_some_and(|v|Self::wand_materials(v)!=WAND_NIL_MATERIALS)
  }
- // Return exact native token spans for a complete nested tag-8 payload.
- fn wand_material_spans(raw:&[u8],materials:FurnitureVariant)->Result<Vec<std::ops::Range<usize>>,Error>{
+ // Decode complete nested furniture tuples in either native wire format.
+ // The tag and token spans are retained for exact, format-preserving patches.
+ fn wand_material_fields(raw:&[u8])->Result<(i32,FurnitureVariant,Vec<std::ops::Range<usize>>),Error>{
   let mut cursor=Cursor::new(raw);
-  if cursor.array()?!=2||cursor.int(8,8)?!=8||cursor.array()?!=3{return Err(Error::Schema)}
-  let mut spans=Vec::with_capacity(3);
-  for expected in materials{
+  if cursor.array()?!=2{return Err(Error::Schema)}
+  let tag=cursor.int(1,8)? as i32;
+  if !matches!(tag,1|8)||cursor.array()?!=3{return Err(Error::Schema)}
+  let mut spans=Vec::with_capacity(3);let mut materials=[0;3];
+  for material in &mut materials{
    let start=cursor.pos;
-   if cursor.int(0,i32::MAX as i128)?!=expected as i128{return Err(Error::Schema)}
+   *material=if tag==1{
+    let mut words=[0;4];
+    for word in &mut words{*word=cursor.int(0,u32::MAX as i128)? as u32;}
+    furniture_source::material_index_for_guid(words).ok_or(Error::Schema)?
+   }else{cursor.int(0,i32::MAX as i128)? as i32};
    spans.push(start..cursor.pos);
   }
   if cursor.pos!=raw.len(){return Err(Error::Schema)}
+  Ok((tag,materials,spans))
+ }
+ fn wand_material_spans(raw:&[u8],materials:FurnitureVariant)->Result<Vec<std::ops::Range<usize>>,Error>{
+  let (_,decoded,spans)=Self::wand_material_fields(raw)?;
+  if decoded!=materials{return Err(Error::Schema)}
   Ok(spans)
  }
  // Resolve legacy source GUIDs without changing their native representation.
@@ -1330,8 +1342,8 @@ impl Editor {
   let mut guid=[0;4];for word in &mut guid{*word=c.int(0,u32::MAX as i128).ok()? as u32;}
   if c.pos!=c.bytes.len(){return None}
   let source=crate::inventory_source::legacy_wand_source_id(guid)?;
-  let mut nested=Cursor::new(decoded.get(row.unique_fields[1].clone())?);
-  if nested.token().ok()?!=Token::Nil||nested.pos!=nested.bytes.len(){return None}
+  let nested=decoded.get(row.unique_fields[1].clone())?;
+  let materials=if nested==[0xc0]{WAND_NIL_MATERIALS}else{Self::wand_material_fields(nested).ok()?.1};
   let mut values=[0;3];
   for (v,span) in values.iter_mut().zip(&row.unique_fields[2..]){
    let mut c=Cursor::new(decoded.get(span.clone())?);*v=c.int(0,i32::MAX as i128).ok()? as i32;
@@ -1339,7 +1351,8 @@ impl Editor {
   }
   let item=row.item_id?;
   if crate::inventory_source::wand_source_style(item,source)!=Some(values[2]){return None}
-  let identity=Self::wand_nil(source,[values[0],values[1]]);
+  let [a,b,c]=materials;
+  let identity=[source,values[0],values[1],a,b,c];
   Self::wand_key(item,identity)?;Some(identity)
  }
  fn saved_wand_identity(&self,row:&crate::native::InventoryRow)->Option<WandData>{
@@ -1498,13 +1511,18 @@ impl Editor {
   sources
  }
  // Native ItemWandProcessor copies the selected InventoryItem's unique data.
- // A positive verified saved furniture row is an exact witness; never synthesize
- // a nested tuple from a bare Item ID or an absent furniture definition.
+ // A positive verified saved or active staged furniture row is an exact
+ // witness; never synthesize a nested tuple from a bare Item ID.
  fn owned_furniture_wand_witness(&self,id:u32)->Option<WandData>{
-  let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
-  if !self.unique_quantity_ids.contains(&id)||!row.quantity.is_some_and(|q|q>0)||
-   !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
-  let item=row.item_id?;
+  let item=if let Some(furniture)=self.pending_furniture.get(&id){
+   if !self.inventory_changes.get(&id).is_some_and(|&q|q>0){return None}
+   furniture.item_id
+  }else{
+   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+   if !self.unique_quantity_ids.contains(&id)||!row.quantity.is_some_and(|q|q>0)||
+    !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
+   row.item_id?
+  };
   let (source,original,current,_)=self.furniture_context(id)?;
   Self::wand_material_source(crate::inventory_source::ITEM_WAND_ID,item)?;
   if !Self::valid_furniture_target(source,original,current){return None}
@@ -1540,9 +1558,9 @@ impl Editor {
   let item=crate::inventory_source::ITEM_WAND_ID;
   if candidate!=(PENDING_ITEM|item as u32)||!self.absent_wand_source_gate(item){return Vec::new()}
   let Some(keys)=self.nested_wand_output_reservations()else{return Vec::new()};
-  let mut rows:Vec<_>=self.slot.index.inventory.iter().filter_map(|r|{
-   let witness=self.owned_furniture_wand_witness(r.id)?;
-   (!Self::furniture_wand_pairs(witness,&keys).is_empty()).then_some(r.id)
+  let mut rows:Vec<_>=self.slot.index.inventory.iter().map(|r|r.id).chain(self.pending_furniture.keys().copied()).filter_map(|id|{
+   let witness=self.owned_furniture_wand_witness(id)?;
+   (!Self::furniture_wand_pairs(witness,&keys).is_empty()).then_some(id)
   }).collect();
   rows.sort_unstable();rows.dedup();rows
  }
@@ -3021,9 +3039,16 @@ impl Editor {
      if !self.valid_wand_nested_target(row.id,item,original,original,*v){return Err(Error::Schema)}
      let span=row.unique_fields.get(1).cloned().ok_or(Error::Schema)?;
      let raw=original_payload.get(span.clone()).ok_or(Error::Schema)?;
-     for (i,token) in Self::wand_material_spans(raw,Self::wand_materials(original))?.into_iter().enumerate(){
+     let (tag,materials,spans)=Self::wand_material_fields(raw)?;
+     if materials!=Self::wand_materials(original){return Err(Error::Schema)}
+     for (i,token) in spans.into_iter().enumerate(){
       if original[i+3]==v[i+3]{continue}
-      let mut encoded=vec![0xd2];encoded.extend(v[i+3].to_be_bytes());
+      let encoded=if tag==1{
+       let words=if v[i+3]==0{[0;4]}else{furniture_source::MATERIAL_GUID_INDEX.iter().find(|(_,index)|*index==v[i+3]).ok_or(Error::Schema)?.0};
+       let mut bytes=Vec::with_capacity(20);
+       for word in words{bytes.push(0xce);bytes.extend(word.to_be_bytes());}
+       bytes
+      }else{let mut bytes=vec![0xd2];bytes.extend(v[i+3].to_be_bytes());bytes};
       patches.push((span.start+token.start..span.start+token.end,encoded));
      }
     }

@@ -149,9 +149,15 @@ def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_r
                    and d['CustomMaxCount']>0 and
                    ((d['UseEffect'] in (1,2) and d['GiftEffect']==0) or
                     (d['UseEffect']==0 and d['GiftEffect']==1)))
+            # Native stack membership, not rarity/category name: existing
+            # released nil rows with a distributable ownership flag and no
+            # special use/gift effect can use the common reference gate.
+            ordinary_stack=(released_nil and stack and d['ItemOwnership'] in (2,18,16)
+                            and d['UseEffect']==0 and d['GiftEffect']==0)
             flags=(1|2*bool(cat&256)|4*bool(add)) if bag else (
-                (1|2*bool(cat&256)) if quest_cosmetic else
-                (1|4*bool(d['RequiredDlcContent']=='0'*32 and d['ItemOwnership']==16)) if reset else 0)
+                (1|2*bool(cat&256)|4*bool(d['RequiredDlcContent']=='0'*32 and d['UseEffect']==0 and d['GiftEffect']==0)) if quest_cosmetic else
+                (1|4*bool(d['RequiredDlcContent']=='0'*32 and d['ItemOwnership']==16)) if reset else
+                (1|2*bool(cat&256)) if ordinary_stack else 0)
             guid=d['SerializedGuid']
             require(len(guid)==32 and all(c in '0123456789abcdefABCDEF' for c in guid),'invalid item GUID')
             words=[int(guid[i:i+8][::-1],16) for i in range(0,32,8)]
@@ -257,10 +263,10 @@ def render_bag_facts(facts,rows):
     facts=sorted(facts)
     require([id for id,_,_ in facts]==[id for id,_ in rows],'bag definition identity alignment')
     flags=bytes(f for _,f,_ in facts);keys=[key for _,_,key in facts]
-    fh='00c61ee7aec852a2e627dfc8941c681fba1f768852fe586f4d22103b55156518'
+    fh='e0652f0d4db8cae44ad1c041846ec5f5e95e14de8a500d1dbf702d68a82a30b8'
     kh='0bd8235b2a3bad5263ec8a2144a0a84fa27d8bab4e27e60034190abc6d7a8396'
     require(hashlib.sha256(flags).hexdigest()==fh and hashlib.sha256(b''.join(s.pack('<I',key) for key in keys)).hexdigest()==kh,'bag facts fingerprint')
-    require(len(set(keys))==12163 and [sum(bool(f&mask) for f in flags) for mask in (1,2,4)]==[9636,5963,6708],'bag facts coverage')
+    require(len(set(keys))==12163 and [sum(bool(f&mask) for f in flags) for mask in (1,2,4)]==[9835,6020,7213],'bag facts coverage')
     return ("// Generated from the pinned Steam v3.0.1 definitions, ascending RULES Item ID order.\n"
             "// Flags: 1=released ordinary bag class, 2=outfit reference class, 4=unrestricted bag acquisition.\n"
             "// Native item GUID fingerprints are denial-only. See extract-inventory-quantity-rules.py.\n"
