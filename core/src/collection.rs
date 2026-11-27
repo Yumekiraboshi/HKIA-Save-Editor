@@ -382,6 +382,7 @@ pub struct Editor {
  inventory_item_rows:HashMap<i32,usize>,
  unique_quantity_ids:HashSet<u32>,
  structural_quantity_caps:HashMap<u32,i32>,
+ structural_zero_ids:HashSet<u32>,
  legacy_wand_sources_resolved:bool,
  flower_variant_changes:HashMap<u32,FlowerVariant>,
  furniture_variant_changes:HashMap<u32,FurnitureVariant>,
@@ -423,9 +424,10 @@ impl Editor {
   let legacy_wand_sources_resolved=slot.index.inventory.iter().filter(|r|matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))).all(|r|
    r.id>0&&r.id<PENDING_ITEM&&r.unique_id.is_some_and(|uid|uid>0)&&r.quantity.is_some_and(|q|q>=0)&&
    r.fields.iter().all(Option::is_some)&&Self::legacy_wand_identity_in(&slot.envelope.decoded,r).is_some());
-  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),inventory_removed:HashSet::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),pending_bobas:HashMap::new(),pending_cafes:HashMap::new(),pending_wands:HashMap::new(),inventory_item_rows,unique_quantity_ids:HashSet::new(),structural_quantity_caps:HashMap::new(),legacy_wand_sources_resolved,flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),boba_variant_changes:HashMap::new(),wand_variant_changes:HashMap::new(),cafe_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
+  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),inventory_removed:HashSet::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),pending_bobas:HashMap::new(),pending_cafes:HashMap::new(),pending_wands:HashMap::new(),inventory_item_rows,unique_quantity_ids:HashSet::new(),structural_quantity_caps:HashMap::new(),structural_zero_ids:HashSet::new(),legacy_wand_sources_resolved,flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),boba_variant_changes:HashMap::new(),wand_variant_changes:HashMap::new(),cafe_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
   editor.unique_quantity_ids=editor.index_unique_quantity_ids();
   editor.structural_quantity_caps=editor.index_structural_quantity_caps();
+  editor.structural_zero_ids=editor.inventory_removable_ids().into_iter().filter(|id|editor.structural_quantity_caps.contains_key(id)).collect();
   Ok(editor)
  }
  fn compatible(slot:&ReadSlot)->bool{
@@ -1271,7 +1273,7 @@ impl Editor {
  /// Existing consumables must pass the full original unique quantity
  /// identity/reference index, including copied payloads.
  fn inventory_can_empty(&self,r:&crate::native::InventoryRow)->bool{
-  if self.structural_quantity_caps.contains_key(&r.id){return true}
+  if self.structural_zero_ids.contains(&r.id){return true}
   if (self.is_emptyable_unique_family(r)||self.palette_zero_reference_safe(r))&&self.unique_quantity_ids.contains(&r.id){return true}
   let Some(item_id)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
@@ -2480,80 +2482,25 @@ impl Editor {
  // is shared with deletion; no semantic variant keys are synthesized.
  fn index_structural_quantity_caps(&self)->HashMap<u32,i32>{
   if self.slot.envelope.version!=Version::V301{return HashMap::new()}
-  let removable:HashSet<_>=self.inventory_removable_ids().into_iter().collect();
+  let mut uids=HashMap::<i32,usize>::new();
+  for r in &self.slot.index.inventory{if let Some(uid)=r.unique_id{if uid>0{*uids.entry(uid).or_default()+=1;}}}
   self.slot.index.inventory.iter().filter_map(|r|{
-   if !removable.contains(&r.id)||r.unique_is_nil!=Some(false){return None}
-   let item=r.item_id?;
-   // Growth state is a bag-state discriminator, not a color/pattern choice.
-   // A planted or otherwise unverified state is not a quantity-edit target.
-   if matches!(r.unique_data,Some(InventoryUniqueData::Flower{..}|InventoryUniqueData::Opaque{tag:2})){
-    let span=r.unique_fields.first()?.clone();
-    let mut c=Cursor::new(self.slot.envelope.decoded.get(span)?);
-    let state=c.int(0,7).ok()? as i32;
-    if c.pos!=c.bytes.len()||if FLOWER_SPECIES.iter().any(|&(id,_)|id==item){!matches!(state,0|6|7)}else{state!=6}{return None}
-   }
-   Some((r.id,crate::inventory_source::definition_quantity_limit(item)?))
+   let item=r.item_id?;let uid=r.unique_id?;
+   if item<=0||uid<0||r.id==0||r.id>=PENDING_ITEM||r.quantity?<0||
+    !r.fields.iter().all(Option::is_some)||r.unique_is_nil.is_none()||
+    (uid>0&&uids.get(&uid)!=Some(&1)){return None}
+   // All InventoryItem records have the same Quantity field. The payload
+   // is an opaque preserved span, not part of quantity eligibility.
+   // Reject inconsistent outer identity, not unrecognized appearance values.
+   if (uid==0)!=r.unique_is_nil?{return None}
+   let cap=crate::inventory_source::definition_quantity_limit(item)?;
+   // A finite item cap must not be multiplied by ambiguous same-item rows.
+   if cap<i32::MAX&&self.inventory_item_rows.get(&item)!=Some(&1){return None}
+   Some((r.id,cap))
   }).collect()
  }
- /// If a quantity increase uses structural rather than native semantic
- /// equality authority, conservatively bound all same-item peers together.
- /// Existing over-cap data may be reduced but never increased by this path.
- /// No appearance value is interpreted, normalized or reconstructed.
- fn validate_structural_quantity_totals(&self,deltas:&[InventoryQuantityDelta])->Result<(),Error>{
-  if self.structural_quantity_caps.is_empty(){return Ok(())}
-  let staged:HashMap<_,_>=deltas.iter().map(|d|(d.document_id,d.after)).collect();
-  let quantity=|r:&crate::native::InventoryRow|->Option<i32>{
-   if self.inventory_removed.contains(&r.id){return Some(0)}
-   staged.get(&r.id).copied().unwrap_or_else(||self.inventory_changes.get(&r.id).copied()).or(r.quantity)
-  };
-  let mut caps=HashMap::<i32,i32>::new();
-  for r in &self.slot.index.inventory{
-   if self.unique_quantity_ids.contains(&r.id){continue}
-   if let Some(&cap)=self.structural_quantity_caps.get(&r.id){
-    if quantity(r).zip(r.quantity).is_some_and(|(n,old)|n>old){
-     caps.insert(r.item_id.ok_or(Error::Schema)?,cap);
-    }
-   }
-  }
-  if caps.is_empty(){return Ok(())}
-  let mut totals=HashMap::<i32,(i64,i64)>::new();
-  for r in &self.slot.index.inventory{
-   let Some(item)=r.item_id else{return Err(Error::Schema)};
-   if !caps.contains_key(&item){continue}
-   let original=r.quantity.filter(|q|*q>=0).ok_or(Error::Schema)?;
-   let next=quantity(r).filter(|q|*q>=0).ok_or(Error::Schema)?;
-   let t=totals.entry(item).or_default();t.0+=i64::from(original);t.1+=i64::from(next);
-  }
-  let mut pending:HashMap<_,_>=self.pending_inventory_rows().into_iter().map(|r|(r.document_id,(r.item_id,r.quantity))).collect();
-  for d in deltas.iter().filter(|d|d.document_id&PENDING_ITEM!=0){
-   if let Some(q)=d.after{
-    let item=pending.get(&d.document_id).map(|r|r.0).unwrap_or((d.document_id&!PENDING_ITEM) as i32);
-    pending.insert(d.document_id,(item,q));
-   }else{pending.remove(&d.document_id);}
-  }
-  for (_, (item,q)) in pending{if caps.contains_key(&item){totals.entry(item).or_default().1+=i64::from(q);}}
-  for (item,cap) in caps{
-   let (original,next)=totals.get(&item).copied().ok_or(Error::Schema)?;
-   if next>i64::from(cap).max(original){return Err(Error::Schema)}
-  }
-  Ok(())
- }
  fn inventory_quantity_limit(&self,r:&crate::native::InventoryRow)->Option<i32>{
-  // Existing source-verified unique variants; minimum is independently gated.
-  if self.unique_quantity_ids.contains(&r.id){return Some(i32::MAX)}
-  if let Some(&cap)=self.structural_quantity_caps.get(&r.id){return Some(cap)}
-  if self.slot.envelope.version!=Version::V301||r.id==0||r.id>i32::MAX as u32||
-   r.quantity?<0||r.unique_is_nil!=Some(true)||r.fields[2].is_none()||
-   (r.quantity==Some(0)&&!self.inventory_can_empty(r)&&
-    !(crate::inventory_source::ordinary_bag_definition(r.item_id?).is_some()&&r.unique_id==Some(0)&&
-      r.fields.iter().all(Option::is_some)&&(self.inventory_item_rows.get(&r.item_id?)==Some(&1)||
-      self.ordinary_furniture_base_distinct(r,r.item_id?)))){return None}
-  let item_id=r.item_id?;
-  let cap=crate::inventory_source::ordinary_quantity_limit(item_id)?;
-  // A finite definition limit must not be treated as an independent cap for
-  // every ambiguous saved row with the same item identity. Preserve those rows.
-  if cap<i32::MAX&&self.inventory_item_rows.get(&item_id)!=Some(&1){return None}
-  Some(cap)
+  self.structural_quantity_caps.get(&r.id).copied()
  }
  fn inventory_creation_source_valid(&self)->bool{
   !self.slot.index.inventory_item_refs_incomplete&&self.inventory_creation_rows_valid()
@@ -2634,7 +2581,6 @@ impl Editor {
   }).sum::<usize>()
  }
  fn preflight_inventory_membership(&self,deltas:&[InventoryQuantityDelta])->Result<(),Error>{
-  self.validate_structural_quantity_totals(deltas)?;
   if !deltas.iter().any(|d|d.document_id&PENDING_ITEM!=0){return Ok(())}
   let mut handles:HashSet<u32>=self.inventory_changes.keys().filter(|&&id|id&PENDING_ITEM!=0).copied().collect();
   for d in deltas{
@@ -3254,7 +3200,6 @@ impl Editor {
  pub fn reset(&mut self){self.changes.clear();self.inventory_changes.clear();self.inventory_removed.clear();self.pending_flowers.clear();self.pending_furniture.clear();self.pending_palettes.clear();self.pending_bobas.clear();self.pending_cafes.clear();self.pending_wands.clear();self.flower_variant_changes.clear();self.furniture_variant_changes.clear();self.palette_variant_changes.clear();self.boba_variant_changes.clear();self.wand_variant_changes.clear();self.cafe_variant_changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
  pub fn export(&self)->Result<Vec<u8>,Error>{
   if !self.dirty(){return Err(Error::Schema)}
-  self.validate_structural_quantity_totals(&[])?;
   let original_payload=&self.slot.envelope.decoded;
   let mut patches:Vec<achievement::Replacement>=Vec::new();
   if !self.changes.is_empty(){
