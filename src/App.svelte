@@ -2213,7 +2213,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     </div>
     <div class="date-dialog-item">
      <span class="date-dialog-art" style:height={previewBadges.length?'118px':undefined} aria-hidden="true">
-      <span class="inventory-item-art" class:flower-variant={previewBadges.length>0}>
+      <span style:position="relative" style:display="flex" style:padding-top={previewBadges.length?'22px':undefined}>
        {#if flowerDefinitions}
         <DynamicFlowerSprite itemId={edit.itemId} flower={appearance} definitions={flowerDefinitions} fallback={inventoryOriginalSprite(edit.itemId)}/>
        {/if}
