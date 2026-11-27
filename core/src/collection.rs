@@ -1119,6 +1119,15 @@ impl Editor {
   };
   Self::wand_key(item,v)?;Some(v)
  }
+ // A complete modern bag item wand holds a copied furniture payload, not
+ // a saved furniture UID. Share the exact native identity validator with
+ // the indexer; malformed, nil and other source types retain their guards.
+ pub(crate) fn verified_bag_furniture_wand_copy(row:&crate::native::InventoryRow)->bool{
+  row.item_id==Some(crate::inventory_source::ITEM_WAND_ID)&&row.id>0&&row.id<PENDING_ITEM&&
+   row.unique_id.is_some_and(|uid|uid>0)&&row.quantity.is_some_and(|q|q>=0)&&
+   row.fields.iter().all(Option::is_some)&&
+   Self::wand_identity(row).is_some_and(|v|Self::wand_materials(v)!=WAND_NIL_MATERIALS)
+ }
  fn wand_words(row:&crate::native::InventoryRow)->Option<WandVariant>{
   Self::wand_identity(row).map(Self::wand_pair)
  }
