@@ -123,7 +123,8 @@ def extract(raw, bundle_name, guid, item_id, audit, resolve_cab=None):
     for _ in range(count):
         key,p=string(container,p);first,n=struct.unpack_from('<ii',container,p);ref=ptr(container,p+8);p+=20
         if key==guid:matches.append(local(ref,1))
-    if len(matches)!=1:raise ValueError('missing or ambiguous native prefab key')
+    if not matches:raise ValueError('missing native prefab key')
+    if len(matches)!=1:raise ValueError('ambiguous native prefab key')
     root=matches[0];root_fields=f(root,1);root_comps=array_ptr(root_fields['m_Component']);root_tr=[ref[1] for ref in root_comps if component_class(ref)==4];scripts=[ref[1] for ref in root_comps if component_class(ref)==114]
     scripts=[pid for pid in scripts if ptr(f(pid,114)['m_Script'])==[1,'-4647883882007958521']]
     if len(root_tr)!=1 or len(scripts)!=1:raise ValueError('unsupported root components')
