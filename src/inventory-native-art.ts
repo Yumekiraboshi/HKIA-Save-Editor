@@ -3,7 +3,8 @@ import type {SpriteCell} from './icon-packs';
 const DEFINITIONS='ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0';
 const ATLAS='04c1f4c191b0a821a0bbcb15e67a75bec85cf343a0b2e875ee8e525e1e8dfc7b';
 const INDEX_SHA='a5cb833211120f94c59e0bd31b6a0ae27e4d58149406fdc0269ab5274ffa13e9';
-type NativeArt={entries:ReadonlyMap<number,SpriteCell>;withheld:ReadonlySet<number>};
+export const NATIVE_PLACEHOLDER_SPRITE='-6646601456236922891';
+type NativeArt={entries:ReadonlyMap<number,SpriteCell>;withheld:ReadonlySet<number>;placeholders:ReadonlySet<number>};
 export type InventoryNativeArt=NativeArt;
 
 /** Original Item ID -> exact UiIcon Sprite -> original texture crop.
@@ -21,7 +22,7 @@ export function decodeInventoryNativeArt(value:unknown,base:string):NativeArt{
    typeof sheet.sha256!=='string'||!/^[a-f0-9]{64}$/.test(sheet.sha256)||
    !Number.isInteger(sheet.bytes)||sheet.bytes<1||sheet.bytes>2000000)throw Error('INVENTORY_ART_INVALID');
  }
- const entries=new Map<number,SpriteCell>(),withheld=new Set<number>(),sourceCells=new Map<string,string>(),cellSources=new Map<string,string>();
+ const entries=new Map<number,SpriteCell>(),withheld=new Set<number>(),placeholders=new Set<number>(),sourceCells=new Map<string,string>(),cellSources=new Map<string,string>();
  const validId=(id:unknown):id is number=>typeof id==='number'&&Number.isInteger(id)&&id>0&&id<=0x7fffffff;
  const validPath=(id:unknown)=>typeof id==='string'&&/^-?[1-9]\d{0,18}$/.test(id);
  for(const row of v.records){
@@ -39,9 +40,14 @@ export function decodeInventoryNativeArt(value:unknown,base:string):NativeArt{
   if(!Array.isArray(row)||row.length!==3||!validId(row[0])||!validPath(row[1])||
    !['source-placeholder','dynamic-color'].includes(row[2])||entries.has(row[0])||withheld.has(row[0]))
    throw Error('INVENTORY_ART_INVALID');
+  if(row[2]==='source-placeholder'){
+   if(row[1]!==NATIVE_PLACEHOLDER_SPRITE)throw Error('INVENTORY_ART_INVALID');
+   placeholders.add(row[0]);
+  }
   withheld.add(row[0]);
  }
- return {entries,withheld};
+ if(placeholders.size!==152)throw Error('INVENTORY_ART_INVALID');
+ return {entries,withheld,placeholders};
 }
 export async function loadInventoryNativeArt(base:string):Promise<NativeArt>{
  const response=await fetch(base+'inventory-art/index.json');

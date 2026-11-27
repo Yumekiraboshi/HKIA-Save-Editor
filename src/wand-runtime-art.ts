@@ -3,14 +3,13 @@ import type {Rgba} from './dynamic-sprite-color';
 import type {PixelBuffer,Rect,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
 import {originalWandOverlay,originalWandCellKey,type WandOriginalCell} from './wand-original-subicon';
+import {loadNativePlaceholderTexture,PLACEHOLDER_ASSET} from './native-placeholder-art';
 
 const ROOT=import.meta.env.BASE_URL+'dynamic-wand-art/';
 // Three ordinary item-wand source candidates reference this exact native
 // icon_placeholder Sprite. It is not an individual item-specific image.
 const PLACEHOLDER_SOURCE_IDS=new Set([328475120,1254006907,1731977601]);
-const PLACEHOLDER_ASSET:TextureAsset={file:'native-placeholder.webp',bytes:202,
- sha256:'0adfe05aff08f9988167c8e8a04b47bfe01cfb1b955aee56a70a2c29edc638c2',
- rgbSha256:'e1a9ebe1a551938daee31b811a959a40679c5472dc613f53580b56c89920dfdb',width:258,height:516};
+
 export const WAND_MANIFEST_SHA='5d4d42d95417c8e6222747433b784a32ee9aaebb91216366a70645a33085f0bb';
 type Row={itemId:number;maskGuid:string;base:{spritePathId:string;sampleRect:Rect;trimTopLeft:Rect;logicalSize:number};mask:{spritePathId:string;sampleRect:Rect;colorSpace:number;filterMode:number;mipCount:number}};
 type Manifest={schema:string;version:string;base:TextureAsset;mask:TextureAsset;alphaOffsetY:number;magic:WandColor[];flecks:WandColor[];rows:Row[]};
@@ -120,7 +119,7 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
    }else if(itemId===384749651&&PLACEHOLDER_SOURCE_IDS.has(appearance.sourceItemId)){
     // Native GetUiIcon returns the same original placeholder Sprite.
     spritePathId='-6646601456236922891';sourceHash=PLACEHOLDER_ASSET.sha256;
-    overlay={texture:await loadOpaqueArtTexture(ROOT,PLACEHOLDER_ASSET),
+    overlay={texture:await loadNativePlaceholderTexture(),
      sampleRect:[1,1,256,256],trim:[0,0,256,256],alphaOffsetY:258,
      logicalWidth:256,logicalHeight:256,sampleClamp:[.5,.5,257.5,257.5],
      scale:transform.scale,offsetPercent:transform.offsetPercent,rotation:transform.rotation};

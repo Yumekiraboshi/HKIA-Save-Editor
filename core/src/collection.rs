@@ -592,7 +592,9 @@ impl Editor {
    if !self.unique_quantity_ids.contains(&row.id){return None}
    Self::legacy_furniture_materials(&self.slot.envelope.decoded,row)?
   }else{furniture_variant(row.unique_data?)?};
-  if original==[0;3]||original.iter().any(|&n|furniture_source::material_unlock_item(n).is_some()){return None}
+  // A source-valid restricted material already present in this exact row
+  // is a local witness, not a transferable material unlock.
+  if original==[0;3]{return None}
   furniture_key(source,original)?;
   Some(source)
  }
@@ -638,7 +640,7 @@ impl Editor {
  fn valid_furniture_target(source:&FurnitureItemSource,original:FurnitureVariant,target:FurnitureVariant)->bool{
   target!=[0;3]&&furniture_key(source,target).is_some()&&
    target.iter().enumerate().all(|(i,&n)|n==0||(
-    furniture_source::material_unlock_item(n).is_none()&&
+    (furniture_source::material_unlock_item(n).is_none()||original[i]==n)&&
     source.slots.iter().find(|s|s.slot as usize==i).is_some_and(|s|s.allowed.contains(&n)||original[i]==n)))
  }
  /// Rust issues source-defined one-slot choices. The commit accepts an
@@ -1452,7 +1454,7 @@ impl Editor {
  }
  fn absent_wand_source_allowed(&self,item:i32,source:i32)->bool{
   source>0&&crate::inventory_source::wand_source_style(item,source)==Some(0)&&
-   (crate::inventory_source::ordinary_creation_item(source)||self.has_owned_wand_source(source))
+   (crate::inventory_source::ordinary_bag_creation_item(source)||self.has_owned_wand_source(source))
  }
  // Reserve both original and effective identities, including original zero rows.
  // Any unverified original peer makes the whole source family unsafe to extend.
@@ -1506,6 +1508,7 @@ impl Editor {
   Self::wand_material_source(crate::inventory_source::ITEM_WAND_ID,item)?;
   if !Self::valid_furniture_target(source,original,current){return None}
   let [a,b,c]=current;
+  if current.iter().any(|&n|furniture_source::material_unlock_item(n).is_some()){return None}
   Self::wand_key(crate::inventory_source::ITEM_WAND_ID,[item,104,125,a,b,c])?;
   Some([item,0,0,a,b,c])
  }
@@ -1549,8 +1552,8 @@ impl Editor {
   Self::furniture_wand_pairs(witness,&keys)
  }
  fn wand_source_candidates(&self,item:i32)->Vec<i32>{
-  let mut sources=crate::inventory_source::ordinary_creation_ids().filter(|&source|
-   crate::inventory_source::ordinary_creation_item(source)&&crate::inventory_source::wand_source_style(item,source)==Some(0)).collect::<Vec<_>>();
+  let mut sources=crate::inventory_source::ordinary_bag_creation_ids().filter(|&source|
+   crate::inventory_source::wand_source_style(item,source)==Some(0)).collect::<Vec<_>>();
   sources.extend(self.slot.index.inventory.iter().filter_map(|r|{
    let source=r.item_id?;
    (crate::inventory_source::wand_source_style(item,source)==Some(0)&&self.inventory_item_rows.get(&source)==Some(&1)&&

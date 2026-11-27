@@ -3753,6 +3753,7 @@ fn first_source_wands_require_explicit_source_witness_and_replay_it(){
   assert!(e.inventory_absent_wand_ids().contains(&(critter as i32,0)));
   let sources=e.inventory_absent_wand_sources(item_candidate);
   assert!(sources.contains(&stick)&&sources.windows(2).all(|w|w[0]<w[1]));
+  assert!(sources.contains(&15761463)); // unrestricted native bag definition outside the old creation slice
   assert_eq!(e.inventory_absent_wand_sources(critter_candidate),vec![bug]);
   assert_eq!(e.inventory_wand_creation_variants(item_candidate).len(),36);
   for bad in [[0,0],[stick,1],[1900000001,0]]{
@@ -3770,6 +3771,8 @@ fn first_source_wands_require_explicit_source_witness_and_replay_it(){
   assert!(e.create_inventory_wand_variant(item_candidate,[stick,0],[104,125],1).is_err());
   let alternate=e.create_inventory_wand_variant(item_candidate,[315822,0],[104,125],4).unwrap();
   assert!(matches!(e.inventory_unique_data(alternate),Some(U::WandAppearance{source_item_id:315822,style:0,magic:104,fleck:125,..})));
+  let common=e.create_inventory_wand_variant(item_candidate,[15761463,0],[104,125],5).unwrap();
+  assert!(matches!(e.inventory_unique_data(common),Some(U::WandAppearance{source_item_id:15761463,style:0,magic:104,fleck:125,source_tag:-1,..})));
   e.change_inventory_wand_variant(first,[104,125],[106,125]).unwrap();
   assert!(!e.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[104,125]));
   assert!(!e.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[106,125]));
@@ -3781,6 +3784,8 @@ fn first_source_wands_require_explicit_source_witness_and_replay_it(){
   assert!(saved.inventory().iter().any(|r|r.quantity==3&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(first)));
   assert!(saved.inventory().iter().any(|r|r.quantity==1&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(second)));
   assert!(saved.inventory().iter().any(|r|r.quantity==4&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(alternate)));
+  assert!(saved.inventory().iter().any(|r|r.quantity==5&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(common)));
+  assert!(!saved.inventory().iter().any(|r|r.item_id==15761463));
   assert!(!saved.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[106,125]));
   assert!(saved.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[104,125]));
  }
@@ -4952,4 +4957,34 @@ fn distributable_native_stack_classes_edit_atomically_without_absent_acquisition
   assert_eq!(saved.entries(),e.entries());assert_eq!(saved.achievements(),e.achievements());
  }
  let mut empty=Editor::open(slot("3.0.1")).unwrap();for id in ids{assert!(empty.change_inventory_quantity((1u32<<31)|id,0,1).is_err());}
+}
+
+#[test]
+fn saved_restricted_furniture_material_is_a_row_local_witness_not_an_unlock(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=77485988u32;let make=|value:u32,peer:bool|{
+  let mut p=synthetic_payload("3.0.1");p[3]=if peer{0x97}else{0x96};p[2]=if peer{6}else{5};
+  p.extend(doc(1,arr(vec![u(4),u(item),u(11),u(1),furniture_payload([value,0,0])])));
+  if peer{p.extend(doc(1,arr(vec![u(5),u(item),u(0),u(1),vec![0xc0]])));}
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(287,false);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let before=[287,0,0];let next=[286,0,0];
+  assert_eq!(e.inventory_unique_data(4),Some(U::Furniture{materials:before}));
+  assert!(e.inventory_furniture_variants(4).contains(&next));
+  for bad in [[288,0,0],[289,0,0],[287,287,0]]{assert!(e.change_inventory_furniture_variant(4,before,bad).is_err());}
+  assert!(e.create_inventory_furniture_variant(4,before,[288,0,0],1).is_err());assert!(!e.dirty());
+  e.change_inventory_furniture_variant(4,before,next).unwrap();
+  assert!(e.inventory_furniture_variants(4).contains(&before));
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory_unique_data(4),Some(U::Furniture{materials:before}));
+  assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory_unique_data(4),Some(U::Furniture{materials:next}));
+  assert!(saved.change_inventory_furniture_variant(4,next,before).is_err());
+  assert_eq!(saved.entries(),e.entries());assert_eq!(saved.achievements(),e.achievements());
+ }
+ let mut collision=Editor::open(make(287,true)).unwrap();
+ assert!(collision.change_inventory_furniture_variant(4,[287,0,0],[286,0,0]).is_err());assert!(!collision.dirty());
 }
