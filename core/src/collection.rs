@@ -154,7 +154,8 @@ const ABSENT_FLOWER_DEFAULTS:&[(i32,&[i32])]=&[
 ];
 // Original generic processors accept any flower; the HK-style bow explicitly
 // clears both pattern fields (IgnorePatternOnOutputItem=true).
-const FLOWER_CLOTHING_GENERIC:&[i32]=&[105502901,1110255162,1227385139];
+// Includes seven event-year floral outfits with unrestricted native tradable outputs.
+const FLOWER_CLOTHING_GENERIC:&[i32]=&[41105179,105502901,313677564,528401863,809985659,811189976,965037291,1110255162,1227385139,1646153125];
 const FLOWER_CLOTHING_NO_PATTERN:i32=1482119840;
 const ALL_UNRESTRICTED_FLOWER_PATTERNS:&[i32]=&[1,2,3,4,5,7,8,9,10,11,12,13,14,16];
 pub type BobaVariant=[i32;5];
