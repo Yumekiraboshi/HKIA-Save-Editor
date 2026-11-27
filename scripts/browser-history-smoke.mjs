@@ -2207,7 +2207,9 @@ async function inventoryOriginalArtSmoke(){
   const pajama=page.locator('.inventory-card .inventory-item-art .item-sprite[data-dye-source="game-source-sprite"]');
   await pajama.waitFor({timeout:30_000});
   assert.equal(await pajama.getAttribute('data-icon-fidelity'),'game-original');
-  assert.ok((await pajama.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/source-colorways/315822.webp'));
+  const pajamaHash=JSON.parse(readFileSync('public/dynamic-colorways/index.json','utf8')).records['315822'];
+  assert.match(pajamaHash,/^[a-f0-9]{64}$/);
+  assert.ok((await pajama.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/dynamic-colorways/315822.webp?v='+pajamaHash),'native IconOverride takes precedence over the old atlas variant');
   const pajamaBadge=page.locator('.inventory-card [data-native-decorator="14"]');
   await pajamaBadge.waitFor({timeout:30_000});
   assert.deepEqual(await pajamaBadge.evaluate(el=>[getComputedStyle(el.querySelector('.plate-inner')).backgroundColor,getComputedStyle(el.querySelector('.native-dye-icon-tint')).backgroundColor]),['rgb(149, 250, 172)','rgb(249, 241, 244)']);
@@ -2506,9 +2508,10 @@ async function run(){
    const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await response.arrayBuffer())),x=>x.toString(16).padStart(2,'0')).join('');
    return {id,url,digest,hash,count:n};
   });
-  const expected=source[result.id]?.sha256??dynamic[result.id];
+  const expected=dynamic[result.id]??source[result.id]?.sha256;
   assert.ok(expected,'registered original item ID');
-  assert.ok(result.url.includes('/'+result.id+'.webp'),'same item source URL');
+  const expectedPath=dynamic[result.id]?'/dynamic-colorways/'+result.id+'.webp?v='+expected:'/source-colorways/'+result.id+'.webp';
+  assert.ok(result.url.endsWith(expectedPath),'same item and native override precedence');
   assert.equal(result.digest,expected,'actual bytes match the original-source image manifest');
   assert.ok(result.count>0,'decoded source sprite is not blank');
   return result;
