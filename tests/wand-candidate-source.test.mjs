@@ -45,3 +45,24 @@ test('malformed route cannot bind to a different source cell',()=>{
  const m=structuredClone(manifest);m.sprites[1][2]=0;
  assert.throws(()=>decodeWandCandidateSource(m),/WAND_CANDIDATE_ROW/);
 });
+
+test('all 206 extra original definition aliases share their exact sampled Sprite and never grant candidate eligibility',()=>{
+ const source=JSON.parse(read('data/wand-original-sprite-aliases-v3.0.1.json'));
+ const native=JSON.parse(read('public/inventory-art/index.json'));
+ const originalRows=new Map(native.records.map(r=>[r[0],r[3]]));
+ const spriteIndexes=new Map(manifest.sprites.map((r,i)=>[r[0],i]));
+ const b=Buffer.alloc(source.rows.length*6);
+ assert.equal(source.rows.length,206);assert.equal(binding.aliasRows.size,206);
+ assert.equal(new Set(source.rows.map(r=>r[1])).size,179);
+ assert.equal(source.rows.filter(r=>originalRows.has(r[0])).length,183);
+ for(const [i,[id,pid]] of source.rows.entries()){
+  assert.ok(!Object.hasOwn(manifest.items,String(id)));
+  assert.equal(candidateWandSprite(binding,id,transform),binding.rows.get(pid));
+  assert.equal(candidateWandSprite(binding,id,{...transform,rotation:1}),undefined);
+  if(originalRows.has(id))assert.equal(originalRows.get(id),pid);
+  b.writeUInt32LE(id,i*6);b.writeUInt16LE(spriteIndexes.get(pid),i*6+4);
+ }
+ assert.equal(sha(b),source.indexRowsSha256);
+ assert.equal(source.indexRowsSha256,'b616fa26ecf162dcd8172ed57c0f108de905b81f0389ffd2e11ed97075e186c9');
+ assert.deepEqual(native.records.filter(r=>!Object.hasOwn(manifest.items,String(r[0]))&&binding.rows.has(r[3])).map(r=>r[0]).sort((a,b)=>a-b),source.rows.filter(r=>originalRows.has(r[0])).map(r=>r[0]));
+});
