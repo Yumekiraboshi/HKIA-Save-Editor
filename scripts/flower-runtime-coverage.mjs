@@ -69,8 +69,11 @@ export async function flowerRuntimeCoverage(browser,origin,base){
     const original=await renderFlowerOriginalBaseArt(item.itemId,originalFields),p=await pixels(original);
     if(!p?.visible||p.alpha!==alpha||original!==await renderFlowerOriginalBaseArt(item.itemId,{...originalFields,baseColor:1}))originalFailures.push(item.itemId);
     const states=[];
-    for(const state of [0,7])states.push({state,generated:!!await draw(1,0,0,state),original:!!await renderFlowerOriginalBaseArt(item.itemId,{...originalFields,growState:state})});
-    stateResults.push({itemId:item.itemId,states});
+    for(const state of [0,1,2,3,4,5,7,8,255])states.push({state,generated:!!await draw(1,0,0,state),original:!!await renderFlowerOriginalBaseArt(item.itemId,{...originalFields,growState:state}),sameOriginal:original===await renderFlowerOriginalBaseArt(item.itemId,{...originalFields,growState:state})});
+    const unknownAccent=await renderFlowerArt(item.itemId,{growState:6,baseColor:1,pattern:0,patternColor:9999},defs);
+    const plain=await renderFlowerArt(item.itemId,{growState:6,baseColor:1,pattern:0,patternColor:0},defs);
+    const unusedKnownAccent=await renderFlowerArt(item.itemId,{growState:6,baseColor:1,pattern:0,patternColor:9},defs);
+    stateResults.push({itemId:item.itemId,states,unknownAccent:unknownAccent===null,unusedKnownAccent:plain!==null&&plain===unusedKnownAccent});
    }
    return {species:index.items.length,colors:colors.length,plainCases,patternCases,exactAccentCases,missing,primaryCollisions,patternPrimaryCollisions,accentCollisions,alphaMismatches,stateResults,originalFailures,unknownOriginal:await renderFlowerOriginalBaseArt(0,{growState:6,baseColor:1,pattern:0,patternColor:0})===null};
   },base);
@@ -85,7 +88,7 @@ export async function flowerRuntimeCoverage(browser,origin,base){
   // source masks can contain no visible green channel. Native fallback and
   // effect sprites can also intentionally share the same image.
   assert.deepEqual(out.originalFailures,[]);assert.ok(out.unknownOriginal);
-  assert.ok(out.stateResults.every(r=>r.states.every(s=>!s.generated&&!s.original)),'non-plucked states use the documented native fallback');
+  assert.ok(out.stateResults.every(r=>r.unknownAccent&&r.unusedKnownAccent&&r.states.every(s=>!s.generated&&s.original===[1,2,4,5].includes(s.state)&&s.sameOriginal===s.original)),'all known native states choose the correct original image; invalid accent remains unresolved');
   // An unavailable mask index or texture must not suppress the separately
   // verified original base for any of the 25 species.
   for(const pattern of ['**/inventory-flower-art/index.json','**/inventory-flower-art/flower-mask-rgb-v3.0.1.webp']){

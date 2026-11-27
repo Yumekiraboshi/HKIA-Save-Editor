@@ -9,6 +9,16 @@ export function flowerGrowthKind(itemId:number,flower:InventoryFlower|undefined)
  if(!flower||!hasNativeFlowerArt(itemId))return null;
  return flower.growState===0?'seed':flower.growState===6?'plucked':flower.growState===7?'uprooted':'unknown';
 }
+/** Native FlowerModel.IconForState selects GrownTroweledIcon for both
+ * Grown (3) and GrownTroweled (7). Keep the saved state and its label distinct. */
+export function flowerGrowthSpriteState(itemId:number,flower:InventoryFlower|undefined):0|7|undefined{
+ if(!flower||!hasNativeFlowerArt(itemId))return undefined;
+ return flower.growState===0?0:flower.growState===3||flower.growState===7?7:undefined;
+}
+/** Known states that select the definition UiIcon; only 6 applies tint. */
+export function flowerUsesDefinitionIcon(itemId:number,flower:InventoryFlower|undefined):boolean{
+ return !!flower&&hasNativeFlowerArt(itemId)&&[1,2,4,5,6].includes(flower.growState);
+}
 type ColorDef={labelId:string;rgba:[number,number,number,number]};
 type PatternDef={labelId:string;effect:boolean};
 export type FlowerDisplayDefinitions={colors:Record<string,ColorDef>;patterns:Record<string,PatternDef>};

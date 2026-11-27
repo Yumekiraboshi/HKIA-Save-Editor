@@ -1,6 +1,6 @@
 <script lang="ts">
  import type {SpriteCell} from './icon-packs';
- import {flowerGrowthKind,type InventoryFlower,type FlowerDisplayDefinitions} from './inventory-flower-display';
+ import {flowerGrowthKind,flowerGrowthSpriteState,flowerUsesDefinitionIcon,type InventoryFlower,type FlowerDisplayDefinitions} from './inventory-flower-display';
  import {renderFlowerArt,renderFlowerOriginalBaseArt,renderFlowerDefinitionBaseArt} from './flower-runtime-art';
  import {isStaticFlowerCreationIcon} from './flower-icon-route';
  import {loadFlowerGrowthCell} from './flower-growth-art';
@@ -8,13 +8,14 @@
  import DynamicArtSprite from './DynamicArtSprite.svelte';
  let {itemId,flower,definitions,fallback}:{itemId:number;flower?:InventoryFlower;definitions:FlowerDisplayDefinitions|null;fallback?:SpriteCell}=$props();
  const growth=$derived(flowerGrowthKind(itemId,flower));
+ const spriteState=$derived(flowerGrowthSpriteState(itemId,flower));
  let near=$state(false);
  let resolved=$state<{id:number;state:number;cell:SpriteCell}|undefined>();
  const setNear=(value:boolean)=>{near=value;};
  const growthCell=$derived(resolved?.id===itemId&&resolved.state===flower?.growState?resolved.cell:undefined);
  const displayed=$derived(growthCell??fallback);
  $effect(()=>{
-  if(!flower||!near||(growth!=='seed'&&growth!=='uprooted'))return;
+  if(!flower||!near||spriteState===undefined)return;
   const id=itemId,fields={...flower};
   let active=true;
   void loadFlowerGrowthCell(id,fields).then(cell=>{if(active&&cell)resolved={id,state:fields.growState,cell};});
@@ -26,7 +27,7 @@
  });
  let renderPartial=$derived.by(()=>{const id=itemId,fields=flower?{...flower}:undefined;return ()=>fields?renderFlowerOriginalBaseArt(id,fields):renderFlowerDefinitionBaseArt(id);});
 </script>
-{#if growth==='seed'||growth==='uprooted'}
+{#if spriteState!==undefined}
  <span use:watchDynamicArtVisibility={setNear} class:item-sprite={!!displayed} class:item-art-empty={!displayed}
   data-flower-state-art={growthCell?'native-state-sprite':fallback?'species-reference':undefined}
   data-inventory-art={growthCell?'native-growth-state':undefined}
@@ -34,7 +35,7 @@
   style:background-position={displayed?'-'+displayed.x+'px -'+displayed.y+'px':undefined}>{#if !displayed}✧{/if}</span>
 {:else if isStaticFlowerCreationIcon(itemId)}
  <span class:item-sprite={!!fallback} class:item-art-empty={!fallback} data-inventory-art="native-static-route" style:background-image={fallback?'url("'+fallback.url+'")':undefined} style:background-position={fallback?'-'+fallback.x+'px -'+fallback.y+'px':undefined}>{#if !fallback}✧{/if}</span>
-{:else if growth==='unknown'}
+{:else if growth==='unknown'&&!flowerUsesDefinitionIcon(itemId,flower)}
  <span class:item-sprite={!!fallback} class:item-art-empty={!fallback} data-flower-state-art={fallback?'species-reference':undefined}
   style:background-image={fallback?'url("'+fallback.url+'")':undefined}
   style:background-position={fallback?'-'+fallback.x+'px -'+fallback.y+'px':undefined}>{#if !fallback}✧{/if}</span>
