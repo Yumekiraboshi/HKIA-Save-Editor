@@ -1344,6 +1344,14 @@ async function inventoryAbsentFlowerCreationSmoke(){
   assert.equal(await dialog.locator('button[type="submit"]').count(),0);
   const firstPattern=await dialog.locator('option[data-flower-variant="6,2,1,16"]').getAttribute('value');assert.ok(firstPattern!==null);
   await dialog.locator('select').selectOption(firstPattern);
+  const reset=dialog.locator('.inventory-flower-reset:not([disabled])');
+  await reset.waitFor();
+  await reset.click();
+  await dialog.locator('.inventory-flower-reset').waitFor({state:'hidden'});
+  const restoredPattern=await dialog.locator('option[data-flower-variant="6,2,1,16"]').getAttribute('value');
+  assert.ok(restoredPattern!==null);
+  await dialog.locator('select').selectOption(restoredPattern);
+  await reset.waitFor();
   await dialog.locator('.inventory-create-flower:not([disabled])').click();
   await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();
