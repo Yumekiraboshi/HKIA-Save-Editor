@@ -4075,6 +4075,69 @@ fn furniture_source_wand_edits_and_additions_preserve_exact_nested_identity(){
 }
 
 #[test]
+fn existing_generic_magic_wand_zero_style_is_editable_but_not_an_absent_candidate(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=1020402601u32;let candidate=(1u32<<31)|item;
+ let payload=|source:u32,style:u32,magic:u32,fleck:u32|arr(vec![vec![9],arr(vec![u(source),vec![0xc0],u(magic),u(fleck),u(style)])]);
+ let make=|source:u32,style:u32,extra:Option<Vec<u8>>|{
+  let mut p=synthetic_payload("3.0.1");p[2]=6;p[3]=0x96+u8::from(extra.is_some());
+  p.extend(doc(1,arr(vec![u(4),u(item),u(21),u(3),payload(source,style,104,125)])));
+  if let Some(extra)=extra{p.extend(extra);}
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(0,0,None);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory()[0].editable&&e.inventory()[0].quantity_minimum==0);
+  assert_eq!(e.inventory_wand_variants(4).len(),35);
+  assert!(e.inventory_wand_creation_variants(candidate).is_empty());
+  assert!(e.create_inventory_wand_variant(candidate,[0,0],[106,127],1).is_err());
+  assert!(e.inventory_wand_edit_sources(4).is_empty());
+  assert!(e.change_inventory_wand_variant(4,[104,125],[132,125]).is_err());
+  e.change_inventory_wand_variant(4,[104,125],[106,127]).unwrap();
+  let child=e.create_inventory_wand_variant(4,[106,127],[108,126],2).unwrap();
+  assert!(e.create_inventory_wand_variant(4,[106,127],[108,126],1).is_err());
+  e.change_inventory_quantity(4,3,0).unwrap();
+  assert!(e.inventory_wand_creation_variants(4).is_empty());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity,0);
+  assert!(matches!(saved.inventory_unique_data(4),Some(U::WandAppearance{source_item_id:0,magic:106,fleck:127,style:0,source_tag:-1,..})));
+  let added=saved.inventory().into_iter().find(|r|r.quantity==2).unwrap();
+  assert_eq!(saved.inventory_unique_data(added.document_id),e.inventory_unique_data(child));
+  saved.change_inventory_quantity(4,0,3).unwrap();
+  assert!(Editor::open(saved.export().unwrap()).is_ok());
+ }
+ let mut empty=Editor::open(slot("3.0.1")).unwrap();
+ assert!(!empty.inventory_absent_wand_ids().iter().any(|r|r.0==item as i32));
+ assert!(empty.create_inventory_wand_variant(candidate,[0,0],[104,125],1).is_err());
+ // Generic output proof covers the modern tag-9 shape only; the legacy
+ // GUID decoder must not inherit this authorization from the style map.
+ for zipped in [false,true]{
+  let mut p=synthetic_payload("3.0.1");p[2]=6;p[3]=0x96;
+  let legacy=arr(vec![vec![5],arr(vec![guid([0;4]),vec![0xc0],u(104),u(125),u(0)])]);
+  p.extend(doc(1,arr(vec![u(4),u(item),u(21),u(3),legacy])));
+  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(!e.inventory()[0].editable);
+  assert!(e.inventory_wand_variants(4).is_empty());
+  assert!(e.change_inventory_quantity(4,3,0).is_err());
+  assert!(e.change_inventory_wand_variant(4,[104,125],[106,127]).is_err());
+  assert!(!e.dirty());
+ }
+ for (source,style) in [(315822,0),(0,118),(0,116),(0,124)]{
+  let mut e=Editor::open(make(source,style,None)).unwrap();
+  assert!(!e.inventory()[0].editable);
+  assert!(e.change_inventory_wand_variant(4,[104,125],[106,127]).is_err());
+ }
+ let equipped=doc(22,arr(vec![u(5),arr(vec![]),arr(vec![arr(vec![u(item),payload(0,0,104,125)])]),vec![0xc0],vec![0xc0],arr(vec![])]));
+ let mut e=Editor::open(make(0,0,Some(equipped))).unwrap();
+ assert!(e.inventory_wand_variants(4).is_empty());
+ assert!(e.change_inventory_quantity(4,3,0).is_err());
+}
+
+#[test]
 fn rare_candle_effect_only_patterns_roundtrip_and_preserve_native_identity(){
  use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
  for zipped in [false,true]{
