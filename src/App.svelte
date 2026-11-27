@@ -10,7 +10,7 @@
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,type FurnitureDisplay} from './inventory-furniture-display';
- import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryRefillable,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryRefillable,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,flowerGrowthKind,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
@@ -1566,7 +1566,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const canCafe=!!item.cafe?.editable}
      {@const canWand=!!item.unique?.wandEditable&&!!wand}
      {@const canBoba=!!item.boba?.editable}
-      <article class="inventory-card" class:inventory-empty-stack={!inventoryAddMode&&inventoryRefillable(item)} class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!item.flowerCreatable} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
+      <article class="inventory-card" class:inventory-empty-stack={!inventoryAddMode&&inventoryRefillable(item)} class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
       {#if inventoryBatchMode&&item.editable}
        <input class="inventory-batch-checkbox" type="checkbox" checked={inventoryBatchSelected.has(item.documentId)} aria-label={iBatchCopy+': '+inventoryName(item.itemId)}
         disabled={busy||(!inventoryBatchSelected.has(item.documentId)&&inventoryBatchSelected.size>=snapshot.inventoryBatchLimit)} onchange={()=>toggleInventoryBatch(item)}/>
@@ -1625,6 +1625,13 @@ import {verifiedFloorplanName} from './floorplan-names';
          </button>
         {/if}
        </form>
+      {:else if inventoryAddMode&&inventoryCustomizationSource(item)&&(canFlower||canFurniture||canPalette||canBoba||canCafe||canWand)}
+       <button class="inventory-unique-edit-button inventory-add-source" type="button" disabled={busy||inventoryBatchMode}
+        title={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)}
+        onclick={()=>void (canWand?openWandEditor(item):canCafe?openCafeEditor(item):canBoba?openBobaEditor(item):canPalette?openPaletteEditor(item):canFurniture?openFurnitureEditor(item):openFlowerEditor(item))}>
+        <span>{item.quantity.toLocaleString(locale)}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+       </button>
       {:else if item.flowerCreatable}
        <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openAbsentFlowerEditor(item)}>{inventoryAddCopy(locale)}</button>
       {:else if canFurniture}
