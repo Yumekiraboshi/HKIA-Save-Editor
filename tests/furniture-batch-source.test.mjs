@@ -164,3 +164,40 @@ fields[empty]['CustomizedPreviewId']=struct.pack('<I',1);reject()
 `;
  execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
 });
+
+
+test('mesh owner CAB preparation is shared without cross-item scene or geometry state',()=>{
+ const py=String.raw`
+import importlib.util,types,struct
+spec=importlib.util.spec_from_file_location('mesh','scripts/extract-furniture-mesh-source.py')
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+cab='CAB-'+'a'*32
+calls=[]
+raw=b'original bundle'
+def extract_nodes(value):
+    assert value==raw
+    calls.append('decompress')
+    return None,[(cab,b'serialized'),(cab+'.resS',b'stream')]
+def trees(value,indexed):
+    assert value==b'serialized' and indexed
+    calls.append('trees')
+    return {},[],{'1':0}
+def objects(value,classes):
+    assert value==b'serialized' and 142 in classes
+    calls.append('objects')
+    # Empty native AssetBundle container; no prefab key.
+    return [(142,'1',struct.pack('<III',0,0,0),'<')]
+audit=types.SimpleNamespace(auditor=types.SimpleNamespace(extract_nodes=extract_nodes),serialized_objects=objects)
+m.type_trees=trees
+p=m.prepare_bundle(raw,audit)
+assert p[0]==m.sha(raw) and p[1]==cab and p[2]==b'stream'
+for guid,item in [('a'*32,1),('b'*32,2)]:
+    try:m.extract_prepared(p,'owner',guid,item,audit);raise AssertionError('absent prefab accepted')
+    except ValueError as e:assert str(e)=='missing native prefab key'
+assert calls==['decompress','trees','objects']
+try:m.extract(raw,'owner','c'*32,3,audit);raise AssertionError('absent prefab accepted')
+except ValueError as e:assert str(e)=='missing native prefab key'
+assert calls==['decompress','trees','objects']*2
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
+});

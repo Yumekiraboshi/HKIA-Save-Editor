@@ -179,7 +179,7 @@ def extract_batch(plan,root,out,kind,limit):
             jobs.append((typ,row,names))
     found=locate(root,{name for _,_,names in jobs for name in names})
     def attempt(bundle,rows):
-        raw=None;bundle_error=None;parsed=None
+        raw=None;bundle_error=None;parsed=None;prepared_mesh=None
         try:raw=load_unique(found.get(bundle,[]))
         except (OSError,ValueError) as e:bundle_error=str(e)
         replies=[]
@@ -191,7 +191,8 @@ def extract_batch(plan,root,out,kind,limit):
                 replies.append(({**receipt,'status':'unresolved','reason':bundle_error},False));continue
             try:
                 if typ=='geometry':
-                    meta,payload=mesh.extract(raw,bundle,row['guid'],key,audit,resolve_cab=lambda cab:cab_index.resolve(cab,set(row['bundles'])))
+                    if prepared_mesh is None:prepared_mesh=mesh.prepare_bundle(raw,audit)
+                    meta,payload=mesh.extract_prepared(prepared_mesh,bundle,row['guid'],key,audit,resolve_cab=lambda cab:cab_index.resolve(cab,set(row['bundles'])))
                     if key in known_models:require(meta==known_models[key],'pinned geometry mismatch')
                     save_pair(out/'mesh',key,'.geometry.bin',meta,payload)
                 elif key in known_chair:

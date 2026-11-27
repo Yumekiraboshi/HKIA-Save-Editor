@@ -126,12 +126,21 @@ def select_visual_slot_object(item_id,root,bundle_sha,scripts,obj,f):
         raise ValueError('duplicate visual slot fields')
     return first,{'pathId':empty,'objectSha256':empty_sha}
 
-def extract(raw, bundle_name, guid, item_id, audit, resolve_cab=None):
+def prepare_bundle(raw, audit):
+    # Retain one parsed source CAB for the current batch owner only.
+    # Per-item geometry, scene traversal and external CAB caches stay separate.
     _,pairs=audit.auditor.extract_nodes(raw);nodes=dict(pairs)
     cabs=[n for n in nodes if re.fullmatch('CAB-[0-9a-f]{32}',n)]
     if len(cabs)!=1:raise ValueError('one CAB required')
     cab=cabs[0];b=nodes[cab];stream=nodes.get(cab+'.resS',b'');trees,externals,object_types=type_trees(b,indexed=True)
     objects={pid:(c,o) for c,pid,o,e in audit.serialized_objects(b,classes=(1,4,21,23,28,33,43,114,142)) if e=='<'}
+    return (sha(raw),cab,stream,trees,externals,object_types,objects)
+
+def extract(raw, bundle_name, guid, item_id, audit, resolve_cab=None):
+    return extract_prepared(prepare_bundle(raw,audit),bundle_name,guid,item_id,audit,resolve_cab)
+
+def extract_prepared(prepared, bundle_name, guid, item_id, audit, resolve_cab=None):
+    bundle_sha,cab,stream,trees,externals,object_types,objects=prepared
     def obj(pid,cls):
         c,o=objects[pid]
         if c!=cls:raise ValueError('object type mismatch')
@@ -153,7 +162,6 @@ def extract(raw, bundle_name, guid, item_id, audit, resolve_cab=None):
     root=matches[0];root_fields=f(root,1);root_comps=array_ptr(root_fields['m_Component']);root_tr=[ref[1] for ref in root_comps if component_class(ref)==4];scripts=[ref[1] for ref in root_comps if component_class(ref)==114]
     scripts=[pid for pid in scripts if ptr(f(pid,114)['m_Script'])==[1,'-4647883882007958521']]
     if len(root_tr)!=1:raise ValueError('unsupported root components')
-    bundle_sha=sha(raw)
     primary,empty_visual=select_visual_slot_object(item_id,root,bundle_sha,scripts,obj,f)
     sf=f(primary,114);script=ptr(sf['m_Script']);
     if script!=[1,'-4647883882007958521'] or not externals[0].endswith('CAB-2383a36f15413272ed26f383f73f6431'):raise ValueError('unknown visual slot script')
