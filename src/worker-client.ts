@@ -43,7 +43,7 @@ export type SaveSnapshot={
  inventoryCreatable:InventoryEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'flower-preview'|'flower-create'|'flower-create-variants'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-preview'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'boba-variants'|'boba-variant-change'|'boba-create-variants'|'boba-create'|'cafe-variants'|'cafe-variant-change'|'cafe-create-variants'|'cafe-create'|'wand-variants'|'wand-variant-change'|'wand-create-variants'|'wand-create'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'flower-preview'|'flower-create'|'flower-create-variants'|'furniture-variants'|'furniture-preview'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-preview'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'boba-variants'|'boba-variant-change'|'boba-create-variants'|'boba-create'|'cafe-variants'|'cafe-variant-change'|'cafe-create-variants'|'cafe-create'|'wand-variants'|'wand-variant-change'|'wand-create-variants'|'wand-create'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -178,6 +178,10 @@ export function requestFurnitureCreationVariants(documentId:number):Promise<Furn
 }
 export function createInventoryFurnitureVariant(documentId:number,beforeFurnitureVariant:FurnitureVariant,nextFurnitureVariant:FurnitureVariant,nextQuantity:number):Promise<SaveSnapshot>{
  return rpc('furniture-create',{documentId,beforeFurnitureVariant:[...beforeFurnitureVariant],nextFurnitureVariant:[...nextFurnitureVariant],nextQuantity}) as Promise<SaveSnapshot>;
+}
+export type FurniturePreview={options:FurnitureVariant[];creatable:boolean};
+export function requestFurniturePreview(documentId:number,beforeFurnitureVariant:FurnitureVariant,nextFurnitureVariant:FurnitureVariant):Promise<FurniturePreview>{
+ return rpc('furniture-preview',{documentId,beforeFurnitureVariant:[...beforeFurnitureVariant],nextFurnitureVariant:[...nextFurnitureVariant]}) as Promise<FurniturePreview>;
 }
 export function requestFurnitureVariants(documentId:number):Promise<FurnitureVariant[]>{
  return rpc('furniture-variants',{documentId}) as Promise<FurnitureVariant[]>;

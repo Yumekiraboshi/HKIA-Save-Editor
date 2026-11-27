@@ -1677,8 +1677,10 @@ async function inventoryFurnitureVariantEditSmoke(){
   const value=await select.locator('optgroup').first().locator('option[data-material-index="502"]').getAttribute('value');
   assert.ok(value!==null);
   await select.selectOption(value);
+  await dialog.locator('[data-furniture-reset="0"]:not([disabled])').waitFor();
   const second=await select.locator('optgroup').nth(1).locator('option[data-material-index="3"]').getAttribute('value');assert.ok(second!==null);
   await select.selectOption(second);
+  await dialog.locator('[data-furniture-reset="1"]:not([disabled])').waitFor();
   assert.equal(await dialog.locator('.inventory-furniture-reset').count(),2);
   await dialog.locator('button[type="submit"]').click();
   await dialog.waitFor({state:'hidden'});

@@ -280,3 +280,7 @@ The palette dialog refreshes one-channel choices against its uncommitted full tu
 #### Retain the ordinary furniture customization source alongside customized stacks
 
 A positive verified nil/UID-zero furniture base remains an eligible customization source when the same Item ID also has distinct verified nondefault tag-8 stacks. The ordinary base may be saved or staged from the existing source-bounded ordinary creation endpoint. Reject multiple defaults, unknown or ambiguous saved peers, and all existing reference and version restrictions. Reserve every saved and active staged nondefault peer's original and effective normalized key in both option planning and final CAS. Creating another distinct customization leaves the base and all peers unchanged; no new furniture definition, material, placement, entitlement, or recipe is authorized.
+
+#### Native preview for composed furniture materials
+
+The furniture chooser refreshes source-issued per-part options after each draft selection, including ordinary or absent eligible bases and existing custom stacks. Rust verifies the complete draft and normalized peer identity; the Add flag uses the same complete target predicate as final creation CAS. Eligibility remains limited to the existing verified source paths and material rules. No intermediate stack or history entry is created by preview. No new definition, material unlock, placement or entitlement is authorized.
