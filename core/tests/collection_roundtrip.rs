@@ -4197,3 +4197,66 @@ fn only_complete_verified_bag_furniture_wand_copies_release_source_reference(){
   assert!(e.inventory_furniture_creation_variants(4).is_empty());
  }
 }
+
+
+#[test]
+fn remaining_owned_ordinary_furniture_can_create_native_custom_variants_without_absent_authority(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=102286319u32;let candidate=0x80000000|item;
+ let target=[102,0,0];let other=[104,0,0];
+ let make=|quantity:u32,peers:Vec<Vec<u8>>,reference:Option<Vec<u8>>|{
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x96+peers.len() as u8+u8::from(reference.is_some());
+  p.extend(doc(1,arr(vec![u(4),u(item),u(0),u(quantity),vec![0xc0]])));
+  for peer in peers{p.extend(peer);}
+  if let Some(h)=reference{p.extend(doc(32,arr(vec![u(9),guid([7,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![h])]))])])));}
+  slot_from_payload("3.0.1",p)
+ };
+ let custom=|id,uid,materials:[i32;3]|doc(1,arr(vec![u(id),u(item),u(uid),u(2),furniture_payload(materials.map(|v|v as u32))]));
+ let home=|wall,legacy:Vec<Vec<u8>>|arr(vec![guid([41,42,43,44]),arr(legacy),u(wall),u(0),guid([0;4]),l(0),
+  vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])]);
+ let legacy=arr(vec![guid([0xc2961421,0x4fdf4f88,0x988e1cb7,0x7f57b563]),guid([1,2,3,4]),u(0),u(0),u(0),u(0),u(0),u(0),
+  vec![0xc0],vec![0xc0],vec![0xc0],u(0),arr(vec![]),arr(vec![]),u(0)]);
+ for zipped in [false,true]{
+  for with_peer in [false,true]{
+   let raw=make(6,if with_peer{vec![custom(5,11,other)]}else{vec![]},None);
+   let input=if zipped{zip(&raw)}else{raw};
+   let mut e=Editor::open(input.clone()).unwrap();
+   assert!(e.inventory_default_furniture_ids().contains(&4));
+   assert!(e.inventory_furniture_creation_variants(4).contains(&target));
+   assert!(!e.inventory_furniture_creation_variants(4).contains(&[103,0,0]));
+   if with_peer{assert!(!e.inventory_furniture_creation_variants(4).contains(&other));}
+   assert!(e.inventory_furniture_creation_variants(candidate).is_empty());
+   assert!(e.create_inventory_furniture_variant(candidate,[0;3],target,1).is_err());
+   assert!(e.create_inventory_furniture_variant(4,[102,0,0],other,1).is_err());
+   let id=e.create_inventory_furniture_variant(4,[0;3],target,3).unwrap();
+   assert_eq!(e.inventory_unique_data(id),Some(U::Furniture{materials:target}));
+   assert!(e.create_inventory_furniture_variant(4,[0;3],target,1).is_err());
+   let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();
+   recovered.restore_history(&cp).unwrap();assert!(recovered.undo_scope(Inventory));assert!(recovered.redo_scope(Inventory));
+   let saved=Editor::open(recovered.export().unwrap()).unwrap();
+   assert_eq!(saved.inventory()[0].quantity,6);
+   assert_eq!(saved.inventory_original_unique_payload(4),Some([0xc0].as_slice()));
+   let row=saved.inventory().into_iter().find(|r|r.quantity==3).unwrap();
+   assert_eq!(saved.inventory_unique_data(row.document_id),Some(U::Furniture{materials:target}));
+   assert!(saved.inventory_unique_rows().any(|r|r.0==row.document_id&&r.1.is_some_and(|uid|uid>0)));
+   if with_peer{assert_eq!(saved.inventory_unique_data(5),Some(U::Furniture{materials:other}));}
+  }
+ }
+ for raw in [
+  make(0,vec![],None),
+  make(6,vec![],Some(home(item,vec![]))),
+  make(6,vec![],Some(home(0,vec![legacy]))),
+  make(6,vec![doc(1,arr(vec![u(5),u(item),u(0),u(2),vec![0xc0]]))],None),
+  make(6,vec![custom(5,11,[0,0,0])],None),
+  make(6,vec![custom(5,11,other),custom(6,12,other)],None),
+ ]{
+  let mut e=Editor::open(raw).unwrap();
+  assert!(!e.inventory_default_furniture_ids().contains(&4));
+  assert!(e.create_inventory_furniture_variant(4,[0;3],target,1).is_err());
+  assert!(!e.dirty());
+ }
+ let mut absent=Editor::open(slot("3.0.1")).unwrap();
+ assert!(!absent.inventory_absent_furniture_ids().contains(&(item as i32)));
+ assert!(absent.create_inventory_furniture_variant(candidate,[0;3],target,1).is_err());
+ assert!(absent.change_inventory_quantity(candidate,0,1).is_err());
+}
