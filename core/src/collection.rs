@@ -535,7 +535,7 @@ impl Editor {
  }
  fn legacy_flower_source(&self,row:&crate::native::InventoryRow)->Option<FlowerPolicy>{
   let item=row.item_id?;
-  if !FLOWER_SPECIES.iter().any(|&(id,_)|id==item)||self.inventory_item_rows.get(&item)!=Some(&1)||
+  if !FLOWER_SPECIES.iter().any(|&(id,_)|id==item)||
    !crate::inventory_source::is_uncapped_required_unique_stack(item)||
    !self.inventory_creation_payload_safe(item)||self.slot.index.inventory_payload_item_refs.contains(&item)||
    self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item){return None}
@@ -794,9 +794,11 @@ impl Editor {
    if other.id==id{continue}
    if uid.is_some()&&other.unique_id==uid{return None}
    if other.item_id!=Some(item){continue}
-   // A legacy or incomplete payload might be semantically equal.
-   let before=flower_variant(other.unique_data?)?;
-   let after=flower_variant(self.effective_unique(other)?)?;
+   // Both original wire formats share the native FlowerUniqueData properties.
+   // Reserve every resolved peer, even when the peer is not editable.
+   let before=other.unique_data.and_then(flower_variant)
+    .or_else(||Self::legacy_flower_variant(&self.slot.envelope.decoded,other))?;
+   let after=self.flower_variant_changes.get(&other.id).copied().unwrap_or(before);
    for v in [before,after]{if !(0..=7).contains(&v[0])||!(1..=30).contains(&v[1])||!(0..=16).contains(&v[2])||!(0..=30).contains(&v[3]){return None}}
    reserved.insert(before);reserved.insert(after);
   }
@@ -866,7 +868,7 @@ impl Editor {
   if (crate::inventory_source::flower_clothing_reference_keys(item).is_some()||owned_dlc_flower_output(item))&&
    !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return Vec::new()}
   if !self.inventory_creation_payload_safe(item){return Vec::new()}
-  let Some(original)=row.unique_data.and_then(flower_variant)else{return Vec::new()};
+  let Some(original)=self.original_flower_variant(id)else{return Vec::new()};
   self.inventory_flower_variants(id).into_iter().filter(|&v|v!=original).collect()
  }
  /// Stage an explicitly chosen, different native flower tuple from an
@@ -900,7 +902,7 @@ impl Editor {
    !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
   if !self.inventory_creation_payload_safe(item){return None}
   let (patterns,current,reserved)=self.flower_context(id)?;
-  let original=flower_variant(row.unique_data?)?;
+  let original=self.original_flower_variant(id)?;
   (expected==current&&next!=current&&next!=original&&(next[0]==current[0]||self.flower_growth_change_allowed(id))&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
  }
  /// Read-only dialog planning from an uncommitted full tuple.
@@ -2156,7 +2158,8 @@ impl Editor {
     match Self::wand_identity(row).and_then(|v|Self::wand_key(item,v)){Some(v)=>{*wand_counts.entry((item,v)).or_default()+=1;},None=>{ambiguous.insert(item);}}
    }
    if !Self::is_flower_quantity_definition(item){continue}
-   let Some(v)=row.unique_data.and_then(flower_variant)else{ambiguous.insert(item);continue};
+   let Some(v)=row.unique_data.and_then(flower_variant)
+    .or_else(||Self::legacy_flower_variant(&self.slot.envelope.decoded,row))else{ambiguous.insert(item);continue};
    if !(0..=7).contains(&v[0])||!(1..=30).contains(&v[1])||!(0..=16).contains(&v[2])||!(0..=30).contains(&v[3]){
     ambiguous.insert(item);continue
    }
@@ -2172,11 +2175,13 @@ impl Editor {
     self.unique_row_source(row,3)?;
     return (self.legacy_furniture_quantity_source(row).is_some()&&self.legacy_furniture_zero_reference_safe(item)).then_some(row.id)
    }
+   if ambiguous.contains(&item){return None}
    if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:2})){
     self.unique_row_source(row,4)?;
-    return self.legacy_flower_source(row).is_some().then_some(row.id)
+    self.legacy_flower_source(row)?;
+    let v=Self::legacy_flower_variant(&self.slot.envelope.decoded,row)?;
+    return (variant_counts.get(&(item,v))==Some(&1)).then_some(row.id)
    }
-   if ambiguous.contains(&item){return None}
    if Self::palette_identity(row).is_some(){
     self.unique_row_source(row,3)?;
     return (!palette_conflicts.contains(&row.id)).then_some(row.id)
