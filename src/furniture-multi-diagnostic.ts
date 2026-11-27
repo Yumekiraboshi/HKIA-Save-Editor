@@ -12,9 +12,10 @@ import {uploadNativeCube,validateNativeCubeOrientation} from './native-cube-uplo
 import {createFurnitureForwardRenderer,validateFurnitureForwardInputs,type FurnitureForwardMaterial,type FurnitureForwardScene} from './furniture-forwardlit-gpu';
 import type {Vec3,Vec4} from './furniture-surface-v3.0.1';
 import {furnitureRimFromMaterial} from './furniture-rim-v3.0.1';
-import {resolveCustomLitFixedMaterial} from './furniture-customlit-v3.0.1';
+import {resolveCustomLitFixedMaterial,type CustomLitBlendState} from './furniture-customlit-v3.0.1';
 import {glassShaderId,resolveGlassFixedMaterial,type GlassState} from './furniture-glass-v3.0.1';
 import {resolveSparkleFixedMaterial,validateSparkleGpuInputs,createSparkleGpuRenderer} from './furniture-sparkle-gpu';
+type TransparentState=GlassState|CustomLitBlendState;
 type Pattern=NativeTextureSource&{guid:string;bundle:string;bundleSha256:string;pathId:string;objectSha256:string};
 export type FurnitureMultiSources=Omit<RugNativeSources,'variants'>&{
  variants:RugNativeSources['variants']&{bundleNames:readonly string[];patterns:readonly (readonly [string,number,number,readonly number[]])[]};
@@ -77,7 +78,7 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
  const plans=bound.plans.map(p=>{
   const base=p.baseMaterial,f=base.floats,c=base.colors;
   const mesh=get(bound.geometry.meshes[p.meshPathId],'MESH');
-  const common={rendererPathId:p.rendererPathId,meshPathId:p.meshPathId,submeshIndex:p.submeshIndex,slot:p.choice?.slot??null,selectedIndex:p.choice?.selectedIndex??null,cull:f._Cull,glassState:undefined as GlassState|undefined,opaque:f._ZWrite===1&&f._Material_SrcBlend===1&&f._Material_DstBlend===0&&(base.renderQueue===-1||typeof base.renderQueue==='number'&&base.renderQueue<=2500)};
+  const common={rendererPathId:p.rendererPathId,meshPathId:p.meshPathId,submeshIndex:p.submeshIndex,slot:p.choice?.slot??null,selectedIndex:p.choice?.selectedIndex??null,cull:f._Cull,glassState:undefined as GlassState|undefined,customLitBlendState:undefined as CustomLitBlendState|undefined,opaque:f._ZWrite===1&&f._Material_SrcBlend===1&&f._Material_DstBlend===0&&(base.renderQueue===-1||typeof base.renderQueue==='number'&&base.renderQueue<=2500)};
   const sceneFor=(reflectionStrength:number,emissionColor:Vec3,modelNodes=nodes):FurnitureForwardScene=>{
    const transform=authoredRendererModel(modelNodes,p.rendererPathId,request.mountWorld,request.runtimeRoot,request.fit);
    return {...request.scene,model:transform.model,normalMatrix:transform.normalMatrix,tangentParity:transform.tangentParity,reflectionStrength,emissionColor};
@@ -102,7 +103,7 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
    if(p.choice!==null)fail('SHADER_UNSUPPORTED');
    const r=resolveCustomLitFixedMaterial(d.base,p.baseMaterialId),scene=sceneFor(r.reflectionStrength,r.emissionColor);
    validateFurnitureForwardInputs(scene,r.material);checkTextures(Object.values(r.textures));
-   return {...common,kind:'forward' as const,material:r.material,scene,attributes:furnitureForwardAttributeLocations(mesh,r.material,null),...r.textures,patternMap:null};
+   return {...common,kind:'forward' as const,material:r.material,scene,attributes:furnitureForwardAttributeLocations(mesh,r.material,null),...r.textures,patternMap:null,customLitBlendState:r.blendState};
   }
   if(base.shader!==shaderId||base.textures._PatternNormalMap?.texture!==null||base.textures._Surface_EffectMap?.texture!==null||
    f._PatternNormalMap_Toggle!==0||f._Surface_Effect!==0||f.GLIMMER!==0||f._AlphaClip!==0||f._Material_Alpha!==0||f._ZWrite!==1)fail('SHADER_UNSUPPORTED');
@@ -157,10 +158,12 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
  });
  if(new Set(plans.map(p=>p.meshPathId)).size!==Object.keys(bound.geometry.meshes).length)fail('MESH_COVERAGE');
  const hasGlass=plans.some(p=>p.glassState!==undefined);
- // Only one known glass range after the opaque model. Multiple transparent
- // ranges require native renderer sorting evidence rather than an invented order.
- if(hasGlass&&(plans.filter(p=>p.glassState).length!==1||plans.some(p=>!p.glassState&&!p.opaque)))fail('GLASS_ORDER_UNVERIFIED');
- const mixed=hasGlass||plans.some(p=>p.kind==='sparkle'||p.kind==='forward'&&p.material.customLit!==undefined);
+ const transparent=plans.filter(p=>p.glassState!==undefined||p.customLitBlendState!==undefined);
+ const hasTransparent=transparent.length>0;
+ // Only one known transparent range after opaque. Do not infer ordering
+ // of multiple transparent ranges or mix unrelated transparency modes.
+ if(hasTransparent&&(transparent.length!==1||plans.some(p=>!p.glassState&&!p.customLitBlendState&&!p.opaque)))fail(hasGlass?'GLASS_ORDER_UNVERIFIED':'TRANSPARENT_ORDER_UNVERIFIED');
+ const mixed=hasTransparent||plans.some(p=>p.kind==='sparkle'||p.kind==='forward'&&p.material.customLit!==undefined);
  if(mixed&&plans.some(p=>![0,2].includes(p.cull)))fail('CULL_UNSUPPORTED');
  const locations:Record<string,MeshAttributeLocations>={};
  for(const p of plans){
@@ -169,7 +172,7 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
   locations[p.meshPathId]={...previous,...p.attributes};
  }
  for(const c of [request.reflectionPrimary,request.reflectionSecondary])validateNativeCubeOrientation(c.source,c.orientation);
- return {geometry:bound.geometry,plans,locations,mixed,hasGlass,fidelity:'forward-diagnostic-only' as const};
+ return {geometry:bound.geometry,plans,locations,mixed,hasGlass,hasTransparent,fidelity:'forward-diagnostic-only' as const};
 }
 /** Resolve all static meshes, including fixed renderer parts and selected
  * local mirroring, before applying the existing native diagonal scale fit.
@@ -209,7 +212,7 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
   const reflectionPrimary=await cube(request.reflectionPrimary),reflectionSecondary=await cube(request.reflectionSecondary);
   // Resolve every payload before first draw, so unsupported or corrupt assets
   // cannot leave a misleading partial model in the caller's framebuffer.
-  const draws:Array<{cull:number;glassState?:GlassState;run:()=>void}>=[];
+  const draws:Array<{cull:number;transparentState?:TransparentState;run:()=>void}>=[];
   for(const p of resolved.plans){
    const baseMap=await texture(p.baseMap),normalMap=await texture(p.normalMap),comboMap=await texture(p.comboMap);
    const mesh=get(geometry.meshes.get(p.meshPathId),'GPU_MESH');
@@ -220,7 +223,7 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
     if(!p.patternMap&&p.material.useBaseMapMask&&!nativeBaseIsOpaque(p.baseMap,get(payloads.get(p.baseMap.sha256),'BASE_PAYLOAD')))fail('NULL_PATTERN_CONTRIBUTES');
     // CustomLit never consumes patternMap; unused source binding can alias base.
     const patternMap=p.patternMap?await texture(p.patternMap):baseMap;
-    draws.push({cull:p.cull,glassState:p.glassState,run:()=>{
+    draws.push({cull:p.cull,transparentState:p.glassState??p.customLitBlendState,run:()=>{
      if(resolved.locations[p.meshPathId][5]===undefined)gl.vertexAttrib2f(5,0,0);
      renderer!.draw(mesh,{baseMap,normalMap,comboMap,patternMap,reflectionPrimary,reflectionSecondary},p.scene,p.material,p.submeshIndex);
     }});
@@ -234,18 +237,18 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
    // Explicit diagnostic handedness (not proof of Unity camera parity).
    gl.frontFace(gl.CCW);gl.cullFace(gl.BACK);
   }
-  if(resolved.hasGlass){
+  if(resolved.hasTransparent){
    blendState={enabled:gl.isEnabled(gl.BLEND),srcRGB:gl.getParameter(gl.BLEND_SRC_RGB),dstRGB:gl.getParameter(gl.BLEND_DST_RGB),
     srcAlpha:gl.getParameter(gl.BLEND_SRC_ALPHA),dstAlpha:gl.getParameter(gl.BLEND_DST_ALPHA),eqRGB:gl.getParameter(gl.BLEND_EQUATION_RGB),
     eqAlpha:gl.getParameter(gl.BLEND_EQUATION_ALPHA),depthMask:gl.getParameter(gl.DEPTH_WRITEMASK),depthTest:gl.isEnabled(gl.DEPTH_TEST),depthFunc:gl.getParameter(gl.DEPTH_FUNC)};
    gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);
-   draws.sort((a,b)=>(a.glassState?.queue??0)-(b.glassState?.queue??0));
+   draws.sort((a,b)=>(a.transparentState?.queue??0)-(b.transparentState?.queue??0));
   }
   for(const draw of draws){
    if(resolved.mixed){if(draw.cull===2)gl.enable(gl.CULL_FACE);else gl.disable(gl.CULL_FACE);}
    if(blendState){
-    if(draw.glassState){
-     gl.enable(gl.BLEND);gl.blendEquation(gl.FUNC_ADD);gl.blendFunc(draw.glassState.srcBlend===1?gl.ONE:gl.SRC_COLOR,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
+    if(draw.transparentState){
+     gl.enable(gl.BLEND);gl.blendEquation(gl.FUNC_ADD);gl.blendFunc(draw.transparentState.srcBlend===1?gl.ONE:draw.transparentState.srcBlend===3?gl.SRC_COLOR:gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
     }else{gl.disable(gl.BLEND);gl.depthMask(true);}
    }
    draw.run();
