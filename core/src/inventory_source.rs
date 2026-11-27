@@ -287,6 +287,13 @@ pub(crate) const WAND_MAGIC:&[(i32,i32)]=&[
  (112,1864047568),(113,1334678426),(114,558340471),(115,392876538),
 ];
 pub(crate) const WAND_FLECK:&[(i32,i32)]=&[(125,494126928),(126,119953162),(127,1435772717)];
+const MAGIC_WAND_REFERENCE_KEYS:&[(i32,u32)]=&[
+ (39246601,0x5e3f906d),(671373939,0x85b5d9d5),(1233735197,0xc0d01880),
+ (1429161083,0x02024636),(1853305820,0x291e374e),(2096979038,0xa59e6996),
+];
+pub(crate) fn magic_wand_reference_key(item:i32)->Option<u32>{
+ MAGIC_WAND_REFERENCE_KEYS.binary_search_by_key(&item,|&(id,_)|id).ok().map(|i|MAGIC_WAND_REFERENCE_KEYS[i].1)
+}
 pub(crate) fn magic_wand_style(item:i32)->Option<i32>{
  MAGIC_WAND_STYLES.binary_search_by_key(&item,|&(id,_)|id).ok().map(|i|MAGIC_WAND_STYLES[i].1)
 }
@@ -298,6 +305,9 @@ pub(crate) fn magic_wand_choices(v:[i32;2])->bool{
  #[test]fn source_magic_wand_shapes_and_ingredients(){
   assert!(MAGIC_WAND_STYLES.windows(2).all(|w|w[0].0<w[1].0));
   assert!(MAGIC_WAND_STYLES.iter().all(|&(id,_)|is_uncapped_required_unique_stack(id)));
+  assert_eq!(MAGIC_WAND_REFERENCE_KEYS.iter().map(|r|r.0).collect::<Vec<_>>(),MAGIC_WAND_STYLES.iter().map(|r|r.0).collect::<Vec<_>>());
+  assert_eq!(magic_wand_reference_key(1429161083),Some(furniture_guid_fingerprint([0x52e59d2c,0x9342db09,0x587aacab,0x3ac17e48])));
+  assert_eq!(magic_wand_reference_key(1020402601),None);
   assert_eq!(WAND_MAGIC.len()*WAND_FLECK.len(),36);
   assert!(WAND_MAGIC.iter().chain(WAND_FLECK).all(|&(_,id)|ordinary_quantity_limit(id)==Some(i32::MAX)));
   assert_eq!(magic_wand_style(1020402601),None);
