@@ -1989,13 +1989,14 @@ fn source_verified_fish_and_critters_share_ordinary_add_empty_refill_path(){
 }
 
 #[test]
-fn native_currency_rarity_alone_does_not_authorize_membership_edits(){
+fn native_distributable_stack_membership_does_not_authorize_absent_currency(){
  let mut payload=synthetic_payload("3.0.1");payload[3]=0x96;
- // Nontradable seasonal currency remains outside the new allowlist.
+ // Existing event material has native DevInboxGiftable and no special effect.
  payload.extend(doc(1,arr(vec![u(4),u(484139114),u(0),u(6),vec![0xc0]])));
  let mut editor=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
- assert_eq!(editor.inventory()[0].quantity_minimum,1);
- assert!(editor.change_inventory_quantity(4,6,0).is_err());assert!(!editor.dirty());
+ assert_eq!(editor.inventory()[0].quantity_minimum,0);
+ editor.change_inventory_quantity(4,6,0).unwrap();
+ let mut reopened=Editor::open(editor.export().unwrap()).unwrap();reopened.change_inventory_quantity(4,0,6).unwrap();
  assert!(!editor.inventory_creatable().iter().any(|r|r.item_id==484139114||r.item_id==1205887707));
 }
 
@@ -2673,14 +2674,14 @@ fn existing_currency_zero_and_refill_preserve_identity_and_reject_event_or_dlc_g
  for zipped in [false,true]{
   let raw=make(false);let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
-  assert_eq!(original.iter().map(|r|r.quantity_minimum).collect::<Vec<_>>(),vec![0,0,1,1]);
+  assert_eq!(original.iter().map(|r|r.quantity_minimum).collect::<Vec<_>>(),vec![0,0,0,0]);
   assert!(original[1].editable);
   assert!(e.inventory_creatable().iter().any(|r|r.item_id==833471261));
   assert!(!e.inventory_creatable().iter().any(|r|r.item_id==1205887707));
   assert!(e.change_inventory_quantity((1u32<<31)|1205887707,0,1).is_err());
-  assert!(e.change_inventory_quantities(&[(4,6,0),(6,8,0)]).is_err());
-  assert!(e.change_inventory_quantity(7,3,0).is_err());assert_eq!(e.inventory(),original);
-  e.change_inventory_quantities(&[(4,6,0),(5,0,12)]).unwrap();
+  assert!(e.change_inventory_quantities(&[(4,6,0),(6,9,0)]).is_err());
+  assert_eq!(e.inventory(),original);
+  e.change_inventory_quantities(&[(4,6,0),(5,0,12),(6,8,0),(7,3,0)]).unwrap();
   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
   assert_eq!(restored.inventory(),e.inventory());assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);
   assert!(restored.redo_scope(Inventory));let mut reopened=Editor::open(restored.export().unwrap()).unwrap();
@@ -4896,7 +4897,7 @@ fn ordinary_cosmetic_quest_rarity_and_capped_effect_items_share_native_bag_rules
  for zipped in [false,true]{
   let raw=make(false);let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();let before=e.inventory();
-  assert_eq!(before.iter().map(|r|r.quantity_minimum).collect::<Vec<_>>(),vec![0,0,0,1]);
+  assert_eq!(before.iter().map(|r|r.quantity_minimum).collect::<Vec<_>>(),vec![0,0,0,0]);
   assert_eq!(before[2].quantity_limit,Some(10));
   let candidate=e.inventory_creatable().into_iter().find(|r|r.item_id==reset as i32).unwrap();
   assert_eq!(candidate.quantity_limit,Some(3));
@@ -4922,4 +4923,27 @@ fn ordinary_cosmetic_quest_rarity_and_capped_effect_items_share_native_bag_rules
  for item in [outfit,station,restricted,quest_food,413462588]{
   assert!(empty.change_inventory_quantity((1u32<<31)|item,0,1).is_err())
  }
+}
+
+#[test]
+fn distributable_native_stack_classes_edit_atomically_without_absent_acquisition(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let ids=[484139114u32,1455056332,22088469,197197205,8914355];
+ let mut p=synthetic_payload("3.0.1");p[2]=10;p[3]=0x9c;
+ for (i,id) in ids.into_iter().enumerate(){p.extend(doc(1,arr(vec![u(i as u32+4),u(id),u(0),u(5),vec![0xc0]])));}
+ p.extend(doc(10,arr(vec![u(9),guid([1,2,3,4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([1,2,3,4]),vec![0xc3],vec![0xc0]])));
+ p.extend(doc(22,arr(vec![u(10),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
+ let raw=slot_from_payload("3.0.1",p);
+ for zipped in [false,true]{
+  let input=if zipped{zip(&raw)}else{raw.clone()};let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==0));
+  let deltas:Vec<_>=(4..9).map(|id|(id,5,0)).collect();e.change_inventory_quantities(&deltas).unwrap();
+  assert_eq!(e.history().len(),1);let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);assert!(restored.redo_scope(Inventory));
+  let mut reopened=Editor::open(restored.export().unwrap()).unwrap();assert!(reopened.inventory().iter().all(|r|r.quantity==0&&r.editable));
+  let refill:Vec<_>=(4..9).map(|id|(id,0,8)).collect();reopened.change_inventory_quantities(&refill).unwrap();
+  let saved=Editor::open(reopened.export().unwrap()).unwrap();assert!(saved.inventory().iter().all(|r|r.quantity==8));
+  assert_eq!(saved.entries(),e.entries());assert_eq!(saved.achievements(),e.achievements());
+ }
+ let mut empty=Editor::open(slot("3.0.1")).unwrap();for id in ids{assert!(empty.change_inventory_quantity((1u32<<31)|id,0,1).is_err());}
 }

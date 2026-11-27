@@ -77,7 +77,7 @@ const CURRENCY_CREATION_IDS:&[i32]=&[
   #[test]fn complete_catalog_bag_policy_and_reference_fingerprints(){
    assert_eq!(BAG_FLAGS.len(),RULES.len());assert_eq!(ITEM_GUID_DENIAL_KEYS.len(),RULES.len());
    let hex=|b:&[u8]|crate::digest::sha256(b).iter().map(|x|format!("{x:02x}")).collect::<String>();
-   assert_eq!(hex(BAG_FLAGS),"00c61ee7aec852a2e627dfc8941c681fba1f768852fe586f4d22103b55156518");
+   assert_eq!(hex(BAG_FLAGS),"2df3ef7b3ef2464bd518bf7d9c850136998bcde78ed05671a899beadd2b2b77c");
    let bytes:Vec<_>=ITEM_GUID_DENIAL_KEYS.iter().flat_map(|k|k.to_le_bytes()).collect();
    assert_eq!(hex(&bytes),"0bd8235b2a3bad5263ec8a2144a0a84fa27d8bab4e27e60034190abc6d7a8396");
    assert_eq!(ITEM_GUID_DENIAL_KEYS.iter().collect::<std::collections::HashSet<_>>().len(),12163);
@@ -94,7 +94,7 @@ const CURRENCY_CREATION_IDS:&[i32]=&[
     }
     if f&4!=0{absent+=1;assert!(ordinary_quantity_limit(id).is_some())}
    }
-   assert_eq!((total,outfits,absent),(9636,5963,6708));
+   assert_eq!((total,outfits,absent),(9835,6020,6708));
    assert!(ordinary_creation_ids().all(ordinary_bag_creation_item));
    assert!(ordinary_bag_creation_item(216433));assert!(ordinary_bag_creation_item(15761463));
    assert!(ordinary_bag_definition(4881112).is_some()&&!ordinary_bag_creation_item(4881112));
@@ -106,8 +106,9 @@ const CURRENCY_CREATION_IDS:&[i32]=&[
    assert!(ordinary_bag_creation_item(1093982586)&&ordinary_quantity_limit(1093982586)==Some(3));
    assert!(ordinary_bag_creation_item(1763678003)&&ordinary_quantity_limit(1763678003)==Some(3));
    assert!(ordinary_bag_definition(1144225647).is_some()&&!ordinary_bag_creation_item(1144225647));
-   assert!(ordinary_bag_definition(1455056332).is_none());
-   assert!(ordinary_bag_definition(484139114).is_none());
+   assert!(ordinary_bag_definition(1455056332).is_some()&&!ordinary_bag_creation_item(1455056332));
+   assert!(ordinary_bag_definition(484139114).is_some()&&!ordinary_bag_creation_item(484139114));
+   assert!(ordinary_bag_definition(197197205).unwrap().0&&!ordinary_bag_creation_item(197197205));
   }
  }
 #[cfg(test)]
@@ -533,7 +534,7 @@ mod clothing_reference_tests{
   assert_eq!(hash,"8f303e60d27b8dcc69cac8161315f77a642d0aedc1b56be476d54a623e1d270c");
  }
  #[test]fn exact_source_clothing_crosswalk(){
-  assert_eq!(CLOTHING_REFERENCE_ROWS.len(),5963);
+  assert_eq!(CLOTHING_REFERENCE_ROWS.len(),6020);
   assert_eq!(FLOWER_CLOTHING_REFERENCE_KEYS.len(),27);
   assert!(FLOWER_CLOTHING_REFERENCE_KEYS.windows(2).all(|w|w[0].0<w[1].0));
   let mut flower=Vec::new();
@@ -546,7 +547,7 @@ mod clothing_reference_tests{
   }
   let flower_hash=crate::digest::sha256(&flower).iter().map(|x|format!("{x:02x}")).collect::<String>();
   assert_eq!(flower_hash,"80aa4103198c492cb9e670b21c397e7f94dba77730b99cdf257d8bf46abfc16a");
-  assert_eq!(CLOTHING_REFERENCE_GROUPS.len(),949);
+  assert_eq!(CLOTHING_REFERENCE_GROUPS.len(),1006);
   assert!(CLOTHING_REFERENCE_ROWS.windows(2).all(|w|w[0].0<w[1].0));
   assert!(CLOTHING_REFERENCE_GROUPS.windows(2).all(|w|w[0].0<w[1].0));
   let mut rows=Vec::new();let mut groups=Vec::new();
@@ -559,8 +560,8 @@ mod clothing_reference_tests{
    groups.extend(p.to_le_bytes());groups.push(keys.len() as u8);for k in keys{groups.extend(k.to_le_bytes());}
   }
   let hex=|b:&[u8]|crate::digest::sha256(b).iter().map(|x|format!("{x:02x}")).collect::<String>();
-  assert_eq!(hex(&rows),"ea9fbdb217aaf41e2d94b7320c6d13f5f073534e8406af2580222b249c2f3aed");
-  assert_eq!(hex(&groups),"7c1d7dc8b3d64aafafd57aff8181d67b3fea8900e738ea884fd1a765cd07ebf4");
+  assert_eq!(hex(&rows),"eb520a17a147ac80b03800c9009f87e066e8828321f2f2e759288fc27b28fd40");
+  assert_eq!(hex(&groups),"d61d637c0f495da7f0c98ce3c49b461c1fd23353405990dc947b1bf1abb80df6");
   let (event_own,event_keys)=ordinary_clothing_reference_keys(517031).unwrap();
   assert_eq!(event_own,2305082351);assert!(event_keys.contains(&furniture_guid_fingerprint([0xf19cbde5,0x482caed7,0x2797ac8b,0xe22f46e9])));
   assert_eq!(CLOTHING_REFERENCE_ROWS.iter().filter(|&&(id,_,_)|ordinary_creation_item(id)).count()+TRADEABLE_NONCLOTHING_REFERENCE_KEYS.len(),ordinary_creation_ids().count());
