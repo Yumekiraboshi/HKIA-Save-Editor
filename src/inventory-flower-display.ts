@@ -55,3 +55,19 @@ export async function loadFlowerLabels(base:string):Promise<FlowerLabels>{
  if(hash!=='06519628a93327d82ef66ccc336c29244c5e91f433169ac9cb1b290ea6063a0b')throw Error('FLOWER_LABELS_INVALID');
  return JSON.parse(new TextDecoder().decode(data)).locales as FlowerLabels;
 }
+
+/** Native AddFlowerIcons: after all non-null GUID references resolve,
+ * append FlowerColor (12) with the definition's Color as PrimaryColor,
+ * then FlowerPattern (11) if IsPatterned. Never infer a missing definition.
+ * The zero pattern/secondary-color sentinel is a valid absent reference. */
+export type FlowerDecorator={type:12;primaryColor:string}|{type:11;patternUrl:string};
+export function flowerDecorators(flower:InventoryFlower|undefined,defs:FlowerDisplayDefinitions|null):FlowerDecorator[]{
+ if(!flower||!defs||!Object.hasOwn(defs.colors,String(flower.baseColor)))return [];
+ if(flower.pattern!==0&&!Object.hasOwn(defs.patterns,String(flower.pattern)))return [];
+ if(flower.patternColor!==0&&!Object.hasOwn(defs.colors,String(flower.patternColor)))return [];
+ const color=flowerSwatch(defs.colors[String(flower.baseColor)]);
+ if(!color)return [];
+ const rows:FlowerDecorator[]=[{type:12,primaryColor:color}];
+ if(flower.pattern!==0)rows.push({type:11,patternUrl:'pattern-'+flower.pattern+'.webp'});
+ return rows;
+}

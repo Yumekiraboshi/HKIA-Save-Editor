@@ -317,10 +317,8 @@
  .inventory-quantity-form .primary{width:34px}
 }
 
-.inventory-item-art.flower-variant{position:relative;padding-top:16px;box-sizing:content-box}
-.inventory-flower-decorators{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;gap:2px;z-index:1}
-.inventory-flower-color,.inventory-flower-pattern{display:block;width:15px;height:15px;box-sizing:border-box;border:1px solid #fff;border-radius:3px;box-shadow:0 0 0 1px #8885}
-.inventory-flower-pattern{object-fit:contain;background:#151515}
+.inventory-item-art.flower-variant{position:relative;padding-top:22px;box-sizing:content-box}
+.inventory-native-decorators{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;gap:2px;z-index:1;pointer-events:none}
 .inventory-flower-variant-name{font-size:10px;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .inventory-unique-edit-button{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:30px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-size:13px;font-variant-numeric:tabular-nums}

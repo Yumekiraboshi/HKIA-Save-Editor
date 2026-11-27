@@ -1396,7 +1396,10 @@ async function inventoryDynamicFlowerArtSmoke(){
   await sprites.nth(3).waitFor({timeout:30_000});
   assert.equal(await sprites.count(),4);
   await page.locator('.inventory-card .item-sprite[data-icon-fidelity="species-fallback"]').waitFor({timeout:30_000});
-  await page.locator('.inventory-card img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
+  await page.locator('.inventory-card [data-native-decorator="11"] img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
+  const effectCard=page.locator('.inventory-card').filter({has:page.locator('[data-native-decorator="11"] img[src$="pattern-3.webp"]')});
+  assert.deepEqual(await effectCard.locator('[data-native-decorator]').evaluateAll(els=>els.map(e=>e.getAttribute('data-native-decorator'))),['12','11']);
+  await page.locator('.inventory-card [data-native-decorator="12"] img[src$="decorator-12.webp"]').first().waitFor({timeout:30_000});
   const images=await sprites.evaluateAll(async els=>Promise.all(els.map(async el=>{
    const url=getComputedStyle(el).backgroundImage.slice(5,-2);
    if(!url.startsWith('blob:'))throw Error('expected local generated blob');
@@ -1442,6 +1445,10 @@ async function inventoryFlowerGrowthDisplaySmoke(){
   for(const [kind,label] of [['seed','Seed'],['plucked','Flower'],['uprooted','Uprooted plant']]){
    const card=cards.filter({has:page.locator('[data-flower-growth="'+kind+'"]')});
    await card.locator('.inventory-flower-variant-name').filter({hasText:label+' · Red'}).waitFor({timeout:30_000});
+   const badge=card.locator('[data-native-decorator="12"]');
+   await badge.waitFor({timeout:30_000});
+   assert.equal(await badge.evaluate(e=>getComputedStyle(e).getPropertyValue('--primary').trim()),'rgba(193,41,61,1)');
+   assert.equal(await card.locator('[data-native-decorator="11"]').count(),0);
    if(kind!=='plucked'){
     const sprite=card.locator('[data-flower-state-art="native-state-sprite"]');
     await sprite.waitFor({timeout:30_000});
