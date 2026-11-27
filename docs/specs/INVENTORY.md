@@ -537,3 +537,8 @@ The source-defined unrestricted starter is also available when every original pa
 #### Read-only special inventory metadata (tags 0, 10, 11)
 
 The schema-walked original inventory payload supplies exact schematic CraftOriginGuid words, saved home layout names and signed Int64 LayoutId (two exact 32-bit words plus Reported), and saved home kit InstanceId and name. Use the existing bounded Rust snapshot projection and display/search the saved names only; preserve user-entered UTF-8 and omit internal identifiers from tiles. Nil/truncated fields remain opaque; full payload bytes and embedded layout stay untouched. No new identity, rename, quantity change, removal, RPC or home placement editing is authorized. Synthetic raw/ZIP roundtrip and transport tests cover precision, Unicode and malformed metadata denial. Game acceptance unverified.
+
+
+#### Chef creation after emptying all saved stacks
+
+For the nine source-verified cafe outputs and Boba, the existing source-defined first-add path is available when all original rows of that item are verified, independently zero/refill eligible and effectively zero, with no active staged row of that item. Reserve original and effective complete ordered identities; choose an unreserved native starter from source recipe pairs or Boba triples, and reject collisions in the same CAS. Unsupported cafe tuple lengths, missing references and family/allocation limits retain their prior denial. Zero rows are not positive witnesses; preserve their document, UID and original payload and refill independently. The same Add dialog, history and native reparse apply, without consuming or generating ingredients. Synthetic raw/ZIP regression; game acceptance unverified.

@@ -2235,6 +2235,51 @@ fn saved_plucked_flower_zero_and_refill_preserve_uid_payload_and_other_rows(){
 }
 
 #[test]
+fn emptied_chef_families_allow_new_source_variants_without_reusing_saved_identity(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let cafe_item=203331651u32;let boba_item=1798633565u32;
+ let cafe_candidate=0x80000000|cafe_item;let boba_candidate=0x80000000|boba_item;
+ let empty=Editor::open(slot("3.0.1")).unwrap();
+ let cafe=empty.inventory_absent_cafe_defaults().into_iter().find(|r|r.0==cafe_item as i32).unwrap().1;
+ let (_,boba)=empty.inventory_absent_boba_default().unwrap();
+ let cpayload=arr(vec![vec![3],arr(vec![arr(cafe[..3].iter().map(|&v|u(v as u32)).collect()),arr(cafe[3..].iter().map(|&v|u(v as u32)).collect())])]);
+ let bpayload=arr(vec![vec![4],arr(boba.into_iter().map(|v|u(v as u32)).collect())]);
+ for zipped in [false,true]{
+  let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=0x97;
+  p.extend(doc(1,arr(vec![u(4),u(cafe_item),u(21),u(2),cpayload.clone()])));
+  p.extend(doc(1,arr(vec![u(5),u(boba_item),u(22),u(3),bpayload.clone()])));
+  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory_absent_cafe_defaults().iter().all(|r|r.0!=cafe_item as i32));
+  assert!(e.inventory_absent_boba_default().is_none());
+  e.change_inventory_quantities(&[(4,2,0),(5,3,0)]).unwrap();
+  let cs=e.inventory_absent_cafe_defaults().into_iter().find(|r|r.0==cafe_item as i32).unwrap().1;
+  let (_,bs)=e.inventory_absent_boba_default().unwrap();
+  assert_ne!(cs,cafe);assert_ne!(bs,boba);
+  assert!(e.inventory_cafe_creation_variants(cafe_candidate).iter().all(|r|r.0!=cafe));
+  assert!(!e.inventory_boba_creation_variants(boba_candidate).contains(&boba));
+  assert!(e.create_inventory_cafe_variant(cafe_candidate,cs,cafe,1).is_err());
+  assert!(e.create_inventory_boba_variant(boba_candidate,bs,boba,1).is_err());
+  let ch=e.create_inventory_cafe_variant(cafe_candidate,cs,cs,5).unwrap();
+  let bh=e.create_inventory_boba_variant(boba_candidate,bs,bs,6).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();
+  recovered.restore_history(&cp).unwrap();assert_eq!(recovered.inventory(),e.inventory());
+  assert!(recovered.undo_scope(Inventory));assert!(recovered.redo_scope(Inventory));
+  let mut saved=Editor::open(recovered.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory_original_unique_payload(4),Some(cpayload.as_slice()));
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(bpayload.as_slice()));
+  for (handle,quantity) in [(ch,5),(bh,6)]{
+   let row=saved.inventory().into_iter().find(|r|r.quantity==quantity).unwrap();
+   assert_eq!(saved.inventory_unique_data(row.document_id),e.inventory_unique_data(handle));
+   saved.change_inventory_quantity(row.document_id,quantity,0).unwrap();
+  }
+  saved.change_inventory_quantities(&[(4,0,2),(5,0,3)]).unwrap();
+  assert!(saved.inventory_absent_cafe_defaults().iter().all(|r|r.0!=cafe_item as i32));
+  assert!(saved.inventory_absent_boba_default().is_none());
+ }
+}
+
+#[test]
 fn saved_chef_zero_and_refill_preserve_full_payloads_and_native_identity(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let cafe=arr(vec![vec![3],arr(vec![arr(vec![u(99),u(98)]),arr(vec![u(6),u(14),u(11),u(19)])])]);

@@ -1871,30 +1871,44 @@ impl Editor {
  // variants, but have no existing player payload to copy.
  fn absent_chef_allowed(&self,item:i32)->bool{
   crate::inventory_source::is_uncapped_required_unique_stack(item)&&
-   !self.inventory_item_rows.contains_key(&item)&&
+   self.inventory_item_rows.get(&item).copied().unwrap_or(0)<256&&
+   self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)).all(|r|
+    self.unique_quantity_ids.contains(&r.id)&&self.inventory_can_empty(r)&&
+    self.inventory_changes.get(&r.id).copied().or(r.quantity)==Some(0))&&
    self.absent_flower_budget_available()&&self.inventory_creation_payload_safe(item)&&
    !self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)
  }
+ fn boba_starter_choices(&self)->Vec<BobaVariant>{
+  use crate::inventory_source as src;
+  if !self.absent_chef_allowed(src::BOBA_ID)||self.boba_family_count()>=256||
+   self.pending_bobas.keys().any(|id|self.inventory_changes.contains_key(id)){return Vec::new()}
+  let mut reserved=HashSet::new();
+  for row in self.slot.index.inventory.iter().filter(|r|r.item_id==Some(src::BOBA_ID)){
+   let Some(v)=Self::boba_words(&self.slot.envelope.decoded,row)else{return Vec::new()};
+   reserved.insert(v);reserved.insert(self.boba_variant_changes.get(&row.id).copied().unwrap_or(v));
+  }
+  let mut out=Vec::new();
+  for &[color,flavor,milk] in src::BOBA_SOURCE_TRIPLES{
+   for pearls in src::BOBA_PEARLS{
+    for sweet in src::BOBA_SWEETNESS{
+     let next=[color,flavor,pearls,milk,sweet];
+     if !reserved.contains(&next){out.push(next)}
+    }
+   }
+  }
+  out
+ }
  pub fn inventory_absent_boba_default(&self)->Option<(i32,BobaVariant)>{
   use crate::inventory_source as src;
-  if !self.absent_chef_allowed(src::BOBA_ID)||
-   self.pending_bobas.keys().any(|id|self.inventory_changes.contains_key(id)){return None}
-  let [color,flavor,milk]=*src::BOBA_SOURCE_TRIPLES.first()?;
-  Some((src::BOBA_ID,[color,flavor,src::BOBA_PEARLS[0],milk,src::BOBA_SWEETNESS[0]]))
+  Some((src::BOBA_ID,*self.boba_starter_choices().first()?))
  }
  fn absent_boba_default(&self,id:u32)->Option<BobaVariant>{
   let (item,v)=self.inventory_absent_boba_default()?;
   (id==(PENDING_ITEM|item as u32)&&!self.pending_bobas.contains_key(&id)).then_some(v)
  }
  pub fn inventory_boba_creation_variants(&self,id:u32)->Vec<BobaVariant>{
-  if self.absent_boba_default(id).is_some(){
-   let mut out=Vec::new();
-   for &[color,flavor,milk] in crate::inventory_source::BOBA_SOURCE_TRIPLES{
-    for pearls in crate::inventory_source::BOBA_PEARLS{
-     for sweet in crate::inventory_source::BOBA_SWEETNESS{out.push([color,flavor,pearls,milk,sweet]);}
-    }
-   }
-   return out
+  if id==(PENDING_ITEM|crate::inventory_source::BOBA_ID as u32)&&!self.pending_bobas.contains_key(&id){
+   return self.boba_starter_choices()
   }
   let Some((original,_,_))=self.boba_context(id)else{return Vec::new()};
   let item=crate::inventory_source::BOBA_ID;
@@ -2057,29 +2071,49 @@ impl Editor {
    self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||self.cafe_family_count(item)>=256{return None}
   Some(context)
  }
- fn absent_cafe_starter(&self,item:i32)->Option<CafeVariant>{
-  if !self.absent_chef_allowed(item)||
+ fn cafe_starter_reservations(&self,item:i32)->Option<HashSet<CafeVariant>>{
+  if !self.absent_chef_allowed(item)||self.cafe_family_count(item)>=256||
    self.pending_cafes.iter().any(|(&id,&(i,_))|i==item&&self.inventory_changes.contains_key(&id)){return None}
-  let slots=crate::inventory_source::cafe_slot_count(item)?;
-  let mut v=[0;6];
-  for i in 0..slots{
-   let (_,f,c)=*self.cafe_slot_choices(item,i).first()?;
-   v[i]=f;v[i+3]=c;
+  let mut reserved=HashSet::new();
+  for row in self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)){
+   // Keep malformed or unsupported ordered tuple families conservative.
+   let v=Self::cafe_words(&self.slot.envelope.decoded,row)?;
+   reserved.insert(v);reserved.insert(self.cafe_variant_changes.get(&row.id).copied().unwrap_or(v));
   }
-  self.valid_cafe_creation(item,v).then_some(v)
+  Some(reserved)
+ }
+ fn cafe_starter(&self,item:i32,reserved:&HashSet<CafeVariant>)->Option<CafeVariant>{
+  let count=crate::inventory_source::cafe_slot_count(item)?;
+  let slots=if item==crate::inventory_source::NIGIRI_ID{2}else{count};
+  let choices:Vec<Vec<(i32,i32)>>=(0..3).map(|i|{
+   if i>=slots{return vec![(0,0)]}
+   let mut seen=HashSet::new();
+   self.cafe_slot_choices(item,i).into_iter().filter_map(|(_,f,c)|seen.insert((f,c)).then_some((f,c))).collect()
+  }).collect();
+  // With deduplicated source pairs, every candidate is distinct. At most
+  // the bounded reservation count can collide before an unused tuple.
+  for &(a,x) in &choices[0]{for &(b,y) in &choices[1]{for &(c,z) in &choices[2]{
+   let v=[a,b,c,x,y,z];
+   if !reserved.contains(&v)&&self.valid_cafe_creation(item,v){return Some(v)}
+  }}}
+  None
+ }
+ fn absent_cafe_starter(&self,item:i32)->Option<CafeVariant>{
+  self.cafe_starter(item,&self.cafe_starter_reservations(item)?)
  }
  pub fn inventory_absent_cafe_defaults(&self)->Vec<(i32,CafeVariant)>{
   crate::inventory_source::CAFE_IDS.iter().filter_map(|&item|
    self.absent_cafe_starter(item).map(|v|(item,v))).collect()
  }
- fn absent_cafe_context(&self,id:u32)->Option<(i32,CafeVariant)>{
+ fn absent_cafe_context(&self,id:u32)->Option<(i32,CafeVariant,HashSet<CafeVariant>)>{
   if id&PENDING_ITEM==0||self.pending_cafes.contains_key(&id){return None}
   let item=(id&!PENDING_ITEM) as i32;
-  Some((item,self.absent_cafe_starter(item)?))
+  let reserved=self.cafe_starter_reservations(item)?;
+  Some((item,self.cafe_starter(item,&reserved)?,reserved))
  }
  pub fn inventory_cafe_creation_variants(&self,id:u32)->Vec<(CafeVariant,i32,usize)>{
-  if let Some((item,starter))=self.absent_cafe_context(id){
-   return self.cafe_choices(item,starter,starter,&HashSet::new()).into_iter()
+  if let Some((item,starter,reserved))=self.absent_cafe_context(id){
+   return self.cafe_choices(item,starter,starter,&reserved).into_iter()
     .filter(|&(v,_,_)|self.valid_cafe_creation(item,v)).collect()
   }
   let Some((item,original,current,_))=self.cafe_creation_context(id)else{return Vec::new()};
@@ -2088,8 +2122,8 @@ impl Editor {
  }
  pub fn create_inventory_cafe_variant(&mut self,source_id:u32,expected:CafeVariant,next:CafeVariant,quantity:i32)->Result<u32,Error>{
   if quantity<=0{return Err(Error::Schema)}
-  let item=if let Some((item,starter))=self.absent_cafe_context(source_id){
-   if expected!=starter||!self.valid_cafe_creation(item,next){return Err(Error::Schema)}
+  let item=if let Some((item,starter,reserved))=self.absent_cafe_context(source_id){
+   if expected!=starter||reserved.contains(&next)||!self.valid_cafe_creation(item,next){return Err(Error::Schema)}
    item
   }else{
    let (item,original,current,reserved)=self.cafe_creation_context(source_id).ok_or(Error::Schema)?;
