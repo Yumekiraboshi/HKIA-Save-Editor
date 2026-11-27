@@ -108,6 +108,15 @@ export async function wandRuntimeSmoke(browser,origin,base){
       cached:blob===await renderWandArt(row.itemId,{...appearance,sourceUnique:{tag:6,words:[1,2,3]}})});
     }
    }
+   // Two distinct Item IDs point to one exact original Sprite PathID.
+   // No normalized inventory cell is supplied for either ID.
+   const sharedAliases=[];
+   for(const row of m.rows){
+    const a={magicCharacteristicId:104,fleckCharacteristicId:125};
+    const original=await renderWandArt(row.itemId,{...a,sourceItemId:1320295322});
+    const alias=await renderWandArt(row.itemId,{...a,sourceItemId:5365022});
+    sharedAliases.push({id:row.itemId,same:original!==null&&original===alias,art:await pixels(alias),plain:(await pixels(await renderWandBaseArt(row.itemId,a))).rgba});
+   }
    const allShapes=[];
    for(const row of m.rows){
     const a={magicCharacteristicId:104,fleckCharacteristicId:125};
@@ -119,13 +128,15 @@ export async function wandRuntimeSmoke(browser,origin,base){
     }
     if(await renderWandArt(row.itemId,{...a,sourceItemId:315823})!==null)throw Error('UNKNOWN_SOURCE_RENDERED');
    }
-   return {rows,composed,itemRows,added,inv,directSources,placeholders,outside,allShapes,templateRows,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315823,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
+   return {rows,composed,itemRows,added,inv,directSources,placeholders,outside,allShapes,templateRows,sharedAliases,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315823,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
   },base);
   assert.equal(out.rows.length,9);assert.ok(out.unknown&&out.unknownOriginal);
   assert.equal(out.composed.length,13);assert.ok(out.unsupportedSource);
   assert.equal(out.templateRows.length,18);
   for(const row of out.templateRows){assert.ok(row.art.visible&&row.cached);assert.notEqual(row.art.rgba,row.plain);}
   for(const id of new Set(out.templateRows.map(r=>r.id)))assert.equal(new Set(out.templateRows.filter(r=>r.id===id).map(r=>r.art.rgba)).size,2);
+  assert.equal(out.sharedAliases.length,9);
+  assert.ok(out.sharedAliases.every(r=>r.same&&r.art.visible&&r.art.rgba!==r.plain));
   assert.equal(out.outside.length,9);
   for(const row of out.outside){assert.ok(row.art.visible&&row.cached&&row.noCell&&row.mismatched);assert.notEqual(row.art.rgba,row.plain.rgba);}
   assert.equal(out.allShapes.length,36);assert.equal(new Set(out.allShapes.map(r=>r.id)).size,9);
