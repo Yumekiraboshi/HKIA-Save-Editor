@@ -2059,7 +2059,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    {@const changed=current.some((n,i)=>n!==edit.before[i])}
    <form class="date-dialog-inner" onsubmit={e=>{if(edit.absent){e.preventDefault();void addInventoryFlowerVariant()}else void applyInventoryFlowerVariant(e)}}>
     <div class="date-dialog-heading">
-     <h2 id="flower-editor-title">{inventoryName(edit.itemId)}{#if flowerGrowthKind(edit.itemId,{growState:edit.before[0],baseColor:0,pattern:0,patternColor:0})} · {flowerGrowthLabel(locale,flowerGrowthKind(edit.itemId,{growState:edit.before[0],baseColor:0,pattern:0,patternColor:0}))}{/if}</h2>
+     <h2 id="flower-editor-title">{inventoryName(edit.itemId)}{#if flowerGrowthKind(edit.itemId,{growState:current[0],baseColor:0,pattern:0,patternColor:0})} · {flowerGrowthLabel(locale,flowerGrowthKind(edit.itemId,{growState:current[0],baseColor:0,pattern:0,patternColor:0}))}{/if}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFlowerEditor}>×</button>
     </div>
     <div class="date-dialog-item">
@@ -2070,16 +2070,24 @@ import {verifiedFloorplanName} from './floorplan-names';
      </span>
      <div class="date-dialog-detail"><strong>{flowerVariantName(current)}</strong>{#if changed}<button type="button" class="inventory-flower-reset" disabled={busy} aria-label={flowerVariantName(edit.before)} title={flowerVariantName(edit.before)} onclick={()=>void refreshFlowerDraft(edit.before)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>{/if}</div>
     </div>
-    {#if edit.options.length}
+    {#if edit.absent&&edit.options.some(v=>v[0]!==current[0])}
+     <div style="display:flex;gap:6px;flex-wrap:wrap">
+      {#each [0,6,7] as grow}
+       {@const target=edit.options.find(v=>v[0]===grow&&v[1]===current[1]&&v[2]===current[2]&&v[3]===current[3])}
+       <button type="button" class="inventory-flower-growth" data-flower-grow={grow} aria-pressed={grow===current[0]} disabled={busy||!target} onclick={()=>{if(target)void refreshFlowerDraft(target)}}>{flowerGrowthLabel(locale,flowerGrowthKind(edit.itemId,{growState:grow,baseColor:0,pattern:0,patternColor:0}))}</button>
+      {/each}
+     </div>
+    {/if}
+    {#if edit.options.some(v=>v[0]===current[0])}
      <label class="date-dialog-field">
       <span>{flowerCopy.title}</span>
       <select bind:value={flowerSelection} onchange={e=>void selectFlowerDraft(Number(e.currentTarget.value))} disabled={busy}>
        <option value={-1} disabled>{flowerVariantName(current)}</option>
        {#each [flowerCopy.color,flowerCopy.pattern,flowerCopy.accent] as group, g}
-        {#if edit.options.some(v=>flowerOptionGroup(current,v)===g)}
+        {#if edit.options.some(v=>v[0]===current[0]&&flowerOptionGroup(current,v)===g)}
          <optgroup label={group}>
           {#each edit.options as v,i}
-           {#if flowerOptionGroup(current,v)===g}
+           {#if v[0]===current[0]&&flowerOptionGroup(current,v)===g}
             <option value={i} data-flower-variant={v.join(',')}>{flowerVariantName(v)}</option>
            {/if}
           {/each}
