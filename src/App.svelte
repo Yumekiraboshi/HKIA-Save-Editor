@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPalettePreview,changeInventoryPaletteVariant,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafeVariants,changeInventoryCafeVariant,requestCafeCreationVariants,createInventoryCafeVariant,requestWandVariants,changeInventoryWandVariant,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPalettePreview,changeInventoryPaletteVariant,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafePreview,changeInventoryCafeVariant,createInventoryCafeVariant,requestWandVariants,changeInventoryWandVariant,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,inventoryPatchesEqual,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -87,9 +87,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  let paletteDialogEl:HTMLDialogElement|undefined=$state();
  let paletteEdit=$state<{documentId:number;itemId:number;revision:number;before:PaletteVariant;options:PaletteVariant[]}|null>(null);
  let cafeDialogEl:HTMLDialogElement|undefined=$state();
- let cafeEdit=$state<{documentId:number;itemId:number;revision:number;before:CafeVariant;options:CafeOption[];creationOptions:CafeOption[]}|null>(null);
+ let cafeEdit=$state<{documentId:number;itemId:number;revision:number;before:CafeVariant;options:CafeOption[]}|null>(null);
  let cafeSelection=$state(-1);
  let cafeDraft=$state<CafeVariant|null>(null);
+ let cafeDraftCreatable=$state(false);
  let cafeSlot=$state(0);
  let wandDialogEl:HTMLDialogElement|undefined=$state();
  let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[]}|null>(null);
@@ -785,34 +786,32 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||!row.cafe?.editable)return;
   const before=row.cafe.variant,revision=snapshot.revision;busy=true;error='';
   try{
-   const [options,creationOptions]=await Promise.all([requestCafeVariants(row.documentId),requestCafeCreationVariants(row.documentId)]);
+   const preview=await requestCafePreview(row.documentId,before,before);
    if(!snapshot||snapshot.revision!==revision)return;
-   cafeEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions};cafeSlot=0;cafeSelection=-1;cafeDraft=[...before];variantAddQuantity=1;await tick();
+   cafeEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:preview.options};cafeSlot=0;cafeSelection=-1;cafeDraft=[...before];cafeDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
    if(cafeDialogEl&&!cafeDialogEl.open)cafeDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
  }
  async function addInventoryCafeVariant(){
   const edit=cafeEdit,quantity=variantAddQuantity;
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
-  const next=cafeDraft;if(!next||!cafeCreationSelection(edit.before,next,edit.creationOptions))return;
+  const next=cafeDraft;if(!next||!cafeDraftCreatable)return;
   busy=true;error='';
   try{update(await createInventoryCafeVariant(edit.documentId,edit.before,next,quantity));closeCafeEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
  }
- function cafePairEqual(a:CafeVariant,b:CafeVariant,slot:number):boolean{return a[slot]===b[slot]&&a[slot+3]===b[slot+3]}
- function cafeCreationSelection(before:CafeVariant,next:CafeVariant,options:readonly CafeOption[]):boolean{
-  return options.length>0&&next.some((n,i)=>n!==before[i])&&[0,1,2].every(slot=>cafePairEqual(before,next,slot)||options.some(o=>o.slot===slot&&cafePairEqual(o.variant,next,slot)));
+ async function selectCafeSlot(index:number){
+  const edit=cafeEdit;
+  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||!cafeDraft)return;
+  const option=edit.options[index];if(!option||option.slot!==cafeSlot)return;
+  busy=true;error='';
+  try{
+   const preview=await requestCafePreview(edit.documentId,edit.before,option.variant);
+   if(!snapshot||snapshot.revision!==edit.revision||cafeEdit?.documentId!==edit.documentId)return;
+   cafeDraft=[...option.variant];cafeDraftCreatable=preview.creatable;cafeEdit={...edit,options:preview.options};
+  }catch(e){error=describeError(e)}finally{cafeSelection=-1;busy=false}
  }
- function selectCafeSlot(index:number){
-  const edit=cafeEdit;if(!edit||!cafeDraft)return;
-  const option=edit.options[index];if(index!==-1&&(!option||option.slot!==cafeSlot))return;
-  const source=option?.variant??edit.before,next:CafeVariant=[...cafeDraft];
-  next[cafeSlot]=source[cafeSlot];next[cafeSlot+3]=source[cafeSlot+3];cafeDraft=next;
- }
- function openCafeSlot(slot:number){
-  cafeSlot=slot;const edit=cafeEdit;
-  cafeSelection=edit&&cafeDraft?edit.options.findIndex(o=>o.slot===slot&&cafePairEqual(o.variant,cafeDraft!,slot)):-1;
- }
+ function openCafeSlot(slot:number){cafeSlot=slot;cafeSelection=-1;}
  function closeCafeEditor(){if(cafeDialogEl?.open)cafeDialogEl.close()}
  async function applyInventoryCafeVariant(event:SubmitEvent){
   event.preventDefault();const edit=cafeEdit;
@@ -1803,12 +1802,12 @@ import {verifiedFloorplanName} from './floorplan-names';
    {/if}
   {/if}
  </main>
- <dialog class="date-dialog" bind:this={cafeDialogEl} aria-labelledby="cafe-editor-title" onclose={()=>{cafeEdit=null;cafeSelection=-1;cafeDraft=null}} oncancel={e=>{if(busy)e.preventDefault()}}>
+ <dialog class="date-dialog" bind:this={cafeDialogEl} aria-labelledby="cafe-editor-title" onclose={()=>{cafeEdit=null;cafeSelection=-1;cafeDraft=null;cafeDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if cafeEdit}
    {@const edit=cafeEdit}
    {@const selected=cafeDraft??edit.before}
    {@const changed=selected.some((n,i)=>n!==edit.before[i])}
-   {@const canCreate=cafeCreationSelection(edit.before,selected,edit.creationOptions)}
+   {@const canCreate=cafeDraftCreatable}
    <form class="date-dialog-inner" onsubmit={applyInventoryCafeVariant}>
     <div class="date-dialog-heading">
      <h2 id="cafe-editor-title">{inventoryName(edit.itemId)}</h2>
@@ -1821,8 +1820,8 @@ import {verifiedFloorplanName} from './floorplan-names';
        <button type="button" class="inventory-cafe-slot" data-cafe-slot={slot} aria-pressed={cafeSlot===slot} disabled={busy} onclick={()=>openCafeSlot(slot)}>{slot+1} · {cafeSlotLabel(selected,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</button>
       {/each}
      </div>
-     <select name="cafe-variant" aria-label={inventoryName(edit.itemId)} bind:value={cafeSelection} onchange={e=>selectCafeSlot(Number(e.currentTarget.value))} disabled={busy}>
-      <option value={-1}>{cafeSlotLabel(edit.before,cafeSlot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
+     <select name="cafe-variant" aria-label={inventoryName(edit.itemId)} bind:value={cafeSelection} onchange={e=>void selectCafeSlot(Number(e.currentTarget.value))} disabled={busy}>
+      <option value={-1} disabled>{cafeSlotLabel(selected,cafeSlot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
       {#each edit.options as option,i}
        {#if option.slot===cafeSlot}
         <option value={i} data-ingredient-id={option.ingredientId}>{option.ingredientId?sourceNames[String(option.ingredientId)]??cafeSlotLabel(option.variant,cafeSlot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??''):cafeSlotLabel(option.variant,cafeSlot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
@@ -1840,8 +1839,8 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeCafeEditor}>{copy.cancel}</button>
-     {#if edit.creationOptions.length}
-      <button type="button" class="inventory-create-cafe" disabled={busy||!validVariantAddQuantity||!canCreate} onclick={()=>void addInventoryCafeVariant()}>{inventoryAddCopy(locale)}</button>
+     {#if canCreate}
+      <button type="button" class="inventory-create-cafe" disabled={busy||!validVariantAddQuantity} onclick={()=>void addInventoryCafeVariant()}>{inventoryAddCopy(locale)}</button>
      {/if}
      <button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>
     </div>

@@ -272,3 +272,7 @@ For the already supported 50 absent Item IDs only, a currently available origina
 #### Native preview for composed palette edits
 
 The palette dialog refreshes one-channel choices against its uncommitted full tuple, using the existing Rust source and peer checks. The Add action is offered only when the complete draft satisfies the same native creation predicate as the final CAS, including replacing all inherited non-source colors. Preview and per-channel reset do not mutate history or save data. No new color source, absent Item ID generation, or entitlement change is authorized.
+
+#### Native preview for composed Cafe variants
+
+The shared Cafe editor refreshes the available ordered ingredient-pair choices after every draft selection. Rust validates the complete uncommitted tuple, reserves original and effective peer identities and returns whether the same tuple may be added as a distinct stack. The Add action uses the same native full-tuple predicate as final CAS; the draft has no save or history effect. Existing optional nigiri side and owned ingredient witness rules remain unchanged. No new recipes, absent Item IDs or entitlements are authorized.
