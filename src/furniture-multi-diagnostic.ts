@@ -39,7 +39,9 @@ function get<T>(x:T|undefined|null,code:string):T{if(x==null)throw Error('FURNIT
 export function nativeBaseIsOpaque(s:NativeTextureSource,bytes:ArrayBuffer){
  if(bytes.byteLength!==s.bytes)return false;
  const b=new Uint8Array(bytes),v=new DataView(bytes);
- if(s.format===4||s.format===5)return b.every((x,i)=>i%4!==3||x===255);
+ if(s.format===4)return b.length>0&&b.length%4===0&&b.every((x,i)=>i%4!==3||x===255);
+ // Only the all-white original ARGB32 layout is admitted by the uploader.
+ if(s.format===5)return b.length>0&&b.every(x=>x===255);
  if(s.format===10){
   if(!b.length||b.length%8)return false;
   for(let i=0;i<b.length;i+=8)if(v.getUint16(i,true)<=v.getUint16(i+2,true)){
@@ -47,8 +49,39 @@ export function nativeBaseIsOpaque(s:NativeTextureSource,bytes:ArrayBuffer){
   }
   return true;
  }
- // No general BC3 alpha proof is inferred.
+ // BC3 stores two alpha endpoints followed by sixteen packed 3-bit
+ // selectors in each 16-byte block. A selected interpolant can be exactly
+ // 255 only when both endpoints are 255 (or the explicit 255 entry in
+ // six-alpha mode). Test every selector, including padded edge texels and
+ // every mip: this is deliberately conservative and needs no color guess.
+ if(s.format===12){
+  if(!b.length||b.length%16)return false;
+  for(let i=0;i<b.length;i+=16){
+   const a0=b[i],a1=b[i+1];
+   if(a0===255&&a1===255){
+    // Equal endpoints select six-alpha mode: entry 6 is zero.
+    for(let j=0;j<16;j++){const bit=j*3,k=i+2+(bit>>3),shift=bit&7;const index=((b[k]|((k<i+7?b[k+1]:0)<<8))>>shift)&7;if(index===6)return false;}
+   }else{
+    for(let j=0;j<16;j++){
+     const bit=j*3,k=i+2+(bit>>3),shift=bit&7;
+     const index=((b[k]|((k<i+7?b[k+1]:0)<<8))>>shift)&7;
+     if(!((index===0&&a0===255)||(index===1&&a1===255)||(a0<=a1&&index===7)))return false;
+    }
+   }
+  }
+  return true;
+ }
  return false;
+}
+type NullPatternPlan={patternMap:NativeTextureSource|null;material:Pick<FurnitureForwardMaterial,'useBaseMapMask'>;baseMap:NativeTextureSource};
+export function furnitureNullPatternRequiresOpacity(p:NullPatternPlan){
+ return p.patternMap===null&&p.material.useBaseMapMask;
+}
+/** Shared byte-level prerequisite for both the GPU draw and pack preflight. */
+export async function verifyFurnitureNullPatternOpacity(p:NullPatternPlan,read:ReadRugPayload){
+ if(!furnitureNullPatternRequiresOpacity(p))return;
+ const b=furnitureNativeBuiltinBytes(p.baseMap)??await read({kind:'texture',sha256:p.baseMap.sha256,bytes:p.baseMap.bytes});
+ if(!nativeBaseIsOpaque(p.baseMap,b))fail('NULL_PATTERN_CONTRIBUTES');
 }
 /** UV1 is not consumed when the authored world-UV branch is selected,
  * or when the only pattern sample is provably constant/unused. The one
@@ -240,7 +273,7 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
     const noiseMap=await texture(p.noiseMap),submeshIndex=get(p.submeshIndex,'SUBMESH');
     draws.push({cull:p.cull,run:()=>sparkleRenderer!.draw(mesh,{baseMap,normalMap,comboMap,noiseMap,reflectionPrimary,reflectionSecondary},p.scene,p.material,submeshIndex)});
    }else{
-    if(!p.patternMap&&p.material.useBaseMapMask&&!nativeBaseIsOpaque(p.baseMap,get(furnitureNativeBuiltinBytes(p.baseMap)??payloads.get(p.baseMap.sha256),'BASE_PAYLOAD')))fail('NULL_PATTERN_CONTRIBUTES');
+    await verifyFurnitureNullPatternOpacity(p,async ref=>get(payloads.get(ref.sha256),'BASE_PAYLOAD'));
     // CustomLit never consumes patternMap; unused source binding can alias base.
     const patternMap=p.patternMap?await texture(p.patternMap):baseMap;
     draws.push({cull:p.cull,transparentState:p.glassState??p.customLitBlendState,run:()=>{

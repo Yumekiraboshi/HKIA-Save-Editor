@@ -13,9 +13,22 @@ export async function furniturePackPreflight(api,pack,cases,authored){
  const refs=[...new Map(api.furniturePayloadReferences(sources,Object.values(cubemaps)).map(r=>[r.kind+'/'+r.sha256,r])).values()];
  let verifiedBytes=0;
  for(const ref of refs){const b=await read(ref);if(b.byteLength!==ref.bytes)throw Error('FURNITURE_PREFLIGHT_PAYLOAD');verifiedBytes+=b.byteLength;}
- const common=furniturePackDiagnosticCommon(api,sources,cubemaps,authored),result=[];
+ const common=furniturePackDiagnosticCommon(api,sources,cubemaps,authored),result=[],opacityProofs=new Map();
  for(const c of cases){
-  try{const fit=api.fitFurnitureMultiStaticBounds(sources,{...common,...c});const plan=api.resolveFurnitureMultiDiagnostic(sources,fit.request);result.push({...c,status:'prepared',draws:plan.plans.length});}
+  try{
+   const fit=api.fitFurnitureMultiStaticBounds(sources,{...common,...c});
+   const plan=api.resolveFurnitureMultiDiagnostic(sources,fit.request);
+   for(const draw of plan.plans){
+    if(draw.kind!=='forward'||!api.furnitureNullPatternRequiresOpacity(draw))continue;
+    const t=draw.baseMap,key=t.format+'/'+t.sha256+'/'+t.bytes;
+    // Cache only proof promises, never the (potentially large) source bytes.
+    // All referenced payloads were independently verified above.
+    let proof=opacityProofs.get(key);
+    if(!proof){proof=api.verifyFurnitureNullPatternOpacity(draw,read);opacityProofs.set(key,proof);}
+    await proof;
+   }
+   result.push({...c,status:'prepared',draws:plan.plans.length});
+  }
   catch(e){result.push({...c,status:'rejected',reason:String(e instanceof Error?e.message:e).slice(0,300)});}
  }
  const reasonCounts=Object.create(null);for(const r of result)if(r.status==='rejected')reasonCounts[r.reason]=(reasonCounts[r.reason]??0)+1;
