@@ -3167,6 +3167,39 @@ fn furniture_multislot_creation_and_edit_are_atomic(){
 }
 
 #[test]
+fn cafe_multiple_ingredient_pairs_create_one_independent_stack(){
+ use hkia_save_core::collection::{HistoryScope::Inventory,CafeVariant};
+ let original=[44,49,48,6,46,9];let target=[62,50,48,6,46,9];
+ let encode=|v:CafeVariant|arr(vec![vec![3],arr(vec![arr(v[..3].iter().map(|&w|u(w as u32)).collect()),arr(v[3..].iter().map(|&w|u(w as u32)).collect())])]);
+ let make=|peer:bool|{let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=if peer{0x97}else{0x96};
+  p.extend(doc(1,arr(vec![u(4),u(1338995084),u(21),u(2),encode(original)])));
+  if peer{p.extend(doc(1,arr(vec![u(5),u(1338995084),u(22),u(1),encode(target)])))}
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(false);let input=if zipped{zip(&raw)}else{raw};let mut e=Editor::open(input.clone()).unwrap();
+  let options=e.inventory_cafe_creation_variants(4);
+  assert!(options.iter().any(|&(v,_,_)|v==[62,49,48,6,46,9]));
+  assert!(options.iter().any(|&(v,_,_)|v==[44,50,48,6,46,9]));
+  assert!(!options.iter().any(|&(v,_,_)|v==target));
+  let mut bad=target;bad[4]=999;
+  assert!(e.create_inventory_cafe_variant(4,original,bad,3).is_err());assert!(!e.dirty());
+  let id=e.create_inventory_cafe_variant(4,original,target,3).unwrap();
+  assert_eq!(e.history().len(),1);assert!(e.create_inventory_cafe_variant(4,original,target,1).is_err());
+  assert!(e.change_inventory_cafe_variant(4,original,target).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut r=Editor::open(input).unwrap();r.restore_history(&cp).unwrap();
+  assert!(r.undo_scope(Inventory));assert!(!r.dirty());assert!(r.redo_scope(Inventory));
+  let saved=Editor::open(r.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory_original_unique_payload(4),Some(encode(original).as_slice()));
+  assert_eq!(saved.inventory()[1].quantity,3);
+  assert!(saved.inventory_cafe_rows().any(|(_,v,_)|v==target));
+  assert!(e.inventory_cafe_rows().any(|(doc,v,_)|doc==id&&v==target));
+ }
+ let mut collision=Editor::open(make(true)).unwrap();
+ assert!(collision.create_inventory_cafe_variant(4,original,target,1).is_err());assert!(!collision.dirty());
+}
+
+#[test]
 fn palette_multichannel_creation_is_one_native_transaction(){
  use hkia_save_core::{collection::{HistoryScope::Inventory,PaletteVariant},inventory_palette_source::palette_output_color as color,native::InventoryUniqueData};
  let original=[color(1,0).unwrap(),color(2,0).unwrap(),color(3,0).unwrap()];
