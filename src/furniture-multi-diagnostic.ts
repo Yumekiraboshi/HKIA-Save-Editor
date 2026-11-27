@@ -216,7 +216,8 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
  // of multiple transparent ranges or mix unrelated transparency modes.
  if(hasTransparent&&(transparent.length!==1||plans.some(p=>!p.glassState&&!p.customLitBlendState&&!p.opaque)))fail(hasGlass?'GLASS_ORDER_UNVERIFIED':'TRANSPARENT_ORDER_UNVERIFIED');
  const mixed=hasTransparent||plans.some(p=>p.kind==='sparkle'||p.kind==='forward'&&(p.material.customLit!==undefined||p.material.terrain!==undefined));
- if(mixed&&plans.some(p=>![0,2].includes(p.cull)))fail('CULL_UNSUPPORTED');
+ // Cull is authored per material even in an all-CustomLitFurniture plan.
+ if(plans.some(p=>![0,2].includes(p.cull)))fail('CULL_UNSUPPORTED');
  const locations:Record<string,MeshAttributeLocations>={};
  for(const p of plans){
   const previous=locations[p.meshPathId]??{};
@@ -285,7 +286,7 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
   // Compile every required shader before the first draw.
   if(resolved.plans.some(p=>p.kind==='forward'))renderer=createFurnitureForwardRenderer(gl);
   if(resolved.plans.some(p=>p.kind==='sparkle'))sparkleRenderer=createSparkleGpuRenderer(gl);
-  if(resolved.mixed){
+  {
    cullState={enabled:gl.isEnabled(gl.CULL_FACE),mode:gl.getParameter(gl.CULL_FACE_MODE),front:gl.getParameter(gl.FRONT_FACE)};
    // Explicit diagnostic handedness (not proof of Unity camera parity).
    gl.frontFace(gl.CCW);gl.cullFace(gl.BACK);
@@ -298,7 +299,7 @@ export async function drawFurnitureMultiDiagnostic(gl:WebGL2RenderingContext,d:F
    draws.sort((a,b)=>(a.transparentState?.queue??0)-(b.transparentState?.queue??0));
   }
   for(const draw of draws){
-   if(resolved.mixed){if(draw.cull===2)gl.enable(gl.CULL_FACE);else gl.disable(gl.CULL_FACE);}
+   if(draw.cull===2)gl.enable(gl.CULL_FACE);else gl.disable(gl.CULL_FACE);
    if(blendState){
     if(draw.transparentState){
      gl.enable(gl.BLEND);gl.blendEquation(gl.FUNC_ADD);gl.blendFunc(draw.transparentState.srcBlend===1?gl.ONE:draw.transparentState.srcBlend===3?gl.SRC_COLOR:gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
