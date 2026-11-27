@@ -4682,6 +4682,67 @@ fn legacy_furniture_material_cas_retains_guid_union_and_untouched_spans(){
 
 
 #[test]
+fn nested_furniture_wands_edit_all_four_outer_and_inner_wire_formats(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=384749651u32;let source=61381969i32;
+ let source_guid=[0x6c8af25a,0x4fc04e89,0x901068ae,0x512dc0c2];
+ let material2=[0xd3ce93fd,0x4a105e00,0x3e1e60b9,0x5af6b600];
+ let material3=[0xe4335dad,0x4b4cf657,0x4fc9c79f,0xa9c89c6f];
+ let legacy_material=|g:[u32;4]|arr(vec![vec![1],arr(vec![guid([0;4]),guid(g),guid([0;4])])]);
+ let legacy=|nested:Vec<u8>|arr(vec![vec![5],arr(vec![guid(source_guid),nested,u(104),u(125),u(0)])]);
+ let modern=|magic:u32,nested:Vec<u8>|arr(vec![vec![9],arr(vec![u(source as u32),nested,u(magic),u(125),u(0)])]);
+ let make=|outer_legacy:bool,nested:Vec<u8>,peer:Vec<u8>|{
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x97;
+  let first=if outer_legacy{legacy(nested)}else{modern(104,nested)};
+  p.extend(doc(1,arr(vec![u(4),u(item),u(11),u(6),first])));
+  p.extend(doc(1,arr(vec![u(5),u(item),u(12),u(2),peer])));
+  slot_from_payload("3.0.1",p)
+ };
+ for outer_legacy in [false,true]{
+ for historical in [false,true]{
+  let nested=if historical{legacy_material(material2)}else{furniture_payload([0,2,0])};
+  let expected_nested=if historical{legacy_material(material3)}else{furniture_payload([0,3,0])};
+  let peer=modern(105,furniture_payload([0,2,0]));
+  for zipped in [false,true]{
+   let raw=make(outer_legacy,nested.clone(),peer.clone());let input=if zipped{zip(&raw)}else{raw};
+   let mut e=Editor::open(input.clone()).unwrap();
+   let before=[source,104,125,0,2,0];let after=[source,104,125,0,3,0];
+   assert!(e.inventory().iter().all(|r|r.editable&&r.quantity_minimum==0));
+   assert!(matches!(e.inventory_unique_data(4),Some(U::WandAppearance{source_item_id:61381969,source_tag:8,..})));
+   assert!(e.inventory_wand_nested_material_variants(4).contains(&[0,3,0]));
+   assert!(e.change_inventory_wand_nested(4,before,[source,105,125,0,2,0]).is_err());
+   assert!(e.change_inventory_wand_nested(4,before,[source,104,125,0,285,0]).is_err());
+   assert!(!e.dirty());
+   e.change_inventory_wand_nested(4,before,after).unwrap();
+   let added=e.create_inventory_wand_nested(4,after,[source,106,125,0,3,0],4).unwrap();
+   assert!(matches!(e.inventory_unique_data(added),Some(U::WandAppearance{magic:106,source_tag:8,..})));
+   e.change_inventory_quantity(4,6,0).unwrap();
+   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+   restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+   let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+   let exported=saved.inventory_original_unique_payload(4).unwrap();
+   let original=if outer_legacy{legacy(nested.clone())}else{modern(104,nested.clone())};
+   assert_eq!(&exported[..3],&original[..3]);
+   // Changed material tokens may use a different integer width; compare decoded
+   // identity and retain the original nested union header, source and style.
+   assert!(exported.windows(3).any(|w|w==&expected_nested[..3]));
+   assert_eq!(saved.inventory_original_unique_payload(5),Some(peer.as_slice()));
+   assert_eq!(saved.inventory_unique_data(4),e.inventory_unique_data(4));
+   assert!(saved.inventory().iter().all(|r|r.editable&&r.quantity_minimum==0));
+   saved.change_inventory_quantity(4,0,6).unwrap();
+   assert!(Editor::open(saved.export().unwrap()).unwrap().inventory().iter().any(|r|r.quantity==4));
+  }
+  let mut duplicate=Editor::open(make(outer_legacy,nested.clone(),modern(104,furniture_payload([0,2,0])))).unwrap();
+  assert!(duplicate.inventory().iter().all(|r|!r.editable));
+  assert!(duplicate.change_inventory_quantity(4,6,0).is_err());
+ }
+ let invalid=legacy_material([u32::MAX;4]);
+ let mut rejected=Editor::open(make(outer_legacy,invalid,modern(105,furniture_payload([0,2,0])))).unwrap();
+ assert!(!rejected.inventory()[0].editable);assert!(rejected.change_inventory_quantity(4,6,0).is_err());
+ }
+}
+
+#[test]
 fn mixed_legacy_and_current_wands_share_identity_and_keep_native_wire_tags(){
  use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
  let item=384749651u32;let source=1185152302u32;
