@@ -70,3 +70,30 @@ test('source-pinned banner alpha uses the same rim-only shader and native blend 
  const bad=structuredClone(base);bad.materials[id].renderQueue=3001;
  assert.throws(()=>resolveCustomLitFixedMaterial(bad,id),/SHADER_UNSUPPORTED/);
 });
+
+test('source-pinned Retsuko amplifier and Scholastic bleacher opaque CustomLit materials',()=>{
+ const shader='CAB-46b8f8fe122147493b3113f7c1c8cd0f:-6681258383375895387';
+ const rows=[
+  ['CAB-6ef96dd92514d121449bf26b3df2f0e4','-4094287017633679692','a95c9bc23890d6021dcc50d3835d1453278342b0ec9444dd9ed50b591db675ef',['8952410971996192852','2352204321797132278','657186981487005829'],-0.5,0.5],
+  ['CAB-d61f0eabee36bcd36932688765a94472','5316780692551889377','db71ba2d2ef4a0625a42141f3a9477d8696c055ab347da4acf05062fde348fe8',['4737708589456548386','-8337080324662890314','-1890117830744700162'],0,0]
+ ];
+ const link=texture=>({texture,scale:[1,1],offset:[0,0]});
+ for(const [cab,pid,hash,pids,metallic,occlusion] of rows){
+  const id=cab+':'+pid,keys=pids.map(p=>cab+':'+p);
+  // Source-verified material constants and identities; texture data is synthetic.
+  const material={shader,objectSha256:hash,renderQueue:-1,validKeywords:['CUSTOM_RIMLIGHT_ON'],
+   floats:{_Material_Alpha:0,_AlphaClip:0,_ZWrite:1,_Cull:2,_Lighting_Fog:1,_Lighting_Medium_Underwater:0,_Material_VertexAnimation:0,_Surface_Effect:0,_Clip_Offset:0,GLIMMER:0,UV_WORLD:0,_Material_SrcBlend:1,_Material_DstBlend:0,_ZTest:4,CUSTOM_RIMLIGHT:1,_Lighting_RimPower:1.5,_Lighting_RimFeathering:0.16699999570846558,_Lighting_RimIntensity:1,_Lighting_RimColoring:0,_Smoothness_Shift:0,_Metallic_Shift:metallic,_OcclusionStrength:occlusion,_ReflectionStrength:1},
+   colors:{_BaseColor:[1,1,1,1],_EmissionColor:[1.8443026542663574,1.0621638298034668,.5697060227394104,1]},
+   textures:{_BaseMap:link(keys[0]),_BumpMap:link(keys[1]),_MetallicGlossMap:link(keys[2]),_AnimTex:link(null),_Surface_EffectMap:link(null)}};
+  const textures=Object.fromEntries(keys.map(k=>[k,{fixture:k}]));
+  const base={materials:{[id]:material},shaders:{[shader]:{objectSha256:'7c32f4b3f7c0c0d580af1e22584952aa29d266dfbe98de3b916c3fecb7339931'}},textures};
+  const p=resolveCustomLitFixedMaterial(base,id);
+  assert.equal(p.blendState,undefined);assert.equal(p.material.metallicShift,metallic);assert.equal(p.material.occlusionStrength,occlusion);
+  assert.deepEqual(p.textures,{baseMap:textures[keys[0]],normalMap:textures[keys[1]],comboMap:textures[keys[2]]});
+  for(const [k,v] of [['_Material_Alpha',1],['_ZWrite',0],['_Cull',0],['_Material_DstBlend',10],['UV_WORLD',1]]){
+   const bad=structuredClone(base);bad.materials[id].floats[k]=v;assert.throws(()=>resolveCustomLitFixedMaterial(bad,id),/SHADER_UNSUPPORTED/);
+  }
+  const bad=structuredClone(base);bad.materials[id].objectSha256='0'.repeat(64);assert.throws(()=>resolveCustomLitFixedMaterial(bad,id),/SHADER_UNSUPPORTED/);
+  assert.throws(()=>resolveCustomLitFixedMaterial({...base,materials:{[id+'0']:material}},id+'0'),/SHADER_UNSUPPORTED/);
+ }
+});
