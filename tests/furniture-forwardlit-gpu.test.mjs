@@ -67,3 +67,11 @@ test('CustomLit and original combo emission switches reset between submesh draws
  assert.throws(()=>r.draw(mesh,textures,s,{...m,customLit:{materialAlpha:1}}),/INPUT/);
  r.dispose();
 });
+
+test('explicit CustomLit alpha sampling is bound and resets; unknown alpha mode rejects',()=>{
+ const a=fake(),r=createFurnitureForwardRenderer(a.gl),material={...m,useBaseMapMask:false,customLit:{materialAlpha:1}};
+ r.draw(mesh,textures,s,material);r.draw(mesh,textures,s,m);
+ assert.deepEqual(a.calls.filter(x=>x[0]==='float'&&x[1]==='materialAlpha').map(x=>x[2]),[1,0]);
+ assert.throws(()=>r.draw(mesh,textures,s,{...material,customLit:{materialAlpha:.5}}),/INPUT/);
+ r.dispose();
+});

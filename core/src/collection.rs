@@ -663,7 +663,7 @@ impl Editor {
  /// allocation budget, identity/reference guards, and original tuple.
  pub fn inventory_flower_creation_variants(&self,id:u32)->Vec<FlowerVariant>{
   if let Some(f)=self.pending_flowers.get(&id){
-   if !self.inventory_changes.contains_key(&id)||!self.absent_flower_budget_available(){return Vec::new()}
+   if !self.inventory_changes.contains_key(&id)||!self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(f.item_id){return Vec::new()}
    return self.inventory_flower_variants(id).into_iter().filter(|&v|v!=f.variant).collect()
   }
   if id&PENDING_ITEM!=0{return self.absent_flower_options((id&!PENDING_ITEM) as i32)}
@@ -674,7 +674,7 @@ impl Editor {
   let Some(item)=row.item_id else{return Vec::new()};
   if crate::inventory_source::flower_clothing_reference_keys(item).is_some()&&
    !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return Vec::new()}
-  if self.slot.index.inventory_payload_item_refs.contains(&item){return Vec::new()}
+  if !self.inventory_creation_payload_safe(item){return Vec::new()}
   let Some(original)=row.unique_data.and_then(flower_variant)else{return Vec::new()};
   self.inventory_flower_variants(id).into_iter().filter(|&v|v!=original).collect()
  }
@@ -689,7 +689,7 @@ impl Editor {
  fn flower_creation_item(&self,id:u32,expected:FlowerVariant,next:FlowerVariant)->Option<i32>{
   if !self.absent_flower_budget_available(){return None}
   if let Some(f)=self.pending_flowers.get(&id){
-   if !self.inventory_changes.contains_key(&id){return None}
+   if !self.inventory_changes.contains_key(&id)||!self.inventory_creation_payload_safe(f.item_id){return None}
    let (patterns,current,reserved)=self.flower_context(id)?;
    return (expected==current&&next!=current&&next!=f.variant&&next[0]==current[0]&&
     valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(f.item_id)
@@ -707,7 +707,7 @@ impl Editor {
   let item=row.item_id?;
   if crate::inventory_source::flower_clothing_reference_keys(item).is_some()&&
    !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
-  if self.slot.index.inventory_payload_item_refs.contains(&item){return None}
+  if !self.inventory_creation_payload_safe(item){return None}
   let (patterns,current,reserved)=self.flower_context(id)?;
   let original=flower_variant(row.unique_data?)?;
   (expected==current&&next!=current&&next!=original&&next[0]==current[0]&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
@@ -747,7 +747,7 @@ impl Editor {
  }
  fn absent_flower_choices(&self,item_id:i32)->Vec<FlowerVariant>{
   if self.inventory_item_rows.contains_key(&item_id)||
-   self.slot.index.inventory_payload_item_refs.contains(&item_id)||
+   !self.inventory_creation_payload_safe(item_id)||
    self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item_id){return Vec::new()}
   if !crate::inventory_source::is_uncapped_required_unique_stack(item_id){return Vec::new()}
   // Missing crowns use only their exact source species' original default
@@ -1253,18 +1253,22 @@ impl Editor {
   }
   out
  }
- pub fn inventory_cafe_creation_variants(&self,id:u32)->Vec<(CafeVariant,i32,usize)>{
-  let Some((item,original,current,_))=self.cafe_context(id)else{return Vec::new()};
+ fn cafe_creation_context(&self,id:u32)->Option<(i32,CafeVariant,CafeVariant,HashSet<CafeVariant>)>{
+  let context=self.cafe_context(id)?;
+  let item=context.0;
   let quantity=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
   if !quantity.is_some_and(|q|q>0)||!self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
-   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||self.cafe_family_count(item)>=256{return Vec::new()}
+   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||self.cafe_family_count(item)>=256{return None}
+  Some(context)
+ }
+ pub fn inventory_cafe_creation_variants(&self,id:u32)->Vec<(CafeVariant,i32,usize)>{
+  let Some((item,original,current,_))=self.cafe_creation_context(id)else{return Vec::new()};
   self.inventory_cafe_variants(id).into_iter().filter(|&(v,_,_)|
    v!=original&&v!=current&&self.valid_cafe_creation(item,v)).collect()
  }
  pub fn create_inventory_cafe_variant(&mut self,source_id:u32,expected:CafeVariant,next:CafeVariant,quantity:i32)->Result<u32,Error>{
-  if quantity<=0||!self.inventory_cafe_creation_variants(source_id).iter().any(|&(v,_,_)|v==next){return Err(Error::Schema)}
-  let (item,_,current,_)=self.cafe_context(source_id).ok_or(Error::Schema)?;
-  if current!=expected{return Err(Error::Schema)}
+  let (item,original,current,reserved)=self.cafe_creation_context(source_id).ok_or(Error::Schema)?;
+  if quantity<=0||current!=expected||next==current||next==original||reserved.contains(&next)||!self.valid_cafe_creation(item,next){return Err(Error::Schema)}
   let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
   let change=Change::CafeCreated{document_id,source_id,item_id:item,expected,variant:next,quantity};
   self.restore_change(&change,false);self.undo.push(change);

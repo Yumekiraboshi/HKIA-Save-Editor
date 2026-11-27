@@ -4,8 +4,8 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-const {outputFiles}=await build({stdin:{contents:"export * from './src/furniture-multi-diagnostic';export * from './src/native-texture-upload';export * from './src/furniture-renderer-bounds';",resolveDir:fileURLToPath(new URL('../',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {resolveFurnitureMultiDiagnostic,fitFurnitureMultiStaticBounds,mergeStaticRendererBounds,drawFurnitureMultiDiagnostic,furnitureForwardAttributeLocations,nativeBaseIsOpaque,verifyNativeTexturePayload,validateNativeTextureLayout}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {outputFiles}=await build({stdin:{contents:"export * from './src/furniture-multi-diagnostic';export * from './src/native-texture-upload';export * from './src/furniture-renderer-bounds';export * from './src/furniture-native-builtin-textures-v3.0.1';",resolveDir:fileURLToPath(new URL('../',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+const {resolveFurnitureMultiDiagnostic,fitFurnitureMultiStaticBounds,mergeStaticRendererBounds,drawFurnitureMultiDiagnostic,furnitureForwardAttributeLocations,nativeBaseIsOpaque,verifyNativeTexturePayload,validateNativeTextureLayout,furnitureNativeBuiltinTexture,furnitureNativeBuiltinBytes}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const read=p=>JSON.parse(readFileSync(new URL('../'+p,import.meta.url)));
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const additionalPath='data/furniture-chair-pattern-sources-v3.0.1.json';
@@ -118,7 +118,7 @@ test('the extracted podium GUID matches the authored camera mount without inferr
  assert.equal(c.rendererPathId,'4695806416409439665');assert.equal(c.meshFilterPathId,'-1995439662326436431');
 });
 
-test('UV1 is optional only for world UV, exact original white pattern or proven-unused null pattern',()=>{
+test('UV1 omission is limited to nonspatial patterns, world UV or verified native descriptor alias',()=>{
  const d=sources(),p=resolveFurnitureMultiDiagnostic(d,request(d,32709745,[207,0,0])).plans[0];
  const mesh=structuredClone(d.geometry.rows.find(x=>x.itemId===32709745).meshes[p.meshPathId]);
  assert.deepEqual(furnitureForwardAttributeLocations(mesh,p.material,p.patternMap),{0:0,1:1,2:2,4:4,5:5});
@@ -132,6 +132,10 @@ test('UV1 is optional only for world UV, exact original white pattern or proven-
  assert.deepEqual(furnitureForwardAttributeLocations(mesh,{...p.material,worldUV:true},p.patternMap),expected);
  assert.deepEqual(furnitureForwardAttributeLocations(mesh,{...p.material,baseColor:[1,1,1,1]},null),expected);
  assert.throws(()=>furnitureForwardAttributeLocations(mesh,{...p.material,baseColor:[1,1,1,0]},null),/MESH_CHANNEL/);
+ const alias=structuredClone(mesh);alias.stride=32;alias.channels[4]=[0,28,1,2];
+ assert.deepEqual(furnitureForwardAttributeLocations(alias,p.material,p.patternMap),{...expected,5:5});
+ assert.deepEqual(furnitureForwardAttributeLocations(alias,p.material,white),expected);
+ assert.throws(()=>furnitureForwardAttributeLocations(alias,{...p.material,baseColor:[1,1,1,0]},null),/MESH_CHANNEL/);
  mesh.channels[4]=[0,0,0,0];assert.throws(()=>furnitureForwardAttributeLocations(mesh,p.material,white),/MESH_CHANNEL/);
 });
 
@@ -165,7 +169,31 @@ test('combined plans preflight all three fixed/customized material ranges and re
  assert.throws(()=>resolveFurnitureMultiDiagnostic(d,request(d,id)),/SHADER_UNSUPPORTED/);
 });
 
-test('exact null BaseMap may alias selected original pattern only when base contribution is zero',()=>{
+test('original UnityPlayer constant maps retain the exact bytes and verify through the native texture validator',async()=>{
+ const shader='cdb64e92e92cbc2b88b3ce48c8a3ed302a16972a23528c27e766b7a646d852d0';
+ for(const [name,pixel,digest] of [['_BaseMap',[255,255,255,255],'8667e718294e9e0df1d30600ba3eeb201f764aad2dad72748643e4a285e1d1f7'],['_BumpMap',[127,127,255,255],'33869922b91375cf2b77363e8858a3aee06bae988641ad07f99e817b272d2c35']]){
+  const t=furnitureNativeBuiltinTexture(shader,name),b=furnitureNativeBuiltinBytes(t);
+  assert.equal(t.sha256,digest);assert.equal(sha(Buffer.from(b)),digest);
+  assert.deepEqual([...new Uint8Array(b)],Array.from({length:16},()=>pixel).flat());
+  await verifyNativeTexturePayload(t,b);
+  assert.equal(furnitureNativeBuiltinBytes({...t}),undefined);
+  new Uint8Array(b)[0]=1;
+  assert.equal(new Uint8Array(furnitureNativeBuiltinBytes(t))[0],pixel[0]);
+ }
+ assert.equal(furnitureNativeBuiltinTexture(shader,'_BaseMap'),furnitureNativeBuiltinTexture(shader,'_MetallicGlossMap'));
+ assert.throws(()=>furnitureNativeBuiltinTexture('0'.repeat(64),'_BaseMap'),/BUILTIN_SHADER/);
+ assert.throws(()=>furnitureNativeBuiltinTexture(shader,'_PatternMap'),/BUILTIN_PROPERTY/);
+ const d=sources(),id=32709745,r=request(d,id,[207,0,0]),bind=d.base.rows.find(x=>x.itemId===id).bindings[0],m=d.base.materials[bind[1]];
+ m.textures._BumpMap.texture=null;m.textures._MetallicGlossMap.texture=null;
+ const plan=resolveFurnitureMultiDiagnostic(d,r).plans[0];
+ assert.equal(plan.normalMap,furnitureNativeBuiltinTexture(shader,'_BumpMap'));
+ assert.equal(plan.comboMap,furnitureNativeBuiltinTexture(shader,'_MetallicGlossMap'));
+ m.textures._BumpMap.texture='missing-source-normal';
+ assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/FURNITURE_MULTI_TEXTURE/);
+});
+
+
+test('exact null BaseMap aliases unused pattern or uses verified original white, never a dangling reference',()=>{
  const d=sources(),id=32709745,r=request(d,id,[207,0,0]);
  const g=d.geometry.rows.find(x=>x.itemId===id),node=g.nodes.find(x=>x.rendererPathId);
  const bind=d.base.rows.find(x=>x.itemId===id).bindings[0],m=d.base.materials[bind[1]];
@@ -179,9 +207,32 @@ test('exact null BaseMap may alias selected original pattern only when base cont
  assert.equal(p.normalMap,original.normalMap);assert.equal(p.comboMap,original.comboMap);
  assert.equal(p.material.baseColor[3],0);
  row[3]=[1,1,1,1];
- assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/TEXTURE_NULL/);
+ const white=resolveFurnitureMultiDiagnostic(d,r).plans[0].baseMap;
+ assert.equal(white,furnitureNativeBuiltinTexture(d.base.shaders[m.shader].objectSha256,'_BaseMap'));
  row[3]=[1,1,1,0];m.textures._BaseMap.texture='absent-source-texture';
  assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/FURNITURE_MULTI_TEXTURE/);
  m.textures._BaseMap.texture=null;d.additionalPatterns.rows=[];d.patterns.rows=[];
  assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/PATTERN_UNAVAILABLE/);
+});
+
+test('single source-pinned transparent CustomLit range is permitted only after verified opaque ranges',()=>{
+ const d=sources(),id=90163601,g=d.geometry.rows.find(x=>x.itemId===id),b=d.base.rows.find(x=>x.itemId===id),n=g.nodes.find(x=>x.rendererPathId&&!x.slot);
+ const bind=b.bindings.find(x=>x[0]===n.rendererPathId),old=d.base.materials[bind[1]];
+ const cab='CAB-6c0f768e2ed4ce159a88e4d10c87130c',pid='-532235555454519552',key=cab+':'+pid,ref='1:'+pid,shader='CAB-46b8f8fe122147493b3113f7c1c8cd0f:-6681258383375895387';
+ // Synthetic geometry binding to exercise the real source gate, not original geometry evidence.
+ n.material=ref;g.materials[ref]={externalCab:'archive:/'+cab+'/'+cab,pathId:pid};bind[1]=key;
+ const link=texture=>({texture,scale:[1,1],offset:[0,0]});
+ d.base.materials[key]={...old,shader,objectSha256:'c999d000910a1cd7a947323d5d55ba205a3365cbac45d740927a7da57edc9210',renderQueue:3000,validKeywords:['CUSTOM_RIMLIGHT_ON'],
+ floats:{...old.floats,_Material_Alpha:1,_AlphaClip:0,_ZWrite:0,_Cull:0,_Lighting_Fog:1,_Lighting_Medium_Underwater:0,_Material_VertexAnimation:0,_Surface_Effect:0,_Clip_Offset:0,GLIMMER:0,UV_WORLD:0,_Material_SrcBlend:5,_Material_DstBlend:10,_ZTest:4,_StencilCompare:0,_StencilOverride:0,CUSTOM_RIMLIGHT:1,_Lighting_RimPower:1.5,_Lighting_RimFeathering:.16699999570846558,_Lighting_RimIntensity:1,_Lighting_RimColoring:0,_Smoothness_Shift:0,_Metallic_Shift:0,_OcclusionStrength:0,_ReflectionStrength:1},
+ colors:{...old.colors,_BaseColor:[1,1,1,1],_EmissionColor:[0,0,0,1]},
+ textures:{_BaseMap:link(old.textures._BaseMap.texture),_BumpMap:link(old.textures._BumpMap.texture),_MetallicGlossMap:link(old.textures._MetallicGlossMap.texture),_AnimTex:link(null),_Surface_EffectMap:link(null)}};
+ d.base.shaders[shader]={objectSha256:'7c32f4b3f7c0c0d580af1e22584952aa29d266dfbe98de3b916c3fecb7339931'};
+ const other=b.bindings.filter(x=>x!==bind);
+ for(const row of other){const m=d.base.materials[row[1]];m.renderQueue=-1;Object.assign(m.floats,{_Cull:2,_ZWrite:1,_Material_SrcBlend:1,_Material_DstBlend:0});}
+ const p=resolveFurnitureMultiDiagnostic(d,request(d,id));
+ assert.equal(p.hasTransparent,true);assert.equal(p.hasGlass,false);assert.equal(p.mixed,true);
+ const alpha=p.plans.find(x=>x.rendererPathId===n.rendererPathId);
+ assert.equal(alpha.customLitBlendState.srcBlend,5);assert.equal(alpha.material.customLit.materialAlpha,1);assert.equal(alpha.opaque,false);
+ d.base.materials[other[0][1]].floats._Material_SrcBlend=5;
+ assert.throws(()=>resolveFurnitureMultiDiagnostic(d,request(d,id)),/TRANSPARENT_ORDER_UNVERIFIED/);
 });
