@@ -2206,6 +2206,40 @@ async function inventoryIconScaleSmoke(){
   console.log('CHROMIUM INVENTORY ICON SCALE PASS: three sizes of original fish and ordinary item');
  }finally{await context.close();}
 }
+async function inventoryNativeArtRetrySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();let online=false,requests=0;
+  await page.route('**/inventory-art/index.json',r=>{requests++;return online?r.continue():r.fulfill({status:503,body:'unavailable'});});
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-native-art-retry.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({resultArtInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('10455890');
+  await page.locator('.inventory-card [data-result-icon-target="357184380"][data-inventory-art="native-result-unavailable"]').waitFor({timeout:30_000});
+  await search.fill('1217231008');
+  await page.locator('.inventory-card [data-icon-fidelity="game-original-placeholder"]').waitFor({timeout:30_000});
+  await page.waitForLoadState('networkidle');
+  const failures=requests;assert.ok(failures>=1);
+  online=true;
+  await chooseTab(page,'collections');
+  await chooseTab(page,'inventory');
+  await search.fill('10455890');
+  const result=page.locator('.inventory-card [data-result-icon-target="357184380"][data-inventory-art="native-result"]');
+  await result.waitFor({timeout:30_000});
+  assert.ok(await result.evaluate(async el=>{
+   const url=getComputedStyle(el).backgroundImage.match(/^url\("(.+)"\)$/)?.[1];
+   if(!url||!url.includes('/inventory-art/sheet-008.webp'))return false;
+   const image=new Image();image.src=url;await image.decode();return image.naturalWidth===1152;
+  }));
+  await chooseTab(page,'collections');
+  await chooseTab(page,'inventory');
+  await page.waitForLoadState('networkidle');
+  assert.equal(requests,failures+1);
+ }finally{await context.close();}
+ console.log('CHROMIUM NATIVE INVENTORY ART RETRY PASS: exact target recovered without page reload, withheld route retained');
+}
 async function inventoryNativeResultArtSmoke(){
  // The first recipe/schematic result is in the original inventory atlas,
  // the second resolves to the original shared placeholder.
@@ -3028,6 +3062,7 @@ async function run(){
  await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
  await inventoryNativeResultArtSmoke();
+ await inventoryNativeArtRetrySmoke();
  await inventoryIconScaleSmoke();
  await inventoryDynamicFlowerArtSmoke();
  await inventoryFlowerGrowthDisplaySmoke();
