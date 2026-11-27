@@ -164,3 +164,43 @@ fields[empty]['CustomizedPreviewId']=struct.pack('<I',1);reject()
 `;
  execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
 });
+
+
+test('targeted extraction selects exact catalog models with shared pattern closure',()=>{
+ const run=(...args)=>JSON.parse(execFileSync(process.env.PYTHON_BIN||'python3',['scripts/batch-furniture-native-source.py','--plan',...args],{cwd:repo,encoding:'utf8',maxBuffer:16*1024*1024,stdio:['ignore','pipe','pipe']}));
+ const full=run();
+ const bundle='p_assets_art_decor_event_hugs_84222325_9943a9dc';
+ const p=run('--first-bundle',bundle);
+ assert.equal(p.models.length,5);
+ assert.ok(p.models.every(r=>r.bundles[0]===bundle));
+ const choices=new Set(p.models.flatMap(r=>r.slots.flatMap(s=>s.choices)));
+ assert.deepEqual(p.patterns,full.patterns.filter(r=>r.materialIndices.some(i=>choices.has(i))));
+ assert.equal(p.patterns.length,2);
+ assert.deepEqual(p.counts,full.counts);
+ const extra=full.models.find(r=>r.bundles[0]!==bundle);
+ const combined=run('--first-bundle',bundle,'--item-id',String(extra.itemId),'--item-id',String(p.models[0].itemId));
+ assert.equal(combined.models.length,6);
+ assert.ok(combined.models.some(r=>r.itemId===extra.itemId));
+ for(const args of [['--item-id','-1'],['--first-bundle','not-a-catalog-bundle'],['--item-id',String(extra.itemId),'--limit','1']])assert.throws(()=>run(...args));
+});
+
+test('selection retains missing patterns even for previously packed selected models',()=>{
+ const py=String.raw`
+import importlib.util
+s=importlib.util.spec_from_file_location('batch','scripts/batch-furniture-native-source.py')
+m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+p=m.make_plan()
+bundle='p_assets_art_decor_event_hugs_84222325_9943a9dc'
+target=m.select_plan(p,first_bundles=[bundle])
+ids={r['itemId'] for r in target['models']}
+prior={**p,'models':[r for r in p['models'] if r['itemId'] not in ids],
+       'patterns':[r for r in p['patterns'] if r['guid']!=target['patterns'][0]['guid']],
+       'priorPack':{'test':True}}
+selected=m.select_plan(p,first_bundles=[bundle],remaining=prior)
+assert selected['models']==[]
+assert selected['patterns']==target['patterns'][1:]
+assert selected['priorPack']==prior['priorPack']
+assert m.select_plan(p,remaining=prior)==prior
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
+});

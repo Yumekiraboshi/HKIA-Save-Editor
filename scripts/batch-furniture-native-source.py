@@ -96,6 +96,27 @@ def remaining_plan(plan,pack,expected_sha):
             'patterns':[r for r in plan['patterns'] if r['guid'] not in ps],
             'priorPack':{'sha256':expected_sha,'models':len(gs),'patterns':len(ps)}}
 
+def select_plan(plan,item_ids=(),first_bundles=(),remaining=None):
+    """Select exact catalog models and all their selectable pattern dependencies.
+    Derive dependencies before excluding a verified prior pack, so an already
+    packed model can still request its missing patterns.
+    """
+    available=plan if remaining is None else remaining
+    ids=set(item_ids);bundles=set(first_bundles)
+    if not ids and not bundles:return available
+    require(ids<=set(r['itemId'] for r in plan['models']),'unknown selected item ID')
+    require(bundles<=set(r['bundles'][0] for r in plan['models']),'unknown selected first bundle')
+    selected=[r for r in plan['models'] if r['itemId'] in ids or r['bundles'][0] in bundles]
+    selected_ids={r['itemId'] for r in selected}
+    choices={v for r in selected for s in r['slots'] for v in s['choices']}
+    guids={r['guid'] for r in plan['patterns'] if choices.intersection(r['materialIndices'])}
+    return {**available,'models':[r for r in available['models'] if r['itemId'] in selected_ids],
+            'patterns':[r for r in available['patterns'] if r['guid'] in guids]}
+
+def add_selection_args(p):
+    p.add_argument('--item-id',type=int,action='append',default=[],help='exact catalog item ID; repeatable')
+    p.add_argument('--first-bundle',action='append',default=[],help='exact first catalog bundle; repeatable; union with item IDs')
+
 def locate(root,names):
     found=defaultdict(list)
     for directory,dirs,files in os.walk(root,followlinks=False):
@@ -225,9 +246,12 @@ def main():
     p.add_argument('--limit',type=int,help='optional per-kind limit for local smoke')
     p.add_argument('--remaining-from',type=Path,help='previous independently pinned unified source pack')
     p.add_argument('--remaining-sha256',help='independent SHA-256 of previous ZIP')
+    add_selection_args(p)
     a=p.parse_args();plan=make_plan()
+    require(a.limit is None or not (a.item_id or a.first_bundle),'target selection cannot be combined with limit')
     require(bool(a.remaining_from)==bool(a.remaining_sha256),'prior pack and pin required together')
-    if a.remaining_from:plan=remaining_plan(plan,a.remaining_from,a.remaining_sha256)
+    remaining=remaining_plan(plan,a.remaining_from,a.remaining_sha256) if a.remaining_from else plan
+    plan=select_plan(plan,a.item_id,a.first_bundle,remaining)
     if a.plan:
         print(json.dumps(plan,separators=(',',':')));return
     require(a.root and a.catalog and a.out,'--root --catalog --out required')
