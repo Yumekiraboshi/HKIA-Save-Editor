@@ -26,7 +26,7 @@
 import {searchAchievementRows} from './achievement-search';
  import {loadAchievementGroups,groupRows,ungroupedRows,nativeAchievementOrder,groupSummaries as summarizeAchievementGroups,type AchievementHierarchy} from './achievement-groups';
  import {achievementGroupCopy} from './achievement-group-ui';
- import {loadAchievementCategoryAtlas,type CategoryIconAtlas} from './achievement-category-icons';
+ import {loadAchievementCategoryAtlas,resolveAchievementDetailCategoryArt,type CategoryIconAtlas} from './achievement-category-icons';
  import {loadAchievementIndividualAtlas,type IndividualAchievementAtlas} from './achievement-individual-icons';
  import {loadAchievementIndex,achievementGuid,readableSourceKey,type AchievementIndex} from './achievement-index';
  import {loadAchievementTitles,type AchievementTitles} from './achievement-localization';
@@ -1583,7 +1583,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#if editingAchievement}
      {@const editingSaveGuid=achievementGuid(editingAchievement.guid)}
      {@const dialogIndividualArt=achievementIndividualAtlas?.bySaveGuid.get(editingSaveGuid)}
-     {@const dialogCategoryArt=achievementCategoryAtlas?.bySaveGuid.get(editingSaveGuid)}
+     {@const dialogCategoryArt=resolveAchievementDetailCategoryArt(editingSaveGuid,snapshot.version,achievementCategoryAtlas,achievementIndividualAtlas,achievementGroupHierarchy)}
      <form class="achievement-form" onsubmit={e=>{e.preventDefault();void saveAchievement()}}>
       <div class="date-dialog-heading">
        <h2>{compactCopy.date}</h2>
@@ -1594,7 +1594,7 @@ import {verifiedFloorplanName} from './floorplan-names';
         {#if dialogIndividualArt}
          <span class="achievement-individual-sprite" style:background-image={`url("${achievementIndividualAtlas?.url}")`} style:background-position={`${dialogIndividualArt.x} ${dialogIndividualArt.y}`}></span>
         {:else if dialogCategoryArt}
-         <span class="achievement-category-sprite" style:background-image={`url("${achievementCategoryAtlas?.url}")`} style:background-position={`${dialogCategoryArt.x} ${dialogCategoryArt.y}`}></span>
+         <span class="achievement-category-sprite" data-icon-source={dialogCategoryArt.saveGuid===editingSaveGuid?'category':'native-parent'} style:background-image={`url("${achievementCategoryAtlas?.url}")`} style:background-position={`${dialogCategoryArt.x} ${dialogCategoryArt.y}`}></span>
         {:else}
          <span class="item-art-empty">✧</span>
         {/if}
