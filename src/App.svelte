@@ -40,6 +40,7 @@ import {searchAchievementRows} from './achievement-search';
  import DynamicPaletteSprite from './DynamicPaletteSprite.svelte';
  import DynamicChefSprite from './DynamicChefSprite.svelte';
  import DynamicWandSprite from './DynamicWandSprite.svelte';
+ import {selectWandOriginalCell} from './wand-original-subicon';
  import {inventoryWandAppearance,wandVariantOf,wandVariantLabel,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance} from './inventory-chef-display';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
@@ -430,11 +431,20 @@ import {verifiedFloorplanName} from './floorplan-names';
   inventoryIconPulse;
   if(activeTool!=='inventory'||!snapshot||!catalog)return;
   const groups=new Set<string>();
+  function addWandSource(id:number|undefined){
+   if(!id||id===1185152302)return;
+   const item=inventorySourceItems.get(id);
+   if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
+  }
   for(const row of inventoryRows.slice(0,inventoryLimit)){
+   // Native TryGetSubIcon returns the source item's normal UiIcon, even
+   // when the wand itself has a native inventory-art entry.
+   if(row.itemId===384749651)addWandSource(inventoryWandAppearance(row.itemId,row.unique)?.sourceItemId);
    if(inventoryNativeArt?.entries.has(row.itemId)||inventoryNativeArt?.withheld.has(row.itemId))continue;
    const item=inventorySourceItems.get(row.itemId);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
+  if(wandEdit?.itemId===384749651)addWandSource(wandEdit.appearance.sourceItemId);
   // The category representatives use the same verified item atlas/cache.
   for(const tab of NATIVE_INVENTORY_TABS){
    const id=inventoryCategoryRepresentative(tab.key,nativeInventoryIndex);
@@ -475,6 +485,11 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function flowerOptionGroup(before:FlowerVariant,next:FlowerVariant):number{
   return next[2]!==before[2]?1:next[1]!==before[1]?0:2;
+ }
+ function wandOriginalCell(id:number){
+  if(inventoryNativeArt?.withheld.has(id))return undefined;
+  const group=inventorySourceItems.get(id)?.[3];
+  return selectWandOriginalCell(id,group,group?inventoryIconPacks[group]?.entries:undefined);
  }
  function inventoryName(itemId:number):string{
   return sourceNames[String(itemId)]??'#'+String(itemId);
@@ -1654,7 +1669,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
        <span class="inventory-item-art" class:flower-variant={!!flower} aria-hidden="true">
         {#if wand&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
-          <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite}/>
+          <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite} originalCell={wandOriginalCell(wand.sourceItemId)}/>
          {:else if chef&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicChefSprite itemId={item.itemId} appearance={chef} fallback={nativeSprite??sprite}/>
          {:else if item.palette&&item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
@@ -1935,7 +1950,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="wand-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeWandEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><DynamicWandSprite itemId={edit.itemId} appearance={{...edit.appearance,magicCharacteristicId:selected[0],fleckCharacteristicId:selected[1]}}/></div>
+    <div style="display:flex;justify-content:center"><DynamicWandSprite itemId={edit.itemId} appearance={{...edit.appearance,magicCharacteristicId:selected[0],fleckCharacteristicId:selected[1]}} originalCell={wandOriginalCell(edit.appearance.sourceItemId)}/></div>
     {#if edit.nestedBefore}
      <div class="compact-hint">{inventoryName(edit.nestedBefore[0])} · {furnitureVariantTitle(furnitureDisplay,edit.nestedBefore[0],edit.nestedBefore.slice(3),furnitureCopy.defaultMaterial)}</div>
      {#if edit.nestedOptions?.length}

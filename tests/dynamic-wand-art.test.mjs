@@ -79,3 +79,20 @@ test('item-derived overlays bind exact source definition and Sprite identities, 
  }
  for(const a of source.textures){const data=read(a.file);assert.equal(data.length,a.bytes);assert.equal(sha(data),a.sha256);}
 });
+
+ test('normal original collection cells are reused by exact Item ID, never a named dye sprite',async()=>{
+ const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/wand-original-subicon.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+ const {selectWandOriginalCell,normalizedWandOverlayPixels}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+ const group='collections_group_events',cell={url:'blob:original-sheet',x:96,y:0,group,sheet:0,cell:1};
+ assert.deepEqual(selectWandOriginalCell(315822,group,{'315822':cell}),{itemId:315822,cell});
+ assert.equal(selectWandOriginalCell(315823,group,{'315822':cell}),undefined);
+ assert.equal(selectWandOriginalCell(371479572,group,{'371479572':cell}),undefined);
+ assert.equal(selectWandOriginalCell(315822,group,{'315822':{...cell,url:'/dynamic-colorways/315822.webp'}}),undefined);
+ assert.equal(selectWandOriginalCell(315822,group,{'315822':{...cell,x:0}}),undefined);
+ const rgba=new Uint8ClampedArray(84*84*4);rgba.set([23,45,67,89]);
+ const p=normalizedWandOverlayPixels(rgba);
+ assert.deepEqual([p.width,p.height],[84,168]);
+ assert.deepEqual([...p.rgba.slice(0,4)],[23,45,67,255]);
+ assert.deepEqual([...p.rgba.slice(84*84*4,84*84*4+4)],[89,89,89,255]);
+ assert.throws(()=>normalizedWandOverlayPixels(new Uint8ClampedArray(8)));
+ });
