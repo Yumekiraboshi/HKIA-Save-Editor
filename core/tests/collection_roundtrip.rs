@@ -4279,9 +4279,9 @@ fn legacy_furniture_guid_quantity_zero_refill_preserves_original_tag_and_payload
  for zipped in [false,true]{
   let raw=make(material,vec![]);let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();
-  assert_eq!(e.inventory_unique_data(4),Some(U::Opaque{tag:1}));
+  assert_eq!(e.inventory_unique_data(4),Some(U::Furniture{materials:[0,2,0]}));
   assert_eq!(e.inventory()[0].quantity_minimum,0);
-  assert!(e.inventory_furniture_variants(4).is_empty());
+  assert!(e.inventory_furniture_variants(4).contains(&[0,3,0]));
   let before=e.inventory_original_unique_payload(4).unwrap().to_vec();
   e.change_inventory_quantity(4,6,0).unwrap();
   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
@@ -4293,7 +4293,7 @@ fn legacy_furniture_guid_quantity_zero_refill_preserves_original_tag_and_payload
   let reopened=Editor::open(saved.export().unwrap()).unwrap();
   assert_eq!(reopened.inventory()[0].quantity,9);
   assert_eq!(reopened.inventory_original_unique_payload(4),Some(before.as_slice()));
-  assert_eq!(reopened.inventory_unique_data(4),Some(U::Opaque{tag:1}));
+  assert_eq!(reopened.inventory_unique_data(4),Some(U::Furniture{materials:[0,2,0]}));
  }
  for raw in [
   make([0;4],vec![]),
@@ -4304,5 +4304,43 @@ fn legacy_furniture_guid_quantity_zero_refill_preserves_original_tag_and_payload
  ]{
   let mut e=Editor::open(raw).unwrap();
   assert!(!e.inventory()[0].editable);assert!(e.change_inventory_quantity(4,6,0).is_err());assert!(!e.dirty());
+ }
+}
+
+
+#[test]
+fn legacy_furniture_material_cas_retains_guid_union_and_untouched_spans(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=61381969u32;
+ let material2=[0xd3ce93fd,0x4a105e00,0x3e1e60b9,0x5af6b600];
+ let payload=arr(vec![vec![1],arr(vec![guid([0;4]),guid(material2),guid([0;4])])]);
+ let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x96;
+ p.extend(doc(1,arr(vec![u(4),u(item),u(11),u(6),payload.clone()])));
+ let raw=slot_from_payload("3.0.1",p);
+ for zipped in [false,true]{
+  let input=if zipped{zip(&raw)}else{raw.clone()};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory_furniture_edit_hints().any(|id|id==4));
+  assert!(e.inventory_furniture_variants(4).contains(&[0,3,0]));
+  assert!(e.inventory_furniture_creation_variants(4).is_empty());
+  assert!(e.change_inventory_furniture_variant(4,[0,2,0],[0,1,0]).is_err());
+  assert!(e.change_inventory_furniture_variant(4,[0,3,0],[0,4,0]).is_err());
+  assert!(e.change_inventory_furniture_variant(4,[0,2,0],[0,99999,0]).is_err());
+  assert!(!e.dirty());
+  e.change_inventory_furniture_variant(4,[0,2,0],[0,3,0]).unwrap();
+  e.change_inventory_quantity(4,6,5).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.undo_scope(Inventory));
+  assert_eq!(restored.inventory_unique_data(4),Some(U::Furniture{materials:[0,2,0]}));
+  assert!(restored.redo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity,5);
+  assert_eq!(saved.inventory_unique_data(4),Some(U::Furniture{materials:[0,3,0]}));
+  let exported=saved.inventory_original_unique_payload(4).unwrap();
+  assert_eq!(&exported[..3],&payload[..3]);assert_ne!(exported,payload.as_slice());
+  saved.change_inventory_furniture_variant(4,[0,3,0],[0,2,0]).unwrap();
+  let reopened=Editor::open(saved.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory_unique_data(4),Some(U::Furniture{materials:[0,2,0]}));
+  assert_eq!(&reopened.inventory_original_unique_payload(4).unwrap()[..3],&payload[..3]);
  }
 }

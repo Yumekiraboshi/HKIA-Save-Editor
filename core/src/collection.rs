@@ -442,6 +442,11 @@ impl Editor {
   if let Some(&identity)=self.wand_variant_changes.get(&row.id){
    return Self::wand_appearance(row.item_id?,identity)
   }
+  // For verified legacy rows expose the resolved appearance, not a tag conversion.
+  if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:1}))&&self.unique_quantity_ids.contains(&row.id){
+   let materials=self.furniture_variant_changes.get(&row.id).copied().or_else(||Self::legacy_furniture_materials(&self.slot.envelope.decoded,row))?;
+   return Some(InventoryUniqueData::Furniture{materials})
+  }
   self.flower_variant_changes.get(&row.id).copied().map(flower_unique)
    .or_else(||self.furniture_variant_changes.get(&row.id).copied().map(|materials|InventoryUniqueData::Furniture{materials}))
    .or_else(||self.palette_variant_changes.get(&row.id).copied().map(|rgba_bits|InventoryUniqueData::Palette{rgba_bits}))
@@ -479,7 +484,10 @@ impl Editor {
   // Existing inventory furniture only. Home layout/exterior edits and
   // pattern unlock grants remain outside this operation.
   if source.is_home_layout{return None}
-  let original=furniture_variant(row.unique_data?)?;
+  let original=if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:1})){
+   if !self.unique_quantity_ids.contains(&row.id){return None}
+   Self::legacy_furniture_materials(&self.slot.envelope.decoded,row)?
+  }else{furniture_variant(row.unique_data?)?};
   if original==[0;3]||original.iter().any(|&n|furniture_source::material_unlock_item(n).is_some()){return None}
   furniture_key(source,original)?;
   Some(source)
@@ -489,7 +497,8 @@ impl Editor {
  }
  fn original_furniture_variant(&self,id:u32)->Option<FurnitureVariant>{
   self.pending_furniture.get(&id).map(|f|f.variant)
-   .or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.unique_data).and_then(furniture_variant))
+   .or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|
+    r.unique_data.and_then(furniture_variant).or_else(||Self::legacy_furniture_materials(&self.slot.envelope.decoded,r))))
  }
  fn furniture_context(&self,id:u32)->Option<(&'static FurnitureItemSource,FurnitureVariant,FurnitureVariant,HashSet<FurnitureVariant>)>{
   let (item,uid,source)=if let Some(f)=self.pending_furniture.get(&id){
@@ -528,6 +537,7 @@ impl Editor {
  pub fn inventory_furniture_variants(&self,id:u32)->Vec<FurnitureVariant>{
   let Some((source,original,current,reserved))=self.furniture_context(id)else{return Vec::new()};
   let current_key=furniture_key(source,current).unwrap();
+  let legacy=self.slot.index.inventory.iter().any(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:1})));
   let mut out=Vec::new();
   for slot in source.slots{
    let i=slot.slot as usize;
@@ -536,7 +546,7 @@ impl Editor {
     if v==current||!Self::valid_furniture_target(source,original,v){continue}
     let key=furniture_key(source,v).unwrap();
     if key!=current_key&&!reserved.contains(&key)&&!out.contains(&v)&&
-     (!self.pending_furniture.contains_key(&id)||Some(key)!=furniture_key(source,[0;3])){out.push(v)}
+     ((!legacy&&!self.pending_furniture.contains_key(&id))||Some(key)!=furniture_key(source,[0;3])){out.push(v)}
    }
   }
   out
@@ -616,7 +626,7 @@ impl Editor {
   })).collect()
  }
  pub fn inventory_furniture_creation_variants(&self,id:u32)->Vec<FurnitureVariant>{
-  if !self.absent_flower_budget_available(){return Vec::new()}
+  if self.slot.index.inventory.iter().any(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:1})))||!self.absent_flower_budget_available(){return Vec::new()}
   if self.pending_furniture.contains_key(&id){
    if !self.inventory_changes.contains_key(&id){return Vec::new()}
   }else if id&PENDING_ITEM!=0{
@@ -677,8 +687,9 @@ impl Editor {
  }
  pub fn change_inventory_furniture_variant(&mut self,id:u32,expected:FurnitureVariant,next:FurnitureVariant)->Result<(),Error>{
   let (source,original,current,reserved)=self.furniture_context(id).ok_or(Error::Schema)?;
+  let legacy=self.slot.index.inventory.iter().any(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:1})));
   if current!=expected||current==next||!Self::valid_furniture_target(source,original,next)||
-   (self.pending_furniture.contains_key(&id)&&furniture_key(source,next)==furniture_key(source,[0;3]))||
+   ((legacy||self.pending_furniture.contains_key(&id))&&furniture_key(source,next)==furniture_key(source,[0;3]))||
    reserved.contains(&furniture_key(source,next).ok_or(Error::Schema)?){return Err(Error::Schema)}
   let revision=self.next_edit_revision()?;
   let before=self.furniture_variant_changes.get(&id).copied();
@@ -987,16 +998,21 @@ impl Editor {
   let item=r.item_id?;let source=furniture_source::item(item)?;
   if source.is_home_layout||crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX)||
    self.inventory_item_rows.get(&item)!=Some(&1){return None}
+  let materials=Self::legacy_furniture_materials(&self.slot.envelope.decoded,r)?;
+  if materials==[0;3]||furniture_key(source,materials)?==furniture_key(source,[0;3])?{return None}
+  Some(item)
+ }
+ fn legacy_furniture_materials(decoded:&[u8],r:&crate::native::InventoryRow)->Option<FurnitureVariant>{
+  if !matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:1}))||r.unique_fields.len()!=3{return None}
   let mut materials=[0;3];
   for (slot,span) in materials.iter_mut().zip(&r.unique_fields){
-   let raw=self.slot.envelope.decoded.get(span.clone())?;
+   let raw=decoded.get(span.clone())?;
    let mut c=Cursor::new(raw);let mut words=[0;4];
    for word in &mut words{*word=c.int(0,u32::MAX as i128).ok()? as u32;}
    if c.pos!=raw.len(){return None}
    *slot=furniture_source::material_index_for_guid(words)?;
   }
-  if materials==[0;3]||furniture_key(source,materials)?==furniture_key(source,[0;3])?{return None}
-  Some(item)
+  Some(materials)
  }
  fn legacy_furniture_zero_reference_safe(&self,item:i32)->bool{
   self.ordinary_tradeable_nonclothing_zero_reference_safe(item)||self.extra_custom_furniture_zero_reference_safe(item)
@@ -2774,7 +2790,12 @@ impl Editor {
     for i in 0..3{
      if original[i]==v[i]{continue}
      let span=row.unique_fields.get(i).cloned().ok_or(Error::Schema)?;
-     let mut encoded=vec![0xd2];encoded.extend(v[i].to_be_bytes());
+     let encoded=if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:1})){
+      let words=if v[i]==0{[0;4]}else{furniture_source::MATERIAL_GUID_INDEX.iter().find(|(_,index)|*index==v[i]).ok_or(Error::Schema)?.0};
+      let mut bytes=Vec::with_capacity(20);
+      for word in words{bytes.push(0xce);bytes.extend(word.to_be_bytes());}
+      bytes
+     }else{let mut bytes=vec![0xd2];bytes.extend(v[i].to_be_bytes());bytes};
      patches.push((span,encoded));
     }
    }
@@ -2976,7 +2997,10 @@ impl Editor {
    a.id!=b.id||a.item_id!=b.item_id||a.unique_id!=b.unique_id||
    a.unique_is_nil!=b.unique_is_nil||
    a.quantity!=self.inventory_changes.get(&b.id).copied().or(b.quantity)||
-   a.unique_data!=self.effective_unique(b)||
+   (if matches!(b.unique_data,Some(InventoryUniqueData::Opaque{tag:1})){
+    a.unique_data!=b.unique_data||
+     (self.unique_quantity_ids.contains(&b.id)&&Self::legacy_furniture_materials(&reread.envelope.decoded,a)!=self.effective_unique(b).and_then(furniture_variant))
+   }else{a.unique_data!=self.effective_unique(b)})||
    if self.flower_variant_changes.contains_key(&b.id){
     a.unique_fields.len()!=4||b.unique_fields.len()!=4||
     (0..4).any(|i|{
@@ -2986,7 +3010,7 @@ impl Editor {
     })
    }else if let Some(next)=self.furniture_variant_changes.get(&b.id){
     a.unique_fields.len()!=3||b.unique_fields.len()!=3||
-    b.unique_data.and_then(furniture_variant).is_none_or(|original|(0..3).any(|i|
+    self.original_furniture_variant(b.id).is_none_or(|original|(0..3).any(|i|
      original[i]==next[i]&&reread.envelope.decoded[a.unique_fields[i].clone()]!=original_payload[b.unique_fields[i].clone()]))
    }else if let Some(next)=self.wand_variant_changes.get(&b.id){
     Self::wand_identity(a)!=Some(*next)||Self::wand_identity(b).is_none_or(|original|{
