@@ -46,3 +46,16 @@ test('inventory loads result source groups before skipping the original row and 
  assert.ok(app.includes('inventoryName(item.itemId)'));
  assert.ok(app.includes('requestInventoryDelete([item],false'));
 });
+
+test('native result route cannot fall through to an unrelated source item icon',()=>{
+ const app=read('src/App.svelte');
+ const start=app.indexOf('{:else if resultId!==undefined&&resultOriginal}');
+ const stop=app.indexOf('{:else if originalVariantArt[String(item.itemId)]',start);
+ assert.ok(start>=0&&stop>start);
+ const branch=app.slice(start,stop);
+ assert.ok(branch.includes('{:else if resultPlaceholder}'));
+ assert.ok(branch.includes('{:else if resultId!==undefined}'));
+ assert.ok(branch.includes('data-inventory-art="native-result-unavailable"'));
+ const preload=app.slice(app.indexOf('const resultId=nativeResultIconTarget(row.itemId,snapshot.version)'),app.indexOf('if(inventoryNativeArt?.entries.has(row.itemId)'));
+ assert.ok(preload.includes('if(resultId!==undefined)')&&preload.includes('continue;'));
+});
