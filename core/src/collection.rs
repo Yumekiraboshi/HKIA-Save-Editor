@@ -1066,12 +1066,16 @@ impl Editor {
  fn wand_zero_reference_safe(&self,row:&crate::native::InventoryRow)->bool{
   let Some(item)=row.item_id else{return false};
   let index=&self.slot.index;
+  let Some(key)=crate::inventory_source::magic_wand_reference_key(item)else{return false};
   Self::wand_words(row).is_some()&&!index.inventory_wand_copies&&
    !index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
    !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_refs_incomplete&&
    !index.inventory_palette_context_incomplete&&!index.inventory_palette_copies_incomplete&&
-   index.inventory_furniture_guid_refs.is_empty()&&
-   !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)
+   !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)&&
+   // Unresolved legacy wand payloads remain a separate conservative denial.
+   !index.inventory.iter().any(|r|matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5})))&&
+   !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
+   !index.inventory_item_refs.iter().any(|&(id,_)|id==item)
  }
  fn wand_appearance(item:i32,[magic,fleck]:WandVariant)->Option<InventoryUniqueData>{
   let style=crate::inventory_source::magic_wand_style(item)?;

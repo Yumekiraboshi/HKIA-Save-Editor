@@ -3271,6 +3271,21 @@ fn existing_shaped_wand_zero_refill_preserves_identity_and_denies_copies(){
   saved.change_inventory_quantities(&[(4,0,2),(5,0,3)]).unwrap();
   assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),before);
  }
+ // An unrelated original legacy furniture GUID no longer denies these wands.
+ let legacy_home=|g:[u32;4]|{
+  let old=arr(vec![guid(g),guid([1,2,3,4]),u(0),u(0),u(0),u(0),u(0),u(0),
+   vec![0xc0],vec![0xc0],vec![0xc0],u(0),arr(vec![]),arr(vec![]),u(0)]);
+  let home=arr(vec![guid([41,42,43,44]),arr(vec![old]),u(0),u(0),guid([0;4]),l(0),
+   vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])]);
+  doc(32,arr(vec![u(6),guid([7,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![home])]))])]))
+ };
+ let mut unrelated=Editor::open(make(Some(legacy_home([0x17fc7530,0x48eebd45,0x68b373b0,0xa7812c9b])))).unwrap();
+ assert!(unrelated.inventory().iter().all(|r|r.quantity_minimum==0));
+ unrelated.change_inventory_quantities(&[(4,2,0),(5,3,0)]).unwrap();
+ assert!(Editor::open(unrelated.export().unwrap()).unwrap().inventory().iter().all(|r|r.quantity==0));
+ let mut matching=Editor::open(make(Some(legacy_home([0x52e59d2c,0x9342db09,0x587aacab,0x3ac17e48])))).unwrap();
+ assert!(matching.inventory().iter().all(|r|r.quantity_minimum==1));
+ assert!(matching.change_inventory_quantities(&[(4,2,0),(5,3,0)]).is_err());assert!(!matching.dirty());
  // Copied current payload, unresolved legacy source GUID and truncated outfit context.
  let general=|equipped:Vec<Vec<u8>>|doc(22,arr(vec![u(6),arr(vec![]),arr(equipped),vec![0xc0],vec![0xc0],arr(vec![])]));
  let legacy=arr(vec![vec![5],arr(vec![guid([1,2,3,4]),vec![0xc0],u(104),u(125),u(118)])]);
