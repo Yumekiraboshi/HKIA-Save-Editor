@@ -27,7 +27,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -65,7 +65,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
   ...(emptyMaterialInventory?[doc(1,arr([9],u32(emptyMaterialInventory==='currency'?348154640:1877756618),[0],u32(6),[0xc0])),doc(1,arr([10],u32(emptyMaterialInventory==='currency'?1774854033:627013240),[0],u32(0),[0xc0]))]:[]),
   ...(wandEditInventory?[chef(8,1429161083,arr([9],arr([0],[0xc0],u32(104),u32(125),u32(118))))]:[]),
   ...(nestedWandInventory?[chef(8,384749651,arr([9],arr(u32(61381969),arr([8],arr(u32(13),u32(2),u32(0))),u32(104),u32(125),u32(0))))]:[]),
-  ...(editableFlower?[flower(8,1,0,0)]:[]),
+  ...(editableFlower?[flower(8,1,ownedRestrictedFlower?6:0,0)]:[]),
   ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
   ...(cafeCreateInventory?[chef(8,1338995084,arr([3],arr(arr(u32(44),u32(49),u32(48)),arr(u32(6),u32(46),u32(9))))),chef(9,1932639321,arr([3],arr(arr(u32(44),u32(137)),arr(u32(6),u32(10))))),doc(1,arr([10],u32(1643431747),[0],u32(1),[0xc0]))]:[]),
   ...(cafeEditInventory?[chef(8,203331651,arr([3],arr(arr(u32(44),u32(49),u32(48)),arr(u32(6),u32(46),u32(9)))))]:[]),
@@ -1542,6 +1542,37 @@ async function inventoryFlowerVariantEditSmoke(){
   console.log('CHROMIUM FLOWER VARIANT EDIT PASS: native choices, CAS, local draft and exported payload reparse');
  }finally{await context.close();}
 }
+async function inventoryOwnedFlowerEffectSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-owned-flower-effect.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({editableFlower:true,ownedRestrictedFlower:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  await page.locator('.inventory-card .inventory-unique-edit-button:not([disabled])').click();
+  const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');await dialog.waitFor();
+  const select=dialog.locator('select'),option=select.locator('option[data-flower-variant="6,8,6,0"]');
+  const value=await option.getAttribute('value');assert.ok(value!==null);
+  assert.equal(await select.locator('option[data-flower-variant$=",15,0"]').count(),0);
+  await select.selectOption(value);
+  await dialog.locator('button[type="submit"]:not([disabled])').waitFor();
+  assert.equal(await dialog.locator('.inventory-create-flower:not([disabled])').count(),0);
+  await dialog.locator('button[type="submit"]').click();await dialog.waitFor({state:'hidden'});
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_flowers_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(v.getUint32(0,true),1);assert.equal(v.getUint32(4,true),8);
+  assert.deepEqual(Array.from({length:4},(_,i)=>v.getInt32(8+i*4,true)),[6,8,6,0]);
+  assert.deepEqual(errors,[]);console.log('CHROMIUM OWNED FLOWER EFFECT PASS: original retained, no new restricted effect, recovery and reparse');
+ }finally{await context.close()}
+}
 async function inventoryFlowerCreationSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -2828,6 +2859,7 @@ async function run(){
  await inventoryFlowerGrowthDisplaySmoke();
  await flowerRuntimeCoverage(browser,origin,base);
  await inventoryFlowerVariantEditSmoke();
+ await inventoryOwnedFlowerEffectSmoke();
  await inventoryFlowerCreationSmoke();
  await inventoryAbsentFlowerCreationSmoke();
  await inventoryRareCandleSmoke();
