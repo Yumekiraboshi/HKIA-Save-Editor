@@ -23,6 +23,7 @@ def validate_white_argb(width,height,mips,color,data):
 # Original PC v3.0.1 Shader object identities. Extraction support does not
 # imply WebGL rendering support. Offsets refer to each exact hashed object.
 SHADER_SOURCES={
+    'CAB-2b27edbfe7f08bad1cd631865ee4eb15:-2540003304741789102':('6a7232c308fb8355a29b9b83b3148ef433ff91a43b7a2491b9730017fa7c78aa',16836,'Sunblink/Lynx/CustomLitTriplanar',22,3),
     'CAB-2b27edbfe7f08bad1cd631865ee4eb15:-12830570528601674':('724fb740b376758d27d683cd06a029485cb6ced08faa3ab9069efbc7ae49b05f',14112,'Shader Graphs/HK_Unlit_SoftTextured',11,1),
     'CAB-46b8f8fe122147493b3113f7c1c8cd0f:-245959077359590779':('39080ec3a7154ee8032ee36bab5f861630dfe745b3bd1e35ad275662b1c6e332',28460,'Sunblink/Lynx/CustomLitRefractive',41,7),
     'CAB-2b27edbfe7f08bad1cd631865ee4eb15:-2527260696058741820':('1d7fcbcf451083bffb545d5490fa8a894cf373f0f7b03dd834a89f21e07e7e9a',19752,'Sunblink/Lynx/CustomLitSparkle',36,3),
