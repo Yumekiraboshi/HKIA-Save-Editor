@@ -2,6 +2,7 @@ import {resolveWandBaseTints,type WandBaseAppearance,type WandColor} from './wan
 import type {Rgba} from './dynamic-sprite-color';
 import type {PixelBuffer,Rect,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,type TextureAsset} from './dynamic-art-assets';
+import {originalWandOverlay,originalWandCellKey,type WandOriginalCell} from './wand-original-subicon';
 
 const ROOT=import.meta.env.BASE_URL+'dynamic-wand-art/';
 export const WAND_MANIFEST_SHA='5d4d42d95417c8e6222747433b784a32ee9aaebb91216366a70645a33085f0bb';
@@ -70,7 +71,7 @@ export async function renderWandBaseArt(itemId:number,appearance:WandBaseAppeara
  * original definition UiIcon; nested unique-data colors are intentionally
  * not used by native TryGetSubIcon. Unknown/unextracted IDs remain withheld.
  * Normalized editor geometry; actual prefab/framebuffer parity is pending. */
-export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&{sourceItemId:number}):Promise<Blob|null>{
+export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&{sourceItemId:number},originalCell?:WandOriginalCell):Promise<Blob|null>{
  try{
   const [s,sub]=await Promise.all([sources(),subSources()]);
   const row=s.rows.get(itemId),transform=sub.wands.find(x=>x.itemId===itemId);
@@ -89,11 +90,18 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
   }else{
    const itemSource=await itemSubSources();
    const icon=itemSource.rows.find(x=>x.itemId===appearance.sourceItemId);
-   if(!icon)return null;
-   spritePathId=icon.spritePathId;sourceHash=WAND_ITEM_SUBICON_SHA;
-   overlay={texture:await loadOpaqueArtTexture(ROOT,itemSource.textures[icon.pack]),sampleRect:icon.sampleRect,trim:icon.trimTopLeft,
-    alphaOffsetY:itemSource.alphaOffsetY,logicalWidth:icon.logicalSize,logicalHeight:icon.logicalSize,
-    scale:transform.scale,offsetPercent:transform.offsetPercent,rotation:transform.rotation,sampleClamp:icon.sampleClamp};
+   if(icon){
+    spritePathId=icon.spritePathId;sourceHash=WAND_ITEM_SUBICON_SHA;
+    overlay={texture:await loadOpaqueArtTexture(ROOT,itemSource.textures[icon.pack]),sampleRect:icon.sampleRect,trim:icon.trimTopLeft,
+     alphaOffsetY:itemSource.alphaOffsetY,logicalWidth:icon.logicalSize,logicalHeight:icon.logicalSize,
+     scale:transform.scale,offsetPercent:transform.offsetPercent,rotation:transform.rotation,sampleClamp:icon.sampleClamp};
+   }else{
+    // The item wand can use a source definition's already-published normal
+    // UiIcon cell; never substitute named dye-colorway art or nested colors.
+    if(itemId!==384749651||!originalCell||originalCell.itemId!==appearance.sourceItemId)return null;
+    sourceHash='original-collection-cell-v1';spritePathId=originalWandCellKey(originalCell);
+    overlay=await originalWandOverlay(originalCell,transform);
+   }
   }
   return await renderCachedDynamicArt(JSON.stringify(['3.0.1','wand-composite-2',WAND_MANIFEST_SHA,WAND_SUBICON_MANIFEST_SHA,sourceHash,itemId,tints,spritePathId]),{
    base:s.base,mask:s.mask,baseRect:row.base.sampleRect,maskRect:row.mask.sampleRect,trim:row.base.trimTopLeft,
