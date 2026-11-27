@@ -200,6 +200,22 @@ async function inventoryDynamicPaletteArtSmoke(){
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
   await inputs.nth(1).waitFor();
   assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.value)),['4','7']);
+  // The source-only preview must survive an unavailable mask without
+  // pretending that the original base is the selected individual color.
+  await page.route('**/dynamic-palette-art/palette-mask-rgb-v3.0.1.webp',route=>route.fulfill({status:404,body:''}));
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
+  const originals=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-palette"][data-icon-fidelity="source-derived-base-only"]');
+  await originals.nth(1).waitFor({timeout:30_000});
+  const originalPixels=await originals.evaluateAll(async els=>Promise.all(els.map(async el=>{
+   const im=await createImageBitmap(await (await fetch(getComputedStyle(el).backgroundImage.slice(5,-2))).blob());
+   const canvas=document.createElement('canvas');canvas.width=im.width;canvas.height=im.height;
+   const ctx=canvas.getContext('2d');ctx.drawImage(im,0,0);im.close();
+   return Array.from(ctx.getImageData(0,0,canvas.width,canvas.height).data);
+  })));
+  assert.equal(originalPixels.length,2);assert.deepEqual(originalPixels[0],originalPixels[1]);
+  assert.deepEqual(originalPixels[0].filter((_,i)=>i%4===3),images[0].alpha);
   await page.locator('.file-menu > summary').click();
   const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
   const output=readFileSync(await download.path());
