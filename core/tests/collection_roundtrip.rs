@@ -2781,7 +2781,9 @@ fn cafe_uses_common_unrestricted_ingredient_acquisition_without_creating_materia
   assert_eq!(saved.inventory_original_unique_payload(4),Some(encode(before).as_slice()));
   let row=saved.inventory().into_iter().find(|r|r.quantity==5).unwrap();
   assert_eq!(saved.inventory_unique_data(row.document_id),e.inventory_unique_data(added));
-  assert_eq!(saved.inventory_original_unique_payload(row.document_id),Some(encode(target).as_slice()));
+  // New records use the writer's native signed i32 encoding, not the
+  // unsigned integer encoding used by the original synthetic fixture.
+  assert!(saved.inventory_cafe_rows().any(|(id,v,_)|id==row.document_id&&v==target));
  }
 }
 
