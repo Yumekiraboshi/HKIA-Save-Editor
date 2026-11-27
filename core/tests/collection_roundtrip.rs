@@ -4684,7 +4684,12 @@ fn only_complete_verified_bag_furniture_wand_copies_release_source_reference(){
  assert_eq!(reopened.inventory_original_unique_payload(5),Some(copy.as_slice()));
  assert_eq!(reopened.inventory()[0].quantity,0);
  reopened.change_inventory_quantity(4,0,2).unwrap();
- for (id,materials,style) in [(item,vec![0xc0],0),(item,furniture_payload([0,0,0]),0),(item,furniture_payload([285,2,0]),0),(item,furniture_payload([13,2,0]),1),(1304219546,furniture_payload([13,2,0]),0)]{
+ let mut nil_copy=Editor::open(make(item,vec![0xc0],0)).unwrap();
+ let original=nil_copy.inventory_original_unique_payload(5).unwrap().to_vec();
+ assert!(nil_copy.inventory()[0].editable&&nil_copy.inventory()[0].quantity_minimum==0);
+ nil_copy.change_inventory_quantity(4,93,0).unwrap();
+ assert_eq!(Editor::open(nil_copy.export().unwrap()).unwrap().inventory_original_unique_payload(5),Some(original.as_slice()));
+ for (id,materials,style) in [(item,furniture_payload([0,0,0]),0),(item,furniture_payload([285,2,0]),0),(item,furniture_payload([13,2,0]),1),(1304219546,furniture_payload([13,2,0]),0)]{
   let mut e=Editor::open(make(id,materials,style)).unwrap();
   assert!(!e.inventory()[0].editable);
   assert!(e.change_inventory_quantity(4,93,0).is_err());
@@ -5799,5 +5804,47 @@ fn native_defaulted_reference_tails_do_not_disable_unrelated_ordinary_bag_deleti
   let refill:Vec<_>=before.iter().filter(|r|r.item_id!=target).map(|r|(r.document_id,0,2)).collect();
   saved.change_inventory_quantities(&refill).unwrap();
   assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),before);
+ }
+}
+
+#[path="../src/inventory_wand_ingredient_data.rs"]
+mod complete_wand_source;
+
+#[test]
+fn all_source_ordinary_item_wand_ingredients_remain_deletable_after_copy(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let ids:Vec<_>=complete_quantity_source::RULES.iter().zip(complete_bag_source::BAG_FLAGS).enumerate()
+  .filter_map(|(i,(&(id,_),&f))|(f&1!=0&&complete_wand_source::WAND_ITEM_SOURCE_BITS[i/8]&(1<<(i%8))!=0).then_some(id)).collect();
+ assert_eq!(ids.len(),8595);
+ let make=|batch:&[i32],wand:u32|{
+  let n=batch.len() as u32;
+  let mut p=vec![0x93,0];p.extend(u(8+2*n));p.push(0xdc);p.extend(((7+2*n) as u16).to_be_bytes());
+  p.extend_from_slice(&synthetic_payload("3.0.1")[4..]);
+  for (i,&item) in batch.iter().enumerate(){
+   let id=4+i as u32;
+   p.extend(doc(1,arr(vec![u(id),u(item as u32),u(0),u(2),vec![0xc0]])));
+  }
+  for (i,&item) in batch.iter().enumerate(){
+   p.extend(doc(1,arr(vec![u(4+n+i as u32),u(wand),u(1+i as u32),u(1),
+    arr(vec![vec![9],arr(vec![u(item as u32),vec![0xc0],u(104),u(125),u(0)])])])));
+  }
+  p.extend(doc(10,arr(vec![u(4+2*n),guid([1,2,3,4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([1,2,3,4]),vec![0xc3],vec![0xc0]])));
+  p.extend(doc(22,arr(vec![u(5+2*n),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
+  slot_from_payload("3.0.1",p)
+ };
+ let critters=[7285157,79024873,112622136,702286800,711665739,767798085,897162761,1112156413,1327542038,2011076305];
+ for (batch,wand) in ids.chunks(200).map(|c|(c,384749651u32)).chain(std::iter::once((critters.as_slice(),1304219546u32))){
+  let raw=make(batch,wand);let mut e=Editor::open(raw).unwrap();let original=e.inventory();let n=batch.len();
+  assert_eq!(original.len(),2*n);
+  assert!(original[..n].iter().all(|r|r.editable&&r.quantity_minimum==0));
+  let copies:Vec<_>=original[n..].iter().map(|r|(r.document_id,e.inventory_original_unique_payload(r.document_id).unwrap().to_vec())).collect();
+  let zero:Vec<_>=original[..n].iter().map(|r|(r.document_id,2,0)).collect();
+  e.change_inventory_quantities(&zero).unwrap();assert!(e.undo_scope(Inventory));assert_eq!(e.inventory(),original);assert!(e.redo_scope(Inventory));
+  let mut saved=Editor::open(e.export().unwrap()).unwrap();
+  assert!(saved.inventory()[..n].iter().all(|r|r.quantity==0));
+  for (id,bytes) in copies{assert_eq!(saved.inventory_original_unique_payload(id),Some(bytes.as_slice()));}
+  let refill:Vec<_>=original[..n].iter().map(|r|(r.document_id,0,2)).collect();
+  saved.change_inventory_quantities(&refill).unwrap();
+  assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),original);
  }
 }

@@ -380,11 +380,11 @@ impl<'a> Walk<'a>{
        if tag==1{let a=a.as_ref().ok_or(Error::Schema)?;let int=|k:usize|->Result<Option<i32>,Error>{a.get(k).map(|v|i32::try_from(v.0.int()?).map_err(|_|Error::Schema)).transpose()};let fields=std::array::from_fn(|i|a.get(i+1).map(|v|v.1.clone()));let unique_is_nil=a.get(4).map(|v|matches!(&v.0,Value::Nil));let unique_data=a.get(4).and_then(|v|match &v.0{Value::InventoryUnique(data,_)=>Some(*data),_=>None});let unique_fields=a.get(4).and_then(|v|match &v.0{Value::InventoryUnique(_,fields)=>Some(fields.clone()),_=>None}).unwrap_or_default();
         let row=InventoryRow{id,item_id:int(1)?,unique_id:int(2)?,quantity:int(3)?,fields,unique_is_nil,unique_data,unique_fields};
         // Complete direct modern bag wands defer their source Item ID here.
-        // Only a recognized nondefault tag-8 copy is independent of the bag
-        // source identity. Other references were indexed during the walk.
+        // A complete source-verified modern wand is an independent copy,
+        // including a nil nested payload. Other references remain indexed.
         if self.version==Version::V301{
          if let Some(InventoryUniqueData::WandAppearance{source_item_id,..})=row.unique_data{
-          if source_item_id>0&&!crate::collection::Editor::verified_bag_furniture_wand_copy(&row){
+          if source_item_id>0&&!crate::collection::Editor::verified_bag_wand_copy(&row){
            self.index.inventory_payload_item_refs.insert(source_item_id);
           }
          }
