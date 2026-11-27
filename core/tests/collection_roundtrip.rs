@@ -3504,6 +3504,32 @@ fn furniture_multislot_creation_and_edit_are_atomic(){
 }
 
 #[test]
+fn furniture_draft_preview_recomputes_material_choices_against_complete_identity(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let before=[13,2,0];let peer=[502,2,0];let intermediate=[13,3,0];let target=[502,3,0];
+ for zipped in [false,true]{
+  let raw=furniture_edit_slot(Some(furniture_payload([502,2,0])));let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let (options,creatable)=e.inventory_furniture_preview(4,before,before).unwrap();
+  assert!(!creatable);assert!(!options.contains(&peer));assert!(options.contains(&intermediate));
+  assert!(e.inventory_furniture_preview(4,before,peer).is_err());
+  let (options,creatable)=e.inventory_furniture_preview(4,before,intermediate).unwrap();
+  assert!(creatable&&options.contains(&target));
+  assert!(e.inventory_furniture_preview(4,before,target).unwrap().1);
+  assert!(!e.dirty());
+  let id=e.create_inventory_furniture_variant(4,before,target,2).unwrap();
+  assert_eq!(e.inventory_unique_data(id),Some(U::Furniture{materials:target}));
+  assert!(e.inventory_furniture_preview(4,before,target).is_err());
+  assert!(e.undo_scope(Inventory));assert!(e.inventory_furniture_preview(4,before,target).unwrap().1);
+  assert!(e.redo_scope(Inventory));
+  let saved=Editor::open(e.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory_unique_data(4),Some(U::Furniture{materials:before}));
+  assert_eq!(saved.inventory_unique_data(5),Some(U::Furniture{materials:peer}));
+  assert!(saved.inventory().iter().any(|r|r.quantity==2&&saved.inventory_unique_data(r.document_id)==Some(U::Furniture{materials:target})));
+ }
+}
+
+#[test]
 fn cafe_multiple_ingredient_pairs_create_one_independent_stack(){
  use hkia_save_core::collection::{HistoryScope::Inventory,CafeVariant};
  let original=[44,49,48,6,46,9];let target=[62,50,48,6,46,9];
