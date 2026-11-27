@@ -334,6 +334,47 @@ async function inventoryFirstWandSmoke(){
   assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST MAGIC WAND PASS: absent chooser, history, recovery and export');
  }finally{await context.close()}
 }
+async function inventoryFirstItemWandSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-first-item-wand.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('384749651');
+  const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="wand-editor-title"]');
+  await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  const add=dialog.locator('.inventory-create-wand');assert.equal(await add.isEnabled(),false);
+  await dialog.locator('input[name="wand-source-search"]').fill('1185152302');
+  await dialog.locator('select[name="wand-source"]').selectOption('1185152302');
+  const select=dialog.locator('select[name="wand-variant"]');
+  const option=await select.locator('option[data-wand-variant="106:127"]').getAttribute('value');
+  assert.ok(option!==null);await select.selectOption(option);
+  await dialog.locator('input[name="variant-add-quantity"]').fill('2');
+  await add.click();await dialog.waitFor({state:'hidden'});
+  await card.locator('.inventory-add-source').waitFor();
+  await page.locator('.inventory-add-toggle:not([disabled])').click();
+  await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'2');
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('384749651');
+  await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'2');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_unique_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());let at=0;
+  const u=()=>{const n=v.getUint32(at,true);at+=4;return n};const count=u(),rows=[];
+  for(let i=0;i<count;i++){const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();const words=Array.from({length:n},()=>u()|0);u();if(tag===9)rows.push(words)}
+  assert.ok(rows.some(w=>w.join(':')==='1185152302:106:127:0:-1:0'));
+  assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST ITEM WAND PASS: explicit source selection, recovery and reparse');
+ }finally{await context.close()}
+}
 async function inventoryWandEditSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -2610,6 +2651,7 @@ async function run(){
  await inventoryBobaEditSmoke();
  await inventoryWandEditSmoke();
  await inventoryFirstWandSmoke();
+ await inventoryFirstItemWandSmoke();
  await inventoryBobaFullCreationSmoke();
  await inventoryFirstChefSmoke();
  await inventoryCafeEditSmoke();

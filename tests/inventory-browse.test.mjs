@@ -136,7 +136,7 @@ test('Inventory UI selects native source definitions, retains original game art 
  assert.doesNotMatch(app,/\{iCopy\.all\}/);
  assert.match(app,/inventoryIconPacks\[definition\[3\]\]/);
  assert.match(app,/changeInventoryQuantity\(row.documentId,row.quantity,next\)/);
- assert.match(app,/class:inventory-readonly=\{!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable&&!item.wandCreatableStyle\}/);
+ assert.match(app,/class:inventory-readonly=\{!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable&&item.wandCreatableStyle===undefined\}/);
  assert.match(app,/changeInventoryFurnitureVariant\(selected.documentId,selected.before,next\)/);
  assert.match(app,/requestFurnitureVariants\(row.documentId\)/);
  assert.match(app,/\{@const canFurniture=!!item.unique\?\.furnitureEditable\|\|!!item.furnitureCreatable\}/);
@@ -252,4 +252,10 @@ test('unowned wand candidate is searchable and does not expose ordinary quantity
  assert.deepEqual(inventoryAddRows([source],[candidate]),[candidate]);
  assert.equal(inventoryAddRows([source],[])[0].editable,false);
  assert.equal(inventoryAddRows([source],[])[0].documentId,36);
+});
+
+test('style zero wand candidate remains a customization candidate',()=>{
+ const candidate={documentId:2147483648+384749651,itemId:384749651,quantity:0,editable:false,wandCreatableStyle:0};
+ const owned={documentId:36,itemId:384749651,quantity:2,editable:true,unique:{wandEditable:true}};
+ assert.deepEqual(inventoryAddRows([owned],[candidate]),[candidate]);
 });
