@@ -178,13 +178,14 @@ pub extern "C" fn hkia_inventory_unique_snapshot()->u32{
   let furniture_hints:std::collections::HashSet<_>=editor.inventory_furniture_edit_hints().collect();
   let palette_hints:std::collections::HashSet<_>=editor.inventory_palette_edit_hints().collect();
   let wand_hints:std::collections::HashSet<_>=editor.inventory_wand_edit_hints().collect();
+  let mut special:std::collections::HashMap<_,_>=editor.inventory_special_metadata_rows().map(|(id,tag,words)|(id,(tag,words))).collect();
   for (id,uid,nil,data,fields) in editor.inventory_unique_rows(){
    if count>=1_000_000||out.len()>32*1024*1024{return 1}
    count+=1;
-   let (tag,words):(i32,Vec<u32>)=match data{
+   let (tag,words):(i32,Vec<u32>)=if let Some(value)=special.remove(&id){value}else{match data{
     Some(data)=>data.display_words(),
     None=>(if nil==Some(true){-1}else{-2},Vec::new())
-   };
+   }};
    out.extend(id.to_le_bytes());out.extend(u32::from(uid.is_some()).to_le_bytes());
    out.extend(uid.unwrap_or(0).to_le_bytes());out.extend(tag.to_le_bytes());
    out.extend((fields as u32).to_le_bytes());out.extend((words.len() as u32).to_le_bytes());
