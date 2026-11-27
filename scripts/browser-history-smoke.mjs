@@ -453,6 +453,8 @@ async function inventoryNestedWandSmoke(){
   const choice=await pair.locator('option[data-wand-variant="106:127"]').getAttribute('value');assert.ok(choice!==null);
   await pair.selectOption(choice);
   const combinedOption=dialog.locator('select[name="wand-nested-material"]:not([disabled]) option[data-wand-material="502:3:0"]');
+  await page.waitForFunction(()=>{const dialog=document.querySelector('dialog[aria-labelledby="wand-editor-title"]');return Boolean(dialog?.querySelector('select[name="wand-variant"]:not([disabled])'))});
+  assert.equal(await dialog.locator('[role="alert"]').count(),0,await dialog.locator('[role="alert"]').allTextContents().then(v=>v.join(' ')));
   await combinedOption.waitFor({state:'attached'});
   const combinedChoice=await combinedOption.getAttribute('value');assert.ok(combinedChoice!==null);
   await materials.selectOption(combinedChoice);
