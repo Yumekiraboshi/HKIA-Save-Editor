@@ -28,6 +28,7 @@ CustomLitSurface customLitSurface(vec4 b,vec4 c,vec4 nm,vec4 tint,float ss,float
 export type CustomLitBlendState={queue:3000;srcBlend:5;dstBlend:10;zWrite:false;cull:0|2};
 // Exact source object SHA, cull, rim keyword and transparent mode.
 const extra:Readonly<Record<string,readonly [string,0|2,0|1,0|1]>>={
+ 'CAB-80143f8385dbc1ffc5569bdd27b3c5c5:7360047341139011972':['4dcc89a9999c7f7d4ec5d1d298d323fa20376b7731eb11b7a63c7314e1603cbf',2,0,0],
  'CAB-1439ecb4e3aec07edf439376f0ff48b7:6875419335993937146':["fe7c1d68a979a90755b8ecd8f6ddd6d0507455af2052d9c6e2c6df3e1a6a2bca",2,1,0],
  'CAB-1c1b859afeb3ce121c65bd4d940f64a3:8021757393813074012':["dd32afd94fc5c46bc05221db41fdbda2ddbf1ec4ea82e2659967b0a4f4ab9c7b",0,0,0],
  'CAB-26b78ef50cd0102f819c80ce76b0e84a:-8751875142509439319':["40184e152d561c9995165acbe812f3e56da79625aac194f612d2e6ceecb47013",2,1,0],
