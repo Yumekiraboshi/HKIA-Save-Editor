@@ -4197,3 +4197,60 @@ fn only_complete_verified_bag_furniture_wand_copies_release_source_reference(){
   assert!(e.inventory_furniture_creation_variants(4).is_empty());
  }
 }
+
+
+
+#[test]
+fn remaining_custom_furniture_ordinary_base_zero_refill_with_reference_and_peer_guards(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=102286319u32;
+ let native_guid=[0xc2961421,0x4fdf4f88,0x988e1cb7,0x7f57b563];
+ let make=|uid:u32,peers:Vec<Vec<u8>>,reference:Option<Vec<u8>>|{
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x96+peers.len() as u8+u8::from(reference.is_some());
+  p.extend(doc(1,arr(vec![u(4),u(item),u(uid),u(6),vec![0xc0]])));
+  for peer in peers{p.extend(peer);}
+  if let Some(h)=reference{p.extend(doc(32,arr(vec![u(9),guid([7,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![h])]))])])));}
+  slot_from_payload("3.0.1",p)
+ };
+ let custom=|id,uid,materials|doc(1,arr(vec![u(id),u(item),u(uid),u(2),furniture_payload(materials)]));
+ let home=|wall,legacy:Vec<Vec<u8>>|arr(vec![guid([41,42,43,44]),arr(legacy),u(wall),u(0),guid([0;4]),l(0),
+  vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])]);
+ let legacy=arr(vec![guid(native_guid),guid([1,2,3,4]),u(0),u(0),u(0),u(0),u(0),u(0),
+  vec![0xc0],vec![0xc0],vec![0xc0],u(0),arr(vec![]),arr(vec![]),u(0)]);
+ for zipped in [false,true]{
+  for with_peer in [false,true]{
+   let raw=make(0,if with_peer{vec![custom(5,11,[102,0,0])]}else{vec![]},None);
+   let input=if zipped{zip(&raw)}else{raw};
+   let mut e=Editor::open(input.clone()).unwrap();
+   assert_eq!(e.inventory()[0].quantity_minimum,0);
+   let peer=e.inventory_original_unique_payload(5).map(|p|p.to_vec());
+   e.change_inventory_quantity(4,6,0).unwrap();
+   let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();
+   recovered.restore_history(&cp).unwrap();assert!(recovered.undo_scope(Inventory));assert!(recovered.redo_scope(Inventory));
+   let mut saved=Editor::open(recovered.export().unwrap()).unwrap();
+   assert_eq!(saved.inventory()[0].quantity_minimum,0);assert_eq!(saved.inventory()[0].quantity,0);
+   assert_eq!(saved.inventory_original_unique_payload(4),Some([0xc0].as_slice()));
+   if with_peer{assert_eq!(saved.inventory()[1].quantity,2);assert_eq!(saved.inventory_original_unique_payload(5),peer.as_deref());}
+   saved.change_inventory_quantity(4,0,6).unwrap();
+   let restored=Editor::open(saved.export().unwrap()).unwrap();
+   assert_eq!(restored.inventory()[0].quantity,6);
+   assert_eq!(restored.inventory_original_unique_payload(4),Some([0xc0].as_slice()));
+   if with_peer{assert_eq!(restored.inventory()[1].quantity,2);assert_eq!(restored.inventory_original_unique_payload(5),peer.as_deref());}
+  }
+ }
+ for h in [home(item,vec![]),home(0,vec![legacy])]{
+  let mut e=Editor::open(make(0,vec![],Some(h))).unwrap();
+  assert!(e.change_inventory_quantity(4,6,0).is_err());assert!(!e.dirty());
+ }
+ for (uid,peers) in [
+  (11,vec![]),
+  (0,vec![doc(1,arr(vec![u(5),u(item),u(0),u(2),vec![0xc0]]))]),
+  (0,vec![custom(5,11,[0,0,0])]),
+  (0,vec![custom(5,11,[102,0,0]),custom(6,12,[102,0,0])]),
+  (0,vec![custom(5,11,[102,0,0]),custom(6,11,[102,0,0])]),
+ ]{
+  let mut e=Editor::open(make(uid,peers,None)).unwrap();
+  assert!(e.change_inventory_quantity(4,6,0).is_err());assert!(!e.dirty());
+ }
+ assert!(!Editor::open(slot("3.0.1")).unwrap().inventory_creatable().iter().any(|r|r.item_id==item as i32));
+}
