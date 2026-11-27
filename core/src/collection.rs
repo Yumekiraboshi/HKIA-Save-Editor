@@ -1182,7 +1182,7 @@ impl Editor {
  fn ordinary_nonclothing_reference_safe(&self,item:i32,key:u32)->bool{
   let index=&self.slot.index;
   !index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
-   !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_refs_incomplete&&
+   !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_item_refs_incomplete&&
    !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
    !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)&&
    !index.inventory_item_refs.iter().any(|&(i,_)|i==item)
@@ -3525,6 +3525,21 @@ fn replace_zip(raw:&[u8],z:&ZipIndex,replacement:&[u8])->Result<Vec<u8>,Error>{
 
 #[cfg(test)]
 mod tests {
+ #[test]
+ fn required_unique_source_catalog_has_no_unclassified_bag_family(){
+  use crate::inventory_source as source;
+  let mut counts=[0;4];
+  for &(item,flags) in crate::inventory_source_data::RULES{
+   if flags!=3{continue}
+   let classes=[super::Editor::is_flower_quantity_definition(item),
+    source::CAFE_IDS.binary_search(&item).is_ok()||item==source::BOBA_ID,
+    item==source::CUSTOM_PALETTE_ID,source::wand_output_item(item)];
+   assert_eq!(classes.iter().filter(|&&v|v).count(),1,"required-unique Item ID {item}");
+   for (i,found) in classes.into_iter().enumerate(){if found{counts[i]+=1;}}
+  }
+  assert_eq!(counts.iter().sum::<usize>(),136);
+ }
+
  use super::*;
  #[test]
  fn reencode_and_decode_lz4_roundtrip(){
