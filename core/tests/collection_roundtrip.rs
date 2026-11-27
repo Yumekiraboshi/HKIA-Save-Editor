@@ -5575,22 +5575,32 @@ fn all_source_ordinary_bag_definitions_share_native_zero_refill_and_reference_sc
 }
 
 #[test]
-fn complete_nil_definition_catalog_positive_bounds_and_all_ordinary_additions(){
+fn complete_definition_catalog_uses_one_quantity_field_and_all_ordinary_additions(){
  let defs:Vec<_>=complete_quantity_source::RULES.iter().zip(complete_bag_source::BAG_FLAGS)
-  .filter_map(|(&(id,rule),&flags)|(rule&2==0).then_some((id,rule,flags))).collect();
- assert_eq!(defs.len(),12025);
+  .map(|(&(id,rule),&flags)|(id,rule,flags)).collect();
+ assert_eq!(defs.len(),12163);
+ // This deliberately tests only the common outer record contract and native
+ // definition bounds. The opaque schematic-shaped span is a synthetic
+ // placeholder, not a claim about the actual payload associated with an ID.
+ let opaque=arr(vec![vec![0],arr(vec![guid([11,22,33,44])])]);
  for chunk in defs.chunks(200){
   let mut p=vec![0x93,0];p.extend(u(4+chunk.len() as u32));p.push(0xdc);p.extend(((5+chunk.len()) as u16).to_be_bytes());p.extend_from_slice(&synthetic_payload("3.0.1")[4..]);
-  for (i,&(id,_,_)) in chunk.iter().enumerate(){p.extend(doc(1,arr(vec![u(4+i as u32),u(id as u32),u(0),u(1),vec![0xc0]])));}
+  for (i,&(id,rule,_)) in chunk.iter().enumerate(){
+   let (uid,data)=if rule&2!=0{(1000+i as u32,opaque.clone())}else{(0,vec![0xc0])};
+   p.extend(doc(1,arr(vec![u(4+i as u32),u(id as u32),u(uid),u(0),data])));
+  }
   let mut e=Editor::open(slot_from_payload("3.0.1",p)).unwrap();
   let rows=e.inventory();assert_eq!(rows.len(),chunk.len());
   let mut edits=Vec::new();
   for (row,&(id,rule,_)) in rows.iter().zip(chunk){
    let cap=if rule&1==0{1}else if rule&4==0{i32::MAX}else{complete_quantity_source::CUSTOM_CAPS.iter().find(|r|r.0==id).unwrap().1};
-   assert!(row.editable);assert_eq!(row.quantity_limit,Some(cap));
-   if cap>1{edits.push((row.document_id,1,2));}
+   assert!(row.editable,"definition {id}");assert_eq!(row.quantity_limit,Some(cap));
+   edits.push((row.document_id,0,cap.min(2)));
   }
-  if !edits.is_empty(){e.change_inventory_quantities(&edits).unwrap();assert_eq!(Editor::open(e.export().unwrap()).unwrap().inventory(),e.inventory());}
+  e.change_inventory_quantities(&edits).unwrap();
+  let saved=Editor::open(e.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory(),e.inventory());
+  for row in &rows{assert_eq!(saved.inventory_original_unique_payload(row.document_id),e.inventory_original_unique_payload(row.document_id));}
  }
  let raw=slot("3.0.1");let e=Editor::open(raw.clone()).unwrap();
  let all=e.inventory_creatable();assert_eq!(all.len(),7607);
