@@ -155,7 +155,7 @@ def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_r
             ordinary_stack=(released_nil and stack and d['ItemOwnership'] in (2,18,16)
                             and d['UseEffect']==0 and d['GiftEffect']==0)
             flags=(1|2*bool(cat&256)|4*bool(add)) if bag else (
-                (1|2*bool(cat&256)) if quest_cosmetic else
+                (1|2*bool(cat&256)|4*bool(d['RequiredDlcContent']=='0'*32 and d['UseEffect']==0 and d['GiftEffect']==0)) if quest_cosmetic else
                 (1|4*bool(d['RequiredDlcContent']=='0'*32 and d['ItemOwnership']==16)) if reset else
                 (1|2*bool(cat&256)) if ordinary_stack else 0)
             guid=d['SerializedGuid']
@@ -263,10 +263,10 @@ def render_bag_facts(facts,rows):
     facts=sorted(facts)
     require([id for id,_,_ in facts]==[id for id,_ in rows],'bag definition identity alignment')
     flags=bytes(f for _,f,_ in facts);keys=[key for _,_,key in facts]
-    fh='2df3ef7b3ef2464bd518bf7d9c850136998bcde78ed05671a899beadd2b2b77c'
+    fh='e0652f0d4db8cae44ad1c041846ec5f5e95e14de8a500d1dbf702d68a82a30b8'
     kh='0bd8235b2a3bad5263ec8a2144a0a84fa27d8bab4e27e60034190abc6d7a8396'
     require(hashlib.sha256(flags).hexdigest()==fh and hashlib.sha256(b''.join(s.pack('<I',key) for key in keys)).hexdigest()==kh,'bag facts fingerprint')
-    require(len(set(keys))==12163 and [sum(bool(f&mask) for f in flags) for mask in (1,2,4)]==[9835,6020,6708],'bag facts coverage')
+    require(len(set(keys))==12163 and [sum(bool(f&mask) for f in flags) for mask in (1,2,4)]==[9835,6020,7213],'bag facts coverage')
     return ("// Generated from the pinned Steam v3.0.1 definitions, ascending RULES Item ID order.\n"
             "// Flags: 1=released ordinary bag class, 2=outfit reference class, 4=unrestricted bag acquisition.\n"
             "// Native item GUID fingerprints are denial-only. See extract-inventory-quantity-rules.py.\n"
