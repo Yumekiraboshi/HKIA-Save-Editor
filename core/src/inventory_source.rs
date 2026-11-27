@@ -1,6 +1,7 @@
 //! Source-defined v3.0.1 item quantity semantics. No entitlement inference.
 use crate::inventory_source_data::{RULES,CUSTOM_CAPS};
 use crate::inventory_tradeable_data::TRADEABLE_CREATION_BITS;
+use crate::inventory_wand_ingredient_data::WAND_ITEM_SOURCE_BITS;
 use crate::inventory_tradeable_reference_data::TRADEABLE_NONCLOTHING_REFERENCE_KEYS;
 use crate::inventory_custom_furniture_reference_data::CUSTOM_FURNITURE_EXTRA_REFERENCE_KEYS;
 use crate::inventory_furniture_reference_data::FURNITURE_REFERENCE_KEYS;
@@ -330,6 +331,25 @@ pub(crate) fn magic_wand_reference_key(item:i32)->Option<u32>{
 pub(crate) fn magic_wand_style(item:i32)->Option<i32>{
  MAGIC_WAND_STYLES.binary_search_by_key(&item,|&(id,_)|id).ok().map(|i|MAGIC_WAND_STYLES[i].1)
 }
+/// Exact WandStationItemWandProcessor output IDs and native ingredient predicates.
+/// The nonzero-source slice accepts only nil payloads and style zero; it does
+/// not authorize creation of an unowned source item or absent wand family.
+pub(crate) const ITEM_WAND_ID:i32=384749651;
+pub(crate) const CRITTER_WAND_ID:i32=1304219546;
+const CRITTER_WAND_SOURCES:&[i32]=&[7285157,79024873,112622136,702286800,711665739,767798085,897162761,1112156413,1327542038,2011076305];
+pub(crate) fn wand_source_style(item:i32,source:i32)->Option<i32>{
+ if source==0{return magic_wand_style(item)}
+ if item==CRITTER_WAND_ID{return CRITTER_WAND_SOURCES.binary_search(&source).ok().map(|_|0)}
+ if item!=ITEM_WAND_ID{return None}
+ let i=RULES.binary_search_by_key(&source,|r|r.0).ok()?;
+ (WAND_ITEM_SOURCE_BITS[i/8]&(1<<(i%8))!=0).then_some(0)
+}
+pub(crate) fn wand_reference_key(item:i32)->Option<u32>{
+ match item{ITEM_WAND_ID=>Some(0x785e7587),CRITTER_WAND_ID=>Some(0x6f5bd589),_=>magic_wand_reference_key(item)}
+}
+pub(crate) fn wand_output_item(item:i32)->bool{
+ matches!(item,ITEM_WAND_ID|CRITTER_WAND_ID)||magic_wand_style(item).is_some()
+}
 pub(crate) fn magic_wand_choices(v:[i32;2])->bool{
  WAND_MAGIC.iter().any(|&(id,_)|id==v[0])&&WAND_FLECK.iter().any(|&(id,_)|id==v[1])
 }
@@ -344,6 +364,18 @@ pub(crate) fn magic_wand_choices(v:[i32;2])->bool{
   assert_eq!(WAND_MAGIC.len()*WAND_FLECK.len(),36);
   assert!(WAND_MAGIC.iter().chain(WAND_FLECK).all(|&(_,id)|ordinary_quantity_limit(id)==Some(i32::MAX)));
   assert_eq!(magic_wand_style(1020402601),None);
+  assert_eq!(WAND_ITEM_SOURCE_BITS.len(),1521);
+  assert_eq!(WAND_ITEM_SOURCE_BITS.iter().map(|b|b.count_ones()).sum::<u32>(),8601);
+  let hash=crate::digest::sha256(WAND_ITEM_SOURCE_BITS).iter().map(|b|format!("{b:02x}")).collect::<String>();
+  assert_eq!(hash,"433ec9faa61477cfc61bb069222522f2daa82f3c89d9c9474223a59e6e5afcca");
+  assert!(CRITTER_WAND_SOURCES.windows(2).all(|w|w[0]<w[1]));
+  assert_eq!(wand_source_style(ITEM_WAND_ID,1185152302),Some(0));
+  assert_eq!(wand_source_style(CRITTER_WAND_ID,7285157),Some(0));
+  assert_eq!(wand_source_style(ITEM_WAND_ID,0),None);
+  assert_eq!(wand_source_style(CRITTER_WAND_ID,1185152302),None);
+  assert_eq!(wand_reference_key(ITEM_WAND_ID),Some(furniture_guid_fingerprint([0xb5dabef9,0x0047a0d5,0xe98cd284,0xe52e9f97])));
+  assert_eq!(wand_reference_key(CRITTER_WAND_ID),Some(furniture_guid_fingerprint([0x91a1c067,0x9a4626f9,0xeca0a6af,0x2e2f1909])));
+  assert!(is_uncapped_required_unique_stack(ITEM_WAND_ID)&&is_uncapped_required_unique_stack(CRITTER_WAND_ID));
  }
 }
 

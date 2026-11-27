@@ -23,7 +23,7 @@ export function isWandVariantWire(v:unknown):v is WandVariant{
  return Array.isArray(v)&&v.length===2&&v.every(n=>Number.isInteger(n)&&n>=-2147483648&&n<=2147483647);
 }
 export function wandVariantOf(info:InventoryUniqueInfo|undefined):WandVariant|null{
- return info?.tag===9&&info.fieldCount===5&&info.words.length===6&&info.words[0]===0&&info.words[4]===4294967295&&info.words[5]===0?[info.words[1]|0,info.words[2]|0]:null;
+ return info?.tag===9&&info.fieldCount===5&&info.words.length===6&&info.words[4]===4294967295&&info.words[5]===0?[info.words[1]|0,info.words[2]|0]:null;
 }
 export function decodeWandVariants(bytes:Uint8Array):WandVariant[]{
  if(bytes.length<4)throw Error('WAND_OPTIONS_INVALID');
