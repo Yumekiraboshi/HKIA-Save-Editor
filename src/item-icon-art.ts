@@ -11,7 +11,7 @@ import type {SpriteCell} from './icon-packs';
 export type ItemIconFidelity =
  'game-original' | 'verified-reconstruction' | 'approximate' | 'unsupported';
 export type ItemIconOrigin =
- 'original-uiicon' | 'original-colorway-sprite' | 'verified-variant' | 'original-uiicon-pixel-recolor' | 'original-named-sprite-fit' |
+ 'original-uiicon' | 'original-colorway-sprite' | 'original-named-item-sprite' | 'verified-variant' | 'original-uiicon-pixel-recolor' | 'original-named-sprite-fit' |
  'shared-uiicon-template' | 'missing';
 export type ItemIconArtwork = Readonly<{
  itemId:string;
@@ -35,6 +35,8 @@ const own=(source:object,id:string)=>Object.prototype.hasOwnProperty.call(source
 /** Original named asset, not a claim about the runtime game UI render. */
 export const isSourceColorwayUrl=(url:string)=>/^\/(?:[^/]+\/)*dynamic-colorways\/[1-9][0-9]{0,9}\.webp\?v=[a-f0-9]{64}$/.test(url)||/^\/(?:[^/]+\/)*source-colorways\/[1-9][0-9]{0,9}\.webp$/.test(url);
 
+export const isNamedOriginalItemUrl=(url:string)=>/^\/(?:[^/]+\/)*source-item-art\/[1-9][0-9]{0,9}\.png\?v=[a-f0-9]{64}$/.test(url);
+
 export const isSourceFitUrl=(url:string)=>/^\/(?:[^/]+\/)*native-colorways\/source-fit\/[1-9][0-9]{0,9}\.png\?v=[a-f0-9]{64}$/.test(url);
 
 /** Resolve quality without silently upgrading a shared, undyed UiIcon.
@@ -48,7 +50,9 @@ export function resolveItemIconArt(itemId:number|string,sources:ItemIconSources)
   throw Error('ITEM_ICON_ID_OR_DYEABILITY_INVALID');
  const verified=sources.verifiedById;
  if(verified&&own(verified,id)&&typeof verified[id]==='string'&&verified[id])
-  return isSourceColorwayUrl(verified[id])?
+  return isNamedOriginalItemUrl(verified[id])?
+   {itemId:id,fidelity:'game-original',origin:'original-named-item-sprite',url:verified[id]}:
+   isSourceColorwayUrl(verified[id])?
    {itemId:id,fidelity:'game-original',origin:'original-colorway-sprite',url:verified[id]}:
    {itemId:id,fidelity:'verified-reconstruction',origin:'verified-variant',url:verified[id]};
  const approximated=sources.approximateById;

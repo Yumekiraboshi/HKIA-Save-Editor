@@ -13,7 +13,7 @@ test('all 12,163 definitions have a classified source route',()=>{
  const {rows,routes,report}=buildInventoryThumbnailIndex(root);
  assert.equal(rows.length,12163);
  assert.equal(new Set(rows.map(r=>r.id)).size,12163);
- assert.deepEqual(report.counts,{'collection-pack':4879,'original-colorway':5383,'native-inventory':1747,'source-placeholder':152,'dynamic-color':2});
+ assert.deepEqual(report.counts,{'collection-pack':4878,'original-colorway':5383,'original-named-item':1,'native-inventory':1747,'source-placeholder':152,'dynamic-color':2});
  assert.equal(report.alternateRoutes,0);
  assert.deepEqual(routes,{});
  assert.equal(report.otherUnique.length,93);

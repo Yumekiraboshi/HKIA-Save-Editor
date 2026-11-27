@@ -9,7 +9,7 @@ const {outputFiles}=await build({
  entryPoints:[fileURLToPath(new URL('../src/variant-art.ts',import.meta.url))],
  bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'
 });
-const {parseVariantArtIndex,parseSourceColorwayIndex,parseDynamicColorwayIndex,loadVariantArtIndex,loadVariantArtSources}=await import(
+const {parseVariantArtIndex,parseSourceColorwayIndex,parseDynamicColorwayIndex,parseNamedOriginalItemSprites,loadVariantArtIndex,loadVariantArtSources}=await import(
  'data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64')
 );
 const read=(name)=>readFileSync(new URL(name,import.meta.url),'utf8');
@@ -18,6 +18,7 @@ const native=JSON.parse(read('../public/native-dye-palettes.json'));
 const sources=JSON.parse(read('../public/source-colorways/index.json'));
 const catalog=JSON.parse(read('../public/catalog.json'));
 const dynamic=JSON.parse(read('../public/dynamic-colorways/index.json'));
+const namedItemSprites=JSON.parse(read('../data/named-original-item-sprites-v3.0.1.json'));
 const itemKeys=new Map(catalog.items.map(r=>[String(r[0]),r[1]]));
 const example={
  file:'704486536.png',sha256:'a'.repeat(64),
@@ -213,6 +214,31 @@ test('original source remains primary and verified reconstruction is retained as
   assert.equal(reconstructions['585726126'],'/variant-art/585726126.png');
   assert.equal(primary['585726126'],originals['585726126']);
   assert.equal(originals['585726126'],'/dynamic-colorways/585726126.webp?v='+dynamic.records['585726126']);
-  assert.equal(Object.keys(originals).length,5383);
+  assert.equal(Object.keys(originals).length,5384);
+  assert.equal(originals['1393962785'],'/source-item-art/1393962785.png?v='+namedItemSprites.records['1393962785'].sha256);
  }finally{globalThis.fetch=prev;}
+});
+
+test('named non-dye original item uses exact source identity, validated local image, and no reconstructed color claim',async()=>{
+ const [id,r]=Object.entries(namedItemSprites.records)[0];
+ assert.equal(id,'1393962785');assert.equal(itemKeys.get(id),r.itemKey);
+ assert.equal(r.sourceSpriteName,'icon_'+r.itemKey);assert.ok(!native.records[id]);
+ const bundles=JSON.parse(read('../data/dynamic-colorway-packs/index.json')).sourceBundles;
+ assert.ok(bundles.some(b=>b.name===r.sourceSpriteBundle&&b.sha256===r.sourceBundleSha256&&b.cab===r.cab));
+ assert.equal(parseNamedOriginalItemSprites(namedItemSprites,'/')[id],'/source-item-art/'+r.file+'?v='+r.sha256);
+ const bytes=readFileSync(new URL('../public/source-item-art/'+r.file,import.meta.url));
+ assert.equal(bytes.length,r.bytes);assert.equal(createHash('sha256').update(bytes).digest('hex'),r.sha256);
+ assert.equal(bytes.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
+ assert.equal(bytes.readUInt32BE(16),256);assert.equal(bytes.readUInt32BE(20),256);
+ assert.equal(bytes[24],8);assert.equal(bytes[25],6);
+ const {inflateSync}=await import('node:zlib');const chunks=[];
+ for(let pos=8;pos<bytes.length;){const n=bytes.readUInt32BE(pos);assert.ok(pos+12+n<=bytes.length);if(bytes.toString('ascii',pos+4,pos+8)==='IDAT')chunks.push(bytes.subarray(pos+8,pos+8+n));pos+=12+n;}
+ const filtered=inflateSync(Buffer.concat(chunks));assert.equal(filtered.length,256*1025);
+ const rgba=Buffer.alloc(256*256*4);const paeth=(a,b,c)=>{const p=a+b-c,pa=Math.abs(p-a),pb=Math.abs(p-b),pc=Math.abs(p-c);return pa<=pb&&pa<=pc?a:pb<=pc?b:c};
+ for(let y=0;y<256;y++){const t=filtered[y*1025];assert.ok(t<=4);for(let j=0;j<1024;j++){const k=y*1024+j,a=j>=4?rgba[k-4]:0,b=y?rgba[k-1024]:0,c=y&&j>=4?rgba[k-1028]:0;rgba[k]=(filtered[y*1025+j+1]+(t===0?0:t===1?a:t===2?b:t===3?Math.floor((a+b)/2):paeth(a,b,c)))&255;}}
+ assert.equal(createHash('sha256').update(rgba).digest('hex'),r.rgbaSha256);
+ let visible=0;for(let n=3;n<rgba.length;n+=4)if(rgba[n])visible++;
+ assert.equal(visible,r.visiblePixels);assert.equal(65536-visible,r.transparentPixels);
+ for(const changes of [{file:'../1393962785.png'},{sourceSpriteName:'icon_unrelated'},{itemKey:'item_c_dyeable_unrelated'},{textureSha256:'bad'},{width:128}])assert.throws(()=>parseNamedOriginalItemSprites({...namedItemSprites,records:{[id]:{...r,...changes}}},'/'),/NAMED_ITEM_SPRITE_RECORD_INVALID/);
+ assert.throws(()=>parseNamedOriginalItemSprites({...namedItemSprites,runtimeUiIconReferenceMatches:true},'/'),/NAMED_ITEM_SPRITE_INDEX_INVALID/);
 });

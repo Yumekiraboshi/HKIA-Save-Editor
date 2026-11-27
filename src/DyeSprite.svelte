@@ -1,7 +1,7 @@
 <script lang="ts">
  import type {SpriteCell} from './icon-packs';
  import type {NativeDyePalette} from './native-dye-palettes';
- import {displayedDyeIconFidelity,isSourceColorwayUrl} from './item-icon-art';
+ import {displayedDyeIconFidelity,isSourceColorwayUrl,isNamedOriginalItemUrl} from './item-icon-art';
 
  let {sprite,exactArtUrl,originalArtUrl}:{
   sprite?:SpriteCell;palette?:NativeDyePalette;sourceKey?:string;
@@ -23,7 +23,7 @@
    void picture.decode().then(()=>{
     if(canceled)return;
     displayedUrl=url;
-    if(isSourceColorwayUrl(url))imageSource='game-source-sprite';
+    if(isSourceColorwayUrl(url)||isNamedOriginalItemUrl(url))imageSource='game-source-sprite';
     else imageSource='game-render';
    }).catch(()=>{if(!canceled)onFailure();});
   };
@@ -46,7 +46,7 @@
  data-icon-fidelity={displayedDyeIconFidelity(imageSource)}
  style:background-image={'url("'+(displayedUrl??sprite?.url??'')+'")'}
  style:background-position={displayedUrl?'center':sprite?'-'+sprite.x+'px -'+sprite.y+'px':undefined}
- style:background-size={imageSource==='game-render'?'contain':displayedUrl?'96px 96px':undefined}
+ style:background-size={imageSource==='game-render'?'contain':displayedUrl?(isNamedOriginalItemUrl(displayedUrl)?'84px 84px':'96px 96px'):undefined}
  style:background-repeat={displayedUrl?'no-repeat':undefined}></span>
 {:else}
  <span class="item-art-empty">✧</span>

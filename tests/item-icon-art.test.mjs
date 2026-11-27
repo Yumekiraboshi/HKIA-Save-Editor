@@ -80,3 +80,8 @@ test('named original colorway sprites stay distinct from verified game runtime r
  assert.equal(displayedDyeIconFidelity('game-source-sprite'),'game-original');
  assert.match(readFileSync(new URL('../src/DyeSprite.svelte',import.meta.url),'utf8'),/imageSource='game-source-sprite'/);
 });
+
+test('non-dye named finished sprite is not a colorway reconstruction',()=>{
+ const url='/HKIA-Save-Editor/source-item-art/1393962785.png?v='+'a'.repeat(64);
+ assert.deepEqual(resolveItemIconArt(1393962785,byId(false,{verifiedById:{'1393962785':url}})),{itemId:'1393962785',fidelity:'game-original',origin:'original-named-item-sprite',url});
+});
