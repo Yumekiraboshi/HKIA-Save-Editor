@@ -5902,3 +5902,57 @@ fn existing_verified_unique_zero_refill_is_independent_of_last_copy_removal(){
   assert!(!e.inventory()[i].editable);assert!(e.change_inventory_quantity(4+i as u32,0,1).is_err());assert!(!e.dirty());
  }
 }
+
+#[test]
+fn all_source_authorized_flower_outputs_share_empty_family_first_add(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ // Derive the complete class from the native first-add catalog, not a
+ // hand-selected set of IDs. Existing source coverage asserts its partition.
+ let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=0x97;
+ p.extend(doc(10,arr(vec![u(4),guid([1,2,3,4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([1,2,3,4]),vec![0xc3],vec![0xc0]])));
+ p.extend(doc(22,arr(vec![u(5),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
+ let raw=slot_from_payload("3.0.1",p);
+ for zipped in [false,true]{
+  let input=if zipped{zip(&raw)}else{raw.clone()};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let ids=e.inventory_absent_flower_ids();
+  assert_eq!(ids.iter().copied().collect::<std::collections::HashSet<_>>().len(),ids.len());
+  assert_eq!(ids.len(),105);
+  let mut first=std::collections::HashMap::new();
+  for &item in &ids{
+   let candidate=0x80000000|item as u32;
+   let v=e.inventory_flower_creation_variants(candidate)[0];
+   e.create_inventory_flower_variant(candidate,[0;4],v,2).unwrap();
+   first.insert(item,v);
+  }
+  let mut saved=Editor::open(e.export().unwrap()).unwrap();
+  let original=saved.inventory();assert_eq!(original.len(),ids.len());
+  assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==0));
+  assert!(saved.inventory_absent_flower_ids().is_empty());
+  let zero:Vec<_>=original.iter().map(|r|(r.document_id,2,0)).collect();saved.change_inventory_quantities(&zero).unwrap();
+  let empty= saved.export().unwrap();
+  let mut reopened=Editor::open(empty.clone()).unwrap();
+  let before=reopened.inventory();assert!(before.iter().all(|r|r.quantity==0));
+  for &item in &ids{
+   let id=0x80000000|item as u32;
+   let reserved=first[&item];let choices=reopened.inventory_flower_creation_variants(id);
+   assert!(!choices.contains(&reserved));
+   assert!(reopened.create_inventory_flower_variant(id,[0;4],reserved,1).is_err());
+   if let Some(&next)=choices.first(){
+    reopened.create_inventory_flower_variant(id,[0;4],next,3).unwrap();
+   }else{
+    // Some source species have one starter color. Keep the original
+    // zero row refillable; additional source choices are not fabricated.
+    assert!(reopened.inventory().iter().any(|r|r.item_id==item&&r.quantity==0&&r.editable));
+   }
+  }
+  let cp=reopened.history_checkpoint().unwrap();let mut restored=Editor::open(empty).unwrap();restored.restore_history(&cp).unwrap();
+  assert_eq!(restored.inventory(),reopened.inventory());assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut final_save=Editor::open(restored.export().unwrap()).unwrap();
+  for r in &before{
+   assert_eq!(final_save.inventory_original_unique_payload(r.document_id),saved.inventory_original_unique_payload(r.document_id));
+  }
+  let refill:Vec<_>=before.iter().map(|r|(r.document_id,0,2)).collect();final_save.change_inventory_quantities(&refill).unwrap();
+  assert!(Editor::open(final_save.export().unwrap()).unwrap().inventory().iter().all(|r|r.quantity>0));
+ }
+}

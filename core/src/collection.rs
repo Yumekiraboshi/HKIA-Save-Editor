@@ -990,13 +990,7 @@ impl Editor {
  fn absent_flower_preview_context(&self,item:i32,witness:FlowerVariant)->Option<(FlowerPolicy,HashSet<FlowerVariant>)>{
   if !self.absent_flower_options(item).contains(&witness){return None}
   let patterns=flower_item_patterns(item,6)?;
-  let mut reserved=HashSet::new();
-  for (&id,f) in &self.pending_flowers{
-   if f.item_id!=item||!self.inventory_changes.contains_key(&id){continue}
-   reserved.insert(f.variant);
-   reserved.insert(self.flower_variant_changes.get(&id).copied().unwrap_or(f.variant));
-  }
-  Some((patterns,reserved))
+  Some((patterns,self.absent_flower_reservations(item)?))
  }
  fn absent_flower_budget_available(&self)->bool{
   self.inventory_creation_source_valid()&&self.undo.len()+self.redo.len()<MAX_UNDO&&
@@ -1012,11 +1006,26 @@ impl Editor {
  fn absent_flower_growth_supported(item:i32,grow:i32)->bool{
   matches!(grow,0|7)&&ABSENT_FLOWER_DEFAULTS.iter().any(|&(id,_)|id==item)
  }
+ fn absent_flower_reservations(&self,item:i32)->Option<HashSet<FlowerVariant>>{
+  if !self.saved_item_family_empty(item){return None}
+  let mut reserved=HashSet::new();
+  for row in self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)){
+   if !self.unique_quantity_ids.contains(&row.id){return None}
+   let original=self.original_flower_variant(row.id)?;
+   reserved.insert(original);reserved.insert(self.flower_variant_changes.get(&row.id).copied().unwrap_or(original));
+  }
+  for (&id,f) in &self.pending_flowers{
+   if f.item_id!=item||!self.inventory_changes.contains_key(&id){continue}
+   reserved.insert(f.variant);reserved.insert(self.flower_variant_changes.get(&id).copied().unwrap_or(f.variant));
+  }
+  Some(reserved)
+ }
  fn absent_flower_choices(&self,item_id:i32)->Vec<FlowerVariant>{
-  if owned_dlc_flower_output(item_id)||self.inventory_item_rows.contains_key(&item_id)||
+  if owned_dlc_flower_output(item_id)||
    !self.inventory_creation_payload_safe(item_id)||
    self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item_id){return Vec::new()}
   if !crate::inventory_source::is_uncapped_required_unique_stack(item_id){return Vec::new()}
+  let Some(reserved)=self.absent_flower_reservations(item_id)else{return Vec::new()};
   // Missing crowns use only their exact source species' original default
   // colors. Generic processors can use any of the unrestricted source
   // species; only their actual default colors are offered here.
@@ -1026,7 +1035,7 @@ impl Editor {
     let eligible=FLOWER_SPECIES.iter().any(|&(id,p)|id==species&&p.contains(&10));
     colors.iter().copied().filter(move |_|eligible).map(|color|[6,color,10,default_flower_accent(color)])
    }).collect::<std::collections::BTreeSet<_>>().into_iter().filter(|v|valid_flower_variant(policy,*v)&&
-    !self.pending_flowers.iter().any(|(&id,f)|self.inventory_changes.contains_key(&id)&&f.item_id==item_id&&(f.variant==*v||self.flower_variant_changes.get(&id)==Some(v)))).collect()
+    !reserved.contains(v)).collect()
   }
   let species=flower_candle_source(item_id).map(|r|r.1).or_else(||FLOWER_CROWN_SPECIES.iter().find(|&&(id,_)|id==item_id).map(|&(_,species)|species)).unwrap_or(item_id);
   let colors:Vec<i32>=if let Some((_,colors))=ABSENT_FLOWER_DEFAULTS.iter().find(|&&(id,_)|id==species){
@@ -1036,7 +1045,7 @@ impl Editor {
    colors.sort_unstable();colors.dedup();colors
   }else{return Vec::new()};
   let Some(patterns)=flower_item_patterns(item_id,6)else{return Vec::new()};
-  colors.into_iter().map(|color|[6,color,0,0]).filter(|v|valid_flower_variant(patterns,*v)&&!self.pending_flowers.iter().any(|(&id,f)|self.inventory_changes.contains_key(&id)&&f.item_id==item_id&&(f.variant==*v||self.flower_variant_changes.get(&id)==Some(v)))).collect()
+  colors.into_iter().map(|color|[6,color,0,0]).filter(|v|valid_flower_variant(patterns,*v)&&!reserved.contains(v)).collect()
  }
  pub fn inventory_absent_flower_ids(&self)->Vec<i32>{
   if !self.absent_flower_budget_available(){return Vec::new()}
