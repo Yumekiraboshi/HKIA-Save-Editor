@@ -290,6 +290,50 @@ async function inventoryPaletteCreationSmoke(){
   console.log('CHROMIUM PALETTE ADD PASS: independent stack, quantity, history, draft and export reparse');
  }finally{await context.close()}
 }
+async function inventoryFirstWandSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-first-wand.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('1429161083');
+  const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="wand-editor-title"]');
+  await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  assert.equal(await dialog.locator('button[type="submit"]').count(),0);
+  const select=dialog.locator('select[name="wand-variant"]');
+  assert.equal(await select.locator('option').count(),36);
+  const value=await select.locator('option[data-wand-variant="106:127"]').getAttribute('value');assert.ok(value!==null);
+  await select.selectOption(value);
+  await dialog.locator('input[name="variant-add-quantity"]').fill('2');
+  await dialog.locator('.inventory-create-wand:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await card.locator('.inventory-add-source').waitFor();
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('1429161083');
+  await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'2');
+  await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  assert.equal(await select.locator('option[data-wand-variant="106:127"]').count(),0);
+  await dialog.locator('.date-dialog-cancel').click();await dialog.waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();await card.waitFor({state:'detached'});
+  await page.locator('button[title="Redo"]:not([disabled])').click();await card.locator('input[name="quantity"]').waitFor();
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('1429161083');await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'2');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_absent_wand_ids(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(v.getUint32(0,true),5);
+  assert.equal(e.hkia_inventory_snapshot(),0);const iv=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  const rows=Array.from({length:iv.getUint32(0,true)},(_,i)=>[iv.getInt32(4+i*16+4,true),iv.getInt32(4+i*16+8,true)]);
+  assert.ok(rows.some(([id,q])=>id===1429161083&&q===2));
+  assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST MAGIC WAND PASS: absent chooser, history, recovery and export');
+ }finally{await context.close()}
+}
 async function inventoryWandEditSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -2514,6 +2558,7 @@ async function run(){
  await inventoryChefArtSmoke();
  await inventoryBobaEditSmoke();
  await inventoryWandEditSmoke();
+ await inventoryFirstWandSmoke();
  await inventoryBobaFullCreationSmoke();
  await inventoryCafeEditSmoke();
  await inventoryCafeCreationAndOptionalSideSmoke();

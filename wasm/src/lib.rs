@@ -960,12 +960,24 @@ pub extern "C" fn hkia_inventory_wand_variant_change(id:u32,b0:i32,b1:i32,a0:i32
 }
 
 #[no_mangle]
+pub extern "C" fn hkia_inventory_absent_wand_ids()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_absent_wand_ids();
+  let mut out=Vec::with_capacity(4+rows.len()*8);
+  out.extend((rows.len() as u32).to_le_bytes());
+  for (item,style) in rows{out.extend(item.to_le_bytes());out.extend(style.to_le_bytes());}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
 pub extern "C" fn hkia_inventory_wand_creation_variants(id:u32)->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();
   let Some(e)=a.editor.as_ref()else{return 1};
   let rows=e.inventory_wand_creation_variants(id);
-  if rows.len()>35{return 1}
+  if rows.len()>36{return 1}
   let mut out=Vec::with_capacity(4+rows.len()*8);out.extend((rows.len() as u32).to_le_bytes());
   for row in rows{for word in row{out.extend(word.to_le_bytes());}}
   a.reply=out;0
