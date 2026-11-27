@@ -450,7 +450,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   for(const row of inventoryRows.slice(0,inventoryLimit)){
    // Native TryGetSubIcon returns the source item's normal UiIcon, even
    // when the wand itself has a native inventory-art entry.
-   if(row.itemId===384749651)addWandSource(inventoryWandAppearance(row.itemId,row.unique)?.sourceItemId);
+   if(hasNativeWandArt(row.itemId))addWandSource(inventoryWandAppearance(row.itemId,row.unique)?.sourceItemId);
    const resultId=nativeResultIconTarget(row.itemId,snapshot.version);
    if(resultId!==undefined&&!inventoryNativeArt?.entries.has(resultId)&&!inventoryNativeArt?.withheld.has(resultId)){
     const result=inventorySourceItems.get(resultId);
@@ -460,7 +460,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const item=inventorySourceItems.get(row.itemId);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
-  if(wandEdit?.itemId===384749651)addWandSource(wandEdit.appearance.sourceItemId);
+  if(wandEdit&&hasNativeWandArt(wandEdit.itemId))addWandSource(wandEdit.appearance.sourceItemId);
   // A dialog may outlive its visible inventory row or be opened from Add.
   // Load its own original definition group using the same bounded pack queue.
   for(const edit of [flowerEdit,paletteEdit,cafeEdit,bobaEdit,wandEdit]){
