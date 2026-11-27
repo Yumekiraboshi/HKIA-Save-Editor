@@ -4211,7 +4211,7 @@ fn remaining_owned_ordinary_furniture_can_create_native_custom_variants_without_
   if let Some(h)=reference{p.extend(doc(32,arr(vec![u(9),guid([7,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![h])]))])])));}
   slot_from_payload("3.0.1",p)
  };
- let custom=|id,uid,materials|doc(1,arr(vec![u(id),u(item),u(uid),u(2),furniture_payload(materials)]));
+ let custom=|id,uid,materials:[i32;3]|doc(1,arr(vec![u(id),u(item),u(uid),u(2),furniture_payload(materials.map(|v|v as u32))]));
  let home=|wall,legacy:Vec<Vec<u8>>|arr(vec![guid([41,42,43,44]),arr(legacy),u(wall),u(0),guid([0;4]),l(0),
   vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])]);
  let legacy=arr(vec![guid([0xc2961421,0x4fdf4f88,0x988e1cb7,0x7f57b563]),guid([1,2,3,4]),u(0),u(0),u(0),u(0),u(0),u(0),
