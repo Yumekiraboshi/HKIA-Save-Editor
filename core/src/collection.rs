@@ -1247,7 +1247,8 @@ impl Editor {
   match row.unique_data?{
    InventoryUniqueData::CafeAppearance{..} if CAFE_IDS.binary_search(&item).is_ok()&&row.unique_fields.len()==2=>{
     let flavors=read_list(0)?;let colors=read_list(1)?;
-    if !flavors.iter().all(|&n|n>0)||!colors.iter().all(|&n|is_chef_color(n)){return None}
+    // Exact ordered equality is independent of recipe or color validity.
+    // A fully decoded unsupported peer reserves its own key, not the family.
     Some((flavors,colors))
    }
    InventoryUniqueData::BobaAppearance{..} if item==BOBA_ID&&row.unique_fields.len()==5=>{
@@ -1827,7 +1828,7 @@ impl Editor {
  // variants, but have no existing player payload to copy.
  fn absent_chef_allowed(&self,item:i32)->bool{
   crate::inventory_source::is_uncapped_required_unique_stack(item)&&
-   self.inventory_item_rows.get(&item).copied().unwrap_or(0)<256&&
+   (item!=crate::inventory_source::BOBA_ID||self.inventory_item_rows.get(&item).copied().unwrap_or(0)<256)&&
    self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)).all(|r|
     self.unique_quantity_ids.contains(&r.id)&&self.inventory_can_empty(r)&&
     self.inventory_changes.get(&r.id).copied().or(r.quantity)==Some(0))&&
@@ -1917,9 +1918,14 @@ impl Editor {
  fn original_cafe_variant(&self,id:u32)->Option<CafeVariant>{
   self.pending_cafes.get(&id).map(|&(_,v)|v).or_else(||Self::cafe_words(&self.slot.envelope.decoded,self.slot.index.inventory.iter().find(|r|r.id==id)?))
  }
+ fn valid_cafe_saved(item:i32,v:CafeVariant)->bool{
+  let n=Self::cafe_count(v);
+  crate::inventory_source::cafe_count_allowed(item,n)&&(0..3).all(|i|
+   if i<n{v[i]>0&&crate::inventory_source::is_chef_color(v[i+3])}else{v[i]==0&&v[i+3]==0})
+ }
  fn valid_cafe_original(item:i32,v:CafeVariant)->bool{
   let n=Self::cafe_count(v);
-  if !crate::inventory_source::cafe_count_allowed(item,n){return false}
+  if !Self::valid_cafe_saved(item,v){return false}
   (0..3).all(|i|if i>=n{v[i]==0&&v[i+3]==0}
    else if item==crate::inventory_source::NIGIRI_ID&&i==1{
     crate::inventory_source::NIGIRI_SIDES.iter().any(|&(_,f,c)|(f,c)==(v[i],v[i+3]))
@@ -1951,14 +1957,11 @@ impl Editor {
  pub fn inventory_cafe_witnesses(&self)->&'static [(i32,i32,i32)]{
   if self.slot.envelope.version==Version::V301{crate::inventory_source::CAFE_INGREDIENT_WITNESSES}else{&[]}
  }
- fn cafe_family_count(&self,item:i32)->usize{
-  self.inventory_item_rows.get(&item).copied().unwrap_or(0)+self.pending_cafes.values().filter(|&&(i,_)|i==item).count()
- }
  pub fn inventory_cafe_rows(&self)->impl Iterator<Item=(u32,CafeVariant,bool)>+'_{
   self.slot.index.inventory.iter().filter_map(move |r|{
    if self.slot.envelope.version!=Version::V301{return None}
    let item=r.item_id?;let original=Self::cafe_words(&self.slot.envelope.decoded,r)?;
-   let editable=self.unique_quantity_ids.contains(&r.id)&&self.cafe_family_count(item)<=256&&Self::valid_cafe_original(item,original);
+   let editable=self.unique_quantity_ids.contains(&r.id)&&Self::valid_cafe_saved(item,original);
    Some((r.id,self.cafe_variant_changes.get(&r.id).copied().unwrap_or(original),editable))
   }).chain(self.pending_cafes.iter().filter(|(id,_)|self.inventory_changes.contains_key(*id)).map(|(&id,&(_,v))|
    (id,self.cafe_variant_changes.get(&id).copied().unwrap_or(v),true)))
@@ -1971,16 +1974,17 @@ impl Editor {
    if !self.unique_quantity_ids.contains(&id){return None}
    self.slot.index.inventory.iter().find(|r|r.id==id)?.item_id?
   };
-  if self.cafe_family_count(item)>256{return None}
   let original=self.original_cafe_variant(id)?;
-  if !Self::valid_cafe_original(item,original){return None}
+  if !Self::valid_cafe_saved(item,original){return None}
   let current=self.cafe_variant_changes.get(&id).copied().unwrap_or(original);
   let mut reserved=HashSet::new();
   for other in &self.slot.index.inventory{
    if other.id==id||other.item_id!=Some(item){continue}
    let (flavors,colors)=self.chef_identity(other)?;
    if flavors.len()!=colors.len()||!crate::inventory_source::cafe_count_allowed(item,flavors.len()){continue}
-   let v=Self::cafe_words(&self.slot.envelope.decoded,other)?;
+   // Complete keys that cannot be represented by the positive paired editor
+   // cannot collide with its targets. Preserve their original bytes.
+   let Some(v)=Self::cafe_words(&self.slot.envelope.decoded,other)else{continue};
    reserved.insert(v);reserved.insert(self.cafe_variant_changes.get(&other.id).copied().unwrap_or(v));
   }
   for (&other,&(other_item,v)) in &self.pending_cafes{
@@ -1991,7 +1995,7 @@ impl Editor {
   Some((item,original,current,reserved))
  }
  fn valid_cafe_target(&self,item:i32,original:CafeVariant,next:CafeVariant)->bool{
-  if !Self::valid_cafe_original(item,next){return false}
+  if !Self::valid_cafe_saved(item,next){return false}
   let n=Self::cafe_count(next);
   (0..n).all(|i|(next[i],next[i+3])==(original[i],original[i+3])||
    self.cafe_slot_choices(item,i).iter().any(|&(_,f,c)|(f,c)==(next[i],next[i+3])))
@@ -2012,10 +2016,10 @@ impl Editor {
   for i in 0..slots{
    for (ingredient,flavor,color) in self.cafe_slot_choices(item,i){
     let mut next=current;next[i]=flavor;next[i+3]=color;
-    if next!=current&&Self::valid_cafe_original(item,next)&&!reserved.contains(&next)&&seen.insert(next){out.push((next,ingredient,i))}
+    if next!=current&&self.valid_cafe_target(item,original,next)&&!reserved.contains(&next)&&seen.insert(next){out.push((next,ingredient,i))}
    }
    let mut next=current;next[i]=original[i];next[i+3]=original[i+3];
-   if next!=current&&Self::valid_cafe_original(item,next)&&!reserved.contains(&next)&&seen.insert(next){out.push((next,0,i))}
+   if next!=current&&self.valid_cafe_target(item,original,next)&&!reserved.contains(&next)&&seen.insert(next){out.push((next,0,i))}
   }
   out
  }
@@ -2024,16 +2028,18 @@ impl Editor {
   let item=context.0;
   let quantity=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
   if !quantity.is_some_and(|q|q>0)||!self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
-   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||self.cafe_family_count(item)>=256{return None}
+   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
   Some(context)
  }
  fn cafe_starter_reservations(&self,item:i32)->Option<HashSet<CafeVariant>>{
-  if !self.absent_chef_allowed(item)||self.cafe_family_count(item)>=256||
+  if !self.absent_chef_allowed(item)||
    self.pending_cafes.iter().any(|(&id,&(i,_))|i==item&&self.inventory_changes.contains_key(&id)){return None}
   let mut reserved=HashSet::new();
   for row in self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)){
-   // Keep malformed or unsupported ordered tuple families conservative.
-   let v=Self::cafe_words(&self.slot.envelope.decoded,row)?;
+   // Exact complete unequal-length keys cannot collide with generated tuples.
+   let (flavors,colors)=self.chef_identity(row)?;
+   if flavors.len()!=colors.len()||!crate::inventory_source::cafe_count_allowed(item,flavors.len()){continue}
+   let Some(v)=Self::cafe_words(&self.slot.envelope.decoded,row)else{continue};
    reserved.insert(v);reserved.insert(self.cafe_variant_changes.get(&row.id).copied().unwrap_or(v));
   }
   Some(reserved)
@@ -2377,6 +2383,8 @@ impl Editor {
    }
    if let Some((a,b))=self.chef_identity(row){
     self.unique_row_source(row,if item==crate::inventory_source::BOBA_ID{5}else{2})?;
+    if item!=crate::inventory_source::BOBA_ID&&
+     (!a.iter().all(|&n|n>0)||!b.iter().all(|&n|crate::inventory_source::is_chef_color(n))){return None}
     return (chef_counts.get(&(item,a,b))==Some(&1)).then_some(row.id)
    }
    if let Some(source)=self.furniture_source(row){
