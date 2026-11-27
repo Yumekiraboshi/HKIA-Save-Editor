@@ -427,12 +427,40 @@ pub(crate) fn ordinary_clothing_reference_keys(item:i32)->Option<(u32,&'static [
  let (_,keys)=CLOTHING_REFERENCE_GROUPS[CLOTHING_REFERENCE_GROUPS.binary_search_by_key(&parent,|r|r.0).ok()?];
  Some((key,keys))
 }
+// Original Switch v3.0.1: item, outfit, normal and alternate-water avatar pieces.
+// Five distinct denial fingerprints per floral outfit; not identity authority.
+const FLORAL_CLOTHING_REFERENCE_KEYS:&[(i32,&[u32])]=&[
+ (41105179,&[0x0be3f2e1,0x347ed351,0x7b7c52c7,0xb628f99d,0xe9eb22bd]),
+ (313677564,&[0x1ad81341,0x1b4bfa47,0x43d0eb61,0xd95ce939,0xf1479e6e]),
+ (528401863,&[0x0b71af78,0x0bb754d9,0x266e3003,0xc978c8ef,0xd9c8dedf]),
+ (809985659,&[0x40b47e54,0x86a7a3d5,0xbe86782c,0xcdad1c54,0xd66fdd16]),
+ (811189976,&[0x026c913a,0x0483fd3e,0xa39d70ef,0xc793d87b,0xdc6ab50a]),
+ (965037291,&[0x05cfbc17,0x400ec7dd,0x67872060,0xac3de037,0xd88bac13]),
+ (1646153125,&[0x5a42f3cb,0x9045cbfc,0x9a4535a3,0xb8920df8,0xd8da5eea]),
+];
 pub(crate) fn flower_clothing_reference_keys(item:i32)->Option<&'static [u32]>{
  FLOWER_CLOTHING_REFERENCE_KEYS.binary_search_by_key(&item,|r|r.0).ok().map(|i|FLOWER_CLOTHING_REFERENCE_KEYS[i].1)
+ .or_else(||FLORAL_CLOTHING_REFERENCE_KEYS.binary_search_by_key(&item,|r|r.0).ok().map(|i|FLORAL_CLOTHING_REFERENCE_KEYS[i].1))
 }
 #[cfg(test)]
 mod clothing_reference_tests{
  use super::*;
+ #[test]fn exact_floral_clothing_reference_crosswalk(){
+  assert_eq!(FLORAL_CLOTHING_REFERENCE_KEYS.len(),7);
+  assert!(FLORAL_CLOTHING_REFERENCE_KEYS.windows(2).all(|w|w[0].0<w[1].0));
+  let mut bytes=Vec::new();
+  for &(id,keys) in FLORAL_CLOTHING_REFERENCE_KEYS{
+   assert!(is_uncapped_required_unique_stack(id));
+   assert!(!ordinary_creation_item(id));
+   assert_eq!(keys.len(),5);
+   assert!(keys.windows(2).all(|w|w[0]<w[1]));
+   assert_eq!(flower_clothing_reference_keys(id),Some(keys));
+   bytes.extend(id.to_le_bytes());bytes.push(keys.len() as u8);
+   for key in keys{bytes.extend(key.to_le_bytes());}
+  }
+  let hash=crate::digest::sha256(&bytes).iter().map(|x|format!("{x:02x}")).collect::<String>();
+  assert_eq!(hash,"8f303e60d27b8dcc69cac8161315f77a642d0aedc1b56be476d54a623e1d270c");
+ }
  #[test]fn exact_source_clothing_crosswalk(){
   assert_eq!(CLOTHING_REFERENCE_ROWS.len(),3946);
   assert_eq!(FLOWER_CLOTHING_REFERENCE_KEYS.len(),27);

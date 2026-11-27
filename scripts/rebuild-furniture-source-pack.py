@@ -42,14 +42,16 @@ def run(script,*args):
 def read(path):
     return json.loads(path.read_text(encoding='utf-8'))
 
-def rebuild(root,out,catalog=None,prior=None,prior_sha=None,limit=None,run_stage=run):
+def rebuild(root,out,catalog=None,prior=None,prior_sha=None,limit=None,run_stage=run,*,item_ids=(),first_bundles=()):
     root=root.resolve();out=out.resolve()
     require(root.is_dir() and not out.exists() and not out.is_symlink() and
             not out.is_relative_to(REPO) and not out.is_relative_to(root),'new output outside repository and original source')
     require(bool(prior)==bool(prior_sha),'prior pack and independent hash required together')
     require(limit is None or type(limit) is int and limit>0,'positive limit')
+    require(limit is None or not (item_ids or first_bundles),'target selection cannot be combined with limit')
     plan,catalog,paths=discover(root,catalog)
     remaining=batch.remaining_plan(plan,prior,prior_sha) if prior else plan
+    remaining=batch.select_plan(plan,item_ids,first_bundles,remaining)
     require(remaining['models'] or remaining['patterns'],'no remaining source identities')
     out.mkdir(parents=True,exist_ok=False)
     print('Source identities: '+json.dumps({'models':len(remaining['models']),'patterns':len(remaining['patterns'])}),flush=True)
@@ -57,6 +59,8 @@ def rebuild(root,out,catalog=None,prior=None,prior_sha=None,limit=None,run_stage
     args=['--root',root,'--catalog',catalog,'--out',geometry]
     if prior:args+=['--remaining-from',prior,'--remaining-sha256',prior_sha]
     if limit is not None:args+=['--limit',limit]
+    for item_id in item_ids:args+=['--item-id',item_id]
+    for bundle in first_bundles:args+=['--first-bundle',bundle]
     run_stage('batch-furniture-native-source.py',*args)
     report=read(geometry/'report.json')
     pack_materials=None
@@ -86,5 +90,6 @@ if __name__=='__main__':
     p.add_argument('--catalog',type=Path,help='optional explicit catalog path inside source tree; otherwise exact hash discovery')
     p.add_argument('--prior',type=Path);p.add_argument('--prior-sha256')
     p.add_argument('--limit',type=int,help='optional small per-kind diagnostic extraction')
+    batch.add_selection_args(p)
     a=p.parse_args()
-    rebuild(a.root,a.out,a.catalog,a.prior,a.prior_sha256,a.limit)
+    rebuild(a.root,a.out,a.catalog,a.prior,a.prior_sha256,a.limit,item_ids=a.item_id,first_bundles=a.first_bundle)

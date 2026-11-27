@@ -1070,6 +1070,28 @@ pub extern "C" fn hkia_inventory_wand_nested_material_variants(id:u32,creation:u
  })
 }
 #[no_mangle]
+pub extern "C" fn hkia_inventory_owned_furniture_wand_sources(id:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_owned_furniture_wand_sources(id);
+  if rows.len()>12163{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*4);out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{out.extend(row.to_le_bytes());}a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_owned_furniture_wand_pairs(id:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_owned_furniture_wand_pairs(id);
+  if rows.len()>36{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*8);out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for word in row{out.extend(word.to_le_bytes());}}a.reply=out;0
+ })
+}
+#[no_mangle]
 pub extern "C" fn hkia_inventory_wand_nested_pairs(id:u32,creation:u32)->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();

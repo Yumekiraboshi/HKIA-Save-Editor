@@ -80,13 +80,34 @@ export function bindFurnitureRendererTreatments(d:RugNativeSources,itemId:number
   };
   if(n.materialSlots!==undefined||mesh.submeshes!==undefined){
    const binding=submeshBindings.get(id);
-   // Fixed renderer slots only. Native customization of a multi-material
-   // renderer is not inferred from the renderer-level VisualSlot reference.
-   if(n.slot!=null||binding?.slot!=null)fail('SUBMESH_TREATMENT_UNVERIFIED');
+   // Native VisualSlot uses Renderer.GetMaterial/GetSharedMaterial (first
+   // assigned material), not an array. Admit only the source-pinned COLO26
+   // renderer with unchanged ordered submesh/material identity.
    if(n.material!==undefined||bindings.has(id)||!n.materialSlots||!mesh.submeshes||!binding||
     mesh.submeshes.length<2||mesh.submeshes.length!==n.materialSlots.length||binding.materials.length!==n.materialSlots.length)throw Error('FURNITURE_TREATMENT_SUBMESH_COVERAGE');
+   let choice:(typeof choices)[number]|null=null;
+   if(n.slot!=null||binding.slot!=null){
+    const expectedKeys=['0:1280843064671824810','0:7360047341139011972'];
+    const expectedHashes=['c1609f4de37c830a53cd72fc562447861d7804113ef33a8fca0882adb119cc26','4dcc89a9999c7f7d4ec5d1d298d323fa20376b7731eb11b7a63c7314e1603cbf'];
+    const ranges=mesh.submeshes;
+    if(itemId!==1913359021||geometry.cab!=='CAB-80143f8385dbc1ffc5569bdd27b3c5c5'||
+     geometry.bundleSha256!=='ff07ef7230109e8bb6afc8b4b20604eec0e0ad725b1003394f19658262b767c8'||
+     geometry.visualSlotObjectPathId!=='3887440351149882788'||geometry.visualSlotObjectSha256!=='e66f9346178ec5a43c9215fedbcd1356616ea0ab8a6b369ed62cd249c1a0d6b5'||
+     geometry.geometrySha256!=='0469e802cebdebe72e4330dd8a074382c487027d76b9fa89eda90df82f09ab5f'||
+     id!=='-6498765778094195292'||meshId!=='2102444807489941090'||n.slot?.slot!==0||n.slot.displayedDefinitionGuid!==null||
+     binding.slot?.slot!==0||binding.slot.displayedDefinitionGuid!==null||n.scale?.join(',')!=='1,1,1'||
+     mesh.vertexCount!==397||mesh.indexCount!==1824||ranges.length!==2||
+     ranges.some((s,i)=>s.firstByte!==[0,1920][i]||s.indexCount!==[960,864][i]||s.firstVertex!==[0,212][i]||s.vertexCount!==[212,185][i])||
+     expectedKeys.some((k,i)=>n.materialSlots![i]!==k||geometry.materials[k]?.objectSha256!==expectedHashes[i]))fail('SUBMESH_TREATMENT_UNVERIFIED');
+    const selected=choices.find(x=>x.slot===0);
+    // All six original COLO26 choices are nonmirrored; the fixed range's
+    // shared renderer transform is unchanged. Do not infer a mirror rule
+    // for other multi-material prefabs.
+    if(!selected||selected.selectedIndex<207||selected.selectedIndex>212||selected.definition[15]!==false)fail('SUBMESH_TREATMENT_UNVERIFIED');
+    choice=selected!;used.add(choice.slot);
+   }
    submeshBindings.delete(id);
-   return n.materialSlots.map((key,submeshIndex)=>({rendererPathId:id,meshPathId:meshId,submeshIndex,baseMaterialId:binding.materials[submeshIndex],baseMaterial:materialFor(key,binding.materials[submeshIndex]),choice:null}));
+   return n.materialSlots.map((key,submeshIndex)=>({rendererPathId:id,meshPathId:meshId,submeshIndex,baseMaterialId:binding.materials[submeshIndex],baseMaterial:materialFor(key,binding.materials[submeshIndex]),choice:submeshIndex===0?choice:null}));
   }
   const binding=bindings.get(id),materialKey=n.material;
   if(!binding||!materialKey||submeshBindings.has(id))throw Error('FURNITURE_TREATMENT_RENDERER');

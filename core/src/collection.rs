@@ -155,7 +155,8 @@ const ABSENT_FLOWER_DEFAULTS:&[(i32,&[i32])]=&[
 ];
 // Original generic processors accept any flower; the HK-style bow explicitly
 // clears both pattern fields (IgnorePatternOnOutputItem=true).
-const FLOWER_CLOTHING_GENERIC:&[i32]=&[105502901,1110255162,1227385139];
+// Includes seven event-year floral outfits with unrestricted native tradable outputs.
+const FLOWER_CLOTHING_GENERIC:&[i32]=&[41105179,105502901,313677564,528401863,809985659,811189976,965037291,1110255162,1227385139,1646153125];
 const FLOWER_CLOTHING_NO_PATTERN:i32=1482119840;
 const ALL_UNRESTRICTED_FLOWER_PATTERNS:&[i32]=&[1,2,3,4,5,7,8,9,10,11,12,13,14,16];
 pub type BobaVariant=[i32;5];
@@ -1126,6 +1127,15 @@ impl Editor {
   };
   Self::wand_key(item,v)?;Some(v)
  }
+ // A complete modern bag item wand holds a copied furniture payload, not
+ // a saved furniture UID. Share the exact native identity validator with
+ // the indexer; malformed, nil and other source types retain their guards.
+ pub(crate) fn verified_bag_furniture_wand_copy(row:&crate::native::InventoryRow)->bool{
+  row.item_id==Some(crate::inventory_source::ITEM_WAND_ID)&&row.id>0&&row.id<PENDING_ITEM&&
+   row.unique_id.is_some_and(|uid|uid>0)&&row.quantity.is_some_and(|q|q>=0)&&
+   row.fields.iter().all(Option::is_some)&&
+   Self::wand_identity(row).is_some_and(|v|Self::wand_materials(v)!=WAND_NIL_MATERIALS)
+ }
  fn wand_words(row:&crate::native::InventoryRow)->Option<WandVariant>{
   Self::wand_identity(row).map(Self::wand_pair)
  }
@@ -1288,6 +1298,60 @@ impl Editor {
   sources.retain(|source|reserved.get(source).map_or(true,|keys|keys.len()<36));
   sources
  }
+ // Native ItemWandProcessor copies the selected InventoryItem's unique data.
+ // A positive verified saved furniture row is an exact witness; never synthesize
+ // a nested tuple from a bare Item ID or an absent furniture definition.
+ fn owned_furniture_wand_witness(&self,id:u32)->Option<WandData>{
+  let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+  if !self.unique_quantity_ids.contains(&id)||!row.quantity.is_some_and(|q|q>0)||
+   !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
+  let item=row.item_id?;
+  let (source,original,current,_)=self.furniture_context(id)?;
+  Self::wand_material_source(crate::inventory_source::ITEM_WAND_ID,item)?;
+  if !Self::valid_furniture_target(source,original,current){return None}
+  let [a,b,c]=current;
+  Self::wand_key(crate::inventory_source::ITEM_WAND_ID,[item,104,125,a,b,c])?;
+  Some([item,0,0,a,b,c])
+ }
+ fn nested_wand_output_reservations(&self)->Option<HashSet<WandData>>{
+  let item=crate::inventory_source::ITEM_WAND_ID;
+  let mut keys=HashSet::new();
+  for r in self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)){
+   if !self.unique_quantity_ids.contains(&r.id){return None}
+   let original=Self::wand_identity(r)?;
+   for v in [original,self.wand_variant_changes.get(&r.id).copied().unwrap_or(original)]{keys.insert(Self::wand_key(item,v)?);}
+  }
+  for (&id,&(i,original)) in &self.pending_wands{
+   if i!=item||!self.inventory_changes.contains_key(&id){continue}
+   for v in [original,self.wand_variant_changes.get(&id).copied().unwrap_or(original)]{keys.insert(Self::wand_key(item,v)?);}
+  }
+  Some(keys)
+ }
+ fn furniture_wand_pairs(witness:WandData,keys:&HashSet<WandData>)->Vec<WandVariant>{
+  let item=crate::inventory_source::ITEM_WAND_ID;
+  crate::inventory_source::WAND_MAGIC.iter().flat_map(|&(m,_)|
+   crate::inventory_source::WAND_FLECK.iter().map(move |&(f,_)|[m,f]))
+   .filter(|&[m,f]|{
+    let mut target=witness;target[1]=m;target[2]=f;
+    Self::wand_key(item,target).is_some_and(|key|!keys.contains(&key))
+   }).collect()
+ }
+ pub fn inventory_owned_furniture_wand_sources(&self,candidate:u32)->Vec<u32>{
+  let item=crate::inventory_source::ITEM_WAND_ID;
+  if candidate!=(PENDING_ITEM|item as u32)||!self.absent_wand_source_gate(item){return Vec::new()}
+  let Some(keys)=self.nested_wand_output_reservations()else{return Vec::new()};
+  let mut rows:Vec<_>=self.slot.index.inventory.iter().filter_map(|r|{
+   let witness=self.owned_furniture_wand_witness(r.id)?;
+   (!Self::furniture_wand_pairs(witness,&keys).is_empty()).then_some(r.id)
+  }).collect();
+  rows.sort_unstable();rows.dedup();rows
+ }
+ pub fn inventory_owned_furniture_wand_pairs(&self,id:u32)->Vec<WandVariant>{
+  if !self.absent_wand_source_gate(crate::inventory_source::ITEM_WAND_ID){return Vec::new()}
+  let Some(witness)=self.owned_furniture_wand_witness(id)else{return Vec::new()};
+  let Some(keys)=self.nested_wand_output_reservations()else{return Vec::new()};
+  Self::furniture_wand_pairs(witness,&keys)
+ }
  fn wand_source_candidates(&self,item:i32)->Vec<i32>{
   let mut sources=crate::inventory_source::ordinary_creation_ids().filter(|&source|
    crate::inventory_source::ordinary_creation_item(source)&&crate::inventory_source::wand_source_style(item,source)==Some(0)).collect::<Vec<_>>();
@@ -1302,7 +1366,8 @@ impl Editor {
  fn absent_wand_choices(&self,item:i32)->Vec<WandVariant>{
   if !self.absent_wand_source_gate(item){return Vec::new()}
   if crate::inventory_source::magic_wand_style(item).is_none()&&
-   self.inventory_absent_wand_sources(PENDING_ITEM|item as u32).is_empty(){return Vec::new()}
+   self.inventory_absent_wand_sources(PENDING_ITEM|item as u32).is_empty()&&
+   self.inventory_owned_furniture_wand_sources(PENDING_ITEM|item as u32).is_empty(){return Vec::new()}
   crate::inventory_source::WAND_MAGIC.iter().flat_map(|&(magic,_)|
    crate::inventory_source::WAND_FLECK.iter().map(move |&(fleck,_)|[magic,fleck])).collect()
  }
@@ -1456,6 +1521,13 @@ impl Editor {
   self.apply_wand_change(id,original,next)
  }
  pub fn create_inventory_wand_nested(&mut self,id:u32,expected:WandData,next:WandData,quantity:i32)->Result<u32,Error>{
+  if expected[1..3]==[0,0]{
+   let item=crate::inventory_source::ITEM_WAND_ID;
+   if quantity<=0||self.owned_furniture_wand_witness(id)!=Some(expected)||
+    next[0]!=expected[0]||next[3..]!=expected[3..]||
+    !self.inventory_owned_furniture_wand_pairs(id).contains(&Self::wand_pair(next)){return Err(Error::Schema)}
+   return self.stage_wand(id,item,[0;2],Some(expected),next,quantity)
+  }
   let (item,original,current,reserved)=self.wand_full_context(id).ok_or(Error::Schema)?;
   let key=Self::wand_key(item,next).ok_or(Error::Schema)?;
   if quantity<=0||current!=expected||Self::wand_key(item,current)==Some(key)||Self::wand_key(item,original)==Some(key)||reserved.contains(&key)||

@@ -81,3 +81,19 @@ test('fixed submesh bindings retain each original material in order; customized 
  b.submeshBindings[0].materials.reverse();assert.throws(()=>bindFurnitureRendererTreatments(d,90163601,[0,0,0]),/BASE_LINK/);
  b.submeshBindings[0].materials.reverse();n.slot=other.slot;assert.throws(()=>bindFurnitureRendererTreatments(d,90163601,[0,0,0]),/SUBMESH_TREATMENT_UNVERIFIED/);
 });
+
+test('pinned COLO26 first material receives all six choices and the second remains fixed',()=>{
+ const cab='CAB-80143f8385dbc1ffc5569bdd27b3c5c5',keys=['0:1280843064671824810','0:7360047341139011972'],ids=keys.map(x=>cab+':'+x.slice(2)),hashes=['c1609f4de37c830a53cd72fc562447861d7804113ef33a8fca0882adb119cc26','4dcc89a9999c7f7d4ec5d1d298d323fa20376b7731eb11b7a63c7314e1603cbf'];
+ const renderer='-6498765778094195292',meshId='2102444807489941090',slot={slot:0,displayedDefinitionGuid:null};
+ const bounds=[0,0,0,1,1,1];
+ const g={itemId:1913359021,cab,bundleSha256:'ff07ef7230109e8bb6afc8b4b20604eec0e0ad725b1003394f19658262b767c8',visualSlotObjectPathId:'3887440351149882788',visualSlotObjectSha256:'e66f9346178ec5a43c9215fedbcd1356616ea0ab8a6b369ed62cd249c1a0d6b5',geometrySha256:'0469e802cebdebe72e4330dd8a074382c487027d76b9fa89eda90df82f09ab5f',nodes:[{rendererPathId:renderer,meshPathId:meshId,materialSlots:keys,slot,scale:[1,1,1],active:true,enabled:true}],meshes:{[meshId]:{vertexCount:397,indexCount:1824,submeshes:[{firstByte:0,indexCount:960,firstVertex:0,vertexCount:212,bounds},{firstByte:1920,indexCount:864,firstVertex:212,vertexCount:185,bounds}]}},materials:Object.fromEntries(keys.map((k,i)=>[k,{objectSha256:hashes[i]}]))};
+ const d={catalog,variants,geometry:{version:'3.0.1',rows:[g]},base:{version:'3.0.1',rows:[{itemId:g.itemId,bindings:[],submeshBindings:[{rendererPathId:renderer,materials:ids,slot}]}],materials:Object.fromEntries(ids.map((k,i)=>[k,{objectSha256:hashes[i]}]))}};
+ for(const index of [0,207,208,209,210,211,212]){
+  const p=bindFurnitureRendererTreatments(d,g.itemId,[index,0,0]).plans;
+  assert.deepEqual(p.map(x=>[x.submeshIndex,x.baseMaterialId,x.choice?.selectedIndex??null]),[[0,ids[0],index||207],[1,ids[1],null]]);
+ }
+ for(const alter of [x=>x.geometry.rows[0].nodes[0].materialSlots.reverse(),x=>x.geometry.rows[0].bundleSha256='0'.repeat(64),x=>x.geometry.rows[0].visualSlotObjectSha256='0'.repeat(64),x=>x.geometry.rows[0].nodes[0].scale[0]=-1,x=>x.geometry.rows[0].meshes[meshId].submeshes[1].firstByte=1918,x=>x.base.rows[0].submeshBindings[0].slot={slot:1,displayedDefinitionGuid:null},x=>x.geometry.rows[0].nodes[0].slot.displayedDefinitionGuid='1'.repeat(32),x=>x.variants.rows.find(r=>r[0]===207)[15]=true]){
+  const changed=structuredClone(d);alter(changed);assert.throws(()=>bindFurnitureRendererTreatments(changed,g.itemId,[0,0,0]),/SUBMESH_TREATMENT_UNVERIFIED/);
+ }
+ const bad=structuredClone(d);bad.base.rows[0].submeshBindings[0].materials.reverse();assert.throws(()=>bindFurnitureRendererTreatments(bad,g.itemId,[0,0,0]),/BASE_LINK/);
+});

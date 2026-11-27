@@ -2,7 +2,7 @@
  * This is display-only. No native save eligibility or mutation is determined here.
  * Raw material values are not proof of runtime color conversion or camera parity. */
 import {nativeFurnitureTreatment} from './furniture-material-treatment';
-import type {Vec2,Vec4} from './furniture-surface-v3.0.1';
+import type {Vec2,Vec3,Vec4} from './furniture-surface-v3.0.1';
 import type {NativeGeometrySource} from './native-furniture-mesh';
 import type {NativeTextureSource} from './native-texture-upload';
 import type {FurnitureForwardMaterial} from './furniture-forwardlit-gpu';
@@ -12,7 +12,7 @@ type SetRow=readonly [string,string,readonly number[]];
 type CatalogMaterial=readonly [number,string,string,string,...unknown[]];
 type MaterialRow=readonly [number,string,string,Vec4,boolean,string|null,Vec2,Vec2,Vec4,number,Vec4,number,number,number,number,boolean,string,string];
 type SlotLink={slot:number;displayedDefinitionGuid:string|null};
-type MeshRow=NativeGeometrySource&{schema:string;version:string;itemId:number;cab:string;nodes:readonly {rendererPathId?:string;meshPathId?:string;material?:string;materialSlots?:readonly string[];slot?:SlotLink|null;active:boolean;enabled?:boolean}[];materials:Readonly<Record<string,{objectSha256:string}>>};
+type MeshRow=NativeGeometrySource&{schema:string;version:string;itemId:number;cab:string;bundleSha256?:string;visualSlotObjectPathId?:string;visualSlotObjectSha256?:string;nodes:readonly {rendererPathId?:string;meshPathId?:string;scale?:Vec3;material?:string;materialSlots?:readonly string[];slot?:SlotLink|null;active:boolean;enabled?:boolean}[];materials:Readonly<Record<string,{objectSha256:string}>>};
 type TextureLink={texture:string|null;scale:Vec2;offset:Vec2};
 type BaseMaterial={objectSha256:string;shader:string;renderQueue?:number;validKeywords:readonly string[];textures:Readonly<Record<string,TextureLink>>;floats:Readonly<Record<string,number>>;colors:Readonly<Record<string,Vec4>>};
 type Pattern=NativeTextureSource&{materialIndex:number;guid:string};
