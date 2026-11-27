@@ -4362,6 +4362,41 @@ fn first_item_wand_copies_verified_owned_furniture_without_touching_source(){
 
 
 #[test]
+fn staged_furniture_is_a_wand_source_without_intermediate_export(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let source=61381969i32;let item=384749651i32;let candidate=0x80000000|item as u32;
+ let witness=[source,0,0,13,3,0];let target=[source,104,125,13,3,0];
+ for zipped in [false,true]{
+  let raw=furniture_edit_slot(None);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let original=e.inventory()[0].clone();
+  let staged=e.create_inventory_furniture_variant(4,[13,2,0],[13,3,0],2).unwrap();
+  assert!(e.inventory_owned_furniture_wand_sources(candidate).contains(&staged));
+  assert!(e.inventory_owned_furniture_wand_pairs(staged).contains(&[104,125]));
+  assert!(e.create_inventory_wand_nested(staged,[source,0,0,13,2,0],target,1).is_err());
+  let wand=e.create_inventory_wand_nested(staged,witness,target,3).unwrap();
+  assert_eq!(e.inventory()[0],original);
+  assert!(matches!(e.inventory_unique_data(wand),Some(U::WandAppearance{source_item_id:61381969,source_tag:8,..})));
+  assert!(!e.inventory_owned_furniture_wand_pairs(staged).contains(&[104,125]));
+  e.change_inventory_furniture_variant(staged,[13,3,0],[13,4,0]).unwrap();
+  assert!(e.create_inventory_wand_nested(staged,witness,[source,105,125,13,3,0],1).is_err());
+  e.change_inventory_quantity(staged,2,0).unwrap();
+  assert!(!e.inventory_owned_furniture_wand_sources(candidate).contains(&staged));
+  assert!(e.inventory_owned_furniture_wand_pairs(staged).is_empty());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.inventory_owned_furniture_wand_sources(candidate).contains(&staged));
+  assert!(restored.redo_scope(Inventory));assert!(!restored.inventory_owned_furniture_wand_sources(candidate).contains(&staged));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  let rows=saved.inventory();
+  assert_eq!(rows.len(),2);
+  let output=rows.iter().find(|r|r.item_id==item).unwrap();assert_eq!(output.quantity,3);
+  assert_eq!(saved.inventory_unique_data(output.document_id),e.inventory_unique_data(wand));
+  assert_eq!(rows.iter().find(|r|r.item_id==source).unwrap(),&original);
+ }
+}
+
+#[test]
 fn only_complete_verified_bag_furniture_wand_copies_release_source_reference(){
  let item=384749651u32;let source=61381969u32;
  let make=|wand_item:u32,materials:Vec<u8>,style:u32|{
