@@ -461,6 +461,57 @@ async function inventoryBobaEditSmoke(){
   console.log('CHROMIUM BOBA VARIANT PASS: independent pearls and sweetness, draft, history and export');
  }finally{await context.close()}
 }
+async function inventoryFirstChefSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-first-chef.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
+  const search=page.locator('.inventory-controls input[type="search"]'),card=page.locator('.inventory-card');
+  await search.fill('1798633565');await card.locator('.inventory-unique-edit-button').click();
+  const boba=page.locator('dialog[aria-labelledby="boba-editor-title"]');await boba.waitFor();
+  assert.equal(await boba.locator('button[type="submit"]').count(),0);
+  const bs=boba.locator('select[name="boba-base"]'),vs=boba.locator('select[name="boba-variant"]');
+  assert.equal(await bs.locator('option').count(),19);
+  assert.equal(await vs.locator('option').count(),8);
+  await bs.selectOption('46:39:78');await vs.selectOption({label:'With tapioca · Semi-sweet'});
+  await boba.locator('input[name="variant-add-quantity"]').fill('2');
+  await boba.locator('.inventory-create-boba:not([disabled])').click();await boba.waitFor({state:'hidden'});
+  await card.locator('.inventory-add-source').waitFor();
+  await search.fill('1338995084');await card.locator('.inventory-unique-edit-button').click();
+  const cafe=page.locator('dialog[aria-labelledby="cafe-editor-title"]');await cafe.waitFor();
+  assert.equal(await cafe.locator('button[type="submit"]').count(),0);
+  assert.equal(await cafe.locator('.inventory-cafe-slot').count(),3);
+  const select=cafe.locator('select[name="cafe-variant"]');
+  const ingredient=await select.locator('option[data-ingredient-id]').first().getAttribute('value');assert.ok(ingredient!==null);
+  await select.selectOption(ingredient);await cafe.locator('[data-cafe-slot="1"]').click();
+  const next=await select.locator('option[data-ingredient-id]').last().getAttribute('value');assert.ok(next!==null);
+  await select.selectOption(next);
+  await cafe.locator('input[name="variant-add-quantity"]').fill('3');
+  await cafe.locator('.inventory-create-cafe:not([disabled])').click();await cafe.waitFor({state:'hidden'});
+  await card.locator('.inventory-add-source').waitFor();
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('1338995084');
+  const qty=card.locator('input[name="quantity"]');await qty.waitFor();assert.equal(await qty.inputValue(),'3');
+  await page.locator('button[title="Undo"]:not([disabled])').click();await card.waitFor({state:'detached'});
+  await page.locator('button[title="Redo"]:not([disabled])').click();await qty.waitFor();
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('1338995084');await qty.waitFor();assert.equal(await qty.inputValue(),'3');
+  await search.fill('1798633565');await qty.waitFor();assert.equal(await qty.inputValue(),'2');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_boba_snapshot(),0);
+  let v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(v.getUint32(0,true),1);
+  assert.deepEqual(Array.from({length:5},(_,i)=>v.getInt32(12+i*4,true)),[46,39,76,78,72]);
+  assert.equal(e.hkia_inventory_cafe_snapshot(),0);v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(v.getUint32(0,true),1);
+  assert.equal(e.hkia_inventory_absent_chef_defaults(),0);v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(v.getUint32(0,true),0);assert.equal(v.getUint32(4,true),8);
+  assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST CHEF PASS: unowned Boba and composed cafe selection, undo, recovery and reparse');
+ }finally{await context.close()}
+}
 async function inventoryBobaFullCreationSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -2597,6 +2648,7 @@ async function run(){
  await inventoryWandEditSmoke();
  await inventoryFirstWandSmoke();
  await inventoryBobaFullCreationSmoke();
+ await inventoryFirstChefSmoke();
  await inventoryCafeEditSmoke();
  await inventoryCafeCreationAndOptionalSideSmoke();
  await inventoryChefQuantitySmoke();

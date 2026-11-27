@@ -825,6 +825,23 @@ pub extern "C" fn hkia_inventory_palette_create(id:u32,b0:u32,b1:u32,b2:u32,b3:u
  })
 }
 
+// Missing-item candidates have their own bounded wire snapshot.
+#[no_mangle]
+pub extern "C" fn hkia_inventory_absent_chef_defaults()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let mut out=Vec::new();
+  if let Some((item,v))=e.inventory_absent_boba_default(){
+   out.extend(1u32.to_le_bytes());out.extend(item.to_le_bytes());
+   for word in v{out.extend(word.to_le_bytes());}
+  }else{out.extend(0u32.to_le_bytes());}
+  let cafe=e.inventory_absent_cafe_defaults();
+  out.extend((cafe.len() as u32).to_le_bytes());
+  for (item,v) in cafe{out.extend(item.to_le_bytes());for word in v{out.extend(word.to_le_bytes());}}
+  a.reply=out;0
+ })
+}
 /// Separate full Boba tuple snapshot; the existing appearance wire stays stable.
 #[no_mangle]
 pub extern "C" fn hkia_inventory_boba_snapshot()->u32{
@@ -870,7 +887,7 @@ pub extern "C" fn hkia_inventory_boba_creation_variants(id:u32)->u32{
   let mut a=s.borrow_mut();a.reply.clear();
   let Some(e)=a.editor.as_ref()else{return 1};
   let rows=e.inventory_boba_creation_variants(id);
-  if rows.len()>151{return 1}
+  if rows.len()>152{return 1}
   let mut out=Vec::with_capacity(4+rows.len()*20);
   out.extend((rows.len() as u32).to_le_bytes());for row in rows{for word in row{out.extend(word.to_le_bytes());}}
   a.reply=out;0

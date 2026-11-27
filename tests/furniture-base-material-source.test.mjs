@@ -50,7 +50,7 @@ test('additional furniture shader sources are keyed by exact CAB, signed Path ID
 import importlib.util
 spec=importlib.util.spec_from_file_location('base','scripts/extract-furniture-base-material-source.py')
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
-assert len(m.SHADER_SOURCES)==8
+assert len(m.SHADER_SOURCES)==9
 for key,source in m.SHADER_SOURCES.items():
     assert m.shader_source(key,source[0])==source
     try:
@@ -64,9 +64,24 @@ for key,source in m.SHADER_SOURCES.items():
     except ValueError:
         pass
 assert sorted((v[2],v[3],v[4]) for v in m.SHADER_SOURCES.values())==[
-    ('Shader Graphs/FluidStream',34,1),('Shader Graphs/Standard Vertex Color',6,1),('Sunblink/Lynx/CustomLit',47,42),
+    ('Shader Graphs/FluidStream',34,1),('Shader Graphs/HK_Unlit_SoftTextured',11,1),('Shader Graphs/Standard Vertex Color',6,1),('Sunblink/Lynx/CustomLit',47,42),
     ('Sunblink/Lynx/CustomLitFurniture',42,4),('Sunblink/Lynx/CustomLitRefractive',41,7),('Sunblink/Lynx/CustomLitSparkle',36,3),('Sunblink/Lynx/Fluid',24,1),
     ('Sunblink/Lynx/Terrain/Custom Lit Terrain Simple',31,4)]
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:fileURLToPath(new URL('../',import.meta.url))});
+});
+
+test('base extraction accepts only the pinned all-white ARGB32 BlankPattern',()=>{
+ const py=String.raw`
+import importlib.util
+s=importlib.util.spec_from_file_location('base','scripts/extract-furniture-base-material-source.py')
+m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+data=bytes([255])*20
+m.validate_white_argb(2,2,2,1,data)
+for args in [(2,2,2,1,bytes(20)),(2,2,2,0,data),(1,5,2,1,data),(2,2,1,1,data),(2,2,2,1,data[:-1]),(2,2,2,1,data[:-1]+b'\x00')]:
+    try:m.validate_white_argb(*args)
+    except ValueError as e:assert 'unsupported ARGB32 texture' in str(e)
+    else:raise AssertionError('unverified ARGB accepted')
 `;
  execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:fileURLToPath(new URL('../',import.meta.url))});
 });

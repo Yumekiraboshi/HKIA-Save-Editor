@@ -13,9 +13,17 @@ def require(ok,msg):
     if not ok:raise ValueError(msg)
 def sha(b):return hashlib.sha256(b).hexdigest()
 
+def validate_white_argb(width,height,mips,color,data):
+    # Exact BlankPattern bytes; matches the existing pack and GPU gate.
+    # All channels are FF, so no unverified ARGB swizzle is needed.
+    require((width,height,mips,color)==(2,2,2,1) and data==bytes([255])*20 and
+            sha(data)=='9a8dcd3f9ff7aa3114e141f03c12989d363ea81fd74c02eea63c5f41489cb17a',
+            'unsupported ARGB32 texture')
+
 # Original PC v3.0.1 Shader object identities. Extraction support does not
 # imply WebGL rendering support. Offsets refer to each exact hashed object.
 SHADER_SOURCES={
+    'CAB-2b27edbfe7f08bad1cd631865ee4eb15:-12830570528601674':('724fb740b376758d27d683cd06a029485cb6ced08faa3ab9069efbc7ae49b05f',14112,'Shader Graphs/HK_Unlit_SoftTextured',11,1),
     'CAB-46b8f8fe122147493b3113f7c1c8cd0f:-245959077359590779':('39080ec3a7154ee8032ee36bab5f861630dfe745b3bd1e35ad275662b1c6e332',28460,'Sunblink/Lynx/CustomLitRefractive',41,7),
     'CAB-2b27edbfe7f08bad1cd631865ee4eb15:-2527260696058741820':('1d7fcbcf451083bffb545d5490fa8a894cf373f0f7b03dd834a89f21e07e7e9a',19752,'Sunblink/Lynx/CustomLitSparkle',36,3),
     'CAB-6ef5e40a482b00b1d462fae2060592ab:8125211537628429288':('d1e8f28824efdf877dae5004d5ae5ea98823893b62f137d6fc37dfb44f5d91a8',19860,'Shader Graphs/Standard Vertex Color',6,1),
@@ -62,15 +70,17 @@ def extract(bundles,scene,mesh,audit,shader_audit,out=None,resolve_cab=None):
         target=object_for(key,28)
         if not target:unresolved.add(key);return
         entry,b=target;cab=key.split(':')[0];name,at=mesh.string(b);alpha,w,h,size,stripped,fmt,mips=struct.unpack_from('<7I',b,at)
-        require(alpha in (0,1) and 0<w<=8192 and 0<h<=8192 and stripped==0 and fmt in (4,10,12) and 1<=mips<=max(w,h).bit_length(),f'unsupported texture layout {key} {name} {alpha,w,h,size,stripped,fmt,mips}')
+        require(alpha in (0,1) and 0<w<=8192 and 0<h<=8192 and stripped==0 and fmt in (4,5,10,12) and 1<=mips<=max(w,h).bit_length(),f'unsupported texture layout {key} {name} {alpha,w,h,size,stripped,fmt,mips}')
         require(b[at+28:at+32] in (bytes(4),b'\1\0\0\0') and mesh.u(b,at+32)==0,'texture flags')
         streaming,priority,images,dim=struct.unpack_from('<4I',b,at+36);require(streaming in (0,1) and images==1 and dim==2,'texture dimension')
         sampler=struct.unpack_from('<iifiii',b,at+52);lightmap,color,platform,inline=struct.unpack_from('<4I',b,at+76)
         require(sampler[0] in (0,1,2) and 0<=sampler[1]<=16 and math.isfinite(sampler[2]) and all(v in (0,1,2,3) for v in sampler[3:]) and color in (0,1) and platform==inline==0,'sampler')
         off,length=struct.unpack_from('<QI',b,at+92);path,end=mesh.string(b,at+104);require(end==len(b) and path==f'archive:/{cab}/{cab}.resS' and length==size and off+length<=len(entry['stream']),'stream binding')
-        data=entry['stream'][off:off+length];cursor=0;chain=[]
+        data=entry['stream'][off:off+length]
+        if fmt==5:validate_white_argb(w,h,mips,color,data)
+        cursor=0;chain=[]
         for level in range(mips):
-            mw=max(1,w>>level);mh=max(1,h>>level);n=mw*mh*4 if fmt==4 else ((mw+3)//4)*((mh+3)//4)*(8 if fmt==10 else 16)
+            mw=max(1,w>>level);mh=max(1,h>>level);n=mw*mh*4 if fmt in (4,5) else ((mw+3)//4)*((mh+3)//4)*(8 if fmt==10 else 16)
             require(cursor+n<=length,'mip bounds');chain.append([mw,mh,cursor,n,sha(data[cursor:cursor+n])]);cursor+=n
         require(cursor==length,'mip chain');textures[key]={'name':name,'bundle':entry['bundle'],'objectSha256':sha(b),'width':w,'height':h,'format':fmt,'colorSpace':color,'sampler':sampler,'bytes':length,'sha256':sha(data),'mips':chain}
         if out:(out/(sha(data)+'.texture.bin')).write_bytes(data)
