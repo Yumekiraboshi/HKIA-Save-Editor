@@ -42,12 +42,12 @@ jobs:
       - run: npm run test:wasm
       - run: npm run check
       - run: npm run build
-      - name: Create native game UiIcon colorway previews (not 3D renders)
+      - name: Verify historical colorway diagnostics outside the published site
         run: |
           npm install --no-save --package-lock=false --ignore-scripts playwright-core@1.56.1
-          node scripts/generate-native-dye-icons.mjs --all-groups --out dist/native-colorways
-          node scripts/verify-native-dye-icons.mjs dist/native-colorways
-          node scripts/audit-native-colorway-collisions.mjs dist/native-colorways
+          node scripts/generate-native-dye-icons.mjs --all-groups --out /tmp/hkia-native-colorway-diagnostics
+          node scripts/verify-native-dye-icons.mjs /tmp/hkia-native-colorway-diagnostics
+          node scripts/audit-native-colorway-collisions.mjs /tmp/hkia-native-colorway-diagnostics
       - name: Evaluate neutral-anchor icon calibration (diagnostic only)
         run: node scripts/audit-neutral-anchor-icons.mjs --out /tmp/hkia-neutral-anchor
       - uses: actions/upload-artifact@v4
