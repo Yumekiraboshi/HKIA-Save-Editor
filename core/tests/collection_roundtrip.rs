@@ -4195,20 +4195,7 @@ fn existing_generic_magic_wand_zero_style_is_editable_but_not_an_absent_candidat
  let mut empty=Editor::open(slot("3.0.1")).unwrap();
  assert!(!empty.inventory_absent_wand_ids().iter().any(|r|r.0==item as i32));
  assert!(empty.create_inventory_wand_variant(candidate,[0,0],[104,125],1).is_err());
- // Generic output proof covers the modern tag-9 shape only; the legacy
- // GUID decoder must not inherit this authorization from the style map.
- for zipped in [false,true]{
-  let mut p=synthetic_payload("3.0.1");p[2]=6;p[3]=0x96;
-  let legacy=arr(vec![vec![5],arr(vec![guid([0;4]),vec![0xc0],u(104),u(125),u(0)])]);
-  p.extend(doc(1,arr(vec![u(4),u(item),u(21),u(3),legacy])));
-  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
-  let mut e=Editor::open(input.clone()).unwrap();
-  assert!(!e.inventory()[0].editable);
-  assert!(e.inventory_wand_variants(4).is_empty());
-  assert!(e.change_inventory_quantity(4,3,0).is_err());
-  assert!(e.change_inventory_wand_variant(4,[104,125],[106,127]).is_err());
-  assert!(!e.dirty());
- }
+ // Existing zero-GUID legacy output is exercised in the cross-format regression.
  for (source,style) in [(315822,0),(0,118),(0,116),(0,124)]{
   let mut e=Editor::open(make(source,style,None)).unwrap();
   assert!(!e.inventory()[0].editable);
@@ -4845,6 +4832,49 @@ fn nested_furniture_wands_edit_all_four_outer_and_inner_wire_formats(){
  let invalid=legacy_material([u32::MAX;4]);
  let mut rejected=Editor::open(make(outer_legacy,invalid,modern(105,furniture_payload([0,2,0])))).unwrap();
  assert!(!rejected.inventory()[0].editable);assert!(rejected.change_inventory_quantity(4,6,0).is_err());
+ }
+}
+
+#[test]
+fn existing_generic_legacy_wands_use_the_same_source_zero_style_zero_contract(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=1020402601u32;let candidate=(1u32<<31)|item;
+ let legacy=|source:[u32;4],magic:u32,style:u32|arr(vec![vec![5],arr(vec![guid(source),vec![0xc0],u(magic),u(125),u(style)])]);
+ let modern=|magic:u32|arr(vec![vec![9],arr(vec![u(0),vec![0xc0],u(magic),u(125),u(0)])]);
+ let make=|first:Vec<u8>,peer:Vec<u8>|{
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x97;
+  p.extend(doc(1,arr(vec![u(4),u(item),u(11),u(6),first])));
+  p.extend(doc(1,arr(vec![u(5),u(item),u(12),u(2),peer])));
+  slot_from_payload("3.0.1",p)
+ };
+ let original=legacy([0;4],104,0);let peer=modern(105);
+ for zipped in [false,true]{
+  let raw=make(original.clone(),peer.clone());let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory().iter().all(|r|r.editable&&r.quantity_minimum==0));
+  assert!(!e.inventory_absent_wand_ids().iter().any(|&(id,_)|id==item as i32));
+  assert!(e.inventory_wand_creation_variants(candidate).is_empty());
+  assert!(e.inventory_wand_edit_sources(4).is_empty());
+  assert!(e.change_inventory_wand_variant(4,[104,125],[105,125]).is_err());
+  e.change_inventory_wand_variant(4,[104,125],[106,126]).unwrap();
+  let added=e.create_inventory_wand_variant(4,[106,126],[107,127],3).unwrap();
+  e.change_inventory_quantities(&[(4,6,0),(5,2,0)]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert!(matches!(saved.inventory_unique_data(4),Some(U::WandAppearance{source_item_id:0,style:0,magic:106,fleck:126,..})));
+  assert_eq!(&saved.inventory_original_unique_payload(4).unwrap()[..3],&original[..3]);
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(peer.as_slice()));
+  let row=saved.inventory().into_iter().find(|r|r.quantity==3).unwrap();
+  assert_eq!(saved.inventory_unique_data(row.document_id),e.inventory_unique_data(added));
+  saved.change_inventory_quantity(4,0,6).unwrap();
+  assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory()[0].quantity,6);
+ }
+ for first in [legacy([0;4],105,0),legacy([0;4],104,118),legacy([1,2,3,4],104,0),legacy([0;4],132,0)]{
+  let mut rejected=Editor::open(make(first,peer.clone())).unwrap();
+  assert!(!rejected.inventory()[0].editable);
+  assert!(rejected.change_inventory_quantity(4,6,0).is_err());
+  assert!(!rejected.dirty());
  }
 }
 

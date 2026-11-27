@@ -1350,7 +1350,6 @@ impl Editor {
    if c.pos!=c.bytes.len(){return None}
   }
   let item=row.item_id?;
-  if item==crate::inventory_source::GENERIC_MAGIC_WAND_ID{return None}
   if crate::inventory_source::wand_source_style(item,source)!=Some(values[2]){return None}
   let [a,b,c]=materials;
   let identity=[source,values[0],values[1],a,b,c];
