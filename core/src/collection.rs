@@ -1026,7 +1026,26 @@ impl Editor {
   }
   out
  }
+ fn absent_wand_choices(&self,item:i32)->Vec<WandVariant>{
+  if crate::inventory_source::magic_wand_style(item).is_none()||
+   !crate::inventory_source::is_uncapped_required_unique_stack(item)||
+   self.inventory_item_rows.contains_key(&item)||
+   self.pending_wands.iter().any(|(&id,&(i,_))|i==item&&self.inventory_changes.contains_key(&id))||
+   self.slot.index.inventory_wand_copies||
+   !self.inventory_creation_payload_safe(item)||
+   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||
+   !self.absent_flower_budget_available(){return Vec::new()}
+  crate::inventory_source::WAND_MAGIC.iter().flat_map(|&(magic,_)|
+   crate::inventory_source::WAND_FLECK.iter().map(move |&(fleck,_)|[magic,fleck])).collect()
+ }
+ pub fn inventory_absent_wand_ids(&self)->Vec<(i32,i32)>{
+  crate::inventory_source::MAGIC_WAND_STYLES.iter().copied()
+   .filter(|&(item,_)|!self.absent_wand_choices(item).is_empty()).collect()
+ }
  pub fn inventory_wand_creation_variants(&self,id:u32)->Vec<WandVariant>{
+  if id&PENDING_ITEM!=0&&!self.pending_wands.contains_key(&id){
+   return self.absent_wand_choices((id&!PENDING_ITEM) as i32)
+  }
   let Some((item,original,_,_))=self.wand_context(id)else{return Vec::new()};
   let qty=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
   if !qty.is_some_and(|q|q>0)||self.wand_family_count(item)>=256||!self.absent_flower_budget_available()||
@@ -1035,8 +1054,14 @@ impl Editor {
  }
  pub fn create_inventory_wand_variant(&mut self,source_id:u32,expected:WandVariant,next:WandVariant,quantity:i32)->Result<u32,Error>{
   if quantity<=0||!self.inventory_wand_creation_variants(source_id).contains(&next){return Err(Error::Schema)}
-  let (item,_,current,_)=self.wand_context(source_id).ok_or(Error::Schema)?;
-  if expected!=current{return Err(Error::Schema)}
+  let item=if source_id&PENDING_ITEM!=0&&!self.pending_wands.contains_key(&source_id){
+   if expected!=[0;2]{return Err(Error::Schema)}
+   (source_id&!PENDING_ITEM) as i32
+  }else{
+   let (item,_,current,_)=self.wand_context(source_id).ok_or(Error::Schema)?;
+   if expected!=current{return Err(Error::Schema)}
+   item
+  };
   let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
   let change=Change::WandCreated{document_id,source_id,item_id:item,expected,variant:next,quantity};
   self.restore_change(&change,false);self.undo.push(change);

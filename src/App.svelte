@@ -92,7 +92,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let cafeDraft=$state<CafeVariant|null>(null);
  let cafeSlot=$state(0);
  let wandDialogEl:HTMLDialogElement|undefined=$state();
- let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[]}|null>(null);
+ let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[];absent?:boolean}|null>(null);
  let wandSelection=$state(-1);
  let bobaDialogEl:HTMLDialogElement|undefined=$state();
  let bobaEdit=$state<{documentId:number;itemId:number;revision:number;before:BobaVariant;options:BobaVariant[];creationOptions:BobaVariant[]}|null>(null);
@@ -821,6 +821,18 @@ import {verifiedFloorplanName} from './floorplan-names';
   busy=true;error='';
   try{update(await changeInventoryCafeVariant(edit.documentId,edit.before,next));closeCafeEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
+ }
+ async function openAbsentWandEditor(row:InventoryEntry){
+  if(!snapshot||busy||!row.wandCreatableStyle)return;
+  const revision=snapshot.revision;busy=true;error='';
+  try{
+   const options=await requestWandCreationVariants(row.documentId);
+   if(!snapshot||snapshot.revision!==revision||!options.length)return;
+   const before:WandVariant=[0,0],appearance:WandInventoryAppearance={sourceItemId:0,sourceUnique:null,styleCharacteristicId:row.wandCreatableStyle,magicCharacteristicId:options[0][0],fleckCharacteristicId:options[0][1]};
+   wandEdit={documentId:row.documentId,itemId:row.itemId,revision,before,appearance,options,creationOptions:options,absent:true};
+   wandSelection=0;variantAddQuantity=1;await tick();
+   if(wandDialogEl&&!wandDialogEl.open)wandDialogEl.showModal();
+  }catch(e){error=describeError(e)}finally{busy=false}
  }
  async function openWandEditor(row:InventoryEntry){
   const before=wandVariantOf(row.unique),appearance=inventoryWandAppearance(row.itemId,row.unique);
@@ -1578,7 +1590,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const canCafe=!!item.cafe?.editable}
      {@const canWand=!!item.unique?.wandEditable&&!!wand}
      {@const canBoba=!!item.boba?.editable}
-      <article class="inventory-card" class:inventory-empty-stack={!inventoryAddMode&&inventoryRefillable(item)} class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
+      <article class="inventory-card" class:inventory-empty-stack={!inventoryAddMode&&inventoryRefillable(item)} class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable&&!item.wandCreatableStyle} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
       {#if inventoryBatchMode&&item.editable}
        <input class="inventory-batch-checkbox" type="checkbox" checked={inventoryBatchSelected.has(item.documentId)} aria-label={iBatchCopy+': '+inventoryName(item.itemId)}
         disabled={busy||(!inventoryBatchSelected.has(item.documentId)&&inventoryBatchSelected.size>=snapshot.inventoryBatchLimit)} onchange={()=>toggleInventoryBatch(item)}/>
@@ -1644,6 +1656,8 @@ import {verifiedFloorplanName} from './floorplan-names';
         <span>{item.quantity.toLocaleString(locale)}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
        </button>
+      {:else if item.wandCreatableStyle}
+       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openAbsentWandEditor(item)}>{inventoryAddCopy(locale)}</button>
       {:else if item.flowerCreatable}
        <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openAbsentFlowerEditor(item)}>{inventoryAddCopy(locale)}</button>
       {:else if canFurniture}
@@ -1867,9 +1881,9 @@ import {verifiedFloorplanName} from './floorplan-names';
     </div>
     <div style="display:flex;justify-content:center"><DynamicWandSprite itemId={edit.itemId} appearance={{...edit.appearance,magicCharacteristicId:selected[0],fleckCharacteristicId:selected[1]}}/></div>
     <label class="date-dialog-field">
-     <span>{wandName(edit.before)}</span>
+     <span>{edit.absent?inventoryName(edit.itemId):wandName(edit.before)}</span>
      <select name="wand-variant" aria-label={inventoryName(edit.itemId)} bind:value={wandSelection} disabled={busy}>
-      <option value={-1}>{wandName(edit.before)}</option>
+      {#if !edit.absent}<option value={-1}>{wandName(edit.before)}</option>{/if}
       {#each edit.options as option,i}<option value={i} data-wand-variant={option.join(':')}>{wandName(option)}</option>{/each}
      </select>
     </label>

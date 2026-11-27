@@ -3341,3 +3341,39 @@ fn ordinary_furniture_source_remains_available_after_custom_stack_export(){
   assert_eq!(reopened.inventory_unique_data(base),None);
  }}
 }
+
+
+#[test]
+fn first_shaped_wands_use_native_candidates_and_shared_history(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=1429161083i32;let candidate=0x80000000u32|item as u32;
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert_eq!(e.inventory_absent_wand_ids().len(),6);
+  assert!(e.inventory_absent_wand_ids().contains(&(item,118)));
+  assert_eq!(e.inventory_wand_creation_variants(candidate).len(),36);
+  assert!(e.create_inventory_wand_variant(candidate,[104,125],[106,127],1).is_err());
+  assert!(e.create_inventory_wand_variant(candidate,[0,0],[116,125],1).is_err());
+  assert!(e.create_inventory_wand_variant(candidate,[0,0],[104,125],0).is_err());
+  assert!(!e.dirty());
+  let id=e.create_inventory_wand_variant(candidate,[0,0],[104,125],2).unwrap();
+  assert!(e.inventory_wand_creation_variants(candidate).is_empty());
+  assert!(e.create_inventory_wand_variant(candidate,[0,0],[106,127],1).is_err());
+  e.change_inventory_wand_variant(id,[104,125],[106,127]).unwrap();
+  let second=e.create_inventory_wand_variant(id,[106,127],[108,126],3).unwrap();
+  assert_ne!(id,second);
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert!(!saved.inventory_absent_wand_ids().contains(&(item,118)));
+  let rows:Vec<_>=saved.inventory().into_iter().filter(|r|r.item_id==item).collect();
+  assert_eq!(rows.len(),2);
+  assert!(rows.iter().any(|r|r.quantity==2&&saved.inventory_unique_data(r.document_id).unwrap().display_words().1==[0,106,127,118,u32::MAX,0]));
+  assert!(rows.iter().any(|r|r.quantity==3&&saved.inventory_unique_data(r.document_id).unwrap().display_words().1==[0,108,126,118,u32::MAX,0]));
+  assert!(rows.iter().all(|r|r.quantity_minimum==0));
+  let row=&rows[0];saved.change_inventory_quantity(row.document_id,row.quantity,0).unwrap();
+  assert!(Editor::open(saved.export().unwrap()).unwrap().inventory().iter().any(|r|r.document_id==row.document_id&&r.quantity==0));
+ }
+}
