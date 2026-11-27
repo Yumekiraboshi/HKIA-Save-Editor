@@ -11,6 +11,7 @@
  import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,furnitureHasCustomizedAppearance,type FurnitureDisplay} from './inventory-furniture-display';
  import InventoryDecorator from './InventoryDecorator.svelte';
+ import {flowerDecorators} from './inventory-flower-display';
  import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryRefillable,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,flowerGrowthKind,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
@@ -1652,6 +1653,8 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const sprite=definition&&!inventoryNativeArt?.withheld.has(item.itemId)?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
      {@const flower=flowerDisplay(item.flower,flowerDefinitions,flowerLabels[locale]??{})}
      {@const growth=flowerGrowthKind(item.itemId,item.flower)}
+     {@const flowerBadges=snapshot.version==='3.0.1'?flowerDecorators(item.flower,flowerDefinitions):[]}
+     {@const customized=snapshot.version==='3.0.1'&&furnitureHasCustomizedAppearance(furnitureDisplay,furnitureVariantOf(item.unique))}
      {@const variantTitle=inventoryVariantSearchName(item)}
      {@const chef=inventoryChefAppearance(item.itemId,item.unique)}
      {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
@@ -1670,7 +1673,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          <button type="button" class="inventory-stack-delete" disabled={busy||item.quantityMinimum!==0||item.quantity<=0} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)+': '+inventoryName(item.itemId)} onclick={e=>requestInventoryDelete([item],false,e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
         {/if}
       <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
-       <span class="inventory-item-art" class:flower-variant={!!flower} style:position="relative" aria-hidden="true">
+       <span class="inventory-item-art" class:flower-variant={flowerBadges.length>0} style:position="relative" aria-hidden="true">
         {#if wand&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite} originalCell={wandOriginalCell(wand.sourceItemId)}/>
          {:else if chef&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
@@ -1691,13 +1694,13 @@ import {verifiedFloorplanName} from './floorplan-names';
         {:else}
          <span class="item-art-empty">✧</span>
         {/if}
-        {#if snapshot.version==='3.0.1'&&furnitureHasCustomizedAppearance(furnitureDisplay,furnitureVariantOf(item.unique))}
-         <InventoryDecorator type={9}/>
-        {/if}
-        {#if flower}
-         <span class="inventory-flower-decorators">
-          {#if flower.color}<span class="inventory-flower-color" style:background-color={flower.color}></span>{/if}
-          {#if flower.patternUrl}<img class="inventory-flower-pattern" src={INVENTORY_UI+flower.patternUrl} alt=""/>{/if}
+        {#if customized||flowerBadges.length}
+         <span class="inventory-native-decorators">
+          {#if customized}<InventoryDecorator type={9}/>{/if}
+          {#each flowerBadges as badge (badge.type)}
+           {#if badge.type===12}<InventoryDecorator type={12} primaryColor={badge.primaryColor}/>
+           {:else}<InventoryDecorator type={11} patternUrl={badge.patternUrl}/>{/if}
+          {/each}
          </span>
         {/if}
        </span>

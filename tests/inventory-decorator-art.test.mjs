@@ -37,3 +37,26 @@ test('all five flagged chef instruction definitions have a normal original sourc
  const {sprites}=collectNativeSprites('collection_group_citytown');
  assert.ok(ids.every(id=>sprites.has(String(id))));
 });
+
+ test('native flower decorators preserve color-first order and original pattern refs',async()=>{
+ const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/inventory-flower-display.ts',import.meta.url))],bundle:true,write:false,format:'esm',platform:'node',logLevel:'silent'});
+ const {flowerDecorators:f}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+ const defs=JSON.parse(read('public/inventory-ui/flowers.json'));
+ const index=JSON.parse(read('public/inventory-ui/index.json'));
+ const flower={growState:0,baseColor:1,pattern:0,patternColor:0};
+ for(const growState of [0,6,7]){
+  assert.deepEqual(f({...flower,growState},defs),[{type:12,primaryColor:'rgba(193,41,61,1)'}]);
+  for(const pattern of Object.keys(defs.patterns).map(Number)){
+   const file='pattern-'+pattern+'.webp';
+   assert.equal(sha(read('public/inventory-ui/'+file)),index.files[file]);
+   assert.deepEqual(f({...flower,growState,pattern,patternColor:2},defs),[{type:12,primaryColor:'rgba(193,41,61,1)'},{type:11,patternUrl:file}]);
+  }
+ }
+ for(const baseColor of Object.keys(defs.colors).map(Number)){
+  assert.equal(f({...flower,baseColor},defs).length,1);
+ }
+ assert.deepEqual(f({...flower,pattern:99},defs),[]);
+ assert.deepEqual(f({...flower,patternColor:99},defs),[]);
+ assert.deepEqual(f({...flower,baseColor:99},defs),[]);
+ assert.deepEqual(f(flower,null),[]);
+ });
