@@ -87,7 +87,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let paletteDialogEl:HTMLDialogElement|undefined=$state();
  let paletteEdit=$state<{documentId:number;itemId:number;revision:number;before:PaletteVariant;options:PaletteVariant[]}|null>(null);
  let cafeDialogEl:HTMLDialogElement|undefined=$state();
- let cafeEdit=$state<{documentId:number;itemId:number;revision:number;before:CafeVariant;options:CafeOption[];creationOptions:CafeOption[]}|null>(null);
+ let cafeEdit=$state<{documentId:number;itemId:number;revision:number;before:CafeVariant;options:CafeOption[];creationOptions:CafeOption[];absent?:boolean}|null>(null);
  let cafeSelection=$state(-1);
  let cafeDraft=$state<CafeVariant|null>(null);
  let cafeSlot=$state(0);
@@ -95,7 +95,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[];absent?:boolean}|null>(null);
  let wandSelection=$state(-1);
  let bobaDialogEl:HTMLDialogElement|undefined=$state();
- let bobaEdit=$state<{documentId:number;itemId:number;revision:number;before:BobaVariant;options:BobaVariant[];creationOptions:BobaVariant[]}|null>(null);
+ let bobaEdit=$state<{documentId:number;itemId:number;revision:number;before:BobaVariant;options:BobaVariant[];creationOptions:BobaVariant[];absent?:boolean}|null>(null);
  let bobaSelection=$state(-1);
  let bobaBase=$state('');
  let paletteSlot=$state(0);
@@ -785,23 +785,23 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||!row.cafe?.editable)return;
   const before=row.cafe.variant,revision=snapshot.revision;busy=true;error='';
   try{
-   const [options,creationOptions]=await Promise.all([requestCafeVariants(row.documentId),requestCafeCreationVariants(row.documentId)]);
+   const [options,creationOptions]=await Promise.all([row.cafe.creationOnly?Promise.resolve([] as CafeOption[]):requestCafeVariants(row.documentId),requestCafeCreationVariants(row.documentId)]);
    if(!snapshot||snapshot.revision!==revision)return;
-   cafeEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions};cafeSlot=0;cafeSelection=-1;cafeDraft=[...before];variantAddQuantity=1;await tick();
+   cafeEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:row.cafe.creationOnly?creationOptions:options,creationOptions,absent:row.cafe.creationOnly};cafeSlot=0;cafeSelection=-1;cafeDraft=[...before];variantAddQuantity=1;await tick();
    if(cafeDialogEl&&!cafeDialogEl.open)cafeDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
  }
  async function addInventoryCafeVariant(){
   const edit=cafeEdit,quantity=variantAddQuantity;
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
-  const next=cafeDraft;if(!next||!cafeCreationSelection(edit.before,next,edit.creationOptions))return;
+  const next=cafeDraft;if(!next||!cafeCreationSelection(edit.before,next,edit.creationOptions,edit.absent))return;
   busy=true;error='';
   try{update(await createInventoryCafeVariant(edit.documentId,edit.before,next,quantity));closeCafeEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
  }
  function cafePairEqual(a:CafeVariant,b:CafeVariant,slot:number):boolean{return a[slot]===b[slot]&&a[slot+3]===b[slot+3]}
- function cafeCreationSelection(before:CafeVariant,next:CafeVariant,options:readonly CafeOption[]):boolean{
-  return options.length>0&&next.some((n,i)=>n!==before[i])&&[0,1,2].every(slot=>cafePairEqual(before,next,slot)||options.some(o=>o.slot===slot&&cafePairEqual(o.variant,next,slot)));
+ function cafeCreationSelection(before:CafeVariant,next:CafeVariant,options:readonly CafeOption[],absent=false):boolean{
+  return (absent||options.length>0&&next.some((n,i)=>n!==before[i]))&&[0,1,2].every(slot=>cafePairEqual(before,next,slot)||options.some(o=>o.slot===slot&&cafePairEqual(o.variant,next,slot)));
  }
  function selectCafeSlot(index:number){
   const edit=cafeEdit;if(!edit||!cafeDraft)return;
@@ -866,9 +866,9 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||!row.boba?.editable)return;
   const before=row.boba.variant,revision=snapshot.revision;busy=true;error='';
   try{
-   const [options,creationOptions]=await Promise.all([requestBobaVariants(row.documentId),requestBobaCreationVariants(row.documentId)]);
+   const [options,creationOptions]=await Promise.all([row.boba.creationOnly?Promise.resolve([] as BobaVariant[]):requestBobaVariants(row.documentId),requestBobaCreationVariants(row.documentId)]);
    if(!snapshot||snapshot.revision!==revision)return;
-   bobaEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions};bobaBase=bobaBaseKey(before);bobaSelection=-1;variantAddQuantity=1;await tick();
+   bobaEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:row.boba.creationOnly?creationOptions:options,creationOptions,absent:row.boba.creationOnly};bobaBase=bobaBaseKey(before);bobaSelection=row.boba.creationOnly?creationOptions.findIndex(v=>v.every((n,i)=>n===before[i])):-1;variantAddQuantity=1;await tick();
    if(bobaDialogEl&&!bobaDialogEl.open)bobaDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
  }
@@ -1665,6 +1665,8 @@ import {verifiedFloorplanName} from './floorplan-names';
         <span>{item.quantity}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg>
        </button>
+      {:else if item.boba?.creationOnly||item.cafe?.creationOnly}
+       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void (item.boba?.creationOnly?openBobaEditor(item):openCafeEditor(item))}>{inventoryAddCopy(locale)}</button>
       {:else if canFlower}
        <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode}
         title={flowerCopy.title} aria-label={flowerCopy.title+': '+inventoryName(item.itemId)} onclick={()=>void openFlowerEditor(item)}>
@@ -1829,7 +1831,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    {@const edit=cafeEdit}
    {@const selected=cafeDraft??edit.before}
    {@const changed=selected.some((n,i)=>n!==edit.before[i])}
-   {@const canCreate=cafeCreationSelection(edit.before,selected,edit.creationOptions)}
+   {@const canCreate=cafeCreationSelection(edit.before,selected,edit.creationOptions,edit.absent)}
    <form class="date-dialog-inner" onsubmit={applyInventoryCafeVariant}>
     <div class="date-dialog-heading">
      <h2 id="cafe-editor-title">{inventoryName(edit.itemId)}</h2>
@@ -1861,7 +1863,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeCafeEditor}>{copy.cancel}</button>
-     {#if edit.creationOptions.length}
+     {#if edit.absent||edit.creationOptions.length}
       <button type="button" class="inventory-create-cafe" disabled={busy||!validVariantAddQuantity||!canCreate} onclick={()=>void addInventoryCafeVariant()}>{inventoryAddCopy(locale)}</button>
      {/if}
      {#if !inventoryAddMode}<button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>{/if}
@@ -1917,13 +1919,13 @@ import {verifiedFloorplanName} from './floorplan-names';
     </div>
     <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}}/></div>
     <div class="date-dialog-field">
-     <select name="boba-base" aria-label={inventoryName(edit.itemId)} bind:value={bobaBase} onchange={e=>{bobaSelection=bobaSelectionForBase(edit.before,edit.options,bobaSelection,e.currentTarget.value);error=''}} disabled={busy}>
+     <select name="boba-base" aria-label={inventoryName(edit.itemId)} bind:value={bobaBase} onchange={e=>{bobaSelection=bobaSelectionForBase(edit.before,edit.options,bobaSelection,e.currentTarget.value);if(edit.absent&&bobaSelection<0)bobaSelection=edit.options.findIndex(v=>bobaBaseKey(v)===e.currentTarget.value&&v[2]===edit.before[2]&&v[4]===edit.before[4]);error=''}} disabled={busy}>
       {#each bobaBaseChoices(edit.before,edit.options) as base}
        <option value={bobaBaseKey(base)}>{bobaBaseLabel(base,locale,snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
       {/each}
      </select>
      <select name="boba-variant" aria-label={bobaVariantLabel(edit.before,locale)} bind:value={bobaSelection} disabled={busy}>
-      <option value={-1}>{bobaBase===bobaBaseKey(edit.before)?bobaVariantLabel(edit.before,locale):'—'}</option>
+      {#if !edit.absent}<option value={-1}>{bobaBase===bobaBaseKey(edit.before)?bobaVariantLabel(edit.before,locale):'—'}</option>{/if}
       {#each edit.options as option,i}
        {#if bobaBaseKey(option)===bobaBase}<option value={i}>{bobaVariantLabel(option,locale)}</option>{/if}
       {/each}
