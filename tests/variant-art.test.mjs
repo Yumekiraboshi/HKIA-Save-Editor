@@ -105,7 +105,8 @@ test('Collection and Inventory select original images without inferred recolorin
  assert.match(app,/exactArtUrl=\{exactVariantArt\[String\(representative\)\]\}/);
  assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,6);
  assert.match(app,/originalArtUrl=\{originalVariantArt\[String\(representative\)\]\}/);
- assert.match(sprite,/if\(original\)showExact\(original,showReconstruction\)/);
+ assert.match(sprite,/if\(original\)showExact\(original,showOriginalFallback\)/);
+ assert.match(sprite,/if\(url\)showExact\(url,showReconstruction\)/);
  assert.match(sprite,/showExact\(exact,showSharedReference\)/);
  assert.match(sprite,/sprite\?:SpriteCell;palette\?:NativeDyePalette/);
  assert.match(sprite,/if\(canceled\)return/);
