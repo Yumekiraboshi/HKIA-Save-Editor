@@ -121,6 +121,7 @@ mod catalog;
 mod inventory_source;
 pub mod inventory_palette_source;
 mod inventory_source_data;
+mod inventory_bag_data;
 mod inventory_tradeable_data;
 mod inventory_wand_ingredient_data;
 mod inventory_legacy_wand_guid_data;
