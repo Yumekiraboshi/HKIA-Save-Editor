@@ -38,7 +38,7 @@ import {searchAchievementRows} from './achievement-search';
  import {loadIconPack,type IconPack} from './icon-packs';
  import {createIconPackRequests} from './icon-pack-requests';
  import {loadNativeDyePalettes,dyeDecoratorFor,type NativeDyePalettes} from './native-dye-palettes';
- import {loadVariantArtSources} from './variant-art';
+ import {createVariantArtSourceLoader} from './variant-art';
  import DyeSprite from './DyeSprite.svelte';
  import DynamicFlowerSprite from './DynamicFlowerSprite.svelte';
  import DynamicPaletteSprite from './DynamicPaletteSprite.svelte';
@@ -202,6 +202,15 @@ import {verifiedFloorplanName} from './floorplan-names';
  let nativeDyePalettes:NativeDyePalettes=$state({});
  let exactVariantArt:Record<string,string>=$state({});
  let originalVariantArt:Record<string,string>=$state({});
+ const loadVariantArtSources=createVariantArtSourceLoader(import.meta.env.BASE_URL);
+ let variantArtEpoch=0;
+ function refreshVariantArtwork(){
+  const epoch=variantArtEpoch;
+  void loadVariantArtSources().then(art=>{
+   if(epoch!==variantArtEpoch)return;
+   originalVariantArt=art.originals;exactVariantArt=art.reconstructions;
+  }).catch(()=>{});
+ }
  let iconEpoch=0;
  let iconError=$state(false);
  let loadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
@@ -282,8 +291,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   // Exact game dye palettes, used exclusively for recoloring item image pixels.
   void loadNativeDyePalettes(import.meta.env.BASE_URL)
    .then(palettes=>nativeDyePalettes=palettes).catch(()=>{});
-  void loadVariantArtSources(import.meta.env.BASE_URL)
-   .then(art=>{originalVariantArt=art.originals;exactVariantArt=art.reconstructions;}).catch(()=>{});
+  refreshVariantArtwork();
   browserLanguage=detectLocale(navigator.languages?.length?navigator.languages:[navigator.language||'en']);
   try{
    const savedLang=localStorage.getItem('hkia-display-locale');
@@ -316,6 +324,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    media.removeEventListener?.('change',listener);
    window.removeEventListener('beforeunload',beforeUnload);
    iconEpoch++;iconLoadingGroup=null;iconPack=null;
+   variantArtEpoch++;
    inventoryIconEpoch++;
    for(const pack of Object.values(inventoryIconPacks))pack.dispose();
    inventoryIconPacks={};
@@ -564,6 +573,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   return task;
  }
  function openInventoryTab(){
+  refreshVariantArtwork();
   clearInventoryBatch();inventoryAddMode=false;
   activeTool='inventory';inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;inventoryShowZero=false;
   inventoryLimit=BATCH_SIZE;editingAchievement=null;error='';
@@ -617,6 +627,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   void persistDraft();
  }
  function selectCategory(key:string){
+  refreshVariantArtwork();
   selectedGroup=key;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
   query='';collectionSearchDrilldown=false;filter='all';editId=null;error='';
   void fetchImages(key);
@@ -633,6 +644,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(snapshot)void persistDraft();
  }
  function goHome(){
+  refreshVariantArtwork();
   activeTool='collections';selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
   editId=null;query='';collectionSearchDrilldown=false;filter='all';iconEpoch++;iconLoadingGroup=null;iconPack=null;iconError=false;
   if(snapshot)void persistDraft();
