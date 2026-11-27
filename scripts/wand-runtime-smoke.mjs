@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 export async function wandRuntimeSmoke(browser,origin,base){
  const {outputFiles}=await build({
-  stdin:{contents:"export * from './wand-runtime-art'; export * from './wand-original-subicon'; export {initialInventoryNativeArt} from './inventory-native-art'; export {loadIconPack} from './icon-packs'; export {loadInventoryNativeArt} from './inventory-native-art';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
+  stdin:{contents:"export * from './wand-runtime-art'; export * from './wand-original-subicon'; export {initialInventoryNativeArt} from './inventory-native-art'; export {loadIconPack} from './icon-packs'; export {loadSampledWandOverlay} from './wand-candidate-source'; export {loadInventoryNativeArt} from './inventory-native-art';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
   bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env.BASE_URL':JSON.stringify(base)}
  });
  const context=await browser.newContext();
@@ -95,6 +95,27 @@ export async function wandRuntimeSmoke(browser,origin,base){
    }
    // The native saved source selection is independent of the wand shape.
    // This proves rendering only, not creation eligibility for these pairs.
+   const nonsquareRows=[];
+   const {loadSampledWandOverlay}=await import(base+'__wand_runtime_fixture__.mjs');
+   const nonSquareManifest=await (await fetch(base+'dynamic-wand-art/candidate-source/wand-nonsquare.json')).json();
+   for(const row of m.rows){
+    const a={magicCharacteristicId:104,fleckCharacteristicId:125};
+    const plain=await pixels(await renderWandBaseArt(row.itemId,a));
+    for(const source of nonSquareManifest.rows){
+     const appearance={...a,sourceItemId:source.itemId},blob=await renderWandArt(row.itemId,appearance);
+     nonsquareRows.push({id:row.itemId,sourceItemId:source.itemId,art:await pixels(blob),plain:plain.rgba,cached:blob===await renderWandArt(row.itemId,appearance)});
+    }
+   }
+   const transforms=[];
+   const t={scale:Math.fround(.4),offsetPercent:[-.25,.25],rotation:0};
+   for(const source of nonSquareManifest.rows){
+    const original=await loadSampledWandOverlay(source.itemId,t);
+    if(!original)throw Error('missing non-square source');
+    const {texture,alphaOffsetY,sampleRect}=original.overlay;
+    const alpha=[];for(let y=0;y<34;y++)for(let x=0;x<34;x++)alpha.push(texture.rgba[((y+alphaOffsetY)*texture.width+x+sampleRect[0])*4]);
+    transforms.push({id:source.itemId,pid:original.spritePathId,sourceHash:original.sourceHash,alpha,
+     wrongTransform:await loadSampledWandOverlay(source.itemId,{...t,rotation:1})===null});
+   }
    const allShapes=[];
    for(const row of m.rows){
     const a={magicCharacteristicId:104,fleckCharacteristicId:125};
@@ -106,10 +127,24 @@ export async function wandRuntimeSmoke(browser,origin,base){
     }
     if(await renderWandArt(row.itemId,{...a,sourceItemId:315823})!==null)throw Error('UNKNOWN_SOURCE_RENDERED');
    }
-   return {rows,composed,itemRows,added,inv,directSources,placeholders,outside,allShapes,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315823,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
+   return {rows,composed,itemRows,added,inv,directSources,placeholders,outside,allShapes,nonsquareRows,transforms,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315823,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
   },base);
   assert.equal(out.rows.length,9);assert.ok(out.unknown&&out.unknownOriginal);
   assert.equal(out.composed.length,13);assert.ok(out.unsupportedSource);
+  assert.equal(out.nonsquareRows.length,45);
+  for(const row of out.nonsquareRows){assert.ok(row.art.visible&&row.cached);assert.notEqual(row.art.rgba,row.plain);}
+  for(const id of new Set(out.nonsquareRows.map(r=>r.id)))assert.equal(new Set(out.nonsquareRows.filter(r=>r.id===id).map(r=>r.art.rgba)).size,5);
+  assert.equal(out.transforms.length,5);
+  for(const r of out.transforms){assert.ok(r.wrongTransform);assert.equal(r.sourceHash,'950095992ecb78341afb1cf6c5c2afaf16de8b6b365cf66c8fcb66c692d7096a');assert.ok(r.alpha.some(a=>a>200));}
+  // The opaque original cards are letterboxed by actual source aspect,
+  // rather than stretched to the square output sample grid.
+  for(const [id,w,h] of [[371479572,439,512],[583339916,512,511],[1057045178,512,511],[1314269583,512,470]]){
+   const r=out.transforms.find(r=>r.id===id),s=84*Math.fround(.4)/Math.max(w,h);
+   for(let y=0;y<34;y++)for(let x=0;x<34;x++){
+    const dx=x+4.5-21,dy=y+4.5-21;
+    assert.equal(r.alpha[y*34+x],Math.abs(dx)<w*s/2&&Math.abs(dy)<h*s/2?255:0);
+   }
+  }
   assert.equal(out.outside.length,9);
   for(const row of out.outside){assert.ok(row.art.visible&&row.cached&&row.noCell&&row.mismatched);assert.notEqual(row.art.rgba,row.plain.rgba);}
   assert.equal(out.allShapes.length,36);assert.equal(new Set(out.allShapes.map(r=>r.id)).size,9);
