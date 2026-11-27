@@ -110,7 +110,7 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
   const link=(name:string)=>get(base.textures[name],'TEXTURE_LINK');
   const st=(name:string):Vec4=>{const l=link(name);return [...l.scale,...l.offset] as Vec4;};
   const tex=(name:string)=>get(d.base.textures[get(link(name).texture,'TEXTURE_NULL')],'TEXTURE');
-  const b=tex('_BaseMap'),n=tex('_BumpMap'),x=tex('_MetallicGlossMap');
+  const n=tex('_BumpMap'),x=tex('_MetallicGlossMap');
   const baseST=st('_BaseMap');
   if(['_BumpMap','_MetallicGlossMap'].some(k=>st(k).some((v,i)=>v!==baseST[i])))fail('BASE_UV');
   if(![0,1].includes(f._Pattern_WorldUV)||![0,1].includes(f._BaseMap_Mask_Toggle))fail('FLAGS');
@@ -140,6 +140,14 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
    occlusionStrength:f._OcclusionStrength,worldUV:f._Pattern_WorldUV===1,useComboEmissionMask:true,...(rim?{rim}:{})
   };
   if(!pattern&&material.baseColor[3]<=0)fail('NULL_PATTERN_CONTRIBUTES');
+  // The original Furniture surface sets the base blend weight to zero
+  // whenever BaseColor.a <= 0. In this branch RGB/alpha of BaseMap are
+  // unused, but its authored ST still drives the normal and combo UVs.
+  // Alias an already verified, non-null pattern only for an exact null
+  // BaseMap pointer; never replace a missing/corrupt referenced texture.
+  const baseLink=link('_BaseMap');
+  const b=baseLink.texture===null&&material.baseColor[3]<=0&&pattern!==null
+   ?pattern:tex('_BaseMap');
   const modelNodes=treatment?nodes.map(node=>node.rendererPathId===p.rendererPathId?{...node,scale:furnitureTreatmentScale(node.scale,treatment!.mirrored)}:node):nodes;
   const emissionColor=get(c._EmissionColor,'EMISSION').slice(0,3) as unknown as Vec3;
   const scene=sceneFor(f._ReflectionStrength,emissionColor,modelNodes);

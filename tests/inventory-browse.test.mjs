@@ -212,3 +212,23 @@ test('empty native stacks leave the owned grid but remain available to search an
  assert.deepEqual(owned,[empty,opaque,positive]);
  assert.deepEqual(inventoryAddRows([opaque,positive],[absent]),[absent]);
 });
+
+test('inventory search normalizes Japanese width and kana without losing native identity or diacritics',()=>{
+ assert.deepEqual(filter('みんと').map(r=>r.documentId),[10,14]);
+ assert.deepEqual(filter('ﾐﾝﾄ').map(r=>r.documentId),[10,14]);
+ assert.deepEqual(filter('３１５８２２').map(r=>r.documentId),[10,14]);
+ assert.equal(filter('ＢＬＵＥ').length,1);
+ const flowers=[{documentId:50,itemId:43114910,quantity:2,editable:true}];
+ const variantName=()=> 'ピンク · グラデーション';
+ const labels={'43114910':'花'};
+ const search=q=>browseInventory(flowers,q,'flowers',false,labels,items,index,'ja',variantName);
+ const counts=q=>inventorySearchGroupCounts(flowers,q,false,labels,items,index,variantName);
+ for(const q of ['花　ﾋﾟﾝｸ','花 ぴんく','く\u3099らでーしょん']){
+  assert.deepEqual(search(q),flowers);
+  assert.equal(counts(q).get('flowers'),1);
+ }
+ assert.deepEqual(search('ひんく'),[]);
+ assert.equal(counts('ひんく').size,0);
+ assert.equal(variantName(),'ピンク · グラデーション');
+ assert.equal(flowers[0].quantity,2);
+});

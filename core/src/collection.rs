@@ -543,7 +543,11 @@ impl Editor {
   }).collect()
  }
  pub fn create_inventory_furniture_variant(&mut self,source_id:u32,expected:FurnitureVariant,next:FurnitureVariant,quantity:i32)->Result<u32,Error>{
-  if quantity<=0||!self.inventory_furniture_creation_variants(source_id).contains(&next){return Err(Error::Schema)}
+  let options=self.inventory_furniture_creation_variants(source_id);
+  // Compose only source-issued slot choices. Final identity checks below
+  // are against the complete tuple, not the individual one-slot examples.
+  if quantity<=0||options.is_empty()||expected==next||
+   next.iter().enumerate().any(|(i,&n)|n!=expected[i]&&!options.iter().any(|v|v[i]==n)){return Err(Error::Schema)}
   let item_id=if self.pending_furniture.contains_key(&source_id){
    let (source,_,current,_)=self.furniture_context(source_id).ok_or(Error::Schema)?;
    if current!=expected{return Err(Error::Schema)}
@@ -559,6 +563,21 @@ impl Editor {
    if current!=expected{return Err(Error::Schema)}
    source.item_id
   };
+  let source=furniture_source::item(item_id).ok_or(Error::Schema)?;
+  let key=furniture_key(source,next).ok_or(Error::Schema)?;
+  if !Self::valid_furniture_target(source,[0;3],next)||Some(key)==furniture_key(source,[0;3]){return Err(Error::Schema)}
+  if let Some((_,original,current,reserved))=self.furniture_context(source_id){
+   if Some(key)==furniture_key(source,original)||Some(key)==furniture_key(source,current)||reserved.contains(&key){return Err(Error::Schema)}
+  }else{
+   // The only other eligible paths are absent/default sources, whose
+   // saved peers are absent or one nil base. Reserve all active staged peers.
+   for (&id,f) in &self.pending_furniture{
+    if f.item_id!=item_id||!self.inventory_changes.contains_key(&id){continue}
+    for v in [f.variant,self.furniture_variant_changes.get(&id).copied().unwrap_or(f.variant)]{
+     if furniture_key(source,v).ok_or(Error::Schema)?==key{return Err(Error::Schema)}
+    }
+   }
+  }
   let document_id=self.allocate_staged_unique_handle()?;
   let revision=self.next_edit_revision()?;
   let change=Change::FurnitureCreated{document_id,source_id,expected,furniture:PendingFurniture{item_id,variant:next},quantity};
@@ -677,7 +696,11 @@ impl Editor {
   }
   if id&PENDING_ITEM!=0{
    let item=(id&!PENDING_ITEM) as i32;
-   return (expected==[0;4]&&self.absent_flower_options(item).contains(&next)).then_some(item)
+   // Preserve legacy default-only requests; customized first stacks
+   // require an exact, currently offered original default witness.
+   if expected==[0;4]{return self.absent_flower_options(item).contains(&next).then_some(item)}
+   let (patterns,reserved)=self.absent_flower_preview_context(item,expected)?;
+   return (next[0]==6&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
   }
   if !self.unique_quantity_ids.contains(&id){return None}
   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
@@ -691,11 +714,27 @@ impl Editor {
  }
  /// Read-only dialog planning from an uncommitted full tuple.
  pub fn inventory_flower_preview(&self,id:u32,expected:FlowerVariant,draft:FlowerVariant)->Result<(Vec<FlowerVariant>,bool),Error>{
-  let (patterns,current,reserved)=self.flower_context(id).ok_or(Error::Schema)?;
+  let (patterns,current,reserved)=if id&PENDING_ITEM!=0&&!self.pending_flowers.contains_key(&id){
+   let (patterns,reserved)=self.absent_flower_preview_context((id&!PENDING_ITEM) as i32,expected).ok_or(Error::Schema)?;
+   (patterns,expected,reserved)
+  }else{self.flower_context(id).ok_or(Error::Schema)?};
   if expected!=current||draft[0]!=current[0]||!valid_flower_variant(patterns,draft)||reserved.contains(&draft){return Err(Error::Schema)}
   let choices=Self::flower_choices(patterns,draft,&reserved);
   let creatable=self.flower_creation_item(id,expected,draft).is_some();
   Ok((choices,creatable))
+ }
+ // Equivalent to staging a source default then editing the new row,
+ // without creating an intermediate identity.
+ fn absent_flower_preview_context(&self,item:i32,witness:FlowerVariant)->Option<(&'static [i32],HashSet<FlowerVariant>)>{
+  if !self.absent_flower_options(item).contains(&witness){return None}
+  let patterns=flower_item_patterns(item,6)?;
+  let mut reserved=HashSet::new();
+  for (&id,f) in &self.pending_flowers{
+   if f.item_id!=item||!self.inventory_changes.contains_key(&id){continue}
+   reserved.insert(f.variant);
+   reserved.insert(self.flower_variant_changes.get(&id).copied().unwrap_or(f.variant));
+  }
+  Some((patterns,reserved))
  }
  fn absent_flower_budget_available(&self)->bool{
   self.inventory_creation_source_valid()&&self.undo.len()+self.redo.len()<MAX_UNDO&&

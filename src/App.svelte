@@ -83,6 +83,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let furnitureDisplay:FurnitureDisplay|null=$state(null);
  let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[];creationOptions:FurnitureVariant[];createOnly:boolean}|null>(null);
  let furnitureSelection=$state(-1);
+ let furnitureDraft=$state<FurnitureVariant|null>(null);
  let paletteDialogEl:HTMLDialogElement|undefined=$state();
  let paletteEdit=$state<{documentId:number;itemId:number;revision:number;before:PaletteVariant;options:PaletteVariant[];creationOptions:PaletteVariant[]}|null>(null);
  let cafeDialogEl:HTMLDialogElement|undefined=$state();
@@ -754,8 +755,11 @@ import {verifiedFloorplanName} from './floorplan-names';
   try{
    const options=await requestFlowerCreationVariants(row.documentId);
    if(!snapshot||snapshot.revision!==revision||!options.length)return;
-   flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before:[0,0,0,0],options,creationOptions:options,absent:true};
-   flowerSelection=0;flowerDraft=[...options[0]];flowerDraftCreatable=true;variantAddQuantity=1;await tick();
+   const before=options[0];
+   const preview=await requestFlowerPreview(row.documentId,before,before);
+   if(!snapshot||snapshot.revision!==revision)return;
+   flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:preview.options,creationOptions:options,absent:true};
+   flowerSelection=-1;flowerDraft=[...before];flowerDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
    if(flowerDialogEl&&!flowerDialogEl.open)flowerDialogEl.showModal();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -771,7 +775,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(!snapshot||snapshot.revision!==revision)return;
    furnitureDisplay=display;
    furnitureEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:createOnly?creationOptions:options,creationOptions,createOnly};
-   furnitureSelection=-1;variantAddQuantity=1;await tick();
+   furnitureSelection=-1;furnitureDraft=[...before];variantAddQuantity=1;await tick();
    if(furnitureDialogEl&&!furnitureDialogEl.open)furnitureDialogEl.showModal();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -902,12 +906,20 @@ import {verifiedFloorplanName} from './floorplan-names';
   try{update(await changeInventoryPaletteVariant(edit.documentId,edit.before,next));closePaletteEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
  }
+ function furnitureCreationSelection(before:FurnitureVariant,next:FurnitureVariant,options:readonly FurnitureVariant[]):boolean{
+  return options.length>0&&next.some((v,i)=>v!==before[i])&&next.every((v,i)=>v===before[i]||options.some(option=>option[i]===v));
+ }
+ function selectFurniturePart(index:number){
+  const edit=furnitureEdit,option=edit?.options[index];
+  if(edit&&option&&furnitureDraft){const slot=option.findIndex((v,i)=>v!==edit.before[i]);if(slot>=0){const next:FurnitureVariant=[...furnitureDraft];next[slot]=option[slot];furnitureDraft=next}}
+ }
+ function resetFurniturePart(slot:number){if(furnitureEdit&&furnitureDraft){const next:FurnitureVariant=[...furnitureDraft];next[slot]=furnitureEdit.before[slot];furnitureDraft=next;furnitureSelection=-1}}
  function closeFurnitureEditor(){if(furnitureDialogEl?.open)furnitureDialogEl.close()}
  async function applyInventoryFurnitureVariant(event:SubmitEvent){
   event.preventDefault();
   const selected=furnitureEdit;
   if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
-  const next=selected.options[furnitureSelection];if(!next)return;
+  const next=furnitureDraft;if(!next||next.every((v,i)=>v===selected.before[i]))return;
   busy=true;error='';
   try{
    update(await changeInventoryFurnitureVariant(selected.documentId,selected.before,next));
@@ -918,9 +930,9 @@ import {verifiedFloorplanName} from './floorplan-names';
  async function addInventoryFurnitureVariant(){
   const selected=furnitureEdit;
   if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
-  const next=selected.options[furnitureSelection];
+  const next=furnitureDraft;
   const quantity=variantAddQuantity;
-  if(!next||!validVariantAddQuantity||quantity===undefined||!selected.creationOptions.some(v=>v.every((n,i)=>n===next[i])))return;
+  if(!next||!validVariantAddQuantity||quantity===undefined||!furnitureCreationSelection(selected.before,next,selected.creationOptions))return;
   busy=true;error='';
   try{
    update(await createInventoryFurnitureVariant(selected.documentId,selected.before,next,quantity));
@@ -932,12 +944,11 @@ import {verifiedFloorplanName} from './floorplan-names';
   const edit=flowerEdit;
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
   const next=edit.options[index];if(!next)return;
-  if(edit.absent){flowerDraft=[...next];flowerDraftCreatable=true;return}
   await refreshFlowerDraft(next);
  }
  async function refreshFlowerDraft(next:FlowerVariant){
   const edit=flowerEdit;
-  if(!snapshot||busy||!edit||edit.absent||snapshot.revision!==edit.revision)return;
+  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
   busy=true;error='';
   try{
    const preview=await requestFlowerPreview(edit.documentId,edit.before,next);
@@ -1945,10 +1956,12 @@ import {verifiedFloorplanName} from './floorplan-names';
   {/if}
  </dialog>
 
- <dialog class="date-dialog" bind:this={furnitureDialogEl} aria-labelledby="furniture-editor-title" onclose={()=>{furnitureEdit=null;furnitureSelection=-1}} oncancel={e=>{if(busy)e.preventDefault()}}>
+ <dialog class="date-dialog" bind:this={furnitureDialogEl} aria-labelledby="furniture-editor-title" onclose={()=>{furnitureEdit=null;furnitureSelection=-1;furnitureDraft=null}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if furnitureEdit}
    {@const edit=furnitureEdit}
-   {@const selected=edit.options[furnitureSelection]??edit.before}
+   {@const selected=furnitureDraft??edit.before}
+   {@const changed=selected.some((v,i)=>v!==edit.before[i])}
+   {@const canCreate=furnitureCreationSelection(edit.before,selected,edit.creationOptions)}
    <form class="date-dialog-inner" onsubmit={e=>{if(edit.createOnly){e.preventDefault();void addInventoryFurnitureVariant()}else void applyInventoryFurnitureVariant(e)}}>
     <div class="date-dialog-heading">
      <h2 id="furniture-editor-title">{inventoryName(edit.itemId)}</h2>
@@ -1962,6 +1975,9 @@ import {verifiedFloorplanName} from './floorplan-names';
         <span>{furnitureCopy.part} {String.fromCharCode(65+slot)}</span>
         <span style:background={materialSwatch(furnitureDisplay,edit.itemId,slot,selected[slot])} style="width:24px;height:24px;border:1px solid currentColor;border-radius:4px;flex-shrink:0" aria-hidden="true"></span>
         <span>{materialLabel(furnitureDisplay,selected[slot],furnitureCopy.defaultMaterial)}</span>
+        {#if selected[slot]!==edit.before[slot]}
+         <button type="button" class="inventory-furniture-reset" data-furniture-reset={slot} disabled={busy} aria-label={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} title={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} onclick={()=>resetFurniturePart(slot)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>
+        {/if}
        </div>
       {/if}
      {/each}
@@ -1969,14 +1985,14 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#if edit.options.length}
      <label class="date-dialog-field">
       <span>{furnitureCopy.material}</span>
-      <select bind:value={furnitureSelection} disabled={busy} required>
+      <select bind:value={furnitureSelection} onchange={e=>selectFurniturePart(Number(e.currentTarget.value))} disabled={busy}>
        <option value={-1} disabled>{furnitureCopy.title}</option>
        {#each [0,1,2] as slot}
         {#if edit.options.some(v=>v[slot]!==edit.before[slot])}
          <optgroup label={furnitureCopy.part+' '+String.fromCharCode(65+slot)}>
           {#each edit.options as v,i}
            {#if v[slot]!==edit.before[slot]}
-            <option value={i}>{materialLabel(furnitureDisplay,v[slot],furnitureCopy.defaultMaterial)}</option>
+            <option value={i} data-material-index={v[slot]}>{materialLabel(furnitureDisplay,v[slot],furnitureCopy.defaultMaterial)}</option>
            {/if}
           {/each}
          </optgroup>
@@ -1987,18 +2003,19 @@ import {verifiedFloorplanName} from './floorplan-names';
     {:else}
      <p class="compact-hint">{iCopy.readonly}</p>
     {/if}
-    {#if edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[furnitureSelection]?.[i]))}
+    {#if canCreate}
      <label class="date-dialog-field">
       <span>{inventoryAddCopy(locale)} · {iCopy.quantity}</span>
       <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
      </label>
     {/if}
+    {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFurnitureEditor}>{copy.cancel}</button>
      {#if edit.creationOptions.length}
-      <button type={edit.createOnly?'submit':'button'} class="inventory-create-furniture" disabled={busy||!validVariantAddQuantity||furnitureSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[furnitureSelection]?.[i]))} onclick={()=>{if(!edit.createOnly)void addInventoryFurnitureVariant()}}>{inventoryAddCopy(locale)}</button>
+      <button type={edit.createOnly?'submit':'button'} class="inventory-create-furniture" disabled={busy||!validVariantAddQuantity||!canCreate} onclick={()=>{if(!edit.createOnly)void addInventoryFurnitureVariant()}}>{inventoryAddCopy(locale)}</button>
      {/if}
-     {#if !edit.createOnly}<button type="submit" formnovalidate class="primary" disabled={busy||furnitureSelection<0}>{copy.apply}</button>{/if}
+     {#if !edit.createOnly}<button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>{/if}
     </div>
    </form>
   {/if}
@@ -2011,7 +2028,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    {@const changed=current.some((n,i)=>n!==edit.before[i])}
    <form class="date-dialog-inner" onsubmit={e=>{if(edit.absent){e.preventDefault();void addInventoryFlowerVariant()}else void applyInventoryFlowerVariant(e)}}>
     <div class="date-dialog-heading">
-     <h2 id="flower-editor-title">{inventoryName(edit.itemId)}{#if flowerGrowthKind(edit.itemId,{growState:(edit.absent?edit.options[0]?.[0]:edit.before[0])??255,baseColor:0,pattern:0,patternColor:0})} · {flowerGrowthLabel(locale,flowerGrowthKind(edit.itemId,{growState:(edit.absent?edit.options[0]?.[0]:edit.before[0])??255,baseColor:0,pattern:0,patternColor:0}))}{/if}</h2>
+     <h2 id="flower-editor-title">{inventoryName(edit.itemId)}{#if flowerGrowthKind(edit.itemId,{growState:edit.before[0],baseColor:0,pattern:0,patternColor:0})} · {flowerGrowthLabel(locale,flowerGrowthKind(edit.itemId,{growState:edit.before[0],baseColor:0,pattern:0,patternColor:0}))}{/if}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFlowerEditor}>×</button>
     </div>
     <div class="date-dialog-item">
@@ -2020,28 +2037,24 @@ import {verifiedFloorplanName} from './floorplan-names';
        <DynamicFlowerSprite itemId={edit.itemId} flower={{growState:current[0],baseColor:current[1],pattern:current[2],patternColor:current[3]}} definitions={flowerDefinitions} fallback={inventoryNativeArt?.entries.get(edit.itemId)}/>
       {/if}
      </span>
-     <div class="date-dialog-detail"><strong>{flowerVariantName(current)}</strong>{#if changed&&!edit.absent}<button type="button" class="inventory-flower-reset" disabled={busy} aria-label={flowerVariantName(edit.before)} title={flowerVariantName(edit.before)} onclick={()=>void refreshFlowerDraft(edit.before)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>{/if}</div>
+     <div class="date-dialog-detail"><strong>{flowerVariantName(current)}</strong>{#if changed}<button type="button" class="inventory-flower-reset" disabled={busy} aria-label={flowerVariantName(edit.before)} title={flowerVariantName(edit.before)} onclick={()=>void refreshFlowerDraft(edit.before)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>{/if}</div>
     </div>
     {#if edit.options.length}
      <label class="date-dialog-field">
       <span>{flowerCopy.title}</span>
       <select bind:value={flowerSelection} onchange={e=>void selectFlowerDraft(Number(e.currentTarget.value))} disabled={busy}>
-       {#if edit.absent}
-        {#each edit.options as v,i}<option value={i}>{flowerVariantName(v)}</option>{/each}
-       {:else}
        <option value={-1} disabled>{flowerVariantName(current)}</option>
        {#each [flowerCopy.color,flowerCopy.pattern,flowerCopy.accent] as group, g}
         {#if edit.options.some(v=>flowerOptionGroup(current,v)===g)}
          <optgroup label={group}>
           {#each edit.options as v,i}
            {#if flowerOptionGroup(current,v)===g}
-            <option value={i}>{flowerVariantName(v)}</option>
+            <option value={i} data-flower-variant={v.join(',')}>{flowerVariantName(v)}</option>
            {/if}
           {/each}
          </optgroup>
         {/if}
        {/each}
-       {/if}
       </select>
      </label>
     {:else}
@@ -2053,6 +2066,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
      </label>
     {/if}
+    {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFlowerEditor}>{copy.cancel}</button>
      {#if edit.creationOptions.length||flowerDraftCreatable}

@@ -164,3 +164,24 @@ test('combined plans preflight all three fixed/customized material ranges and re
  d.base.materials[materialId].floats._Lighting_Medium_Underwater=1;
  assert.throws(()=>resolveFurnitureMultiDiagnostic(d,request(d,id)),/SHADER_UNSUPPORTED/);
 });
+
+test('exact null BaseMap may alias selected original pattern only when base contribution is zero',()=>{
+ const d=sources(),id=32709745,r=request(d,id,[207,0,0]);
+ const g=d.geometry.rows.find(x=>x.itemId===id),node=g.nodes.find(x=>x.rendererPathId);
+ const bind=d.base.rows.find(x=>x.itemId===id).bindings[0],m=d.base.materials[bind[1]];
+ const original=resolveFurnitureMultiDiagnostic(d,r).plans[0];
+ const row=d.variants.rows.find(x=>x[0]===207);
+ // Synthetic null pointer test: not a new source record or material identity.
+ row[3]=[1,1,1,0];m.textures._BaseMap.texture=null;
+ const p=resolveFurnitureMultiDiagnostic(d,r).plans[0];
+ assert.equal(p.baseMap,p.patternMap);
+ assert.deepEqual(p.material.baseST,original.material.baseST);
+ assert.equal(p.normalMap,original.normalMap);assert.equal(p.comboMap,original.comboMap);
+ assert.equal(p.material.baseColor[3],0);
+ row[3]=[1,1,1,1];
+ assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/TEXTURE_NULL/);
+ row[3]=[1,1,1,0];m.textures._BaseMap.texture='absent-source-texture';
+ assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/FURNITURE_MULTI_TEXTURE/);
+ m.textures._BaseMap.texture=null;d.additionalPatterns.rows=[];d.patterns.rows=[];
+ assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/PATTERN_UNAVAILABLE/);
+});
