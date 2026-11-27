@@ -619,7 +619,12 @@ impl Editor {
    if uid.is_some()&&other.unique_id==uid{return None}
    if other.item_id!=Some(item){continue}
    if other.unique_is_nil==Some(true){reserved.insert(furniture_key(source,[0;3])?);}
-   else{for v in [other.unique_data?,self.effective_unique(other)?]{reserved.insert(furniture_key(source,furniture_variant(v)?)?);}}
+   else{
+    let before=other.unique_data.and_then(furniture_variant)
+     .or_else(||Self::legacy_furniture_materials(&self.slot.envelope.decoded,other))?;
+    let after=self.furniture_variant_changes.get(&other.id).copied().unwrap_or(before);
+    for v in [before,after]{reserved.insert(furniture_key(source,v)?);}
+   }
   }
   for (&other,f) in &self.pending_furniture{
    if other==id||f.item_id!=item||!self.inventory_changes.contains_key(&other){continue}
@@ -700,9 +705,9 @@ impl Editor {
   for row in self.slot.index.inventory.iter().filter(|r|r.item_id==Some(source.item_id)){
    if row.unique_is_nil==Some(true){reserved.insert(furniture_key(source,[0;3])?);continue}
    if !self.permits_separate_ordinary_base(row){return None}
-   for value in [row.unique_data,self.effective_unique(row)]{
-    reserved.insert(furniture_key(source,furniture_variant(value?)?)?);
-   }
+   let original=self.original_furniture_variant(row.id)?;
+   let effective=self.furniture_variant_changes.get(&row.id).copied().unwrap_or(original);
+   for value in [original,effective]{reserved.insert(furniture_key(source,value)?);}
   }
   }
   for (&id,f) in &self.pending_furniture{
@@ -731,7 +736,10 @@ impl Editor {
   })).collect()
  }
  pub fn inventory_furniture_creation_variants(&self,id:u32)->Vec<FurnitureVariant>{
-  if self.slot.index.inventory.iter().any(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:1})))||!self.absent_flower_budget_available(){return Vec::new()}
+  if !self.absent_flower_budget_available(){return Vec::new()}
+  if let Some(row)=self.slot.index.inventory.iter().find(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:1}))){
+   if !row.item_id.is_some_and(|item|self.legacy_furniture_zero_reference_safe(item)&&self.inventory_creation_payload_safe(item)){return Vec::new()}
+  }
   if self.pending_furniture.contains_key(&id){
    if !self.inventory_changes.contains_key(&id){return Vec::new()}
   }else if id&PENDING_ITEM!=0{
@@ -1103,8 +1111,7 @@ impl Editor {
  fn legacy_furniture_quantity_source(&self,r:&crate::native::InventoryRow)->Option<i32>{
   if !matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:1}))||r.unique_fields.len()!=3{return None}
   let item=r.item_id?;let source=furniture_source::item(item)?;
-  if source.is_home_layout||crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX)||
-   self.inventory_item_rows.get(&item)!=Some(&1){return None}
+  if source.is_home_layout||crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX){return None}
   let materials=Self::legacy_furniture_materials(&self.slot.envelope.decoded,r)?;
   if materials==[0;3]||furniture_key(source,materials)?==furniture_key(source,[0;3])?{return None}
   Some(item)
@@ -2214,7 +2221,8 @@ impl Editor {
    let Some(item)=row.item_id else{return HashSet::new()};
    if let Some(source)=furniture_source::item(item).filter(|s|!s.is_home_layout){
     let key=if row.unique_is_nil==Some(true){furniture_key(source,[0;3])}
-     else{row.unique_data.and_then(furniture_variant).and_then(|v|furniture_key(source,v))};
+     else{row.unique_data.and_then(furniture_variant)
+     .or_else(||Self::legacy_furniture_materials(&self.slot.envelope.decoded,row)).and_then(|v|furniture_key(source,v))};
     match key{Some(v)=>{*furniture_counts.entry((item,v)).or_default()+=1;},None=>{ambiguous.insert(item);}}
    }
    if item==crate::inventory_source::CUSTOM_PALETTE_ID{
@@ -2244,11 +2252,14 @@ impl Editor {
    let item=row.item_id?;let uid=row.unique_id?;
    if uid_counts.get(&uid)!=Some(&1)||self.slot.index.inventory_payload_item_refs.contains(&item)||
     !row.fields.iter().all(Option::is_some){return None}
-   // Legacy furniture is never normalized or reconstructed by this endpoint.
-   // One original row per Item ID excludes nil, tag-8 and legacy peer aliases.
+   // Distinct legacy/modern/nil peers are compared by the same source-normalized key.
    if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:1})){
     self.unique_row_source(row,3)?;
-    return (self.legacy_furniture_quantity_source(row).is_some()&&self.legacy_furniture_zero_reference_safe(item)).then_some(row.id)
+    self.legacy_furniture_quantity_source(row)?;
+    let source=furniture_source::item(item)?;
+    let key=furniture_key(source,Self::legacy_furniture_materials(&self.slot.envelope.decoded,row)?)?;
+    return (!ambiguous.contains(&item)&&furniture_counts.get(&(item,key))==Some(&1)&&
+     self.legacy_furniture_zero_reference_safe(item)).then_some(row.id)
    }
    if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:5})){
     self.unique_row_source(row,5)?;
@@ -2319,8 +2330,9 @@ impl Editor {
   if !self.unique_quantity_ids.contains(&row.id){return false}
   let Some(source)=self.furniture_source(row)else{return false};
   let Some(default)=furniture_key(source,[0;3])else{return false};
-  [row.unique_data,self.effective_unique(row)].into_iter().all(|value|
-   value.and_then(furniture_variant).and_then(|v|furniture_key(source,v)).is_some_and(|key|key!=default))
+  let Some(original)=self.original_furniture_variant(row.id)else{return false};
+  let effective=self.furniture_variant_changes.get(&row.id).copied().unwrap_or(original);
+  [original,effective].into_iter().all(|value|furniture_key(source,value).is_some_and(|key|key!=default))
  }
  // A single UID-zero nil base can coexist with distinct verified tag-8 peers.
  // Require the stricter complete item-wide reference gate for this extension.
