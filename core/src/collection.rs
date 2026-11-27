@@ -677,7 +677,11 @@ impl Editor {
   }
   if id&PENDING_ITEM!=0{
    let item=(id&!PENDING_ITEM) as i32;
-   return (expected==[0;4]&&self.absent_flower_options(item).contains(&next)).then_some(item)
+   // Preserve legacy default-only requests; customized first stacks
+   // require an exact, currently offered original default witness.
+   if expected==[0;4]{return self.absent_flower_options(item).contains(&next).then_some(item)}
+   let (patterns,reserved)=self.absent_flower_preview_context(item,expected)?;
+   return (next[0]==6&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
   }
   if !self.unique_quantity_ids.contains(&id){return None}
   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
@@ -691,11 +695,27 @@ impl Editor {
  }
  /// Read-only dialog planning from an uncommitted full tuple.
  pub fn inventory_flower_preview(&self,id:u32,expected:FlowerVariant,draft:FlowerVariant)->Result<(Vec<FlowerVariant>,bool),Error>{
-  let (patterns,current,reserved)=self.flower_context(id).ok_or(Error::Schema)?;
+  let (patterns,current,reserved)=if id&PENDING_ITEM!=0&&!self.pending_flowers.contains_key(&id){
+   let (patterns,reserved)=self.absent_flower_preview_context((id&!PENDING_ITEM) as i32,expected).ok_or(Error::Schema)?;
+   (patterns,expected,reserved)
+  }else{self.flower_context(id).ok_or(Error::Schema)?};
   if expected!=current||draft[0]!=current[0]||!valid_flower_variant(patterns,draft)||reserved.contains(&draft){return Err(Error::Schema)}
   let choices=Self::flower_choices(patterns,draft,&reserved);
   let creatable=self.flower_creation_item(id,expected,draft).is_some();
   Ok((choices,creatable))
+ }
+ // Equivalent to staging a source default then editing the new row,
+ // without creating an intermediate identity.
+ fn absent_flower_preview_context(&self,item:i32,witness:FlowerVariant)->Option<(&'static [i32],HashSet<FlowerVariant>)>{
+  if !self.absent_flower_options(item).contains(&witness){return None}
+  let patterns=flower_item_patterns(item,6)?;
+  let mut reserved=HashSet::new();
+  for (&id,f) in &self.pending_flowers{
+   if f.item_id!=item||!self.inventory_changes.contains_key(&id){continue}
+   reserved.insert(f.variant);
+   reserved.insert(self.flower_variant_changes.get(&id).copied().unwrap_or(f.variant));
+  }
+  Some((patterns,reserved))
  }
  fn absent_flower_budget_available(&self)->bool{
   self.inventory_creation_source_valid()&&self.undo.len()+self.redo.len()<MAX_UNDO&&
