@@ -1,5 +1,5 @@
 import type {SpriteCell} from './icon-packs';
-import {flowerGrowthKind,type InventoryFlower} from './inventory-flower-display';
+import {flowerGrowthKind,flowerGrowthSpriteState,type InventoryFlower} from './inventory-flower-display';
 import {loadVerifiedArtAsset} from './dynamic-art-assets';
 const ROOT=import.meta.env.BASE_URL+'inventory-flower-art/';
 const SOURCE_SHA='bf99336e9eaf20de7d2f81f57f00fd2a514e59db03c2e161219f528fed59ff48';
@@ -27,8 +27,8 @@ export function decodeFlowerGrowthCells(value:unknown,url:string):ReadonlyMap<st
  return cells;
 }
 export function resolveFlowerGrowthCell(cells:ReadonlyMap<string,SpriteCell>,itemId:number,flower:InventoryFlower):SpriteCell|undefined{
- const kind=flowerGrowthKind(itemId,flower);
- return kind==='seed'||kind==='uprooted'?cells.get(key(itemId,flower.growState)):undefined;
+ const state=flowerGrowthSpriteState(itemId,flower);
+ return state===undefined?undefined:cells.get(key(itemId,state));
 }
 /** A single shared immutable sheet, loaded only for actual seed/plant cards.
  * One page-lifetime URL, independent of save identity. */
@@ -48,7 +48,6 @@ function load(){
  return source;
 }
 export async function loadFlowerGrowthCell(itemId:number,flower:InventoryFlower):Promise<SpriteCell|undefined>{
- const kind=flowerGrowthKind(itemId,flower);
- if(kind!=='seed'&&kind!=='uprooted')return undefined;
+ if(flowerGrowthSpriteState(itemId,flower)===undefined)return undefined;
  try{return resolveFlowerGrowthCell(await load(),itemId,flower);}catch{return undefined;}
 }
