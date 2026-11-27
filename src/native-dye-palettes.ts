@@ -2,8 +2,8 @@
  * Exact IDs: InventoryItemDefinitionAsset.Id -> OutfitItemDetails.DyeRef
  * -> DyeDataServiceConfig.DyeMap -> SwatchMap.Color (RGBA source).
  * The original UiIcon sprites are shared and contain no verified per-channel mask.
- * Keep these exact game-source colors for later asset-derived recoloring; they
- * are not loaded just to decorate the current collection UI.
+ * The two leading source colors also supply the ordinary inventory's native
+ * dye decorator; collection thumbnails remain unchanged.
  */
 export type NativeDyePalette={dye:number;colors:[string|null,string|null,string|null,string|null,string|null]};
 export type NativeDyePalettes=Record<string,NativeDyePalette>;
@@ -38,4 +38,14 @@ export async function loadNativeDyePalettes(base:string):Promise<NativeDyePalett
  const response=await fetch(base+'native-dye-palettes.json');
  if(!response.ok)throw Error('DYE_MAP_UNAVAILABLE');
  return decodeNativeDyePalettes(await response.json());
+}
+
+/** Ordinary inventory AddDyeIcons uses the native RuntimeDye primary RGB
+ * on the plate and secondary RGB on the white dye_color2 sprite, alpha 1.
+ * Only source-verified v3.0.1 item IDs qualify; no ownership or edit rule. */
+export function dyeDecoratorFor(itemId:number,version:string,palettes:NativeDyePalettes):{primaryColor:string;iconColor:string}|null{
+ if(version!=='3.0.1'||!Number.isInteger(itemId)||itemId<=0||!Object.hasOwn(palettes,String(itemId)))return null;
+ const palette=palettes[String(itemId)],primary=palette?.colors[0],secondary=palette?.colors[1];
+ if(!palette||!Number.isInteger(palette.dye)||palette.dye<=0||!primary||!secondary||!HEX.test(primary)||!HEX.test(secondary))return null;
+ return {primaryColor:primary,iconColor:secondary};
 }

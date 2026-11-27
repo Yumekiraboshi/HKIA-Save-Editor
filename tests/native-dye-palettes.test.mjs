@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({
  entryPoints:[fileURLToPath(new URL('../src/native-dye-palettes.ts',import.meta.url))],
  bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'
 });
-const {decodeNativeDyePalettes}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {decodeNativeDyePalettes,dyeDecoratorFor}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const source=JSON.parse(readFileSync(new URL('../public/native-dye-palettes.json',import.meta.url),'utf8'));
 
 test('all 5,383 game-defined dyeable item IDs have exact dye refs and 2–5 real color channels',()=>{
@@ -65,4 +66,20 @@ test('corrupt, incomplete, mismatched or fabricated dye colors fail closed',()=>
   {...source,records:{...source.records,'704486536':{dye:0,colors:['#fffafa','#fffafa',null,null,null]}}}
  ];
  for(const s of changed)assert.throws(()=>decodeNativeDyePalettes(s),/DYE_MAP_/);
+});
+
+test('native dye decorator selects the verified outfit dye reference and two leading colors',()=>{
+ const map=decodeNativeDyePalettes(source);
+ const rows=Object.entries(map).sort((a,b)=>Number(a[0])-Number(b[0]));
+ const words=Buffer.alloc(rows.length*8);
+ rows.forEach(([id,palette],i)=>{
+  words.writeInt32LE(Number(id),8*i);words.writeInt32LE(palette.dye,8*i+4);
+  assert.deepEqual(dyeDecoratorFor(Number(id),'3.0.1',map),{primaryColor:palette.colors[0],iconColor:palette.colors[1]});
+ });
+ assert.equal(createHash('sha256').update(words).digest('hex'),'bfbd80d073e0cd045ab4e2bba69e2c456ff63b3bab143553ef22d3e6ff5ea3bd');
+ assert.deepEqual(dyeDecoratorFor(315822,'3.0.1',map),{primaryColor:'#95faac',iconColor:'#f9f1f4'});
+ assert.equal(dyeDecoratorFor(315822,'3.0.2',map),null);
+ assert.equal(dyeDecoratorFor(0,'3.0.1',map),null);
+ assert.equal(dyeDecoratorFor(315822,'3.0.1',{}),null);
+ assert.equal(dyeDecoratorFor(315822,'3.0.1',{315822:{dye:820,colors:['#95faac',null,null,null,null]}}),null);
 });
