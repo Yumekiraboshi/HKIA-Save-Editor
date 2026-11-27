@@ -17,3 +17,14 @@ The verified incremental local stage contains 167 unique payloads (124,940,172 b
 `python scripts/stage-furniture-source-pack.py <unified.zip> --zip-sha256 <independently recorded ZIP digest> --out <new staging directory>`
 
 The command checks the independent ZIP pin, reuses the assembler's reference, range and payload verification, and writes only the verified normalized manifest, index and content-addressed binaries. It checks the staged bytes again and refuses an existing destination. It does not upload or deploy anything. Use the reported manifestPin (length and SHA-256) as an independently reviewed application-side pin; do not establish trust from an index served alongside the payloads. `fetchFurnitureSourcePack` loads only that exact manifest from a same-origin root, with a bounded streaming buffer and no redirects; existing lazy payload readers handle individual assets. The pack remains diagnostic until scene and shader fidelity are verified. No production UI activation or asset publication by this change.
+
+### Rebuild without the previous source pack
+
+The previous ZIP is optional. To include the two required original reflection cubemaps in a fresh pack, use the existing light-region extractor with its exact scene and preset bundles:
+
+```sh
+python scripts/extract-furniture-light-region-source.py <original-scene-bundle> <original-networkedprototypes-bundle> --out /tmp/hkia-light/furniture-light-region-source-v3.0.1.json --staging /tmp/hkia-light
+python scripts/pack-furniture-batches.py --source /tmp/hkia-batch --materials /tmp/hkia-materials --lighting-stage /tmp/hkia-light --out /tmp/hkia-unified.zip
+```
+
+The packer checks the full extracted manifest against the committed original scene evidence, both cubemap payload hashes and lengths, and the existing assembler's exact face/mip coverage. This eliminates dependence on a prior ZIP for the shared reflection payloads. Existing pattern-only and incremental packs remain supported. A pack still needs complete source model/material graphs before it can render; runtime lighting and face orientation are not inferred or verified by packing.

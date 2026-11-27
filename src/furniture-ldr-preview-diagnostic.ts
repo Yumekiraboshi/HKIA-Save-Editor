@@ -128,3 +128,23 @@ export async function renderFurnitureLdrGpuDiagnostic(sources:FurnitureMultiSour
  const frame=await renderFurnitureDiagnosticFrame(sources,request,read,options.size,createCanvas,draw,options.clearRgb);
  return applyFurnitureLdrGpuDiagnostic(frame,plan,createCanvas);
 }
+
+/** Compare the two implementations on the identical source frame. This is a
+ * numerical diagnostic, not a measurement against a native game screenshot.
+ * Alpha must exactly equal the original, including zero-alpha RGB pixels. */
+export function compareFurnitureLdrDiagnostic(cpu:FurnitureLdrDiagnosticFrame,gpu:FurnitureLdrDiagnosticFrame){
+ const source=cpu.source;checkFrame(source);
+ if(gpu.source!==source||cpu.fidelity!=='ldr-uber-diagnostic-only'||gpu.fidelity!==cpu.fidelity||
+ !(cpu.rgba instanceof Uint8Array)||!(gpu.rgba instanceof Uint8Array)||
+ cpu.rgba.length!==source.rgba.length||gpu.rgba.length!==source.rgba.length)fail('COMPARE_FRAME');
+ let maxRgbError=0,changedRgbPixels=0,hiddenMaxRgbError=0;
+ for(let i=0;i<source.rgba.length;i+=4){
+  const alpha=source.rgba[i+3];
+  if(cpu.rgba[i+3]!==alpha||gpu.rgba[i+3]!==alpha)fail('COMPARE_ALPHA');
+  const error=Math.max(Math.abs(cpu.rgba[i]-gpu.rgba[i]),Math.abs(cpu.rgba[i+1]-gpu.rgba[i+1]),Math.abs(cpu.rgba[i+2]-gpu.rgba[i+2]));
+  maxRgbError=Math.max(maxRgbError,error);
+  if(error)changedRgbPixels++;
+  if(!alpha)hiddenMaxRgbError=Math.max(hiddenMaxRgbError,error);
+ }
+ return {maxRgbError,changedRgbPixels,hiddenMaxRgbError};
+}

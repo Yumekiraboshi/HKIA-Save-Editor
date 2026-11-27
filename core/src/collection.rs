@@ -764,7 +764,7 @@ impl Editor {
    // require an exact, currently offered original default witness.
    if expected==[0;4]{return self.absent_flower_options(item).contains(&next).then_some(item)}
    let (patterns,reserved)=self.absent_flower_preview_context(item,expected)?;
-   return (next[0]==6&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
+   return ((next[0]==6||Self::absent_flower_growth_supported(item,next[0]))&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
   }
   if !self.unique_quantity_ids.contains(&id){return None}
   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
@@ -782,8 +782,16 @@ impl Editor {
    let (patterns,reserved)=self.absent_flower_preview_context((id&!PENDING_ITEM) as i32,expected).ok_or(Error::Schema)?;
    (patterns,expected,reserved)
   }else{self.flower_context(id).ok_or(Error::Schema)?};
-  if expected!=current||draft[0]!=current[0]||!valid_flower_variant(patterns,draft)||reserved.contains(&draft){return Err(Error::Schema)}
-  let choices=Self::flower_choices(patterns,draft,&reserved);
+  let absent=id&PENDING_ITEM!=0&&!self.pending_flowers.contains_key(&id);
+  let item=(id&!PENDING_ITEM) as i32;
+  if expected!=current||(draft[0]!=current[0]&&!(absent&&(draft[0]==6||Self::absent_flower_growth_supported(item,draft[0]))))||
+   !valid_flower_variant(patterns,draft)||reserved.contains(&draft){return Err(Error::Schema)}
+  let mut choices=Self::flower_choices(patterns,draft,&reserved);
+  if absent&&Self::absent_flower_growth_supported(item,0){
+   for grow in [0,6,7]{let mut next=draft;next[0]=grow;
+    if next!=draft&&!reserved.contains(&next){choices.push(next)}
+   }
+  }
   let creatable=self.flower_creation_item(id,expected,draft).is_some();
   Ok((choices,creatable))
  }
@@ -808,6 +816,11 @@ impl Editor {
  fn absent_flower_options(&self,item_id:i32)->Vec<FlowerVariant>{
   if !self.absent_flower_budget_available(){return Vec::new()}
   self.absent_flower_choices(item_id)
+ }
+ // The 23 unrestricted source species have native Seed and GrownTroweled
+ // inventory art bindings as well as plucked definitions. Clothing is excluded.
+ fn absent_flower_growth_supported(item:i32,grow:i32)->bool{
+  matches!(grow,0|7)&&ABSENT_FLOWER_DEFAULTS.iter().any(|&(id,_)|id==item)
  }
  fn absent_flower_choices(&self,item_id:i32)->Vec<FlowerVariant>{
   if self.inventory_item_rows.contains_key(&item_id)||
