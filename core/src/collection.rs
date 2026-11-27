@@ -592,7 +592,9 @@ impl Editor {
    if !self.unique_quantity_ids.contains(&row.id){return None}
    Self::legacy_furniture_materials(&self.slot.envelope.decoded,row)?
   }else{furniture_variant(row.unique_data?)?};
-  if original==[0;3]||original.iter().any(|&n|furniture_source::material_unlock_item(n).is_some()){return None}
+  // A source-valid restricted material already present in this exact row
+  // is a local witness, not a transferable material unlock.
+  if original==[0;3]{return None}
   furniture_key(source,original)?;
   Some(source)
  }
@@ -638,7 +640,7 @@ impl Editor {
  fn valid_furniture_target(source:&FurnitureItemSource,original:FurnitureVariant,target:FurnitureVariant)->bool{
   target!=[0;3]&&furniture_key(source,target).is_some()&&
    target.iter().enumerate().all(|(i,&n)|n==0||(
-    furniture_source::material_unlock_item(n).is_none()&&
+    (furniture_source::material_unlock_item(n).is_none()||original[i]==n)&&
     source.slots.iter().find(|s|s.slot as usize==i).is_some_and(|s|s.allowed.contains(&n)||original[i]==n)))
  }
  /// Rust issues source-defined one-slot choices. The commit accepts an
@@ -1506,6 +1508,7 @@ impl Editor {
   Self::wand_material_source(crate::inventory_source::ITEM_WAND_ID,item)?;
   if !Self::valid_furniture_target(source,original,current){return None}
   let [a,b,c]=current;
+  if current.iter().any(|&n|furniture_source::material_unlock_item(n).is_some()){return None}
   Self::wand_key(crate::inventory_source::ITEM_WAND_ID,[item,104,125,a,b,c])?;
   Some([item,0,0,a,b,c])
  }
