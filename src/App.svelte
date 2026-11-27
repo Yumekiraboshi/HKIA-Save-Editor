@@ -42,6 +42,8 @@ import {searchAchievementRows} from './achievement-search';
  import DynamicPaletteSprite from './DynamicPaletteSprite.svelte';
  import DynamicChefSprite from './DynamicChefSprite.svelte';
  import DynamicWandSprite from './DynamicWandSprite.svelte';
+ import DynamicArtSprite from './DynamicArtSprite.svelte';
+ import {renderNativePlaceholderArt} from './native-placeholder-art';
  import {selectWandOriginalCell,selectInventoryWandOriginalCell} from './wand-original-subicon';
  import {inventoryWandAppearance,hasNativeWandArt,wandVariantOf,wandVariantLabel,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
@@ -1700,6 +1702,8 @@ import {verifiedFloorplanName} from './floorplan-names';
         {:else if originalVariantArt[String(item.itemId)]||exactVariantArt[String(item.itemId)]||(!nativeSprite&&sprite&&nativeDyePalettes[String(item.itemId)])}
          <DyeSprite sprite={nativeSprite??sprite} palette={nativeDyePalettes[String(item.itemId)]}
           sourceKey={definition?.[1]??''} exactArtUrl={exactVariantArt[String(item.itemId)]} originalArtUrl={originalVariantArt[String(item.itemId)]}/>
+        {:else if inventoryNativeArt?.placeholders.has(item.itemId)}
+         <DynamicArtSprite source="native-placeholder" render={renderNativePlaceholderArt}/>
         {:else if nativeSprite}
          <span class="item-sprite" data-inventory-art="native" style:background-image={'url("'+nativeSprite.url+'")'}
           style:background-position={'-'+nativeSprite.x+'px -'+nativeSprite.y+'px'}></span>
