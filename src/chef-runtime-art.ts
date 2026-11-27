@@ -1,11 +1,11 @@
 import {resolveChefTints,type ChefAppearance,type ChefArtBinding,type ChefColor} from './chef-appearance';
 import type {Rgba} from './dynamic-sprite-color';
-import type {PixelBuffer,Rect} from './dynamic-sprite-raster';
+import type {PixelBuffer,Rect,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
 const ROOT=import.meta.env.BASE_URL+'dynamic-chef-art/';
 const MASK_ROOT=import.meta.env.BASE_URL+'inventory-flower-art/';
 export const CHEF_MANIFEST_SHA='8c73d78ef825e53777bd5042201a6290289213b0f226b27a39e72707ba1fa59c';
-type SpriteRow={spritePathId:string;sampleRect:Rect;trimTopLeft:Rect;logicalSize:number;settingsRaw:number};
+type SpriteRow={spritePathId:string;sampleRect:Rect;trimTopLeft:Rect;logicalSize:number;settingsRaw:number;guardRect?:Rect};
 type Row=ChefArtBinding&{base:SpriteRow;mask:SpriteRow;maskGuid:string};
 type Manifest={schema:string;version:string;base:TextureAsset;mask:TextureAsset;alphaOffsetY:number;rows:Row[];colors:ChefColor[]};
 type Source={manifest:Manifest;base:PixelBuffer;mask:PixelBuffer;rows:Map<number,Row>;colors:Map<number,Rgba>};
@@ -51,5 +51,19 @@ export async function renderChefBaseArt(itemId:number):Promise<Blob|null>{
   const s=await sourceBinding(),row=s.rows.get(itemId);if(!row)return null;
   const base=await loadOpaqueArtTexture(ROOT,s.manifest.base);
   return await renderCachedOriginalBase(JSON.stringify([CHEF_MANIFEST_SHA,itemId]),{base,baseRect:row.base.sampleRect,trim:row.base.trimTopLeft,alphaOffsetY:s.manifest.alphaOffsetY,logicalSize:row.base.logicalSize});
+ }catch{return null;}
+}
+
+/** Original definition UiIcon, without individual recipe colors or mask. */
+export async function loadChefOriginalOverlay(itemId:number,transform:Pick<SpriteOverlay,'scale'|'offsetPercent'|'rotation'>):Promise<{spritePathId:string;sourceHash:string;overlay:SpriteOverlay}|null>{
+ try{
+  const s=await sourceBinding(),row=s.rows.get(itemId);
+  if(!row||!row.base.guardRect)return null;
+  const [x,y,w,h]=row.base.guardRect;
+  return {spritePathId:row.base.spritePathId,sourceHash:CHEF_MANIFEST_SHA,overlay:{
+   texture:await loadOpaqueArtTexture(ROOT,s.manifest.base),sampleRect:row.base.sampleRect,trim:row.base.trimTopLeft,
+   alphaOffsetY:s.manifest.alphaOffsetY,logicalWidth:row.base.logicalSize,logicalHeight:row.base.logicalSize,
+   sampleClamp:[x+.5,y+.5,x+w-.5,y+h-.5],...transform
+  }};
  }catch{return null;}
 }

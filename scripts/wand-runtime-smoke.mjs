@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 export async function wandRuntimeSmoke(browser,origin,base){
  const {outputFiles}=await build({
-  stdin:{contents:"export * from './wand-runtime-art'; export * from './wand-original-subicon'; export {initialInventoryNativeArt} from './inventory-native-art'; export {loadIconPack} from './icon-packs'; export {loadInventoryNativeArt} from './inventory-native-art';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
+  stdin:{contents:"export * from './wand-runtime-art'; export * from './wand-original-subicon'; export {initialInventoryNativeArt} from './inventory-native-art'; export {loadChefOriginalOverlay} from './chef-runtime-art'; export {loadPaletteOriginalOverlay} from './palette-runtime-art'; export {loadIconPack} from './icon-packs'; export {loadInventoryNativeArt} from './inventory-native-art';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
   bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env.BASE_URL':JSON.stringify(base)}
  });
  const context=await browser.newContext();
@@ -95,6 +95,17 @@ export async function wandRuntimeSmoke(browser,origin,base){
    }
    // The native saved source selection is independent of the wand shape.
    // This proves rendering only, not creation eligibility for these pairs.
+   const templateRows=[];
+   for(const row of m.rows){
+    const a={magicCharacteristicId:104,fleckCharacteristicId:125};
+    const plain=await pixels(await renderWandBaseArt(row.itemId,a));
+    for(const sourceItemId of [1061947263,1835273963]){
+     const appearance={...a,sourceItemId};
+     const blob=await renderWandArt(row.itemId,appearance);
+     templateRows.push({id:row.itemId,sourceItemId,art:await pixels(blob),plain:plain.rgba,
+      cached:blob===await renderWandArt(row.itemId,{...appearance,sourceUnique:{tag:6,words:[1,2,3]}})});
+    }
+   }
    const allShapes=[];
    for(const row of m.rows){
     const a={magicCharacteristicId:104,fleckCharacteristicId:125};
@@ -106,10 +117,13 @@ export async function wandRuntimeSmoke(browser,origin,base){
     }
     if(await renderWandArt(row.itemId,{...a,sourceItemId:315823})!==null)throw Error('UNKNOWN_SOURCE_RENDERED');
    }
-   return {rows,composed,itemRows,added,inv,directSources,placeholders,outside,allShapes,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315823,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
+   return {rows,composed,itemRows,added,inv,directSources,placeholders,outside,allShapes,templateRows,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315823,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
   },base);
   assert.equal(out.rows.length,9);assert.ok(out.unknown&&out.unknownOriginal);
   assert.equal(out.composed.length,13);assert.ok(out.unsupportedSource);
+  assert.equal(out.templateRows.length,18);
+  for(const row of out.templateRows){assert.ok(row.art.visible&&row.cached);assert.notEqual(row.art.rgba,row.plain);}
+  for(const id of new Set(out.templateRows.map(r=>r.id)))assert.equal(new Set(out.templateRows.filter(r=>r.id===id).map(r=>r.art.rgba)).size,2);
   assert.equal(out.outside.length,9);
   for(const row of out.outside){assert.ok(row.art.visible&&row.cached&&row.noCell&&row.mismatched);assert.notEqual(row.art.rgba,row.plain.rgba);}
   assert.equal(out.allShapes.length,36);assert.equal(new Set(out.allShapes.map(r=>r.id)).size,9);
@@ -191,6 +205,28 @@ export async function wandRuntimeSmoke(browser,origin,base){
    },base);
    assert.equal(results.length,18);assert.ok(results.every(r=>r.different&&r.cached&&r.missing));
   }finally{await fallbackPage.close();}
+  // Untinted source overlay has no dependency on the source item's mask.
+  const templatePage=await context.newPage();
+  try{
+   await templatePage.route(root+'__wand_runtime_fixture__.html',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html><body></body></html>'}));
+   await templatePage.route(root+'__wand_runtime_fixture__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
+   const requestedMasks=[];
+   await templatePage.route(/\/(?:inventory-flower-art\/flower-mask-rgb-v3\.0\.1|dynamic-palette-art\/palette-mask-rgb-v3\.0\.1)\.webp$/,r=>{requestedMasks.push(r.request().url());return r.fulfill({status:503,body:'unavailable'});});
+   await templatePage.goto(root+'__wand_runtime_fixture__.html');
+   const results=await templatePage.evaluate(async base=>{
+    const {renderWandArt,loadChefOriginalOverlay,loadPaletteOriginalOverlay}=await import(base+'__wand_runtime_fixture__.mjs');
+    const transform={scale:.4,offsetPercent:[-.25,.25],rotation:0};
+    const chef=await loadChefOriginalOverlay(1061947263,transform),palette=await loadPaletteOriginalOverlay(1835273963,transform);
+    const a={magicCharacteristicId:104,fleckCharacteristicId:125};
+    return {chef:chef?.spritePathId,palette:palette?.spritePathId,
+     chefRendered:!!await renderWandArt(39246601,{...a,sourceItemId:1061947263}),
+     paletteRendered:!!await renderWandArt(39246601,{...a,sourceItemId:1835273963}),
+     wrongChef:await loadChefOriginalOverlay(1835273963,transform)===null,
+     wrongPalette:await loadPaletteOriginalOverlay(1061947263,transform)===null};
+   },base);
+   assert.deepEqual(results,{chef:'-3674899348677039372',palette:'4281893961233162555',chefRendered:true,paletteRendered:true,wrongChef:true,wrongPalette:true});
+   assert.deepEqual(requestedMasks,[]);
+  }finally{await templatePage.close();}
   console.log('CHROMIUM DYNAMIC WAND BASE PASS: 9 native wand base layers, color variants, alpha, shared cache and unknown-ID refusal');
  }finally{await context.close();}
 }

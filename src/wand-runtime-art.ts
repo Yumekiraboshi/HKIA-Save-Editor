@@ -6,6 +6,9 @@ import {originalWandOverlay,originalWandCellKey,type WandOriginalCell} from './w
 import {loadSampledWandOverlay,WAND_CANDIDATE_SOURCE_SHA} from './wand-candidate-source';
 import {hasNativePlaceholderArt,loadNativePlaceholderTexture,NATIVE_PLACEHOLDER_SPRITE,PLACEHOLDER_ASSET} from './native-placeholder-art';
 
+import {loadChefOriginalOverlay} from './chef-runtime-art';
+import {loadPaletteOriginalOverlay} from './palette-runtime-art';
+
 const ROOT=import.meta.env.BASE_URL+'dynamic-wand-art/';
 
 export const WAND_MANIFEST_SHA='5d4d42d95417c8e6222747433b784a32ee9aaebb91216366a70645a33085f0bb';
@@ -131,6 +134,16 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
      logicalWidth:256,logicalHeight:256,sampleClamp:[.5,.5,257.5,257.5],
      scale:transform.scale,offsetPercent:transform.offsetPercent,rotation:transform.rotation};
    }else{
+    // The two source definitions withheld from the static inventory atlas
+    // still have an original UiIcon. Reuse the pinned base texture directly
+    // (not the source item's individually recolored image).
+    const shared=appearance.sourceItemId===1061947263
+     ?await loadChefOriginalOverlay(appearance.sourceItemId,transform)
+     :appearance.sourceItemId===1835273963
+      ?await loadPaletteOriginalOverlay(appearance.sourceItemId,transform):null;
+    if(shared){
+     ({spritePathId,sourceHash,overlay}=shared);
+    }else{
     // Every native wand uses TryGetSubIcon and the same source transform.
     // The sampled route checks exact source identity and geometry. It is
     // read-only artwork, not permission to create or edit a wand variant.
@@ -144,6 +157,7 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
      if(!originalCell||originalCell.itemId!==appearance.sourceItemId)return null;
      sourceHash='original-item-cell-v2';spritePathId=originalWandCellKey(originalCell);
      overlay=await originalWandOverlay(originalCell,transform);
+    }
     }
    }
   }

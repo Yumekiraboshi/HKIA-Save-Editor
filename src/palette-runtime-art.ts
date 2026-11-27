@@ -1,10 +1,10 @@
 import type {InventoryPalette} from './inventory-palette-display';
 import {resolvePaletteTints,CUSTOM_PALETTE_ITEM_ID} from './inventory-palette-display';
-import type {PixelBuffer,Rect} from './dynamic-sprite-raster';
+import type {PixelBuffer,Rect,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
 const ROOT=import.meta.env.BASE_URL+'dynamic-palette-art/';
 const MANIFEST_SHA='c25b4775b46e460136f0c5dd8e0d7b24088cd92660451f535488f0b25f9cc386';
-type Row={kind:string;spritePathId:string;sampleRect:Rect};
+type Row={kind:string;spritePathId:string;sampleRect:Rect;guardRect?:Rect};
 type Manifest={schema:string;version:string;itemId:number;maskGuid:string;base:TextureAsset;mask:TextureAsset;rows:Row[];alphaOffsetY:number;logicalSize:number};
 type Source={manifest:Manifest;base:PixelBuffer;mask:PixelBuffer;baseRect:Rect;maskRect:Rect};
 type Binding={manifest:Manifest;baseRect:Rect;maskRect:Rect};
@@ -46,5 +46,20 @@ export async function renderPaletteBaseArt(itemId:number):Promise<Blob|null>{
   const s=await sourceBinding(),size=s.manifest.logicalSize;
   const base=await loadOpaqueArtTexture(ROOT,s.manifest.base);
   return await renderCachedOriginalBase(JSON.stringify([MANIFEST_SHA,itemId]),{base,baseRect:s.baseRect,trim:[0,0,size,size],alphaOffsetY:s.manifest.alphaOffsetY,logicalSize:size});
+ }catch{return null;}
+}
+
+/** Original definition UiIcon, without individual palette colors or mask. */
+export async function loadPaletteOriginalOverlay(itemId:number,transform:Pick<SpriteOverlay,'scale'|'offsetPercent'|'rotation'>):Promise<{spritePathId:string;sourceHash:string;overlay:SpriteOverlay}|null>{
+ if(itemId!==CUSTOM_PALETTE_ITEM_ID)return null;
+ try{
+  const s=await sourceBinding(),row=s.manifest.rows.find(r=>r.kind==='base'),size=s.manifest.logicalSize;
+  if(!row?.guardRect)return null;
+  const [x,y,w,h]=row.guardRect;
+  return {spritePathId:row.spritePathId,sourceHash:MANIFEST_SHA,overlay:{
+   texture:await loadOpaqueArtTexture(ROOT,s.manifest.base),sampleRect:s.baseRect,trim:[0,0,size,size],
+   alphaOffsetY:s.manifest.alphaOffsetY,logicalWidth:size,logicalHeight:size,
+   sampleClamp:[x+.5,y+.5,x+w-.5,y+h-.5],...transform
+  }};
  }catch{return null;}
 }
