@@ -70,3 +70,18 @@ assert sorted((v[2],v[3],v[4]) for v in m.SHADER_SOURCES.values())==[
 `;
  execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:fileURLToPath(new URL('../',import.meta.url))});
 });
+
+test('base extraction accepts only the pinned all-white ARGB32 BlankPattern',()=>{
+ const py=String.raw`
+import importlib.util
+s=importlib.util.spec_from_file_location('base','scripts/extract-furniture-base-material-source.py')
+m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+data=bytes([255])*20
+m.validate_white_argb(2,2,2,1,data)
+for args in [(2,2,2,1,bytes(20)),(2,2,2,0,data),(1,5,2,1,data),(2,2,1,1,data),(2,2,2,1,data[:-1]),(2,2,2,1,data[:-1]+b'\x00')]:
+    try:m.validate_white_argb(*args)
+    except ValueError as e:assert 'unsupported ARGB32 texture' in str(e)
+    else:raise AssertionError('unverified ARGB accepted')
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:fileURLToPath(new URL('../',import.meta.url))});
+});
