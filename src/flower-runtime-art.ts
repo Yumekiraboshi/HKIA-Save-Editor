@@ -1,7 +1,7 @@
 import {resolveFlowerAppearance,type FlowerMaskIndex} from './flower-appearance';
 import type {PixelBuffer,Rect} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
-import {flowerGrowthKind,type InventoryFlower,type FlowerDisplayDefinitions} from './inventory-flower-display';
+import {flowerGrowthKind,flowerUsesDefinitionIcon,type InventoryFlower,type FlowerDisplayDefinitions} from './inventory-flower-display';
 
 const ROOT=import.meta.env.BASE_URL+'inventory-flower-art/';
 const MANIFEST_SHA='0cefd2977c3e25157023e3c47a180e7ebe4e8ab850dfdbe5bd481ae38d0b5020';
@@ -35,7 +35,7 @@ function sources():Promise<Sources>{
  return loading;
 }
 export async function renderFlowerOriginalBaseArt(itemId:number,flower:InventoryFlower):Promise<Blob|null>{
- if(flowerGrowthKind(itemId,flower)!=='plucked')return null;
+ if(!flowerUsesDefinitionIcon(itemId,flower))return null;
  return renderFlowerDefinitionBaseArt(itemId);
 }
 /** Definition template only: no growth state or individual color is inferred. */
