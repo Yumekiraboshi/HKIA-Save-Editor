@@ -4123,20 +4123,8 @@ fn existing_generic_magic_wand_zero_style_is_editable_but_not_an_absent_candidat
  let mut empty=Editor::open(slot("3.0.1")).unwrap();
  assert!(!empty.inventory_absent_wand_ids().iter().any(|r|r.0==item as i32));
  assert!(empty.create_inventory_wand_variant(candidate,[0,0],[104,125],1).is_err());
- // Generic output proof covers the modern tag-9 shape only; the legacy
- // GUID decoder must not inherit this authorization from the style map.
- for zipped in [false,true]{
-  let mut p=synthetic_payload("3.0.1");p[2]=6;p[3]=0x96;
-  let legacy=arr(vec![vec![5],arr(vec![guid([0;4]),vec![0xc0],u(104),u(125),u(0)])]);
-  p.extend(doc(1,arr(vec![u(4),u(item),u(21),u(3),legacy])));
-  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
-  let mut e=Editor::open(input.clone()).unwrap();
-  assert!(!e.inventory()[0].editable);
-  assert!(e.inventory_wand_variants(4).is_empty());
-  assert!(e.change_inventory_quantity(4,3,0).is_err());
-  assert!(e.change_inventory_wand_variant(4,[104,125],[106,127]).is_err());
-  assert!(!e.dirty());
- }
+ // Existing zero-GUID legacy output is exercised in the shared
+ // cross-format identity regression below; absent generation stays denied.
  for (source,style) in [(315822,0),(0,118),(0,116),(0,124)]{
   let mut e=Editor::open(make(source,style,None)).unwrap();
   assert!(!e.inventory()[0].editable);
