@@ -136,7 +136,7 @@ test('Inventory UI selects native source definitions, retains original game art 
  assert.doesNotMatch(app,/\{iCopy\.all\}/);
  assert.match(app,/inventoryIconPacks\[definition\[3\]\]/);
  assert.match(app,/changeInventoryQuantity\(row.documentId,row.quantity,next\)/);
- assert.match(app,/class:inventory-readonly=\{!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable\}/);
+ assert.match(app,/class:inventory-readonly=\{!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable&&item.wandCreatableStyle===undefined\}/);
  assert.match(app,/changeInventoryFurnitureVariant\(selected.documentId,selected.before,next\)/);
  assert.match(app,/requestFurniturePreview\(row.documentId,before,before\)/);
  assert.match(app,/\{@const canFurniture=!!item.unique\?\.furnitureEditable\|\|!!item.furnitureCreatable\}/);
@@ -243,4 +243,25 @@ test('Add exposes positive customization sources without enabling their quantity
  assert.deepEqual(rows.map(r=>r.documentId),[candidate.documentId,32,34]);
  assert.ok(rows.every(r=>!r.editable));assert.equal(rows[1].quantity,7);assert.equal(base.editable,true);
  assert.equal(inventoryAddRows([flower],[])[0].documentId,33);
+});
+
+
+test('unowned wand candidate is searchable and does not expose ordinary quantity or duplicate customization source',()=>{
+ const candidate={documentId:2147483648+1429161083,itemId:1429161083,quantity:0,editable:false,wandCreatableStyle:118};
+ const source={documentId:36,itemId:1429161083,quantity:2,editable:true,unique:{wandEditable:true}};
+ assert.deepEqual(inventoryAddRows([source],[candidate]),[candidate]);
+ assert.equal(inventoryAddRows([source],[])[0].editable,false);
+ assert.equal(inventoryAddRows([source],[])[0].documentId,36);
+});
+
+test('style zero wand candidate remains a customization candidate',()=>{
+ const candidate={documentId:2147483648+384749651,itemId:384749651,quantity:0,editable:false,wandCreatableStyle:0};
+ const owned={documentId:36,itemId:384749651,quantity:2,editable:true,unique:{wandEditable:true}};
+ assert.deepEqual(inventoryAddRows([owned],[candidate]),[candidate]);
+});
+
+test('Add retains a verified nested wand witness alongside a nil-source candidate',()=>{
+ const candidate={documentId:2147483648+384749651,itemId:384749651,quantity:0,editable:false,wandCreatableStyle:0};
+ const nested={documentId:36,itemId:384749651,quantity:2,editable:true,unique:{wandEditable:true,tag:9,words:[61381969,104,125,0,8,3,13,2,0]}};
+ assert.deepEqual(inventoryAddRows([nested],[candidate]),[candidate,{...nested,editable:false}]);
 });

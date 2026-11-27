@@ -64,3 +64,103 @@ for data,fmt,ib in [(sm(a,row(4,3,fv=3)),0,indices),(sm(a,row(6,3,top=1,fv=3)),0
 `;
  execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
 });
+
+test('batch resolves exact missing GUIDs through remaining catalog owners, but never hides ambiguous or invalid owners',()=>{
+ const py=String.raw`
+import importlib.util
+spec=importlib.util.spec_from_file_location('batch','scripts/batch-furniture-native-source.py')
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+def model(i):return {'itemId':i,'guid':str(i)}
+jobs=[('geometry',model(1),['missing','a','b']),('geometry',model(2),['a','b']),('geometry',model(3),['a','b']),
+      ('geometry',model(4),['missing']),('pattern',{'guid':'p'},['a','b']),('geometry',model(5),['a'])]
+found={'a':['source-a'],'b':['source-b']}
+calls=[]
+def attempt(bundle,rows):
+    calls.append((bundle,[(t,r['guid']) for t,r in rows]))
+    replies=[]
+    for t,r in rows:
+        key=r.get('itemId',r['guid'])
+        receipt={'kind':t,'key':key,'guid':r['guid'],'bundle':bundle}
+        if bundle=='a' and key in (1,'p',5):
+            replies.append(({**receipt,'status':'unresolved','reason':'missing exact GUID'},True))
+        elif bundle=='a' and key==2:
+            replies.append(({**receipt,'status':'unresolved','reason':'ambiguous native prefab key'},False))
+        else:replies.append(({**receipt,'status':'extracted'},False))
+    return replies
+rows=m.candidate_rounds(jobs,found,attempt)
+assert calls==[('a',[('geometry','1'),('geometry','2'),('geometry','3'),('pattern','p'),('geometry','5')]),('b',[('geometry','1'),('pattern','p')])]
+assert len(rows)==6
+by={r['key']:r for r in rows}
+assert by[1]['bundle']=='b' and by[1]['status']=='extracted' and len(by[1]['attempts'])==2
+assert by[2]['status']=='unresolved' and by[2]['bundle']=='a' and 'attempts' not in by[2]
+assert by[3]['status']=='extracted' and by[3]['bundle']=='a'
+assert by[4]['status']=='unresolved' and by[4]['bundle']=='missing'
+assert by[5]['status']=='unresolved' and by[5]['bundle']=='a'
+assert by['p']['bundle']=='b' and by['p']['status']=='extracted'
+try:m.candidate_rounds(jobs,found,lambda b,r:[]);raise AssertionError('missing receipt accepted')
+except ValueError:pass
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
+});
+
+test('UInt32 source extractor and assembler preserve exact index width and reject invalid native ranges',()=>{
+ const py=String.raw`
+import struct,importlib.util,hashlib
+def load(name):
+    spec=importlib.util.spec_from_file_location(name,'scripts/'+name+'.py')
+    m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
+m=load('extract-furniture-mesh-source');p=load('assemble-furniture-source-pack')
+def row(off,count,fv,vc,base=0):
+    return struct.pack('<6I6f',off,count,0,base,fv,vc,0,0,0,1,1,1)
+nv=65538;sm=struct.pack('<I',2)+row(0,3,0,3)+row(12,3,65535,3)
+ib=struct.pack('<6I',0,1,2,65535,65536,65537)
+subs=m.native_submeshes(sm,1,nv,ib)
+assert [s['firstByte'] for s in subs]==[0,12]
+def sha(b):return hashlib.sha256(b).hexdigest()
+vb=bytes(nv*12);b=vb+ib
+mesh={'indexFormat':1,'vertexCount':nv,'indexCount':6,'stride':12,'vertexBytes':[0,len(vb),sha(vb)],'indexBytes':[len(vb),len(ib),sha(ib)],'submeshes':subs}
+g={'schema':'HKIA.FurnitureStaticMeshSource.1','version':'3.0.1','meshes':{'1':mesh}}
+p.validate_geometry(g,b)
+for bad in (struct.pack('<6I',0,1,2,0,65536,65537),struct.pack('<6I',0,1,2,65538,65536,65537),struct.pack('<6I',0,1,2,4294967295,65536,65537)):
+    try:m.native_submeshes(sm,1,nv,bad);raise AssertionError('invalid original index')
+    except ValueError:pass
+    mesh['indexBytes'][2]=sha(bad)
+    try:p.validate_geometry(g,vb+bad);raise AssertionError('invalid pack index')
+    except ValueError:pass
+for s in (struct.pack('<I',2)+row(0,3,0,3)+row(6,3,65535,3),struct.pack('<I',2)+row(0,3,0,3)+row(12,3,65535,3,1)):
+    try:m.native_submeshes(s,1,nv,ib);raise AssertionError('invalid range or base vertex')
+    except ValueError:pass
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
+});
+
+test('duplicate furniture visual slots require exact authored identities and matching empty component',()=>{
+ const py=String.raw`
+import struct,importlib.util
+spec=importlib.util.spec_from_file_location('mesh','scripts/extract-furniture-mesh-source.py')
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+pin='d9369ec54b220d739a32e161dee90c6f44e78f86341c60a04a1e561b308fcd1e'
+assert set(m.SCHOOL_DUPLICATE_VISUAL_SLOTS)=={309658643,679070378,925764558}
+root,first,fh,empty,eh=m.SCHOOL_DUPLICATE_VISUAL_SLOTS[309658643]
+# Exercise the identity gate with a synthetic object witness; actual source
+# hashes and serialized component arrays were checked separately on the game.
+objects={first:b'first',empty:b'empty'}
+m.SCHOOL_DUPLICATE_VISUAL_SLOTS[309658643]=(root,first,m.sha(objects[first]),empty,m.sha(objects[empty]))
+common={'m_GameObject':struct.pack('<iq',0,int(root)),'m_Enabled':bytes([1,0,0,0]),'CustomizedPreviewId':bytes(4)}
+fields={first:{**common,'VisualSlots':struct.pack('<I',1)+bytes(20)},empty:{**common,'VisualSlots':bytes(4)}}
+obj=lambda p,c:objects[p]
+f=lambda p,c:fields[p]
+assert m.select_visual_slot_object(309658643,root,pin,[first,empty],obj,f)==(first,{'pathId':empty,'objectSha256':m.sha(objects[empty])})
+assert m.select_visual_slot_object(99,root,pin,[first],obj,f)==(first,None)
+def reject(id=309658643,r=root,h=pin,s=None):
+    try:
+        m.select_visual_slot_object(id,r,h,[first,empty] if s is None else s,obj,f)
+        raise AssertionError('unverified duplicate accepted')
+    except ValueError:pass
+reject(id=99);reject(r='0');reject(h='0'*64);reject(s=[empty,first]);reject(s=[first,empty,first]);reject(s=[])
+objects[empty]=b'changed';reject();objects[empty]=b'empty'
+fields[empty]['VisualSlots']=struct.pack('<I',1)+bytes(20);reject();fields[empty]['VisualSlots']=bytes(4)
+fields[empty]['CustomizedPreviewId']=struct.pack('<I',1);reject()
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
+});

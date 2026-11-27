@@ -780,6 +780,19 @@ pub extern "C" fn hkia_inventory_palette_variants(id:u32)->u32{
  })
 }
 #[no_mangle]
+pub extern "C" fn hkia_inventory_absent_palette_default()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let mut out=Vec::with_capacity(56);
+  if let Some((item,default))=e.inventory_absent_palette_default(){
+   out.extend(1u32.to_le_bytes());out.extend(item.to_le_bytes());
+   for word in default.into_iter().flatten(){out.extend(word.to_le_bytes());}
+  }else{out.extend(0u32.to_le_bytes());}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
 pub extern "C" fn hkia_inventory_palette_preview(id:u32,b0:u32,b1:u32,b2:u32,b3:u32,b4:u32,b5:u32,b6:u32,b7:u32,b8:u32,b9:u32,b10:u32,b11:u32,a0:u32,a1:u32,a2:u32,a3:u32,a4:u32,a5:u32,a6:u32,a7:u32,a8:u32,a9:u32,a10:u32,a11:u32)->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();
@@ -826,6 +839,23 @@ pub extern "C" fn hkia_inventory_palette_create(id:u32,b0:u32,b1:u32,b2:u32,b3:u
  })
 }
 
+// Missing-item candidates have their own bounded wire snapshot.
+#[no_mangle]
+pub extern "C" fn hkia_inventory_absent_chef_defaults()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let mut out=Vec::new();
+  if let Some((item,v))=e.inventory_absent_boba_default(){
+   out.extend(1u32.to_le_bytes());out.extend(item.to_le_bytes());
+   for word in v{out.extend(word.to_le_bytes());}
+  }else{out.extend(0u32.to_le_bytes());}
+  let cafe=e.inventory_absent_cafe_defaults();
+  out.extend((cafe.len() as u32).to_le_bytes());
+  for (item,v) in cafe{out.extend(item.to_le_bytes());for word in v{out.extend(word.to_le_bytes());}}
+  a.reply=out;0
+ })
+}
 /// Separate full Boba tuple snapshot; the existing appearance wire stays stable.
 #[no_mangle]
 pub extern "C" fn hkia_inventory_boba_snapshot()->u32{
@@ -871,7 +901,7 @@ pub extern "C" fn hkia_inventory_boba_creation_variants(id:u32)->u32{
   let mut a=s.borrow_mut();a.reply.clear();
   let Some(e)=a.editor.as_ref()else{return 1};
   let rows=e.inventory_boba_creation_variants(id);
-  if rows.len()>151{return 1}
+  if rows.len()>152{return 1}
   let mut out=Vec::with_capacity(4+rows.len()*20);
   out.extend((rows.len() as u32).to_le_bytes());for row in rows{for word in row{out.extend(word.to_le_bytes());}}
   a.reply=out;0
@@ -974,12 +1004,120 @@ pub extern "C" fn hkia_inventory_wand_variant_change(id:u32,b0:i32,b1:i32,a0:i32
 }
 
 #[no_mangle]
+pub extern "C" fn hkia_inventory_absent_wand_ids()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_absent_wand_ids();
+  let mut out=Vec::with_capacity(4+rows.len()*8);
+  out.extend((rows.len() as u32).to_le_bytes());
+  for (item,style) in rows{out.extend(item.to_le_bytes());out.extend(style.to_le_bytes());}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_absent_wand_sources(id:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_absent_wand_sources(id);
+  if rows.len()>12163{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*4);
+  out.extend((rows.len() as u32).to_le_bytes());
+  for source in rows{out.extend(source.to_le_bytes());}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_source_creation_variants(id:u32,source:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_wand_source_creation_variants(id,source);
+  if rows.len()>36{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*8);out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for word in row{out.extend(word.to_le_bytes());}}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_edit_sources(id:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_wand_edit_sources(id);if rows.len()>12163{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*4);out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{out.extend(row.to_le_bytes());}a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_edit_source_variants(id:u32,source:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let rows=e.inventory_wand_edit_source_variants(id,source);if rows.len()>36{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*8);out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for word in row{out.extend(word.to_le_bytes());}}a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_identity_change(id:u32,s0:i32,b0:i32,b1:i32,s1:i32,a0:i32,a1:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.change_inventory_wand_identity(id,[s0,b0,b1],[s1,a0,a1])){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_nested_material_variants(id:u32,creation:u32,magic:i32,fleck:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  if creation>1{return 1}
+  let rows=if magic==0&&fleck==0{
+   if creation==0{e.inventory_wand_nested_material_variants(id)}else{e.inventory_wand_nested_creation_material_variants(id)}
+  }else{e.inventory_wand_nested_materials_for_pair(id,[magic,fleck],creation==1)};
+  if rows.len()>2634{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*12);out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for word in row{out.extend(word.to_le_bytes());}}a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_nested_pairs(id:u32,creation:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};if creation>1{return 1}
+  let rows=e.inventory_wand_nested_pairs(id,creation==1);
+  let mut out=Vec::with_capacity(4+rows.len()*8);out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for word in row{out.extend(word.to_le_bytes());}}a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_nested_change(id:u32,s0:i32,m0:i32,f0:i32,b0:i32,b1:i32,b2:i32,s1:i32,m1:i32,f1:i32,a0:i32,a1:i32,a2:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.change_inventory_wand_nested(id,[s0,m0,f0,b0,b1,b2],[s1,m1,f1,a0,a1,a2])){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_nested_create(id:u32,s0:i32,m0:i32,f0:i32,b0:i32,b1:i32,b2:i32,s1:i32,m1:i32,f1:i32,a0:i32,a1:i32,a2:i32,quantity:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.create_inventory_wand_nested(id,[s0,m0,f0,b0,b1,b2],[s1,m1,f1,a0,a1,a2],quantity)){
+   Some(Ok(_))=>0,_=>1
+  }
+ })
+}
+#[no_mangle]
 pub extern "C" fn hkia_inventory_wand_creation_variants(id:u32)->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();
   let Some(e)=a.editor.as_ref()else{return 1};
   let rows=e.inventory_wand_creation_variants(id);
-  if rows.len()>35{return 1}
+  if rows.len()>36{return 1}
   let mut out=Vec::with_capacity(4+rows.len()*8);out.extend((rows.len() as u32).to_le_bytes());
   for row in rows{for word in row{out.extend(word.to_le_bytes());}}
   a.reply=out;0

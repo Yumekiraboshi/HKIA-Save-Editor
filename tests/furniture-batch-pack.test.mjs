@@ -65,3 +65,44 @@ with tempfile.TemporaryDirectory() as td:
 `;
  execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd,stdio:'pipe'});
 });
+
+test('standalone batch pack carries both independently pinned original cubemap payloads',()=>{
+ const py=String.raw`
+import importlib.util,tempfile,json,zipfile
+from pathlib import Path
+s=importlib.util.spec_from_file_location('pack','scripts/pack-furniture-batches.py')
+m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+a=m.assembler
+def dump(p,v):p.write_text(json.dumps(v))
+with tempfile.TemporaryDirectory() as td:
+ p=Path(td);src=p/'batch';src.mkdir();(src/'pattern').mkdir();light=p/'light';light.mkdir()
+ g='1'*32;data=bytes([1,2,3,4]);h=a.sha(data)
+ plan={'version':a.VERSION,'catalogSha256':a.CATALOG,'models':[],'patterns':[{'guid':g,'bundles':['original']}]}
+ t={'guid':g,'bundle':'original','bundleSha256':'a'*64,'width':1,'height':1,'format':4,'bytes':4,'sha256':h,'mips':[[1,1,0,4,h]]}
+ dump(src/'pattern'/(g+'.json'),t);(src/'pattern'/(g+'.texture.bin')).write_bytes(data)
+ dump(src/'report.json',{'schema':'HKIA.FurnitureBatchExtraction.1','version':a.VERSION,'catalogSha256':a.CATALOG,'renderFidelity':'unverified','results':[{'kind':'pattern','key':g,'guid':g,'bundle':'original','bundleSha256':'a'*64,'status':'extracted','bytes':4,'sha256':h}]})
+ cubes={}
+ for id,n in [('1',1),('2',2)]:
+  raw=bytes([n])*48;dig=a.sha(raw)
+  cubes[id]={'width':1,'height':1,'format':10,'imageCount':6,'faceOrder':'unverified','mipCount':1,'faceMipRanges':[[1,0,8]],'faceBytes':8,'bytes':48,'sha256':dig}
+  (light/(dig+'.cubemap.bin')).write_bytes(raw)
+ manifest={'schema':'HKIA.FurnitureLightRegionSource.1','version':a.VERSION,'cubemaps':cubes}
+ # Synthetic independent expected manifest only for this test, not production.
+ m.batch.read=lambda _:manifest
+ mf=light/'furniture-light-region-source-v3.0.1.json';dump(mf,manifest)
+ out=p/'out.zip';v=m.pack_batches(plan,src,None,out,lighting_stage=light)
+ assert v['payloads']==3 and v['patterns']==1
+ with zipfile.ZipFile(out) as z:
+  assert json.loads(z.read('sources.json'))['cubemaps']==cubes
+  for cube in cubes.values():
+   assert a.sha(z.read('cube/'+cube['sha256']+'.bin'))==cube['sha256']
+ def reject(code):
+  try:m.pack_batches(plan,src,None,p/'bad.zip',lighting_stage=light)
+  except ValueError as e:assert code in str(e),(code,str(e))
+  else:raise AssertionError(code)
+  assert not (p/'bad.zip').exists()
+ dump(mf,{**manifest,'version':'wrong'});reject('LIGHT_SOURCE');dump(mf,manifest)
+ (light/(cubes['1']['sha256']+'.cubemap.bin')).write_bytes(bytes(48));reject('BATCH_PAYLOAD_HASH')
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd,stdio:'pipe'});
+});

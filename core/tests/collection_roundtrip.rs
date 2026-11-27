@@ -1271,8 +1271,8 @@ fn flower_variants_are_source_bounded_atomic_and_recoverable(){
  assert!(options.contains(&[6,30,0,0]),"cross-color Brown is a native available color");
  assert!(options.contains(&[6,6,10,16]),"ombre uses native default White accent");
  assert!(options.contains(&[6,6,3,0]),"effect uses null accent");
- assert!(options.iter().all(|v|v[0]==6&&![14,15].contains(&v[1])&&![6,15].contains(&v[2])));
- for invalid in [[6,14,0,0],[6,15,0,0],[6,8,6,0],[6,8,15,0],[6,8,10,8],[6,8,3,16],[7,8,0,0],[6,8,0,16]]{
+ assert!(options.iter().all(|v|[0,6,7].contains(&v[0])&&![14,15].contains(&v[1])&&![6,15].contains(&v[2])));
+ for invalid in [[6,14,0,0],[6,15,0,0],[6,8,6,0],[6,8,15,0],[6,8,10,8],[6,8,3,16],[5,8,0,0],[6,8,0,16]]{
   assert!(e.change_inventory_flower_variant(4,before,invalid).is_err(),"{invalid:?}");
  }
  let patterned=[6,6,10,16];
@@ -1295,6 +1295,29 @@ fn flower_variants_are_source_bounded_atomic_and_recoverable(){
  assert!(e.undo_scope(Inventory));assert!(e.undo_scope(Inventory));assert!(!e.dirty());
 }
 
+#[test]
+fn existing_flower_growth_edit_and_add_preserve_native_identity(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ for zipped in [false,true]{
+  let raw=flower_color_slot("3.0.1",None);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let before=[6,6,0,0];let seed=[0,6,0,0];let uprooted=[7,6,0,0];
+  let (choices,can)=e.inventory_flower_preview(4,before,seed).unwrap();
+  assert!(can&&choices.contains(&before)&&choices.contains(&uprooted));
+  assert!(e.change_inventory_flower_variant(4,before,[5,6,0,0]).is_err());
+  e.change_inventory_flower_variant(4,before,seed).unwrap();
+  let new=e.create_inventory_flower_variant(4,seed,uprooted,2).unwrap();
+  assert!(e.change_inventory_flower_variant(4,seed,uprooted).is_err());
+  assert!(e.change_inventory_flower_variant(new,uprooted,before).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.undo_scope(Inventory));assert!(!restored.dirty());
+  assert!(restored.redo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].document_id,4);assert_eq!(saved.inventory()[0].quantity,93);
+  assert_eq!(saved.inventory_unique_data(4),Some(U::Flower{grow_state:0,base_color:6,pattern:0,pattern_color:0}));
+  assert_eq!(saved.inventory_unique_data(saved.inventory()[1].document_id),Some(U::Flower{grow_state:7,base_color:6,pattern:0,pattern_color:0}));
+ }
+}
 #[test]
 fn flower_edit_rejects_legacy_remote_cabin_reference_to_uid(){
  let mut payload=synthetic_payload("3.0.1");payload[3]=0x97;
@@ -1559,7 +1582,7 @@ fn create_flower_variants_allocates_distinct_native_uids_and_keeps_source(){
   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
   let before=[6,6,0,0];let first=[6,9,0,0];let second=[6,16,10,17];
   assert!(e.create_inventory_flower_variant(4,before,before,1).is_err());
-  assert!(e.create_inventory_flower_variant(4,before,[7,9,0,0],1).is_err());
+  assert!(e.create_inventory_flower_variant(4,before,[5,9,0,0],1).is_err());
   assert!(e.create_inventory_flower_variant(4,before,first,0).is_err());
   assert!(e.inventory_flower_creation_variants(4).contains(&first));
   let a=e.create_inventory_flower_variant(4,before,first,3).unwrap();
@@ -1591,7 +1614,7 @@ fn unowned_flower_creation_uses_only_source_defaults_and_native_ids(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let input=slot_from_payload("3.0.1",synthetic_payload("3.0.1"));
  let mut e=Editor::open(input.clone()).unwrap();let item=43114910;let candidate=(1u32<<31)|item as u32;
- assert_eq!(e.inventory_absent_flower_ids().len(),50);
+ assert_eq!(e.inventory_absent_flower_ids().len(),105);
  assert_eq!(e.inventory_flower_creation_variants(candidate),vec![[6,2,0,0],[6,5,0,0],[6,10,0,0]]);
  for bad in [[6,1,0,0],[6,14,0,0],[6,2,1,16],[7,2,0,0]]{
   assert!(e.create_inventory_flower_variant(candidate,[0;4],bad,1).is_err());
@@ -1612,6 +1635,69 @@ fn unowned_flower_creation_uses_only_source_defaults_and_native_ids(){
  assert_eq!(reopened.inventory_unique_data(rows[1].document_id),e.inventory_unique_data(b));
  assert!(!reopened.inventory_absent_flower_ids().contains(&item));
 }
+#[test]
+fn native_unpatterned_candles_share_flower_add_edit_zero_refill(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ for zipped in [false,true]{
+  let raw=slot_from_payload("3.0.1",synthetic_payload("3.0.1"));
+  let input=if zipped{zip(&raw)}else{raw};let mut e=Editor::open(input.clone()).unwrap();
+  let mut handles=Vec::new();
+  for item in [65427158u32,1124067577]{
+   let candidate=(1u32<<31)|item;
+   assert!(e.inventory_absent_flower_ids().contains(&(item as i32)));
+   assert_eq!(e.inventory_flower_creation_variants(candidate),vec![[6,2,0,0],[6,5,0,0],[6,10,0,0]]);
+   assert!(e.create_inventory_flower_variant(candidate,[0;4],[6,2,1,16],1).is_err());
+   assert!(e.create_inventory_flower_variant(candidate,[0;4],[7,2,0,0],1).is_err());
+   let h=e.create_inventory_flower_variant(candidate,[0;4],[6,2,0,0],3).unwrap();
+   e.change_inventory_flower_variant(h,[6,2,0,0],[6,9,0,0]).unwrap();handles.push(h);
+  }
+  for id in [1377029192u32]{assert!(!e.inventory_absent_flower_ids().contains(&(id as i32)));}
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();let rows=saved.inventory();assert_eq!(rows.len(),2);
+  assert!(rows.iter().all(|r|r.editable&&r.quantity_minimum==0&&r.quantity==3));
+  for row in &rows{saved.change_inventory_quantity(row.document_id,3,0).unwrap();}
+  let mut saved=Editor::open(saved.export().unwrap()).unwrap();
+  for row in &rows{saved.change_inventory_quantity(row.document_id,0,5).unwrap();}
+  assert!(Editor::open(saved.export().unwrap()).unwrap().inventory().iter().all(|r|r.quantity==5));
+ }
+}
+
+#[test]
+fn rare_candle_pattern_create_edit_delete_and_refill(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  for item in [22657460,1858821696]{
+   let candidate=(1u32<<31)|item as u32;
+   assert!(e.inventory_absent_flower_ids().contains(&item));
+   let starters=e.inventory_flower_creation_variants(candidate);
+   assert!(starters.contains(&[6,2,10,16]));
+   let before=[6,2,10,16];let target=[6,8,11,30];
+   for bad in [[6,2,0,0],[6,2,3,16],[6,2,6,0],[6,2,15,0],[6,2,10,2],[7,2,10,16],[6,14,10,16]]{
+    assert!(e.inventory_flower_preview(candidate,before,bad).is_err());
+    assert!(e.create_inventory_flower_variant(candidate,before,bad,1).is_err());
+   }
+   assert!(e.inventory_flower_preview(candidate,before,target).unwrap().1);
+   let h=e.create_inventory_flower_variant(candidate,before,target,3).unwrap();
+   assert!(e.change_inventory_flower_variant(h,target,[6,8,0,0]).is_err());
+   e.change_inventory_flower_variant(h,target,[6,9,11,30]).unwrap();
+  }
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();let rows=saved.inventory();
+  assert_eq!(rows.len(),2);assert!(rows.iter().all(|r|r.quantity==3&&r.quantity_minimum==0&&r.editable));
+  for row in &rows{
+   assert_eq!(saved.inventory_unique_data(row.document_id),Some(U::Flower{grow_state:6,base_color:9,pattern:11,pattern_color:30}));
+   saved.change_inventory_quantity(row.document_id,3,0).unwrap();
+  }
+  let mut saved=Editor::open(saved.export().unwrap()).unwrap();
+  for row in &rows{saved.change_inventory_quantity(row.document_id,0,2).unwrap();}
+  assert!(Editor::open(saved.export().unwrap()).unwrap().inventory().iter().all(|r|r.quantity==2));
+ }
+}
+
 #[test]
 fn flower_clothing_creation_reuses_exact_processor_and_uid_rules(){
  use hkia_save_core::collection::HistoryScope::Inventory;
@@ -1649,7 +1735,8 @@ fn flower_clothing_creation_reuses_exact_processor_and_uid_rules(){
  let crown=(1u32<<31)|1120342995;let bow=(1u32<<31)|1482119840;
  assert_eq!(e.inventory_flower_creation_variants(crown),vec![[6,2,0,0],[6,5,0,0],[6,10,0,0]]);
  assert!(e.inventory_flower_creation_variants(bow).iter().all(|v|v[2]==0&&v[3]==0));
- for id in [1095918548u32,41105179]{assert!(e.inventory_flower_creation_variants((1u32<<31)|id).is_empty());}
+ assert!(e.inventory_flower_creation_variants((1u32<<31)|1095918548).is_empty());
+ assert!(!e.inventory_flower_creation_variants((1u32<<31)|41105179).is_empty());
  assert!(e.create_inventory_flower_variant(crown,[0;4],[6,1,0,0],1).is_err());
  e.create_inventory_flower_variant(crown,[0;4],[6,2,0,0],2).unwrap();
  e.create_inventory_flower_variant(bow,[0;4],[6,5,0,0],3).unwrap();
@@ -1829,14 +1916,14 @@ fn create_absent_material_stacks_uses_native_ids_and_scoped_history(){
  for zipped in [false,true]{
   let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();
-  let candidates=e.inventory_creatable();assert_eq!(candidates.len(),4046);
-  assert!(!candidates.iter().any(|r|r.item_id==460708033));
+  let candidates=e.inventory_creatable();assert_eq!(candidates.len(),6532);
+  assert!(candidates.iter().any(|r|r.item_id==460708033));
   let apple=candidates.iter().find(|r|r.item_id==1877756618).unwrap().document_id;
   let flour=candidates.iter().find(|r|r.item_id==627013240).unwrap().document_id;
   assert!(e.change_inventory_quantities(&[(apple,0,6),(u32::MAX,0,7)]).is_err());
   assert!(e.inventory().is_empty());assert!(!e.dirty());
   e.change_inventory_quantities(&[(apple,0,6),(flour,0,9)]).unwrap();
-  assert_eq!(e.inventory().len(),2);assert_eq!(e.inventory_creatable().len(),4044);
+  assert_eq!(e.inventory().len(),2);assert_eq!(e.inventory_creatable().len(),6530);
   assert!(e.change_inventory_quantity(apple,0,1).is_err());
   assert_eq!(e.inventory_unique_rows().count(),2);
   let checkpoint=e.history_checkpoint().unwrap();
@@ -1845,14 +1932,14 @@ fn create_absent_material_stacks_uses_native_ids_and_scoped_history(){
   assert!(e.undo_scope(Inventory));assert!(e.inventory().is_empty());
   assert!(!e.dirty());assert!(e.redo_scope(Inventory));
   e.change_inventory_quantity(apple,6,0).unwrap();
-  assert_eq!(e.inventory().len(),1);assert_eq!(e.inventory_creatable().len(),4045);
+  assert_eq!(e.inventory().len(),1);assert_eq!(e.inventory_creatable().len(),6531);
   assert!(e.undo_scope(Inventory));
   let exported=e.export().unwrap();let reopened=Editor::open(exported).unwrap();
   let rows=reopened.inventory();assert_eq!(rows.len(),2);
   assert_eq!((rows[0].document_id,rows[0].item_id,rows[0].quantity),(5,627013240,9));
   assert_eq!((rows[1].document_id,rows[1].item_id,rows[1].quantity),(6,1877756618,6));
   assert_eq!(reopened.inventory_original_unique_payload(5),Some([0xc0].as_slice()));
-  assert_eq!(reopened.inventory_creatable().len(),4044);assert_eq!(reopened.achievements(),e.achievements());assert_eq!(reopened.entries(),e.entries());
+  assert_eq!(reopened.inventory_creatable().len(),6530);assert_eq!(reopened.achievements(),e.achievements());assert_eq!(reopened.entries(),e.entries());
  }
 }
 
@@ -1909,7 +1996,7 @@ fn native_currency_rarity_alone_does_not_authorize_membership_edits(){
  let mut editor=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
  assert_eq!(editor.inventory()[0].quantity_minimum,1);
  assert!(editor.change_inventory_quantity(4,6,0).is_err());assert!(!editor.dirty());
- assert!(!editor.inventory_creatable().iter().any(|r|r.item_id==460708033));
+ assert!(!editor.inventory_creatable().iter().any(|r|r.item_id==484139114||r.item_id==1205887707));
 }
 
 #[test]
@@ -1944,10 +2031,10 @@ fn ordinary_furniture_and_clothing_creation_preserves_other_data_and_gates_last_
   let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw.clone()};
   let mut editor=Editor::open(input.clone()).unwrap();
   let candidates=editor.inventory_creatable();
-  assert_eq!(candidates.len(),4046);
+  assert_eq!(candidates.len(),6532);
   let furniture=candidates.iter().find(|r|r.item_id==286009791).unwrap().document_id;
   let clothing=candidates.iter().find(|r|r.item_id==315822).unwrap().document_id;
-  assert!(!candidates.iter().any(|r|r.item_id==517031));
+  assert!(candidates.iter().any(|r|r.item_id==517031));
   editor.change_inventory_quantities(&[(furniture,0,12),(clothing,0,3)]).unwrap();
   editor.change_inventory_quantity(clothing,3,0).unwrap();
   assert!(editor.undo_scope(hkia_save_core::collection::HistoryScope::Inventory));
@@ -2016,7 +2103,7 @@ fn flower_clothing_uses_native_species_and_processor_pattern_rules(){
   assert!(e.inventory_flower_variants(5).iter().any(|v|v[2]==14)); // generic
   assert!(e.inventory_flower_variants(6).iter().all(|v|v[2]==0&&v[3]==0)); // HK-style
   assert!(e.inventory_flower_variants(7).is_empty()); // DLC Sunburst
-  assert!(e.inventory_flower_variants(8).is_empty()); // event-year floral dress
+  assert!(e.inventory_flower_variants(8).iter().any(|v|v[2]==14)); // native floral dress processor
   assert!(e.inventory_flower_variants(9).iter().all(|v|v[2]!=1)); // Heavy Nettle
   assert!(e.change_inventory_flower_variant(6,base,[6,6,1,16]).is_err());
   assert!(e.change_inventory_flower_variant(9,base,[6,6,1,16]).is_err());
@@ -2169,7 +2256,7 @@ fn unowned_customized_furniture_uses_verified_acquisition_and_material_choices()
   let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();
   let ids=e.inventory_absent_furniture_ids();
-  assert!(ids.contains(&item));assert!(ids.len()<=295);
+  assert!(ids.contains(&item));assert!(ids.len()<=621);assert!(ids.iter().all(|&id|e.inventory_creatable().iter().any(|r|r.item_id==id)));
   assert!(!ids.contains(&45426907)); // Home layout.
   let choices=e.inventory_furniture_creation_variants(candidate);
   let target=[0,2,0];assert!(choices.contains(&target));
@@ -2299,7 +2386,7 @@ fn staged_flower_source_can_create_other_variants_and_replay_cancellation(){
   let a=e.create_inventory_flower_variant(candidate,[0;4],[6,2,0,0],3).unwrap();
   let next=[6,1,0,0];assert!(e.inventory_flower_creation_variants(a).contains(&next));
   assert!(e.create_inventory_flower_variant(a,[6,5,0,0],next,2).is_err());
-  assert!(e.create_inventory_flower_variant(a,[6,2,0,0],[7,1,0,0],2).is_err());
+  assert!(e.create_inventory_flower_variant(a,[6,2,0,0],[5,1,0,0],2).is_err());
   let b=e.create_inventory_flower_variant(a,[6,2,0,0],next,2).unwrap();
   assert_ne!(a,b);assert!(!e.inventory_flower_creation_variants(a).contains(&next));
   e.change_inventory_quantity(a,3,0).unwrap();
@@ -2574,7 +2661,7 @@ fn add_custom_palette_variants_from_owned_source_and_cancel_staged(){
 }
 
 #[test]
-fn existing_currency_zero_and_refill_preserve_identity_and_reject_event_or_absent_generation(){
+fn existing_currency_zero_and_refill_preserve_identity_and_reject_event_or_dlc_generation(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let make=|duplicate:bool|{
   let mut payload=synthetic_payload("3.0.1");payload[2]=8;payload[3]=if duplicate{0x9a}else{0x99};
@@ -2589,8 +2676,9 @@ fn existing_currency_zero_and_refill_preserve_identity_and_reject_event_or_absen
   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
   assert_eq!(original.iter().map(|r|r.quantity_minimum).collect::<Vec<_>>(),vec![0,0,1,1]);
   assert!(original[1].editable);
-  assert!(!e.inventory_creatable().iter().any(|r|r.item_id==833471261));
-  assert!(e.change_inventory_quantity((1u32<<31)|833471261,0,1).is_err());
+  assert!(e.inventory_creatable().iter().any(|r|r.item_id==833471261));
+  assert!(!e.inventory_creatable().iter().any(|r|r.item_id==1205887707));
+  assert!(e.change_inventory_quantity((1u32<<31)|1205887707,0,1).is_err());
   assert!(e.change_inventory_quantities(&[(4,6,0),(6,8,0)]).is_err());
   assert!(e.change_inventory_quantity(7,3,0).is_err());assert_eq!(e.inventory(),original);
   e.change_inventory_quantities(&[(4,6,0),(5,0,12)]).unwrap();
@@ -2705,6 +2793,49 @@ fn dango_nigiri_and_new_cafe_stacks_roundtrip(){
 }
 
 #[test]
+fn first_chef_stacks_use_native_starters_and_full_recipe_validation(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let (item,before)=e.inventory_absent_boba_default().unwrap();
+  let candidate=0x80000000u32|item as u32;
+  let options=e.inventory_boba_creation_variants(candidate);assert_eq!(options.len(),152);
+  let target=*options.last().unwrap();
+  assert!(e.create_inventory_boba_variant(candidate,[0;5],target,1).is_err());
+  assert!(e.create_inventory_boba_variant(candidate,before,[0;5],1).is_err());
+  assert!(e.create_inventory_boba_variant(candidate,before,target,0).is_err());
+  let handle=e.create_inventory_boba_variant(candidate,before,target,2).unwrap();
+  assert!(e.inventory_absent_boba_default().is_none());
+  assert!(e.create_inventory_boba_variant(candidate,before,target,1).is_err());
+  let cafe=e.inventory_absent_cafe_defaults();assert_eq!(cafe.len(),9);
+  let mut ids=vec![(item,handle,2)];
+  for (item,before) in cafe{
+   let candidate=0x80000000u32|item as u32;
+   assert!(e.create_inventory_cafe_variant(candidate,[0;6],before,1).is_err());
+   assert!(e.create_inventory_cafe_variant(candidate,before,[0;6],1).is_err());
+   let target=e.inventory_cafe_creation_variants(candidate).first().map(|v|v.0).unwrap_or(before);
+   let handle=e.create_inventory_cafe_variant(candidate,before,target,3).unwrap();
+   assert!(e.create_inventory_cafe_variant(candidate,before,target,1).is_err());
+   ids.push((item,handle,3));
+  }
+  assert!(e.inventory_absent_cafe_defaults().is_empty());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert!(saved.inventory_absent_boba_default().is_none());assert!(saved.inventory_absent_cafe_defaults().is_empty());
+  let rows=saved.inventory();assert_eq!(rows.len(),10);
+  for (item,handle,quantity) in ids{
+   let row=rows.iter().find(|r|r.item_id==item).unwrap();
+   assert_eq!(row.quantity,quantity);assert_eq!(saved.inventory_unique_data(row.document_id),e.inventory_unique_data(handle));
+   assert_eq!(row.quantity_minimum,0);saved.change_inventory_quantity(row.document_id,quantity,0).unwrap();
+  }
+  assert!(Editor::open(saved.export().unwrap()).unwrap().inventory().iter().all(|r|r.quantity==0));
+ }
+}
+
+#[test]
 fn all_authored_boba_base_choices_and_new_stacks_roundtrip(){
  use hkia_save_core::collection::{HistoryScope::Inventory,BobaVariant};
  let original=[6,44,76,75,73];let changed=[46,39,79,78,71];let added=[9,55,76,78,72];let child=[32,43,76,75,74];
@@ -2788,6 +2919,41 @@ fn native_magic_wand_variant_creation_reuses_allocator_and_replays_cancelled_par
   let id=saved.inventory()[1].document_id;
   assert_eq!(saved.inventory_unique_data(id).unwrap().display_words().1,[0,110,126,118,u32::MAX,0]);
   assert_eq!(saved.inventory_unique_rows().last().unwrap().1,Some(22));
+ }
+}
+
+#[test]
+fn first_shaped_wands_use_native_candidates_and_shared_history(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=1429161083i32;let candidate=0x80000000u32|item as u32;
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert_eq!(e.inventory_absent_wand_ids().len(),7);
+  assert!(e.inventory_absent_wand_ids().contains(&(item,118)));
+  assert_eq!(e.inventory_wand_creation_variants(candidate).len(),36);
+  assert!(e.create_inventory_wand_variant(candidate,[104,125],[106,127],1).is_err());
+  assert!(e.create_inventory_wand_variant(candidate,[0,0],[116,125],1).is_err());
+  assert!(e.create_inventory_wand_variant(candidate,[0,0],[104,125],0).is_err());
+  assert!(!e.dirty());
+  let id=e.create_inventory_wand_variant(candidate,[0,0],[104,125],2).unwrap();
+  assert!(e.inventory_wand_creation_variants(candidate).is_empty());
+  assert!(e.create_inventory_wand_variant(candidate,[0,0],[106,127],1).is_err());
+  e.change_inventory_wand_variant(id,[104,125],[106,127]).unwrap();
+  let second=e.create_inventory_wand_variant(id,[106,127],[108,126],3).unwrap();
+  assert_ne!(id,second);
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert!(!saved.inventory_absent_wand_ids().contains(&(item,118)));
+  let rows:Vec<_>=saved.inventory().into_iter().filter(|r|r.item_id==item).collect();
+  assert_eq!(rows.len(),2);
+  assert!(rows.iter().any(|r|r.quantity==2&&saved.inventory_unique_data(r.document_id).unwrap().display_words().1==[0,106,127,118,u32::MAX,0]));
+  assert!(rows.iter().any(|r|r.quantity==3&&saved.inventory_unique_data(r.document_id).unwrap().display_words().1==[0,108,126,118,u32::MAX,0]));
+  assert!(rows.iter().all(|r|r.quantity_minimum==0));
+  let row=&rows[0];saved.change_inventory_quantity(row.document_id,row.quantity,0).unwrap();
+  assert!(Editor::open(saved.export().unwrap()).unwrap().inventory().iter().any(|r|r.document_id==row.document_id&&r.quantity==0));
  }
 }
 
@@ -2892,6 +3058,43 @@ fn ordinary_furniture_zero_refuses_placement_defaults_legacy_guid_and_opaque_lay
 }
 
 #[test]
+fn expanded_customized_furniture_add_edit_delete_and_reference_protection(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=32709745u32;
+ let make=|reference:bool|{
+  let mut p=synthetic_payload("3.0.1");p[3]=0x96+u8::from(reference);
+  p.extend(doc(1,arr(vec![u(4),u(item),u(11),u(6),furniture_payload([208,0,0])])));
+  if reference{
+   let home=arr(vec![guid([41,42,43,44]),arr(vec![]),u(item),u(0),guid([0;4]),l(0),
+    vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])]);
+   p.extend(doc(32,arr(vec![u(6),guid([7,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![home])]))])])));
+  }
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(false);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert_eq!(e.inventory()[0].quantity_minimum,0);
+  assert!(e.inventory_furniture_variants(4).contains(&[209,0,0]));
+  e.change_inventory_furniture_variant(4,[208,0,0],[209,0,0]).unwrap();
+  let handle=e.create_inventory_furniture_variant(4,[209,0,0],[210,0,0],2).unwrap();
+  e.change_inventory_quantity(4,6,0).unwrap();
+  let checkpoint=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&checkpoint).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity,0);assert_eq!(saved.inventory()[0].quantity_minimum,0);
+  assert_eq!(saved.inventory_unique_data(4),Some(U::Furniture{materials:[209,0,0]}));
+  assert_eq!(saved.inventory_unique_data(saved.inventory()[1].document_id),e.inventory_unique_data(handle));
+  saved.change_inventory_quantity(4,0,4).unwrap();
+  let reopened=Editor::open(saved.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory()[0].quantity,4);
+  assert_eq!(reopened.inventory_unique_data(4),Some(U::Furniture{materials:[209,0,0]}));
+ }
+ let mut referenced=Editor::open(make(true)).unwrap();
+ assert_eq!(referenced.inventory()[0].quantity_minimum,1);
+ assert!(referenced.change_inventory_quantity(4,6,0).is_err());
+}
+#[test]
 fn saved_customized_furniture_zero_refill_and_reference_protection(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let item=61381969u32;
@@ -2985,6 +3188,39 @@ fn ordinary_clothing_zero_requires_complete_avatar_models_and_no_known_or_unreso
   make(Some(arr(vec![u(6),guid([1,2,3,4]),arr(vec![])])),Some(empty())),
  ]{
   let mut e=Editor::open(raw).unwrap();assert!(e.inventory().iter().all(|r|r.quantity_minimum==1));
+  assert!(e.change_inventory_quantity(4,6,0).is_err());assert!(!e.dirty());
+ }
+}
+
+#[test]
+fn event_tradeable_clothing_zero_refill_uses_exact_outfit_and_piece_references(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=517031u32;
+ let outfit=[0xf19cbde5,0x482caed7,0x2797ac8b,0xe22f46e9];
+ let piece=[0xb2cb0da6,0x436a94b5,0x2ff5088b,0x58380995];
+ let make=|pieces:Vec<Vec<u8>>,outfits:Vec<Vec<u8>>|{
+  let mut p=synthetic_payload("3.0.1");p[3]=0x98;
+  p.extend(doc(1,arr(vec![u(4),u(item),u(0),u(6),vec![0xc0]])));
+  p.extend(doc(10,arr(vec![u(6),guid([1,2,3,4]),arr(pieces),arr(vec![]),arr(outfits),guid([1,2,3,4]),vec![0xc3],vec![0xc0]])));
+  p.extend(doc(22,arr(vec![u(7),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(vec![],vec![]);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let before=e.inventory();
+  assert_eq!(before[0].quantity_minimum,0);
+  e.change_inventory_quantity(4,6,0).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity_minimum,0);
+  assert_eq!(saved.inventory_original_unique_payload(4),Some([0xc0].as_slice()));
+  saved.change_inventory_quantity(4,0,6).unwrap();
+  assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),before);
+ }
+ for raw in [make(vec![],vec![guid(outfit)]),make(vec![guid(piece)],vec![])]{
+  let mut e=Editor::open(raw).unwrap();
+  assert_eq!(e.inventory()[0].quantity_minimum,1);
   assert!(e.change_inventory_quantity(4,6,0).is_err());assert!(!e.dirty());
  }
 }
@@ -3108,6 +3344,21 @@ fn existing_shaped_wand_zero_refill_preserves_identity_and_denies_copies(){
   saved.change_inventory_quantities(&[(4,0,2),(5,0,3)]).unwrap();
   assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),before);
  }
+ // An unrelated original legacy furniture GUID no longer denies these wands.
+ let legacy_home=|g:[u32;4]|{
+  let old=arr(vec![guid(g),guid([1,2,3,4]),u(0),u(0),u(0),u(0),u(0),u(0),
+   vec![0xc0],vec![0xc0],vec![0xc0],u(0),arr(vec![]),arr(vec![]),u(0)]);
+  let home=arr(vec![guid([41,42,43,44]),arr(vec![old]),u(0),u(0),guid([0;4]),l(0),
+   vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])]);
+  doc(32,arr(vec![u(6),guid([7,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![home])]))])]))
+ };
+ let mut unrelated=Editor::open(make(Some(legacy_home([0x17fc7530,0x48eebd45,0x68b373b0,0xa7812c9b])))).unwrap();
+ assert!(unrelated.inventory().iter().all(|r|r.quantity_minimum==0));
+ unrelated.change_inventory_quantities(&[(4,2,0),(5,3,0)]).unwrap();
+ assert!(Editor::open(unrelated.export().unwrap()).unwrap().inventory().iter().all(|r|r.quantity==0));
+ let mut matching=Editor::open(make(Some(legacy_home([0x52e59d2c,0x9342db09,0x587aacab,0x3ac17e48])))).unwrap();
+ assert!(matching.inventory().iter().all(|r|r.quantity_minimum==1));
+ assert!(matching.change_inventory_quantities(&[(4,2,0),(5,3,0)]).is_err());assert!(!matching.dirty());
  // Copied current payload, unresolved legacy source GUID and truncated outfit context.
  let general=|equipped:Vec<Vec<u8>>|doc(22,arr(vec![u(6),arr(vec![]),arr(equipped),vec![0xc0],vec![0xc0],arr(vec![])]));
  let legacy=arr(vec![vec![5],arr(vec![guid([1,2,3,4]),vec![0xc0],u(104),u(125),u(118)])]);
@@ -3131,7 +3382,7 @@ fn flower_uncommitted_preview_is_native_and_multifield_creation_is_atomic(){
   assert!(can_create&&choices.contains(&[6,6,10,30]));
   let (choices,can_create)=e.inventory_flower_preview(4,before,[6,6,10,30]).unwrap();
   assert!(can_create&&choices.contains(&target));
-  assert!(e.inventory_flower_preview(4,before,[7,8,10,30]).is_err());
+  assert!(e.inventory_flower_preview(4,before,[5,8,10,30]).is_err());
   assert!(e.inventory_flower_preview(4,patterned,target).is_err());
   assert!(!e.dirty());assert!(!e.can_undo());
   let handle=e.create_inventory_flower_variant(4,before,target,3).unwrap();
@@ -3249,7 +3500,7 @@ fn unowned_flower_customized_first_stack_uses_verified_default_witness(){
   let id=(1u32<<31)|43114910;let crown=(1u32<<31)|1120342995;let witness=[6,2,0,0];let target=[6,5,10,16];
   assert!(e.inventory_flower_creation_variants(id).contains(&witness));
   assert!(e.inventory_flower_preview(id,witness,[6,2,10,16]).unwrap().0.contains(&target));
-  for bad in [[7,5,10,16],[6,14,10,16],[6,5,10,5],[6,5,0,16]]{
+  for bad in [[5,5,10,16],[6,14,10,16],[6,5,10,5],[6,5,0,16]]{
    assert!(e.create_inventory_flower_variant(id,witness,bad,1).is_err());
   }
   assert!(e.create_inventory_flower_variant(id,[6,1,0,0],target,1).is_err());
@@ -3353,4 +3604,524 @@ fn ordinary_furniture_source_remains_available_after_custom_stack_export(){
   assert!(!reopened.inventory_furniture_creation_variants(base).contains(&[0,3,0]));
   assert_eq!(reopened.inventory_unique_data(base),None);
  }}
+}
+
+#[test]
+fn expanded_nonclothing_tradeable_zero_refill_and_reference_guards(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=13938575u32;let other=21295337u32;
+ let native_guid=[0xea8e0484,0x4ff95a6a,0xf2e7d4b6,0xb50963dd];
+ let legacy=arr(vec![guid(native_guid),guid([1,2,3,4]),u(0),u(0),u(0),u(0),u(0),u(0),
+  vec![0xc0],vec![0xc0],vec![0xc0],u(0),arr(vec![]),arr(vec![]),u(0)]);
+ let home=|legacy:Vec<Vec<u8>>,wall:u32|{
+  arr(vec![guid([41,42,43,44]),arr(legacy),u(wall),u(0),guid([0;4]),l(0),
+   vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])])
+ };
+ let make=|h:Option<Vec<u8>>|{
+  let mut payload=synthetic_payload("3.0.1");payload[3]=0x97+u8::from(h.is_some());
+  for (id,it) in [(4,item),(5,other)]{payload.extend(doc(1,arr(vec![u(id),u(it),u(0),u(6),vec![0xc0]])))}
+  if let Some(h)=h{payload.extend(doc(32,arr(vec![u(6),guid([7,0,0,0]),u(0),
+   arr(vec![doc(8,arr(vec![arr(vec![h])]))])])));}
+  slot_from_payload("3.0.1",payload)
+ };
+ for zipped in [false,true]{
+  let raw=make(None);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory().iter().all(|r|r.quantity_minimum==0));
+  e.change_inventory_quantities(&[(4,6,0),(5,6,0)]).unwrap();
+  assert_eq!(e.history().len(),1);
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert!(saved.inventory().iter().all(|r|r.quantity==0&&r.quantity_minimum==0));
+  saved.change_inventory_quantity(4,0,3).unwrap();
+  let reopened=Editor::open(saved.export().unwrap()).unwrap();assert_eq!(reopened.inventory()[0].quantity,3);
+  assert_eq!(reopened.inventory_original_unique_payload(4),Some([0xc0].as_slice()));
+ }
+ for h in [home(vec![legacy],0),home(vec![],item)]{
+  let mut e=Editor::open(make(Some(h))).unwrap();
+  assert_eq!(e.inventory()[0].quantity_minimum,1);assert_eq!(e.inventory()[1].quantity_minimum,0);
+  assert!(e.change_inventory_quantities(&[(4,6,0),(5,6,0)]).is_err());assert!(!e.dirty());
+ }
+}
+#[test]
+fn ordinary_tradeable_event_comic_music_and_material_addition_uses_native_membership(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let ids=[517031,13938575,21295337,40179426,362307007];
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let candidates=e.inventory_creatable();
+  let req:Vec<_>=ids.iter().map(|id|(candidates.iter().find(|r|r.item_id==*id).unwrap().document_id,0,4)).collect();
+  for id in [2773515,3445697,1798633565,1900000001,1205887707]{assert!(!candidates.iter().any(|r|r.item_id==id));}
+  e.change_inventory_quantities(&req).unwrap();assert_eq!(e.history().len(),1);
+  let checkpoint=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&checkpoint).unwrap();
+  assert!(restored.undo_scope(Inventory));assert!(restored.inventory().is_empty());assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();assert_eq!(saved.inventory().len(),ids.len());
+  assert!(saved.inventory().iter().all(|r|ids.contains(&r.item_id)&&r.quantity==4&&saved.inventory_original_unique_payload(r.document_id)==Some([0xc0].as_slice())));
+  assert_eq!(saved.entries(),e.entries());assert_eq!(saved.achievements(),e.achievements());
+ }
+}
+
+#[test]
+fn first_seed_and_uprooted_plant_use_verified_species_and_full_tuple(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ for zipped in [false,true]{
+  let raw=slot_from_payload("3.0.1",synthetic_payload("3.0.1"));let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let id=(1u32<<31)|43114910;let witness=[6,2,0,0];
+  let (choices,can)=e.inventory_flower_preview(id,witness,witness).unwrap();assert!(can&&choices.contains(&[0,2,0,0])&&choices.contains(&[7,2,0,0]));
+  assert!(e.inventory_flower_preview(id,witness,[0,2,0,0]).unwrap().1);
+  assert!(e.inventory_flower_preview(id,witness,[7,5,10,16]).unwrap().1);
+  assert!(e.inventory_flower_preview(id,witness,[5,2,0,0]).is_err());
+  let crown=(1u32<<31)|1120342995;
+  assert!(e.inventory_flower_preview(crown,witness,[0,2,0,0]).is_err());
+  assert!(e.create_inventory_flower_variant(crown,witness,[7,2,0,0],1).is_err());
+  assert!(!e.dirty());
+  let a=e.create_inventory_flower_variant(id,witness,[0,2,0,0],3).unwrap();
+  let b=e.create_inventory_flower_variant(id,witness,[7,5,10,16],4).unwrap();
+  assert_ne!(a,b);assert!(e.create_inventory_flower_variant(id,witness,[0,2,0,0],1).is_err());
+  let checkpoint=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();recovered.restore_history(&checkpoint).unwrap();
+  assert!(recovered.undo_scope(Inventory));assert!(recovered.redo_scope(Inventory));
+  let saved=Editor::open(recovered.export().unwrap()).unwrap();assert_eq!(saved.inventory().len(),2);
+  for (i,h) in [a,b].into_iter().enumerate(){assert_eq!(saved.inventory_unique_data(saved.inventory()[i].document_id),e.inventory_unique_data(h));}
+  assert!(matches!(saved.inventory_unique_data(saved.inventory()[0].document_id),Some(U::Flower{grow_state:0,..})));
+  assert!(matches!(saved.inventory_unique_data(saved.inventory()[1].document_id),Some(U::Flower{grow_state:7,..})));
+ }
+}
+
+
+#[test]
+fn item_and_critter_wands_preserve_source_identity_through_edit_add_delete_and_recovery(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=384749651u32;let critter=1304219546u32;
+ let stick=1185152302u32;let outfit=315822u32;let bug=7285157u32;
+ let payload=|source:u32,magic:u32,fleck:u32,style:u32,nested:Vec<u8>|arr(vec![vec![9],arr(vec![u(source),nested,u(magic),u(fleck),u(style)])]);
+ let make=|other:Vec<u8>,extra:Option<Vec<u8>>|{
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x98+u8::from(extra.is_some());
+  for (id,it,uid,pay) in [(4,item,21,payload(stick,115,125,0,vec![0xc0])),(5,item,22,other),(6,critter,23,payload(bug,104,126,0,vec![0xc0]))]{
+   p.extend(doc(1,arr(vec![u(id),u(it),u(uid),u(2),pay])));
+  }
+  if let Some(x)=extra{p.extend(x);}
+  slot_from_payload("3.0.1",p)
+ };
+ let peer=payload(outfit,115,125,0,vec![0xc0]);
+ for zipped in [false,true]{
+  let raw=make(peer.clone(),None);let input=if zipped{zip(&raw)}else{raw};let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory().iter().all(|r|r.editable&&r.quantity_minimum==0));
+  assert!(e.inventory_wand_variants(4).contains(&[104,125]));
+  assert!(e.inventory_wand_variants(5).contains(&[104,125]));
+  assert!(e.inventory_wand_variants(6).contains(&[115,127]));
+  e.change_inventory_wand_variant(4,[115,125],[104,125]).unwrap();
+  let child=e.create_inventory_wand_variant(4,[104,125],[105,127],3).unwrap();
+  let critter_child=e.create_inventory_wand_variant(6,[104,126],[115,127],1).unwrap();
+  assert!(matches!(e.inventory_unique_data(child),Some(U::WandAppearance{source_item_id:1185152302,style:0,magic:105,fleck:127,source_tag:-1,..})));
+  assert!(matches!(e.inventory_unique_data(critter_child),Some(U::WandAppearance{source_item_id:7285157,style:0,magic:115,fleck:127,..})));
+  assert!(e.create_inventory_wand_variant(4,[104,125],[105,127],1).is_err());
+  e.change_inventory_quantity(4,2,0).unwrap();
+  assert!(e.inventory_wand_creation_variants(4).is_empty());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity,0);
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(peer.as_slice()));
+  assert!(saved.inventory().iter().any(|r|r.quantity==3&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(child)));
+  assert!(saved.inventory().iter().any(|r|r.quantity==1&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(critter_child)));
+  saved.change_inventory_quantity(4,0,2).unwrap();
+  assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory()[0].quantity,2);
+ }
+ for invalid in [payload(stick,115,125,0,vec![0xc0]),payload(1900000001,115,125,0,vec![0xc0]),payload(outfit,115,125,1,vec![0xc0]),payload(outfit,115,125,0,plain_flower(6))]{
+  let mut e=Editor::open(make(invalid,None)).unwrap();
+  assert!(e.inventory_wand_creation_variants(4).is_empty());
+  assert!(e.change_inventory_quantity(4,2,0).is_err());assert!(!e.dirty());
+ }
+ let copied=doc(22,arr(vec![u(7),arr(vec![]),arr(vec![arr(vec![u(item),peer.clone()])]),vec![0xc0],vec![0xc0],arr(vec![])]));
+ let mut e=Editor::open(make(peer,Some(copied))).unwrap();
+ assert!(e.change_inventory_quantity(4,2,0).is_err());assert!(!e.dirty());
+ let mut empty=Editor::open(slot("3.0.1")).unwrap();
+ assert!(empty.inventory_absent_wand_ids().contains(&(item as i32,0)));
+ assert!(!empty.inventory_absent_wand_ids().contains(&(critter as i32,0)));
+ assert!(empty.create_inventory_wand_variant(0x80000000|item,[0;2],[104,125],1).is_err());
+}
+
+
+#[test]
+fn first_source_wands_require_explicit_source_witness_and_replay_it(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=384749651u32;let critter=1304219546u32;let stick=1185152302i32;let bug=7285157i32;
+ let item_candidate=0x80000000|item;let critter_candidate=0x80000000|critter;
+ let make=||{
+  let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=0x96;
+  p.extend(doc(1,arr(vec![u(4),u(bug as u32),u(0),u(2),vec![0xc0]])));
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make();let input=if zipped{zip(&raw)}else{raw};let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory_absent_wand_ids().contains(&(item as i32,0)));
+  assert!(e.inventory_absent_wand_ids().contains(&(critter as i32,0)));
+  let sources=e.inventory_absent_wand_sources(item_candidate);
+  assert!(sources.contains(&stick)&&sources.windows(2).all(|w|w[0]<w[1]));
+  assert_eq!(e.inventory_absent_wand_sources(critter_candidate),vec![bug]);
+  assert_eq!(e.inventory_wand_creation_variants(item_candidate).len(),36);
+  for bad in [[0,0],[stick,1],[1900000001,0]]{
+   assert!(e.create_inventory_wand_variant(item_candidate,bad,[104,125],1).is_err());
+  }
+  assert!(e.create_inventory_wand_variant(critter_candidate,[stick,0],[104,125],1).is_err());
+  assert!(!e.dirty());
+  let first=e.create_inventory_wand_variant(item_candidate,[stick,0],[104,125],3).unwrap();
+  let second=e.create_inventory_wand_variant(critter_candidate,[bug,0],[105,126],1).unwrap();
+  assert!(matches!(e.inventory_unique_data(first),Some(U::WandAppearance{source_item_id:1185152302,style:0,magic:104,fleck:125,source_tag:-1,..})));
+  assert!(matches!(e.inventory_unique_data(second),Some(U::WandAppearance{source_item_id:7285157,style:0,magic:105,fleck:126,source_tag:-1,..})));
+  assert!(e.inventory_absent_wand_sources(item_candidate).contains(&stick));
+  assert_eq!(e.inventory_wand_source_creation_variants(item_candidate,stick).len(),35);
+  assert!(!e.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[104,125]));
+  assert!(e.create_inventory_wand_variant(item_candidate,[stick,0],[104,125],1).is_err());
+  let alternate=e.create_inventory_wand_variant(item_candidate,[315822,0],[104,125],4).unwrap();
+  assert!(matches!(e.inventory_unique_data(alternate),Some(U::WandAppearance{source_item_id:315822,style:0,magic:104,fleck:125,..})));
+  e.change_inventory_wand_variant(first,[104,125],[106,125]).unwrap();
+  assert!(!e.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[104,125]));
+  assert!(!e.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[106,125]));
+  assert!(e.create_inventory_wand_variant(item_candidate,[stick,0],[106,125],1).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity,2);
+  assert!(saved.inventory().iter().any(|r|r.quantity==3&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(first)));
+  assert!(saved.inventory().iter().any(|r|r.quantity==1&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(second)));
+  assert!(saved.inventory().iter().any(|r|r.quantity==4&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(alternate)));
+  assert!(!saved.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[106,125]));
+  assert!(saved.inventory_wand_source_creation_variants(item_candidate,stick).contains(&[104,125]));
+ }
+ let mut empty=Editor::open(slot("3.0.1")).unwrap();
+ assert!(empty.inventory_absent_wand_sources(critter_candidate).is_empty());
+ assert!(empty.create_inventory_wand_variant(critter_candidate,[bug,0],[104,125],1).is_err());
+}
+
+#[test]
+fn remaining_custom_furniture_zero_refill_preserves_native_payload_and_protects_references(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=102286319u32;
+ let native_guid=[0xc2961421,0x4fdf4f88,0x988e1cb7,0x7f57b563];
+ let make=|payload:Vec<u8>,reference:Option<Vec<u8>>|{
+  let mut p=synthetic_payload("3.0.1");p[3]=0x96+u8::from(reference.is_some());
+  p.extend(doc(1,arr(vec![u(4),u(item),u(11),u(6),payload])));
+  if let Some(h)=reference{p.extend(doc(32,arr(vec![u(6),guid([7,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![h])]))])])));}
+  slot_from_payload("3.0.1",p)
+ };
+ let home=|wall,legacy:Vec<Vec<u8>>|arr(vec![guid([41,42,43,44]),arr(legacy),u(wall),u(0),guid([0;4]),l(0),
+  vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])]);
+ let legacy=arr(vec![guid(native_guid),guid([1,2,3,4]),u(0),u(0),u(0),u(0),u(0),u(0),
+  vec![0xc0],vec![0xc0],vec![0xc0],u(0),arr(vec![]),arr(vec![]),u(0)]);
+ let payload=furniture_payload([102,0,0]);
+ for zipped in [false,true]{
+  let raw=make(payload.clone(),None);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert_eq!(e.inventory()[0].quantity_minimum,0);
+  e.change_inventory_quantity(4,6,0).unwrap();
+  assert!(e.inventory_furniture_creation_variants(4).is_empty());
+  let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();
+  recovered.restore_history(&cp).unwrap();assert!(recovered.undo_scope(Inventory));assert!(recovered.redo_scope(Inventory));
+  let mut saved=Editor::open(recovered.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity_minimum,0);assert_eq!(saved.inventory()[0].quantity,0);
+  assert_eq!(saved.inventory_original_unique_payload(4),Some(payload.as_slice()));
+  saved.change_inventory_quantity(4,0,6).unwrap();
+  let restored=Editor::open(saved.export().unwrap()).unwrap();
+  assert_eq!(restored.inventory()[0].quantity,6);
+  assert_eq!(restored.inventory_original_unique_payload(4),Some(payload.as_slice()));
+ }
+ for h in [home(item,vec![]),home(0,vec![legacy])]{
+  let mut e=Editor::open(make(payload.clone(),Some(h))).unwrap();
+  assert_eq!(e.inventory()[0].quantity_minimum,1);
+  assert!(e.change_inventory_quantity(4,6,0).is_err());assert!(!e.dirty());
+ }
+ let mut nil=Editor::open(make(vec![0xc0],None)).unwrap();
+ assert!(nil.change_inventory_quantity(4,6,0).is_err());
+ assert!(!Editor::open(slot("3.0.1")).unwrap().inventory_creatable().iter().any(|r|r.item_id==item as i32));
+}
+
+
+#[test]
+fn ordinary_furniture_base_zero_refill_keeps_distinct_custom_peers(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=61381969u32;
+ let make=|peers:Vec<Vec<u8>>|{
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x96+peers.len() as u8;
+  p.extend(doc(1,arr(vec![u(4),u(item),u(0),u(3),vec![0xc0]])));
+  for peer in peers{p.extend(peer);}
+  slot_from_payload("3.0.1",p)
+ };
+ let custom=|id,uid,materials|doc(1,arr(vec![u(id),u(item),u(uid),u(2),furniture_payload(materials)]));
+ for zipped in [false,true]{
+  let raw=make(vec![custom(5,11,[0,2,0]),custom(6,12,[0,3,0])]);
+  let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert_eq!(e.inventory()[0].quantity_minimum,0);
+  let before=e.inventory_original_unique_payload(5).unwrap().to_vec();
+  e.change_inventory_quantity(4,3,0).unwrap();
+  assert!(e.inventory_furniture_creation_variants(4).is_empty());
+  assert_eq!(e.inventory_unique_data(5),Some(U::Furniture{materials:[0,2,0]}));
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut reopened=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory()[0].quantity,0);assert_eq!(reopened.inventory()[0].quantity_minimum,0);
+  assert_eq!(reopened.inventory()[1].quantity,2);assert_eq!(reopened.inventory()[2].quantity,2);
+  assert_eq!(reopened.inventory_original_unique_payload(5),Some(before.as_slice()));
+  reopened.change_inventory_quantity(4,0,7).unwrap();
+  let final_save=Editor::open(reopened.export().unwrap()).unwrap();
+  assert_eq!(final_save.inventory()[0].quantity,7);
+  assert_eq!(final_save.inventory_original_unique_payload(4),Some([0xc0].as_slice()));
+  assert_eq!(final_save.inventory_original_unique_payload(5),Some(before.as_slice()));
+ }
+ for peers in [
+  vec![doc(1,arr(vec![u(5),u(item),u(0),u(2),vec![0xc0]]))],
+  vec![custom(5,11,[0,1,0])],
+  vec![custom(5,11,[0,2,0]),custom(6,12,[0,2,0])],
+  vec![custom(5,11,[0,2,0]),custom(6,11,[0,3,0])],
+ ]{
+  let mut e=Editor::open(make(peers)).unwrap();
+  assert_eq!(e.inventory()[0].quantity_minimum,1);
+  assert!(e.change_inventory_quantity(4,3,0).is_err());assert!(!e.dirty());
+ }
+}
+
+
+#[test]
+fn first_custom_palette_uses_exact_native_output_words_and_replays(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,inventory_palette_source::palette_output_color};
+ let item=1835273963i32;let candidate=0x80000000u32|item as u32;
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let (id,default)=e.inventory_absent_palette_default().unwrap();assert_eq!(id,item);
+  let target=[palette_output_color(1,0).unwrap(),palette_output_color(2,3).unwrap(),palette_output_color(3,4).unwrap()];
+  assert!(e.inventory_palette_preview(candidate,default,default).unwrap().1);
+  assert!(e.inventory_palette_preview(candidate,default,target).unwrap().1);
+  assert!(e.create_inventory_palette_variant(candidate,[[0;4];3],target,1).is_err());
+  assert!(e.create_inventory_palette_variant(candidate,default,[[0;4];3],1).is_err());
+  assert!(e.create_inventory_palette_variant(candidate,default,target,0).is_err());assert!(!e.dirty());
+  let handle=e.create_inventory_palette_variant(candidate,default,target,2).unwrap();
+  assert!(e.inventory_absent_palette_default().is_none());
+  assert!(e.create_inventory_palette_variant(candidate,default,target,1).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.inventory_absent_palette_default().is_some());
+  assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();assert!(saved.inventory_absent_palette_default().is_none());
+  let row=&saved.inventory()[0];assert_eq!((row.item_id,row.quantity),(item,2));
+  assert_eq!(saved.inventory_unique_data(row.document_id),e.inventory_unique_data(handle));
+  assert_eq!(saved.inventory_unique_data(row.document_id).unwrap().display_words().1,target.into_iter().flatten().collect::<Vec<_>>());
+ }
+}
+
+
+#[test]
+fn item_wand_source_replacement_keeps_uid_and_reserves_original_and_effective_identity(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=384749651u32;let candidate=0x80000000|item;
+ let stick=1185152302i32;let outfit=315822i32;
+ let make=||{
+  let mut p=synthetic_payload("3.0.1");p[2]=9;p[3]=0x97;
+  for (id,uid,source,magic) in [(4,21,stick,104),(5,22,outfit,105)]{
+   let pay=arr(vec![vec![9],arr(vec![u(source as u32),vec![0xc0],u(magic),u(125),u(0)])]);
+   p.extend(doc(1,arr(vec![u(id),u(item),u(uid),u(2),pay])));
+  }
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make();let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let original=e.inventory_unique_data(4);
+  assert!(e.inventory_wand_edit_sources(4).contains(&outfit));
+  assert!(!e.inventory_wand_edit_source_variants(4,outfit).contains(&[105,125]));
+  assert!(e.change_inventory_wand_identity(4,[stick,104,125],[outfit,105,125]).is_err());
+  assert!(e.change_inventory_wand_identity(4,[stick,104,125],[1900000001,104,125]).is_err());assert!(!e.dirty());
+  e.change_inventory_wand_identity(4,[stick,104,125],[outfit,104,125]).unwrap();
+  assert_eq!(e.inventory()[0].quantity,2);
+  assert!(matches!(e.inventory_unique_data(4),Some(U::WandAppearance{source_item_id:315822,magic:104,fleck:125,style:0,..})));
+  assert!(!e.inventory_wand_source_creation_variants(candidate,stick).contains(&[104,125]));
+  assert!(!e.inventory_wand_source_creation_variants(candidate,outfit).contains(&[104,125]));
+  e.change_inventory_wand_variant(4,[104,125],[106,127]).unwrap();
+  assert!(e.undo_scope(Inventory));assert!(e.undo_scope(Inventory));assert_eq!(e.inventory_unique_data(4),original);
+  assert!(e.redo_scope(Inventory));assert!(e.redo_scope(Inventory));
+  let checkpoint=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&checkpoint).unwrap();
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory_unique_data(4),e.inventory_unique_data(4));
+  assert_eq!(saved.inventory_unique_rows().map(|r|r.1).collect::<Vec<_>>(),vec![Some(21),Some(22)]);
+  assert_eq!(saved.inventory()[0].quantity,2);
+  assert!(saved.inventory_wand_source_creation_variants(candidate,stick).contains(&[104,125]));
+ }
+}
+
+#[test]
+fn first_unowned_currency_creation_roundtrip_and_atomic_rejection(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let ids=[348154640,391038680,460708033,483381991,646065996,833471261,1486918074,1763799360,1774854033,1956968187,2079616823];
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let candidates=e.inventory_creatable();
+  let changes:Vec<_>=ids.iter().map(|id|(candidates.iter().find(|r|r.item_id==*id).unwrap().document_id,0,15)).collect();
+  for denied in [1205887707u32,484139114,2092387705,615026760]{
+   let mut bad=changes.clone();bad.push((0x80000000|denied,0,1));
+   assert!(e.change_inventory_quantities(&bad).is_err());assert!(!e.dirty());
+  }
+  e.change_inventory_quantities(&changes).unwrap();assert_eq!(e.history().len(),1);
+  assert_eq!(e.inventory().len(),11);
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.inventory().is_empty());assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();let rows=saved.inventory();
+  assert_eq!(rows.len(),11);assert!(rows.iter().all(|r|ids.contains(&r.item_id)&&r.quantity==15&&r.quantity_minimum==0));
+  assert!(saved.inventory_unique_rows().all(|(_,uid,nil,_,_)|uid==Some(0)&&nil==Some(true)));
+  assert_eq!(saved.entries(),e.entries());assert_eq!(saved.achievements(),e.achievements());
+  let deletion:Vec<_>=rows.iter().map(|r|(r.document_id,15,0)).collect();
+  saved.change_inventory_quantities(&deletion).unwrap();
+  let mut reopened=Editor::open(saved.export().unwrap()).unwrap();
+  assert!(reopened.inventory().iter().all(|r|r.quantity==0&&r.quantity_minimum==0));
+  reopened.change_inventory_quantity(rows[0].document_id,0,2).unwrap();
+  assert_eq!(Editor::open(reopened.export().unwrap()).unwrap().inventory()[0].quantity,2);
+ }
+}
+
+#[test]
+fn floral_outfits_first_add_edit_clone_zero_and_refill(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let ids=[41105179,313677564,528401863,809985659,811189976,965037291,1646153125];
+ for zipped in [false,true]{
+  let mut p=synthetic_payload("3.0.1");p[3]=0x97;
+  p.extend(doc(10,arr(vec![u(4),guid([1,2,3,4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([1,2,3,4]),vec![0xc3],vec![0xc0]])));
+  p.extend(doc(22,arr(vec![u(5),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
+  p[2]=6;
+  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(ids.iter().all(|id|e.inventory_absent_flower_ids().contains(id)));
+  for item in ids{
+   let candidate=(1u32<<31)|item as u32;
+   let base=e.inventory_flower_creation_variants(candidate)[0];
+   let handle=e.create_inventory_flower_variant(candidate,[0;4],base,2).unwrap();
+   let next=e.inventory_flower_variants(handle).into_iter().find(|v|v[2]==14).unwrap();
+   e.change_inventory_flower_variant(handle,base,next).unwrap();
+   assert!(e.create_inventory_flower_variant(handle,next,base,1).is_err());
+   let clone=e.inventory_flower_creation_variants(handle)[0];
+   e.create_inventory_flower_variant(handle,next,clone,3).unwrap();
+  }
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();let rows=saved.inventory();
+  assert_eq!(rows.len(),14);assert!(rows.iter().all(|r|ids.contains(&r.item_id)&&r.editable&&r.quantity_minimum==0));
+  let clear:Vec<_>=rows.iter().map(|r|(r.document_id,r.quantity,0)).collect();
+  saved.change_inventory_quantities(&clear).unwrap();
+  let mut reopened=Editor::open(saved.export().unwrap()).unwrap();
+  assert!(reopened.inventory().iter().all(|r|r.quantity==0));
+  reopened.change_inventory_quantity(rows[0].document_id,0,4).unwrap();
+  assert_eq!(Editor::open(reopened.export().unwrap()).unwrap().inventory()[0].quantity,4);
+ }
+}
+
+
+#[test]
+fn furniture_source_wand_edits_and_additions_preserve_exact_nested_identity(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=384749651u32;let source=61381969i32;let candidate=0x80000000|item;
+ let wand=|source:i32,magic:u32,materials:Option<[u32;3]>|arr(vec![vec![9],arr(vec![u(source as u32),materials.map(furniture_payload).unwrap_or_else(||vec![0xc0]),u(magic),u(125),u(0)])]);
+ let make=|peer:Vec<u8>|{
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x98;
+  for (id,uid,pay) in [(4,21,wand(source,104,Some([13,2,0]))),(5,22,peer),(6,23,wand(source,104,None))]{
+   p.extend(doc(1,arr(vec![u(id),u(item),u(uid),u(2),pay])));
+  }
+  slot_from_payload("3.0.1",p)
+ };
+ let peer=wand(source,104,Some([502,2,0]));
+ for zipped in [false,true]{
+  let raw=make(peer.clone());let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let before=[source,104,125,13,2,0];let after=[source,104,125,13,3,0];
+  assert!(e.inventory().iter().all(|r|r.editable&&r.quantity_minimum==0));
+  assert!(e.inventory_wand_edit_sources(4).is_empty());
+  assert!(e.inventory_wand_nested_material_variants(4).contains(&[13,3,0]));
+  assert!(e.inventory_wand_nested_creation_material_variants(4).contains(&[13,3,0]));
+  assert!(!e.inventory_wand_nested_material_variants(4).contains(&[502,2,0]));
+  assert!(e.inventory_wand_nested_pairs(4,true).contains(&[106,127]));
+  let combined=e.inventory_wand_nested_materials_for_pair(4,[106,127],true);
+  assert!(combined.contains(&[13,2,0])&&combined.contains(&[502,2,0]));
+  assert!(e.inventory_wand_nested_materials_for_pair(4,[999,127],false).is_empty());
+  assert!(!e.inventory_wand_source_creation_variants(candidate,source).contains(&[104,125]));
+  assert!(e.change_inventory_wand_nested(4,before,[source,104,125,502,2,0]).is_err());
+  assert!(e.change_inventory_wand_nested(4,before,[source,104,125,285,2,0]).is_err());
+  assert!(e.change_inventory_wand_nested(4,before,[source,104,125,0,0,0]).is_err());
+  assert!(e.change_inventory_wand_identity(4,[source,104,125],[315822,104,125]).is_err());
+  assert!(e.create_inventory_wand_variant(4,[104,125],[106,125],1).is_err());
+  assert!(!e.dirty());
+  e.change_inventory_wand_nested(4,before,after).unwrap();
+  assert!(e.inventory_wand_nested_material_variants(4).contains(&[13,2,0]));
+  assert!(!e.inventory_wand_nested_creation_material_variants(4).contains(&[13,2,0]));
+  let material=e.inventory_wand_nested_creation_material_variants(4).into_iter().next().expect("distinct furniture material");
+  let material_target=[source,104,125,material[0],material[1],material[2]];
+  let material_child=e.create_inventory_wand_nested(4,after,material_target,4).unwrap();
+  assert!(!e.inventory_wand_nested_creation_material_variants(4).contains(&material));
+  let child=e.create_inventory_wand_nested(4,after,[source,106,125,13,3,0],3).unwrap();
+  let combination=[source,106,127,502,3,0];
+  assert!(e.inventory_wand_nested_materials_for_pair(4,[106,127],true).contains(&[502,3,0]));
+  let combined_child=e.create_inventory_wand_nested(4,after,combination,5).unwrap();
+  assert!(!e.inventory_wand_nested_materials_for_pair(4,[106,127],true).contains(&[502,3,0]));
+  assert!(matches!(e.inventory_unique_data(child),Some(U::WandAppearance{source_item_id:61381969,magic:106,fleck:125,source_tag:8,source_count:3,..})));
+  assert_eq!(e.inventory_unique_data(child).unwrap().display_words().1,vec![61381969,106,125,0,8,3,13,3,0]);
+  assert!(e.create_inventory_wand_nested(4,after,[source,106,125,13,3,0],1).is_err());
+  assert!(e.create_inventory_wand_nested(4,after,before,1).is_err());
+  e.change_inventory_quantity(4,2,0).unwrap();
+  assert!(e.inventory_wand_nested_creation_material_variants(4).is_empty());
+  let checkpoint=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&checkpoint).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity,0);assert_eq!(saved.inventory_unique_rows().next().unwrap().1,Some(21));
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(peer.as_slice()));
+  assert!(saved.inventory().iter().any(|r|r.quantity==3&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(child)));
+  assert!(saved.inventory().iter().any(|r|r.quantity==4&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(material_child)));
+  assert!(saved.inventory().iter().any(|r|r.quantity==5&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(combined_child)));
+  saved.change_inventory_quantity(4,0,2).unwrap();assert!(Editor::open(saved.export().unwrap()).is_ok());
+ }
+ for peer in [wand(source,104,Some([13,2,0])),wand(source,104,Some([285,2,0])),wand(source,104,Some([0,0,0])),wand(315822,104,Some([13,2,0]))]{
+  let mut e=Editor::open(make(peer)).unwrap();
+  assert!(e.inventory_wand_nested_material_variants(4).is_empty());
+  assert!(e.change_inventory_quantity(4,2,0).is_err());assert!(!e.dirty());
+ }
+}
+
+#[test]
+fn rare_candle_effect_only_patterns_roundtrip_and_preserve_native_identity(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ for zipped in [false,true]{
+  let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let effects=[3,4,5,7,8,9];
+  for item in [22657460,1858821696]{
+   let candidate=(1u32<<31)|item as u32;let starter=[6,2,10,16];
+   for pattern in effects{
+    let target=[6,2,pattern,0];
+    assert!(e.inventory_flower_preview(candidate,starter,target).unwrap().1);
+    assert!(e.inventory_flower_preview(candidate,starter,[6,2,pattern,16]).is_err());
+    e.create_inventory_flower_variant(candidate,starter,target,3).unwrap();
+    assert!(e.create_inventory_flower_variant(candidate,starter,target,3).is_err());
+   }
+  }
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert_eq!(restored.inventory(),e.inventory());assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();let rows=saved.inventory();
+  assert_eq!(rows.len(),12);assert!(rows.iter().all(|r|r.quantity_minimum==0&&r.editable&&r.quantity==3));
+  for row in &rows{
+   let Some(U::Flower{grow_state:6,base_color:2,pattern,pattern_color:0})=saved.inventory_unique_data(row.document_id)else{panic!("wrong effect payload")};
+   assert!(effects.contains(&pattern));
+   let before=[6,2,pattern,0];let next=[6,9,pattern,0];
+   assert!(saved.inventory_flower_variants(row.document_id).contains(&next));
+   saved.change_inventory_flower_variant(row.document_id,before,next).unwrap();
+  }
+  let clear:Vec<_>=rows.iter().map(|r|(r.document_id,3,0)).collect();
+  saved.change_inventory_quantities(&clear).unwrap();
+  let mut reopened=Editor::open(saved.export().unwrap()).unwrap();
+  for row in &rows{
+   assert!(matches!(reopened.inventory_unique_data(row.document_id),Some(U::Flower{grow_state:6,base_color:9,pattern,pattern_color:0}) if effects.contains(&pattern)));
+   reopened.change_inventory_quantity(row.document_id,0,2).unwrap();
+  }
+  assert!(Editor::open(reopened.export().unwrap()).unwrap().inventory().iter().all(|r|r.quantity==2));
+ }
 }

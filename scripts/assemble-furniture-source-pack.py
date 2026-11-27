@@ -28,7 +28,7 @@ def normalized(z):
     require(not ('local-source-manifest.json' in z.namelist() and 'sources.json' in z.namelist()),'AMBIGUOUS_MANIFEST')
     if 'local-source-manifest.json' in z.namelist():
         m=json_entry(z,'local-source-manifest.json');require(m['schema']=='HKIA.LocalFurnitureSourceStage.1' and m['catalogSha256']==CATALOG and m['renderFidelity']=='unverified','STAGE_SOURCE')
-        return m['version'],[x['geometry'] for x in m['models']],[x['base'] for x in m['models']],m['patterns'],{}
+        return m['version'],[x['geometry'] for x in m['models']],[x['base'] for x in m['models']],m['patterns'],m.get('cubemaps',{})
     m=json_entry(z,'sources.json');require(m['schema'] in ('HKIA.CenterpieceStaticSourcePack.1','HKIA.FurnitureSourcePack.1') and m.get('renderFidelity')=='unverified','PACK_SCHEMA')
     require(m.get('catalogSha256',CATALOG)==CATALOG,'CATALOG_SOURCE')
     require(m['geometry']['schema']=='HKIA.FurnitureStaticMeshSamples.1' and m['base']['schema']=='HKIA.FurnitureBaseMaterialSource.1' and m['additionalPatterns']['schema']=='HKIA.FurniturePatternTextureSources.1','SOURCE_SCHEMA')
@@ -47,14 +47,16 @@ def validate_geometry(g,b):
     rr=[]
     for m in g['meshes'].values():
         vr,ir=m['vertexBytes'],m['indexBytes'];rr.extend([vr,ir]);nv=m['vertexCount'];ni=m['indexCount']
-        require(type(nv)==type(ni)==int and 0<nv<=65536 and ni>0 and ni%3==0 and vr[1]==nv*m['stride'] and ir[1]==ni*2,'MESH_LENGTH')
+        fmt=m.get('indexFormat',0);require(type(fmt)==int and fmt in (0,1),'INDEX_FORMAT')
+        width=2 if fmt==0 else 4;code='H' if fmt==0 else 'I'
+        require(type(nv)==type(ni)==int and 0<nv<=(65536 if fmt==0 else 64*1024*1024//12) and 0<ni<=6*1024*1024 and ni%3==0 and vr[1]==nv*m['stride'] and ir[1]==ni*width,'MESH_LENGTH')
         require(ir[0]>=0 and ir[0]+ir[1]<=len(b),'INDEX_RANGE')
-        indices=struct.unpack_from('<'+str(ni)+'H',b,ir[0]);require(max(indices)<nv,'INDEX_VERTEX')
+        indices=struct.unpack_from('<'+str(ni)+code,b,ir[0]);require(max(indices)<nv and max(indices)<(1<<(8*width))-1,'INDEX_VERTEX')
         if 'submeshes' in m:
             cursor=0;require(2<=len(m['submeshes'])<=64,'SUBMESH_COUNT')
             for s in m['submeshes']:
-                n=s['indexCount'];v=s['firstVertex'];vn=s['vertexCount'];require(s['firstByte']==cursor and n>0 and n%3==0 and cursor+n*2<=ir[1] and 0<=v<nv and 0<vn<=nv-v,'SUBMESH_RANGE')
-                require(all(v<=i<v+vn for i in indices[cursor//2:cursor//2+n]),'SUBMESH_VERTEX');cursor+=n*2
+                n=s['indexCount'];v=s['firstVertex'];vn=s['vertexCount'];require(s['firstByte']==cursor and n>0 and n%3==0 and cursor+n*width<=ir[1] and 0<=v<nv and 0<vn<=nv-v,'SUBMESH_RANGE')
+                require(all(v<=i<v+vn for i in indices[cursor//width:cursor//width+n]),'SUBMESH_VERTEX');cursor+=n*width
             require(cursor==ir[1],'SUBMESH_COVERAGE')
     ranges(b,rr,True)
 

@@ -23,11 +23,21 @@ def identity(report,schema,plan):
     require(report['schema']==schema and report['version']==plan['version'] and
             report['catalogSha256']==plan['catalogSha256'] and
             report['renderFidelity']=='unverified','BATCH_IDENTITY')
-def pack_batches(plan,source,materials,out,prior=None,prior_sha=None):
+def lighting_cubes(stage):
+    # The committed original scene/preset manifest is the independent pin.
+    expected=batch.read('furniture-light-region-source-v3.0.1.json')
+    manifest=stage/'furniture-light-region-source-v3.0.1.json'
+    require(stage.is_dir() and not stage.is_symlink() and manifest.is_file() and not manifest.is_symlink(),'LIGHT_STAGE')
+    require(read(manifest)==expected and expected['schema']=='HKIA.FurnitureLightRegionSource.1' and expected['version']==assembler.VERSION,'LIGHT_SOURCE')
+    cubes=expected['cubemaps']
+    require(len(cubes)==2 and len({t['sha256'] for t in cubes.values()})==2,'LIGHT_COVERAGE')
+    return cubes
+
+def pack_batches(plan,source,materials,out,prior=None,prior_sha=None,lighting_stage=None):
     require(bool(prior)==bool(prior_sha),'PRIOR_PIN_REQUIRED')
     require(not out.exists() and not out.is_symlink(),'OUTPUT_EXISTS')
     require(all(not out.resolve().is_relative_to(x.resolve()) for x in
-                (source,batch.REPO,*([materials] if materials else []))),'OUTPUT_INSIDE_SOURCE')
+                (source,batch.REPO,*([materials] if materials else []),*([lighting_stage] if lighting_stage else []))),'OUTPUT_INSIDE_SOURCE')
     if prior:plan=batch.remaining_plan(plan,prior,prior_sha)
     src=read(source/'report.json');mat=read(materials/'report.json') if materials else None
     identity(src,'HKIA.FurnitureBatchExtraction.1',plan)
@@ -47,7 +57,7 @@ def pack_batches(plan,source,materials,out,prior=None,prior_sha=None):
                 r['status'] in ('extracted','unresolved'),'MATERIAL_RECEIPT')
     stage={'schema':'HKIA.LocalFurnitureSourceStage.1','version':plan['version'],
            'catalogSha256':plan['catalogSha256'],'renderFidelity':'unverified',
-           'models':[],'patterns':[]}
+           'models':[],'patterns':[],'cubemaps':lighting_cubes(lighting_stage) if lighting_stage else {}}
     omitted=[];written=set()
     with tempfile.TemporaryDirectory(prefix='hkia-batch-pack-') as d:
         p=Path(d)/'delta.zip'
@@ -58,6 +68,8 @@ def pack_batches(plan,source,materials,out,prior=None,prior_sha=None):
                 raw=path.read_bytes();require(len(raw)==n and assembler.sha(raw)==digest,'BATCH_PAYLOAD_HASH')
                 name=f'{kind}/{digest}.bin'
                 if name not in written:z.writestr(name,raw);written.add(name)
+            for t in stage['cubemaps'].values():
+                add('cube',t['sha256'],t['bytes'],lighting_stage/(t['sha256']+'.cubemap.bin'))
             for (kind,key),receipt in sorted(receipts.items()):
                 if receipt['status']!='extracted' or kind=='geometry' and closed.get(key,{}).get('status')!='extracted':
                     omitted.append({'kind':kind,'key':key,'reason':'source or material closure unresolved'});continue
@@ -103,5 +115,6 @@ if __name__=='__main__':
     for name in ('source','out'):p.add_argument('--'+name,type=Path,required=True)
     p.add_argument('--materials',type=Path,help='material closure batch; omit for pattern-only extraction')
     p.add_argument('--prior',type=Path);p.add_argument('--prior-sha256')
+    p.add_argument('--lighting-stage',type=Path,help='exact original light-region extractor output with both cubemaps')
     a=p.parse_args()
-    print(json.dumps(pack_batches(batch.make_plan(),a.source,a.materials,a.out,a.prior,a.prior_sha256)))
+    print(json.dumps(pack_batches(batch.make_plan(),a.source,a.materials,a.out,a.prior,a.prior_sha256,a.lighting_stage)))

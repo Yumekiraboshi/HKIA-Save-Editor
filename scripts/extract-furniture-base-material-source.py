@@ -4,6 +4,7 @@ Offline only; shader code and texture payloads stay in staging. No rendered icon
 """
 import argparse, hashlib, importlib.util, json, math, re, struct
 from pathlib import Path
+from collections import OrderedDict
 
 def load_module(name):
     spec=importlib.util.spec_from_file_location(name,Path(__file__).with_name(name+'.py'))
@@ -13,9 +14,19 @@ def require(ok,msg):
     if not ok:raise ValueError(msg)
 def sha(b):return hashlib.sha256(b).hexdigest()
 
+def validate_white_argb(width,height,mips,color,data):
+    # Exact BlankPattern bytes; matches the existing pack and GPU gate.
+    # All channels are FF, so no unverified ARGB swizzle is needed.
+    require((width,height,mips,color)==(2,2,2,1) and data==bytes([255])*20 and
+            sha(data)=='9a8dcd3f9ff7aa3114e141f03c12989d363ea81fd74c02eea63c5f41489cb17a',
+            'unsupported ARGB32 texture')
+
 # Original PC v3.0.1 Shader object identities. Extraction support does not
 # imply WebGL rendering support. Offsets refer to each exact hashed object.
 SHADER_SOURCES={
+    'CAB-e0075f9686395e123063e1f6e74b320e:-4347397964667902612':('d6d38ec7b6791f57aada7ef3232dd62b661019609f57e05236a9f663d07bef48',13504,'Sunblink/Lynx/FluidStream',43,1),
+    'CAB-2b27edbfe7f08bad1cd631865ee4eb15:-2540003304741789102':('6a7232c308fb8355a29b9b83b3148ef433ff91a43b7a2491b9730017fa7c78aa',16836,'Sunblink/Lynx/CustomLitTriplanar',22,3),
+    'CAB-2b27edbfe7f08bad1cd631865ee4eb15:-12830570528601674':('724fb740b376758d27d683cd06a029485cb6ced08faa3ab9069efbc7ae49b05f',14112,'Shader Graphs/HK_Unlit_SoftTextured',11,1),
     'CAB-46b8f8fe122147493b3113f7c1c8cd0f:-245959077359590779':('39080ec3a7154ee8032ee36bab5f861630dfe745b3bd1e35ad275662b1c6e332',28460,'Sunblink/Lynx/CustomLitRefractive',41,7),
     'CAB-2b27edbfe7f08bad1cd631865ee4eb15:-2527260696058741820':('1d7fcbcf451083bffb545d5490fa8a894cf373f0f7b03dd834a89f21e07e7e9a',19752,'Sunblink/Lynx/CustomLitSparkle',36,3),
     'CAB-6ef5e40a482b00b1d462fae2060592ab:8125211537628429288':('d1e8f28824efdf877dae5004d5ae5ea98823893b62f137d6fc37dfb44f5d91a8',19860,'Shader Graphs/Standard Vertex Color',6,1),
@@ -30,15 +41,60 @@ def shader_source(key,object_sha):
     require(source is not None and source[0]==object_sha,'unsupported shader identity '+key)
     return source
 
-def extract(bundles,scene,mesh,audit,shader_audit,out=None,resolve_cab=None):
+def parse_material_bundle(path,mesh,audit):
+    raw=path.read_bytes();_,pairs=audit.auditor.extract_nodes(raw);nodes=dict(pairs)
+    cabs=[x for x in nodes if re.fullmatch('CAB-[0-9a-f]{32}',x)];require(len(cabs)==1,'CAB identity');cab=cabs[0]
+    trees,externals,object_types=mesh.type_trees(nodes[cab],indexed=True)
+    objects={p:(c,b) for c,p,b,e in audit.serialized_objects(nodes[cab],classes=(21,28,48)) if e=='<'}
+    entry={'bundle':path.name.removesuffix('.bin'),'sha256':sha(raw),'trees':trees,'objectTypes':object_types,'externals':externals,'objects':objects,'stream':nodes.get(cab+'.resS',b'')}
+    # Conservative byte weight for retained binary data and parsed metadata.
+    # This is a cache budget, not a bound on process RSS or active model data.
+    weight=len(raw)+sum(map(len,nodes.values()))+sum(len(b) for _,b in objects.values())
+    return cab,entry,weight
+
+class MaterialBundleCache:
+    """Only share parsed source bytes inside one local extraction invocation.
+    No CAB-only lookup: callers must still resolve the exact allowed file.
+    """
+    def __init__(self,max_bytes=192*1024*1024,max_entries=8):
+        require(type(max_bytes) is int and max_bytes>=0 and type(max_entries) is int and max_entries>=0,'cache limits')
+        self.max_bytes=max_bytes;self.max_entries=max_entries
+        self.entries=OrderedDict();self.bytes=0
+    @staticmethod
+    def fingerprint(path):
+        s=path.stat()
+        return (s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+    def get(self,path,parse):
+        path=Path(path)
+        key=str(path.absolute())
+        require(not path.is_symlink() and path.is_file(),'original bundle path')
+        before=self.fingerprint(path)
+        if key in self.entries:
+            stamp,cab,entry,weight=self.entries.pop(key)
+            self.bytes-=weight
+            if stamp==before:
+                self.entries[key]=(stamp,cab,entry,weight);self.bytes+=weight
+                return cab,entry
+        cab,entry,weight=parse(path)
+        require(self.fingerprint(path)==before,'source bundle changed during parse')
+        require(type(weight) is int and weight>=0,'cache weight')
+        if self.max_entries and weight<=self.max_bytes:
+            while self.entries and (len(self.entries)>=self.max_entries or self.bytes+weight>self.max_bytes):
+                _,(_,_,_,old)=self.entries.popitem(last=False);self.bytes-=old
+            self.entries[key]=(before,cab,entry,weight);self.bytes+=weight
+        return cab,entry
+
+def extract(bundles,scene,mesh,audit,shader_audit,out=None,resolve_cab=None,bundle_cache=None):
     loaded={}
     def load(path,expected_cab=None):
-        raw=path.read_bytes();_,pairs=audit.auditor.extract_nodes(raw);nodes=dict(pairs)
-        cabs=[x for x in nodes if re.fullmatch('CAB-[0-9a-f]{32}',x)];require(len(cabs)==1,'CAB identity');cab=cabs[0]
+        parse=lambda p:parse_material_bundle(p,mesh,audit)
+        if bundle_cache is None:
+            cab,entry,_=parse(path)
+        else:
+            cab,entry=bundle_cache.get(path,parse)
         require(expected_cab is None or cab==expected_cab,'resolved CAB mismatch')
         require(cab not in loaded,'duplicate CAB')
-        trees,externals,object_types=mesh.type_trees(nodes[cab],indexed=True);objects={p:(c,b) for c,p,b,e in audit.serialized_objects(nodes[cab],classes=(21,28,48)) if e=='<'}
-        loaded[cab]={'bundle':path.name.removesuffix('.bin'),'sha256':sha(raw),'trees':trees,'objectTypes':object_types,'externals':externals,'objects':objects,'stream':nodes.get(cab+'.resS',b'')}
+        loaded[cab]=entry
     for path in bundles:load(path)
     def entry_for(cab):
         if cab not in loaded and resolve_cab is not None:
@@ -62,15 +118,17 @@ def extract(bundles,scene,mesh,audit,shader_audit,out=None,resolve_cab=None):
         target=object_for(key,28)
         if not target:unresolved.add(key);return
         entry,b=target;cab=key.split(':')[0];name,at=mesh.string(b);alpha,w,h,size,stripped,fmt,mips=struct.unpack_from('<7I',b,at)
-        require(alpha in (0,1) and 0<w<=8192 and 0<h<=8192 and stripped==0 and fmt in (4,10,12) and 1<=mips<=max(w,h).bit_length(),f'unsupported texture layout {key} {name} {alpha,w,h,size,stripped,fmt,mips}')
+        require(alpha in (0,1) and 0<w<=8192 and 0<h<=8192 and stripped==0 and fmt in (4,5,10,12) and 1<=mips<=max(w,h).bit_length(),f'unsupported texture layout {key} {name} {alpha,w,h,size,stripped,fmt,mips}')
         require(b[at+28:at+32] in (bytes(4),b'\1\0\0\0') and mesh.u(b,at+32)==0,'texture flags')
         streaming,priority,images,dim=struct.unpack_from('<4I',b,at+36);require(streaming in (0,1) and images==1 and dim==2,'texture dimension')
         sampler=struct.unpack_from('<iifiii',b,at+52);lightmap,color,platform,inline=struct.unpack_from('<4I',b,at+76)
         require(sampler[0] in (0,1,2) and 0<=sampler[1]<=16 and math.isfinite(sampler[2]) and all(v in (0,1,2,3) for v in sampler[3:]) and color in (0,1) and platform==inline==0,'sampler')
         off,length=struct.unpack_from('<QI',b,at+92);path,end=mesh.string(b,at+104);require(end==len(b) and path==f'archive:/{cab}/{cab}.resS' and length==size and off+length<=len(entry['stream']),'stream binding')
-        data=entry['stream'][off:off+length];cursor=0;chain=[]
+        data=entry['stream'][off:off+length]
+        if fmt==5:validate_white_argb(w,h,mips,color,data)
+        cursor=0;chain=[]
         for level in range(mips):
-            mw=max(1,w>>level);mh=max(1,h>>level);n=mw*mh*4 if fmt==4 else ((mw+3)//4)*((mh+3)//4)*(8 if fmt==10 else 16)
+            mw=max(1,w>>level);mh=max(1,h>>level);n=mw*mh*4 if fmt in (4,5) else ((mw+3)//4)*((mh+3)//4)*(8 if fmt==10 else 16)
             require(cursor+n<=length,'mip bounds');chain.append([mw,mh,cursor,n,sha(data[cursor:cursor+n])]);cursor+=n
         require(cursor==length,'mip chain');textures[key]={'name':name,'bundle':entry['bundle'],'objectSha256':sha(b),'width':w,'height':h,'format':fmt,'colorSpace':color,'sampler':sampler,'bytes':length,'sha256':sha(data),'mips':chain}
         if out:(out/(sha(data)+'.texture.bin')).write_bytes(data)

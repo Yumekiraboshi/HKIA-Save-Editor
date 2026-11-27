@@ -14,6 +14,7 @@ import {chromium} from 'playwright-core';
 import {chefRuntimeSmoke} from './chef-runtime-smoke.mjs';
 import {wandRuntimeSmoke} from './wand-runtime-smoke.mjs';
 import {flowerRuntimeCoverage} from './flower-runtime-coverage.mjs';
+import {furnitureLdrGpuSmoke} from './furniture-ldr-gpu-smoke.mjs';
 
 const append=(...arrays)=>Uint8Array.from(arrays.flatMap(x=>Array.from(x)));
 const u32=n=>append([0xce],Array.from({length:4},(_,i)=>n>>>(24-8*i)&255));
@@ -26,7 +27,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -48,7 +49,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
  const placedFurniture=arr(u32(3202680),u32(0),u32(0),u32(0),u32(0),u32(0),[0xc0],[0xc0],arr(),arr(),u32(0),arr(),u32(0));
  const furnitureHome=arr(hash(41,42,43,44),arr(),u32(0),u32(0),hash(0,0,0,0),i64(0n),[0xc0],[0xc2],[0xc0],arr(placedFurniture),[0xc0],[0xc0],u32(0),u32(0),arr());
  const furnitureHomeObject=doc(32,arr([10],hash(10,0,0,0),[0],arr(doc(8,arr(arr(furnitureHome))))));
- const model=arr([0],cafeCreateInventory?[10]:(editableFlower||editableFurniture||paletteCreationInventory||bobaCreateInventory||wandEditInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
+ const model=arr([0],cafeCreateInventory?[10]:(editableFlower||editableFurniture||paletteCreationInventory||bobaCreateInventory||wandEditInventory||nestedWandInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(paletteRemovalInventory?[doc(10,arr([8],hash(1,2,3,4),arr(),arr(),arr(),hash(1,2,3,4),[0xc3],
    paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
@@ -63,6 +64,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,flowerInven
    ...(['flower','flower-equipped'].includes(ordinaryClothingInventory)?[doc(1,arr([8],u32(897617923),u32(11),u32(6),arr([7],arr([6],u32(6),u32(0),u32(0)))))]:[])]:[]),
   ...(emptyMaterialInventory?[doc(1,arr([9],u32(emptyMaterialInventory==='currency'?348154640:1877756618),[0],u32(6),[0xc0])),doc(1,arr([10],u32(emptyMaterialInventory==='currency'?1774854033:627013240),[0],u32(0),[0xc0]))]:[]),
   ...(wandEditInventory?[chef(8,1429161083,arr([9],arr([0],[0xc0],u32(104),u32(125),u32(118))))]:[]),
+  ...(nestedWandInventory?[chef(8,384749651,arr([9],arr(u32(61381969),arr([8],arr(u32(13),u32(2),u32(0))),u32(104),u32(125),u32(0))))]:[]),
   ...(editableFlower?[flower(8,1,0,0)]:[]),
   ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
   ...(cafeCreateInventory?[chef(8,1338995084,arr([3],arr(arr(u32(44),u32(49),u32(48)),arr(u32(6),u32(46),u32(9))))),chef(9,1932639321,arr([3],arr(arr(u32(44),u32(137)),arr(u32(6),u32(10))))),doc(1,arr([10],u32(1643431747),[0],u32(1),[0xc0]))]:[]),
@@ -242,11 +244,48 @@ async function inventoryPaletteRemovalSmoke(){
    await page.locator('.inventory-empty-stack').waitFor();
    await page.locator('button[title="Undo"]:not([disabled])').click();
    await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});
+   await page.waitForFunction(expected=>document.querySelectorAll('.inventory-card .inventory-stack-delete:not([disabled])').length===expected,state===true?2:1);
    assert.equal(await cards.locator('.inventory-stack-delete:not([disabled])').count(),state===true?2:1);
    assert.deepEqual(errors,[]);
   }finally{await context.close()}
  }
  console.log('CHROMIUM PALETTE REMOVAL PASS: copied avatar palette protected; zero, recovery and undo');
+}
+async function inventoryFirstPaletteSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-first-palette.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
+  const search=page.locator('.inventory-controls input[type="search"]');await search.fill('1835273963');
+  const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="palette-editor-title"]');
+  await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  assert.equal(await dialog.locator('button[type="submit"]').count(),0);
+  await dialog.locator('.inventory-palette-option:not([disabled])').first().click();
+  await dialog.locator('[data-palette-slot="1"]:not([disabled])').click();
+  await dialog.locator('.inventory-palette-option:not([disabled])').first().click();
+  await dialog.locator('input[name="variant-add-quantity"]:not([disabled])').fill('2');
+  await dialog.locator('.inventory-create-palette:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await card.locator('.inventory-add-source').waitFor();
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('1835273963');
+  const qty=card.locator('input[name="quantity"]');await qty.waitFor();assert.equal(await qty.inputValue(),'2');
+  await page.locator('button[title="Undo"]:not([disabled])').click();await card.waitFor({state:'detached'});
+  await page.locator('button[title="Redo"]:not([disabled])').click();await qty.waitFor();
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('1835273963');await qty.waitFor();assert.equal(await qty.inputValue(),'2');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_absent_palette_default(),0);
+  assert.equal(new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len()).getUint32(0,true),0);
+  assert.equal(e.hkia_inventory_palettes_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(v.getUint32(0,true),1);
+  assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST PALETTE PASS: absent chooser, history, recovery and export');
+ }finally{await context.close()}
 }
 async function inventoryPaletteCreationSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
@@ -287,6 +326,171 @@ async function inventoryPaletteCreationSmoke(){
   assert.deepEqual(words(60).slice(8),words(8).slice(8));
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM PALETTE ADD PASS: independent stack, quantity, history, draft and export reparse');
+ }finally{await context.close()}
+}
+async function inventoryFirstWandSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-first-wand.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('1429161083');
+  const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="wand-editor-title"]');
+  await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  assert.equal(await dialog.locator('button[type="submit"]').count(),0);
+  const select=dialog.locator('select[name="wand-variant"]');
+  assert.equal(await select.locator('option').count(),36);
+  const value=await select.locator('option[data-wand-variant="106:127"]').getAttribute('value');assert.ok(value!==null);
+  await select.selectOption(value);
+  await dialog.locator('input[name="variant-add-quantity"]').fill('2');
+  await dialog.locator('.inventory-create-wand:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await card.locator('.inventory-add-source').waitFor();
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('1429161083');
+  await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'2');
+  await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  assert.equal(await select.locator('option[data-wand-variant="106:127"]').count(),0);
+  await dialog.locator('.date-dialog-cancel').click();await dialog.waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();await card.waitFor({state:'detached'});
+  await page.locator('button[title="Redo"]:not([disabled])').click();await card.locator('input[name="quantity"]').waitFor();
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('1429161083');await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'2');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_absent_wand_ids(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(v.getUint32(0,true),6);
+  assert.equal(e.hkia_inventory_snapshot(),0);const iv=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  const rows=Array.from({length:iv.getUint32(0,true)},(_,i)=>[iv.getInt32(4+i*16+4,true),iv.getInt32(4+i*16+8,true)]);
+  assert.ok(rows.some(([id,q])=>id===1429161083&&q===2));
+  assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST MAGIC WAND PASS: absent chooser, history, recovery and export');
+ }finally{await context.close()}
+}
+async function inventoryFirstItemWandSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-first-item-wand.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('384749651');
+  const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="wand-editor-title"]');
+  await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  const add=dialog.locator('.inventory-create-wand');assert.equal(await add.isEnabled(),false);
+  await dialog.locator('input[name="wand-source-search"]').fill('1185152302');
+  await dialog.locator('select[name="wand-source"]').selectOption('1185152302');
+  const select=dialog.locator('select[name="wand-variant"]');
+  const option=await select.locator('option[data-wand-variant="106:127"]').getAttribute('value');
+  assert.ok(option!==null);await select.selectOption(option);
+  await dialog.locator('input[name="variant-add-quantity"]').fill('2');
+  await add.click();await dialog.waitFor({state:'hidden'});
+  await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  await dialog.locator('input[name="wand-source-search"]').fill('1185152302');
+  await dialog.locator('select[name="wand-source"]').selectOption('1185152302');
+  await page.waitForFunction(()=>document.querySelector('select[name="wand-variant"]')?.options.length===35);
+  assert.equal(await select.locator('option[data-wand-variant="106:127"]').count(),0);
+  await dialog.locator('input[name="wand-source-search"]').fill('315822');
+  await dialog.locator('select[name="wand-source"]').selectOption('315822');
+  await page.waitForFunction(()=>document.querySelector('select[name="wand-variant"]')?.options.length===36);
+  await select.selectOption(await select.locator('option[data-wand-variant="106:127"]').getAttribute('value'));
+  await dialog.locator('input[name="variant-add-quantity"]').fill('4');
+  await add.click();await dialog.waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('384749651');
+  await card.locator('input[name="quantity"]').nth(1).waitFor();
+  assert.deepEqual((await card.locator('input[name="quantity"]').evaluateAll(els=>els.map(e=>e.value))).sort(),['2','4']);
+  const firstIndex=(await card.locator('input[name="quantity"]').evaluateAll(els=>els.map(e=>e.value))).indexOf('2');
+  assert.ok(firstIndex>=0);
+  await card.nth(firstIndex).locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  await dialog.locator('input[name="wand-source-search"]').fill('315822');
+  await dialog.locator('select[name="wand-source"]').selectOption('315822');
+  await page.waitForFunction(()=>document.querySelector('select[name="wand-variant"]')?.options.length===35);
+  assert.equal(await select.locator('option[data-wand-variant="106:127"]').count(),0);
+  await select.selectOption(await select.locator('option[data-wand-variant="104:125"]').getAttribute('value'));
+  await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('384749651');
+  await card.locator('input[name="quantity"]').nth(1).waitFor();
+  assert.deepEqual((await card.locator('input[name="quantity"]').evaluateAll(els=>els.map(e=>e.value))).sort(),['2','4']);
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_unique_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());let at=0;
+  const u=()=>{const n=v.getUint32(at,true);at+=4;return n};const count=u(),rows=[];
+  for(let i=0;i<count;i++){const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();const words=Array.from({length:n},()=>u()|0);u();if(tag===9)rows.push(words)}
+  assert.ok(rows.some(w=>w.join(':')==='315822:104:125:0:-1:0'));
+  assert.ok(!rows.some(w=>w.join(':')==='1185152302:106:127:0:-1:0'));
+  assert.ok(rows.some(w=>w.join(':')==='315822:106:127:0:-1:0'));
+  assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST ITEM WAND PASS: explicit source selection, recovery and reparse');
+ }finally{await context.close()}
+}
+async function inventoryNestedWandSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-nested-wand.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({nestedWandInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');const search=page.locator('.inventory-controls input[type="search"]');await search.fill('384749651');
+  const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="wand-editor-title"]');
+  await card.locator('.inventory-unique-edit-button:not([disabled])').click();await dialog.waitFor();
+  const materials=dialog.locator('select[name="wand-nested-material"]');
+  const material=await materials.locator('option[data-wand-material="13:3:0"]').getAttribute('value');assert.ok(material!==null);
+  await materials.selectOption(material);
+  await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await card.locator('.inventory-unique-edit-button:not([disabled])').click();await dialog.waitFor();
+  const pair=dialog.locator('select[name="wand-variant"]');
+  const choice=await pair.locator('option[data-wand-variant="106:127"]').getAttribute('value');assert.ok(choice!==null);
+  await pair.selectOption(choice);
+  const combinedOption=dialog.locator('select[name="wand-nested-material"]:not([disabled]) option[data-wand-material="502:3:0"]');
+  await page.waitForFunction(()=>{const dialog=document.querySelector('dialog[aria-labelledby="wand-editor-title"]');return Boolean(dialog?.querySelector('select[name="wand-variant"]:not([disabled])'))});
+  assert.equal(await dialog.locator('[role="alert"]').count(),0,await dialog.locator('[role="alert"]').allTextContents().then(v=>v.join(' ')));
+  await combinedOption.waitFor({state:'attached'});
+  const combinedChoice=await combinedOption.getAttribute('value');assert.ok(combinedChoice!==null);
+  await materials.selectOption(combinedChoice);
+  await dialog.locator('input[name="variant-add-quantity"]').fill('3');
+  await dialog.locator('.inventory-create-wand:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('384749651');
+  await card.locator('.inventory-add-source:not([disabled])').first().click();await dialog.waitFor();
+  const materialOnly=materials.locator('option[data-wand-material]').first();
+  const materialOnlyKey=await materialOnly.getAttribute('data-wand-material'),materialOnlyValue=await materialOnly.getAttribute('value');
+  assert.ok(materialOnlyKey&&materialOnlyValue!==null);
+  await materials.selectOption(materialOnlyValue);
+  assert.equal(await pair.inputValue(),'-1');
+  await dialog.locator('input[name="variant-add-quantity"]').fill('4');
+  assert.equal(await dialog.locator('button[type="submit"]').count(),0);
+  await dialog.locator('.inventory-create-wand:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('384749651');
+  const quantities=card.locator('input[name="quantity"]');
+  await quantities.nth(2).waitFor();
+  assert.deepEqual((await quantities.evaluateAll(els=>els.map(e=>e.value))).sort(),['1','3','4']);
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('384749651');await quantities.nth(2).waitFor();
+  assert.deepEqual((await quantities.evaluateAll(els=>els.map(e=>e.value))).sort(),['1','3','4']);
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_unique_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());let at=0;
+  const u=()=>{const n=v.getUint32(at,true);at+=4;return n};const count=u(),rows=[];
+  for(let i=0;i<count;i++){const id=u(),present=u(),uid=u(),tag=u()|0,fields=u(),n=u();const words=Array.from({length:n},()=>u()|0);u();if(tag===9)rows.push(words)}
+  assert.ok(rows.some(w=>w.join(':')==='61381969:104:125:0:8:3:13:3:0'));
+  assert.ok(rows.some(w=>w.join(':')==='61381969:106:127:0:8:3:502:3:0'));
+  assert.ok(rows.some(w=>w[0]===61381969&&w[4]===8&&w.slice(6).join(':')===materialOnlyKey));
+  assert.equal(rows.length,3);
+  assert.deepEqual(errors,[]);console.log('CHROMIUM NESTED FURNITURE WAND PASS: material edit, new pair, material-only Add, recovery and reparse');
  }finally{await context.close()}
 }
 async function inventoryWandEditSmoke(){
@@ -378,6 +582,57 @@ async function inventoryBobaEditSmoke(){
   assert.deepEqual(Array.from({length:5},(_,i)=>v.getInt32(12+i*4,true)),[6,44,79,75,71]);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM BOBA VARIANT PASS: independent pearls and sweetness, draft, history and export');
+ }finally{await context.close()}
+}
+async function inventoryFirstChefSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-first-chef.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
+  const search=page.locator('.inventory-controls input[type="search"]'),card=page.locator('.inventory-card');
+  await search.fill('1798633565');await card.locator('.inventory-unique-edit-button').click();
+  const boba=page.locator('dialog[aria-labelledby="boba-editor-title"]');await boba.waitFor();
+  assert.equal(await boba.locator('button[type="submit"]').count(),0);
+  const bs=boba.locator('select[name="boba-base"]'),vs=boba.locator('select[name="boba-variant"]');
+  assert.equal(await bs.locator('option').count(),19);
+  assert.equal(await vs.locator('option').count(),8);
+  await bs.selectOption('46:39:78');await vs.selectOption({label:'With tapioca · Semi-sweet'});
+  await boba.locator('input[name="variant-add-quantity"]').fill('2');
+  await boba.locator('.inventory-create-boba:not([disabled])').click();await boba.waitFor({state:'hidden'});
+  await card.locator('.inventory-add-source').waitFor();
+  await search.fill('1338995084');await card.locator('.inventory-unique-edit-button').click();
+  const cafe=page.locator('dialog[aria-labelledby="cafe-editor-title"]');await cafe.waitFor();
+  assert.equal(await cafe.locator('button[type="submit"]').count(),0);
+  assert.equal(await cafe.locator('.inventory-cafe-slot').count(),3);
+  const select=cafe.locator('select[name="cafe-variant"]');
+  const ingredient=await select.locator('option[data-ingredient-id]').first().getAttribute('value');assert.ok(ingredient!==null);
+  await select.selectOption(ingredient);await cafe.locator('[data-cafe-slot="1"]').click();
+  const next=await select.locator('option[data-ingredient-id]').last().getAttribute('value');assert.ok(next!==null);
+  await select.selectOption(next);
+  await cafe.locator('input[name="variant-add-quantity"]').fill('3');
+  await cafe.locator('.inventory-create-cafe:not([disabled])').click();await cafe.waitFor({state:'hidden'});
+  await card.locator('.inventory-add-source').waitFor();
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('1338995084');
+  const qty=card.locator('input[name="quantity"]');await qty.waitFor();assert.equal(await qty.inputValue(),'3');
+  await page.locator('button[title="Undo"]:not([disabled])').click();await card.waitFor({state:'detached'});
+  await page.locator('button[title="Redo"]:not([disabled])').click();await qty.waitFor();
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('1338995084');await qty.waitFor();assert.equal(await qty.inputValue(),'3');
+  await search.fill('1798633565');await qty.waitFor();assert.equal(await qty.inputValue(),'2');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_boba_snapshot(),0);
+  let v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(v.getUint32(0,true),1);
+  assert.deepEqual(Array.from({length:5},(_,i)=>v.getInt32(12+i*4,true)),[46,39,76,78,72]);
+  assert.equal(e.hkia_inventory_cafe_snapshot(),0);v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(v.getUint32(0,true),1);
+  assert.equal(e.hkia_inventory_absent_chef_defaults(),0);v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(v.getUint32(0,true),0);assert.equal(v.getUint32(4,true),8);
+  assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST CHEF PASS: unowned Boba and composed cafe selection, undo, recovery and reparse');
  }finally{await context.close()}
 }
 async function inventoryBobaFullCreationSmoke(){
@@ -1365,6 +1620,12 @@ async function inventoryAbsentFlowerCreationSmoke(){
   const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');
   await dialog.waitFor();
   assert.equal(await dialog.locator('button[type="submit"]').count(),0);
+  await dialog.locator('[data-flower-grow="0"]:not([disabled])').click();
+  await dialog.locator('[data-flower-grow="0"][aria-pressed="true"]').waitFor();
+  await dialog.locator('[data-flower-grow="7"]:not([disabled])').click();
+  await dialog.locator('[data-flower-grow="7"][aria-pressed="true"]').waitFor();
+  await dialog.locator('[data-flower-grow="6"]:not([disabled])').click();
+  await dialog.locator('[data-flower-grow="6"][aria-pressed="true"]').waitFor();
   const firstPattern=await dialog.locator('option[data-flower-variant="6,2,1,16"]').getAttribute('value');assert.ok(firstPattern!==null);
   await dialog.locator('select').selectOption(firstPattern);
   const reset=dialog.locator('.inventory-flower-reset:not([disabled])');
@@ -1406,6 +1667,44 @@ async function inventoryAbsentFlowerCreationSmoke(){
   assert.notDeepEqual(Array.from({length:4},(_,i)=>v.getInt32(28+i*4,true)),[6,2,1,16]);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM UNOWNED FLOWER PASS: native default choices, staged appearance edit, draft recovery, exported reparse');
+ }finally{await context.close();}
+}
+async function inventoryRareCandleSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-rare-candle.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
+  const search=page.locator('.inventory-controls input[type="search"]'),card=page.locator('.inventory-card');
+  await search.fill('22657460');await card.locator('.inventory-unique-edit-button').click();
+  const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');await dialog.waitFor();
+  assert.equal(await dialog.locator('button[type="submit"]').count(),0);
+  assert.equal(await dialog.locator('[data-flower-grow]').count(),0);
+  const choices=await dialog.locator('option[data-flower-variant]').evaluateAll(rows=>rows.map(row=>row.getAttribute('data-flower-variant').split(',').map(Number)));
+  assert.ok(choices.length>0);assert.ok(choices.every(v=>v[0]===6&&([1,2,10,11,12,13,14,16].includes(v[2])?v[3]!==0&&v[3]!==v[1]:[3,4,5,7,8,9].includes(v[2])&&v[3]===0)));
+  for(const pattern of [3,4,5,7,8,9])assert.ok(choices.some(v=>v[2]===pattern&&v[3]===0));
+  const target=choices.find(v=>v[2]===3&&v[3]===0);assert.ok(target);
+  const value=await dialog.locator('option[data-flower-variant="'+target.join(',')+'"]').getAttribute('value');assert.ok(value!==null);
+  await dialog.locator('select').selectOption(value);
+  await dialog.locator('input[name="variant-add-quantity"]').fill('3');
+  await dialog.locator('.inventory-create-flower:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('22657460');
+  await card.locator('input[name="quantity"]').waitFor();assert.equal(await card.locator('input[name="quantity"]').inputValue(),'3');
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('22657460');await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'3');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_flowers_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(v.getUint32(0,true),1);assert.deepEqual(Array.from({length:4},(_,i)=>v.getInt32(8+i*4,true)),target);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM RARE CANDLE PASS: native effect-pattern selection, recovery, export reparse');
  }finally{await context.close();}
 }
 async function inventoryFlowerClothingCreationSmoke(){
@@ -2041,6 +2340,7 @@ async function achievementAtlasRetrySmoke(){
 }
 
 async function run(){
+ if(!livePages)await furnitureLdrGpuSmoke();
  await waitForServer();
  browser=await chromium.launch({headless:true,executablePath:installedChrome(),args:['--no-sandbox','--disable-dev-shm-usage']});
  const context=await browser.newContext({locale:'en-US',viewport:{width:1360,height:840},acceptDownloads:true});
@@ -2503,12 +2803,17 @@ async function run(){
  await achievementExportReopenRoundtrip();
  await inventoryDynamicPaletteArtSmoke();
  await inventoryPaletteCreationSmoke();
+ await inventoryFirstPaletteSmoke();
  await inventoryPaletteRemovalSmoke();
  await chefRuntimeSmoke(browser,origin,base);
  await inventoryChefArtSmoke();
  await inventoryBobaEditSmoke();
  await inventoryWandEditSmoke();
+ await inventoryFirstWandSmoke();
+ await inventoryFirstItemWandSmoke();
+ await inventoryNestedWandSmoke();
  await inventoryBobaFullCreationSmoke();
+ await inventoryFirstChefSmoke();
  await inventoryCafeEditSmoke();
  await inventoryCafeCreationAndOptionalSideSmoke();
  await inventoryChefQuantitySmoke();
@@ -2529,6 +2834,7 @@ async function run(){
  await inventoryFlowerVariantEditSmoke();
  await inventoryFlowerCreationSmoke();
  await inventoryAbsentFlowerCreationSmoke();
+ await inventoryRareCandleSmoke();
  await inventoryFlowerClothingCreationSmoke();
  await inventoryFurnitureVariantEditSmoke();
  await customizedFurnitureRemovalSmoke();

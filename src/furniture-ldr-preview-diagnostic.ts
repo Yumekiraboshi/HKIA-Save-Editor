@@ -9,6 +9,7 @@ import {buildNativeLdrLut,sampleNativeLdrAtlas} from './furniture-ldr-lut-builde
 import {prepareNativeSerializedDefaultGrade} from './furniture-grade-uniforms-v3.0.1';
 import {createNativeDefaultGradeCurveSampler,type GradeCurveFormat,DEFAULT_GRADE_CURVE_SOURCE} from './furniture-default-grade-curves-v3.0.1';
 import {nativeLdrPost,type LdrPostInput,type LutRgba,type LutUv} from './furniture-preview-ldr-v3.0.1';
+import {gradeFurnitureLdrGpu} from './furniture-ldr-gpu';
 import {nativePreviewUiPixel,nativePreviewUiBlend,type PreviewRGB,type PreviewRGBA} from './furniture-preview-output-v3.0.1';
 type Atlas=ReturnType<typeof buildNativeLdrLut>;
 type Post=Omit<LdrPostInput,'color'|'uv'|'internalLut'>;
@@ -100,4 +101,50 @@ export async function renderFurnitureLdrDiagnostic(sources:FurnitureMultiSources
  if(!normalized(options.clearRgb,3))fail('CLEAR');
  const frame=await renderFurnitureDiagnosticFrame(sources,request,read,options.size,createCanvas,draw,options.clearRgb);
  return applyFurnitureLdrDiagnostic(frame,plan);
+}
+
+/** GPU alternative for the explicit LDR diagnostic. The source and clear
+ * are processed by the same shader, including spatial vignette. Alpha must
+ * match raw readback exactly; never use this as a production icon gate. */
+export function applyFurnitureLdrGpuDiagnostic(frame:FurnitureDiagnosticFrame,plan:FurnitureLdrDiagnosticPlan,
+ createCanvas?:()=>HTMLCanvasElement):FurnitureLdrDiagnosticFrame{
+ checkFrame(frame);checkAtlas(plan.atlas);
+ const {rgba,baseline}=gradeFurnitureLdrGpu(frame,plan,createCanvas);
+ let gradedChangedPixels=0,gradedHiddenChangedPixels=0;
+ for(let i=0;i<rgba.length;i+=4){
+  if(rgba[i+3]!==frame.rgba[i+3]||baseline[i+3]!==0)fail('ALPHA');
+  if(rgba[i]!==baseline[i]||rgba[i+1]!==baseline[i+1]||rgba[i+2]!==baseline[i+2]||rgba[i+3]!==baseline[i+3]){
+   gradedChangedPixels++;if(rgba[i+3]===0)gradedHiddenChangedPixels++;
+  }
+ }
+ return {source:frame,rgba,gradedChangedPixels,gradedHiddenChangedPixels,...inspectFurnitureDiagnosticRgba(rgba),fidelity:'ldr-uber-diagnostic-only'};
+}
+export async function renderFurnitureLdrGpuDiagnostic(sources:FurnitureMultiSources,request:FurnitureMultiRequest,read:ReadRugPayload,
+ plan:FurnitureLdrDiagnosticPlan,options:{size:number;clearRgb:FurnitureDiagnosticClearRgb},
+ createCanvas:()=>HTMLCanvasElement=()=>document.createElement('canvas'),draw=drawFurnitureMultiDiagnostic){
+ checkAtlas(plan.atlas);
+ if(plan.post.userLut!==undefined)fail('GPU_USER_LUT_UNSUPPORTED');
+ if(!normalized(options.clearRgb,3))fail('CLEAR');
+ const frame=await renderFurnitureDiagnosticFrame(sources,request,read,options.size,createCanvas,draw,options.clearRgb);
+ return applyFurnitureLdrGpuDiagnostic(frame,plan,createCanvas);
+}
+
+/** Compare the two implementations on the identical source frame. This is a
+ * numerical diagnostic, not a measurement against a native game screenshot.
+ * Alpha must exactly equal the original, including zero-alpha RGB pixels. */
+export function compareFurnitureLdrDiagnostic(cpu:FurnitureLdrDiagnosticFrame,gpu:FurnitureLdrDiagnosticFrame){
+ const source=cpu.source;checkFrame(source);
+ if(gpu.source!==source||cpu.fidelity!=='ldr-uber-diagnostic-only'||gpu.fidelity!==cpu.fidelity||
+ !(cpu.rgba instanceof Uint8Array)||!(gpu.rgba instanceof Uint8Array)||
+ cpu.rgba.length!==source.rgba.length||gpu.rgba.length!==source.rgba.length)fail('COMPARE_FRAME');
+ let maxRgbError=0,changedRgbPixels=0,hiddenMaxRgbError=0;
+ for(let i=0;i<source.rgba.length;i+=4){
+  const alpha=source.rgba[i+3];
+  if(cpu.rgba[i+3]!==alpha||gpu.rgba[i+3]!==alpha)fail('COMPARE_ALPHA');
+  const error=Math.max(Math.abs(cpu.rgba[i]-gpu.rgba[i]),Math.abs(cpu.rgba[i+1]-gpu.rgba[i+1]),Math.abs(cpu.rgba[i+2]-gpu.rgba[i+2]));
+  maxRgbError=Math.max(maxRgbError,error);
+  if(error)changedRgbPixels++;
+  if(!alpha)hiddenMaxRgbError=Math.max(hiddenMaxRgbError,error);
+ }
+ return {maxRgbError,changedRgbPixels,hiddenMaxRgbError};
 }

@@ -87,3 +87,19 @@ test('verified missing UV1 binds the exact same original half2 buffer range as U
  const wrong=structuredClone(mesh);wrong.channels[5]=[0,0,0,16];assert.equal(nativeMissingUv1AliasesUv0(wrong),false);
  wrong.channels[5]=[0,0,0,0];wrong.stride=36;assert.equal(nativeMissingUv1AliasesUv0(wrong),false);
 });
+
+test('UInt32 original index bytes retain high vertex indices, submesh byte offsets and exact upload',async()=>{
+ const nv=65538,off=nv*12,bytes=new ArrayBuffer(off+24),v=new DataView(bytes);
+ [0,1,2,65535,65536,65537].forEach((n,i)=>v.setUint32(off+4*i,n,true));
+ const bounds=[0,0,0,1,1,1],m={indexFormat:1,vertexCount:nv,indexCount:6,stride:12,channels:[[0,0,0,3],...Array.from({length:13},()=>[0,0,0,0])],vertexBytes:[0,off,sha(bytes.slice(0,off))],indexBytes:[off,24,sha(bytes.slice(off))],bounds:[bounds],submeshes:[{firstByte:0,indexCount:3,firstVertex:0,vertexCount:3,bounds},{firstByte:12,indexCount:3,firstVertex:65535,vertexCount:3,bounds}]};
+ const s={geometryBytes:bytes.byteLength,geometrySha256:sha(bytes),meshes:{'1':m}};
+ await verifyNativeGeometry(s,bytes,true);
+ const calls=[],gl={MAX_VERTEX_ATTRIBS:1,VERTEX_ARRAY_BINDING:2,ARRAY_BUFFER_BINDING:3,ARRAY_BUFFER:4,ELEMENT_ARRAY_BUFFER:5,STATIC_DRAW:6,FLOAT:7,HALF_FLOAT:8,UNSIGNED_BYTE:9,NO_ERROR:0,getParameter:k=>k===1?16:null,getError:()=>0,createVertexArray:()=>({}),createBuffer:()=>({}),bindVertexArray(){},bindBuffer(){},bufferData(target,b){if(target===5)calls.push([...b])},enableVertexAttribArray(){},vertexAttribPointer(){},deleteVertexArray(){},deleteBuffer(){}};
+ const uploaded=await uploadNativeGeometry(gl,s,bytes,{'1':{0:0}},true);
+ const mesh=uploaded.meshes.get('1');assert.equal(mesh.indexFormat,1);assert.deepEqual(nativeMeshDrawRange(mesh,1),{firstByte:12,indexCount:3});assert.deepEqual(calls,[[...new Uint8Array(bytes,off,24)]]);uploaded.dispose();
+ for(const [value,error] of [[65538,/NATIVE_MESH_INDEX/],[4294967295,/NATIVE_MESH_INDEX/],[0,/NATIVE_MESH_SUBMESH_INDEX/]]){
+  const bad=bytes.slice(0);new DataView(bad).setUint32(off+12,value,true);const x=structuredClone(s);x.geometrySha256=sha(bad);x.meshes['1'].indexBytes[2]=sha(bad.slice(off));await assert.rejects(verifyNativeGeometry(x,bad,true),error);
+ }
+ for(const format of [0,2,null]){const x=structuredClone(s);x.meshes['1'].indexFormat=format;assert.throws(()=>validateNativeGeometryLayout(x,true),/NATIVE_MESH_/);}
+ const x=structuredClone(s);x.meshes['1'].submeshes[1].firstByte=6;assert.throws(()=>validateNativeGeometryLayout(x,true),/SUBMESH_RANGE/);
+});

@@ -1,6 +1,6 @@
 /** Display-only exact native cafe tuples and source ingredient examples. */
 export type CafeVariant=[number,number,number,number,number,number];
-export type CafeRow={variant:CafeVariant;editable:boolean};
+export type CafeRow={variant:CafeVariant;editable:boolean;creationOnly?:boolean};
 export type CafeWitness=[itemId:number,flavor:number,color:number];
 export type CafeOption={variant:CafeVariant;ingredientId:number;slot:number};
 export function isCafeVariantWire(v:unknown):v is CafeVariant{

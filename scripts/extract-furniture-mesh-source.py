@@ -91,15 +91,40 @@ def array_ptr(b):
 
 def native_submeshes(sm,fmt,nv,ib):
     n=u(sm) if len(sm)>=4 else 0
-    if fmt!=0 or not 1<=n<=64 or len(sm)!=4+48*n or not 1<=nv<=65536 or len(ib)%2:raise ValueError('unsupported submesh/index format')
+    if fmt not in (0,1):raise ValueError('unsupported submesh/index format')
+    width=2 if fmt==0 else 4;code='H' if fmt==0 else 'I'
+    if not 1<=n<=64 or len(sm)!=4+48*n or not 1<=nv<=(65536 if fmt==0 else 64*1024*1024//12) or len(ib)%width or len(ib)//width>6*1024*1024:raise ValueError('unsupported submesh/index format')
     cursor=0;rows=[]
     for i in range(n):
         p=4+48*i;first,count,top,base,fv,vc=struct.unpack_from('<6I',sm,p);bounds=list(struct.unpack_from('<6f',sm,p+24))
-        if first!=cursor or not count or count%3 or top or base or not vc or fv+vc>nv or first+2*count>len(ib) or not all(math.isfinite(x) for x in bounds) or any(x<0 for x in bounds[3:]):raise ValueError('submesh range')
-        if any(not fv<=x[0]<fv+vc for x in struct.iter_unpack('<H',ib[first:first+2*count])):raise ValueError('submesh index bounds')
-        rows.append({'firstByte':first,'indexCount':count,'firstVertex':fv,'vertexCount':vc,'bounds':bounds});cursor+=2*count
+        if first!=cursor or not count or count%3 or top or base or not vc or fv+vc>nv or first+width*count>len(ib) or not all(math.isfinite(x) for x in bounds) or any(x<0 for x in bounds[3:]):raise ValueError('submesh range')
+        if any(not fv<=x[0]<fv+vc or x[0]==(1<<(8*width))-1 for x in struct.iter_unpack('<'+code,ib[first:first+width*count])):raise ValueError('submesh index bounds')
+        rows.append({'firstByte':first,'indexCount':count,'firstVertex':fv,'vertexCount':vc,'bounds':bounds});cursor+=width*count
     if cursor!=len(ib) or (n==1 and (rows[0]['firstVertex']!=0 or rows[0]['vertexCount']!=nv)):raise ValueError('submesh coverage')
     return rows
+
+# Exact v3.0.1 school prefab components: one authored slot array and a
+# second empty instance of the same MonoBehaviour. This is source extraction
+# only, not evidence of native runtime component selection.
+SCHOOL_DUPLICATE_VISUAL_SLOTS={
+    309658643:('4594012181015389488','-29470107625888464','3d4024205a5821688b92fd0769df68ed91574049f735bd9c574244c001e5ad2c','-7246396800638884560','fd9001f470984f72d996c7fb8fa1bb3681c3bb9a8e5300044a83a22a7a1c5952'),
+    679070378:('-1127760422067056889','3748392509682798343','317299a660d8a7029545369cd64d8c5b17675930069d48ddf56a690c98ba9ee0','-4740432595987542265','56f35b75bddaf5488773ca3892e917f3beaa273ad9f61228ec0774452910d214'),
+    925764558:('-7827787959874543765','5019248423022894955','4c342c588f65e7d95234ae67055dadcf3a7ad5cdc487b7a0726575fe74a198f4','6650427107023331179','517d1466ebc3468b7eff78f0a6ced706e94eb310a67d08314f38667c8c6c241e'),
+}
+def select_visual_slot_object(item_id,root,bundle_sha,scripts,obj,f):
+    if len(scripts)==1:return scripts[0],None
+    expected=SCHOOL_DUPLICATE_VISUAL_SLOTS.get(item_id)
+    if expected is None or len(scripts)!=2 or bundle_sha!='d9369ec54b220d739a32e161dee90c6f44e78f86341c60a04a1e561b308fcd1e':
+        raise ValueError('unsupported root components')
+    owner,first,first_sha,empty,empty_sha=expected
+    if root!=owner or scripts!=[first,empty] or sha(obj(first,114))!=first_sha or sha(obj(empty,114))!=empty_sha:
+        raise ValueError('unverified duplicate visual slot objects')
+    a,b=f(first,114),f(empty,114)
+    if (ptr(a['m_GameObject'])!=[0,root] or ptr(b['m_GameObject'])!=[0,root]
+        or u(a['VisualSlots'])!=1 or b['VisualSlots']!=bytes(4)
+        or {k:v for k,v in a.items() if k!='VisualSlots'}!={k:v for k,v in b.items() if k!='VisualSlots'}):
+        raise ValueError('duplicate visual slot fields')
+    return first,{'pathId':empty,'objectSha256':empty_sha}
 
 def extract(raw, bundle_name, guid, item_id, audit, resolve_cab=None):
     _,pairs=audit.auditor.extract_nodes(raw);nodes=dict(pairs)
@@ -123,11 +148,14 @@ def extract(raw, bundle_name, guid, item_id, audit, resolve_cab=None):
     for _ in range(count):
         key,p=string(container,p);first,n=struct.unpack_from('<ii',container,p);ref=ptr(container,p+8);p+=20
         if key==guid:matches.append(local(ref,1))
-    if len(matches)!=1:raise ValueError('missing or ambiguous native prefab key')
+    if not matches:raise ValueError('missing native prefab key')
+    if len(matches)!=1:raise ValueError('ambiguous native prefab key')
     root=matches[0];root_fields=f(root,1);root_comps=array_ptr(root_fields['m_Component']);root_tr=[ref[1] for ref in root_comps if component_class(ref)==4];scripts=[ref[1] for ref in root_comps if component_class(ref)==114]
     scripts=[pid for pid in scripts if ptr(f(pid,114)['m_Script'])==[1,'-4647883882007958521']]
-    if len(root_tr)!=1 or len(scripts)!=1:raise ValueError('unsupported root components')
-    sf=f(scripts[0],114);script=ptr(sf['m_Script']);
+    if len(root_tr)!=1:raise ValueError('unsupported root components')
+    bundle_sha=sha(raw)
+    primary,empty_visual=select_visual_slot_object(item_id,root,bundle_sha,scripts,obj,f)
+    sf=f(primary,114);script=ptr(sf['m_Script']);
     if script!=[1,'-4647883882007958521'] or not externals[0].endswith('CAB-2383a36f15413272ed26f383f73f6431'):raise ValueError('unknown visual slot script')
     if ptr(sf['m_GameObject'])!=[0,root]:raise ValueError('slot owner')
     slots={};s=sf['VisualSlots'];n=u(s);p=4
@@ -138,6 +166,7 @@ def extract(raw, bundle_name, guid, item_id, audit, resolve_cab=None):
     if p!=len(s):raise ValueError('slot object length')
     packed=bytearray();meshes={};scene=[];seen=set();materials={};mesh_origins={};external_meshes={}
     def put(data):
+        if ((len(packed)+3)&~3)+len(data)>64*1024*1024:raise ValueError('geometry payload limit')
         while len(packed)%4:packed.append(0)
         pos=len(packed);packed.extend(data);return [pos,len(data),sha(data)]
     def mesh(ref):
@@ -178,10 +207,10 @@ def extract(raw, bundle_name, guid, item_id, audit, resolve_cab=None):
             end=max(end,o+fmt[ft]*dim)
         if end!=stride or channels[0]!=[0,0,0,3]:raise ValueError('stride mismatch')
         vb=source_stream[off:off+size];ib=m['m_IndexBuffer'];n=u(ib);ib=ib[4:4+n];fmt=u(m['m_IndexFormat']);sm=m['m_SubMeshes']
-        subs=native_submeshes(sm,fmt,nv,ib);count=len(ib)//2
-        positions=[struct.unpack_from('<3f',vb,i*stride) for i in range(nv)]
-        if not all(math.isfinite(x) for row in positions for x in row):raise ValueError('nonfinite vertices')
+        subs=native_submeshes(sm,fmt,nv,ib);count=len(ib)//(2 if fmt==0 else 4)
+        if not all(math.isfinite(x) for i in range(nv) for x in struct.unpack_from('<3f',vb,i*stride)):raise ValueError('nonfinite vertices')
         meshes[pid]={'name':string(m['m_Name'])[0],'objectSha256':sha(mesh_object),'vertexCount':nv,'indexCount':count,'stride':stride,'channels':channels,'vertexBytes':put(vb),'indexBytes':put(ib),'bounds':[list(struct.unpack('<6f',m['m_LocalAABB']))], 'streamOffset':off}
+        if fmt==1:meshes[pid]['indexFormat']=1
         if len(subs)>1:meshes[pid]['submeshes']=subs
         if file_id:meshes[pid].update(sourceCab=origin,sourceBundle=source_name,sourceBundleSha256=source_hash)
         return pid
@@ -213,7 +242,7 @@ def extract(raw, bundle_name, guid, item_id, audit, resolve_cab=None):
         for child in array_ptr(tr['m_Children']):visit(local(child,4),tid)
     visit(root_tr[0]);renderers={x['rendererPathId'] for x in scene if 'rendererPathId' in x}
     if not set(slots)<=renderers:raise ValueError('unresolved slot')
-    return {'schema':'HKIA.FurnitureStaticMeshSource.1','version':'3.0.1','itemId':item_id,'visualGuid':guid,'bundle':bundle_name,'bundleSha256':sha(raw),'cab':cab,'externals':externals,'rootGameObjectPathId':root,'visualSlotScript':script,'visualSlotObjectPathId':scripts[0],'visualSlotObjectSha256':sha(obj(scripts[0],114)),'nodes':scene,'meshes':meshes,'materials':materials,'geometrySha256':sha(packed),'geometryBytes':len(packed),'renderFidelity':'unverified'},bytes(packed)
+    return {'schema':'HKIA.FurnitureStaticMeshSource.1','version':'3.0.1','itemId':item_id,'visualGuid':guid,'bundle':bundle_name,'bundleSha256':bundle_sha,'cab':cab,'externals':externals,'rootGameObjectPathId':root,'visualSlotScript':script,'visualSlotObjectPathId':primary,'visualSlotObjectSha256':sha(obj(primary,114)),**({'emptyVisualSlotObject':empty_visual} if empty_visual else {}),'nodes':scene,'meshes':meshes,'materials':materials,'geometrySha256':sha(packed),'geometryBytes':len(packed),'renderFidelity':'unverified'},bytes(packed)
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('bundle',type=Path);p.add_argument('visual',type=Path);p.add_argument('addressables',type=Path);p.add_argument('--item-id',required=True,type=int);p.add_argument('--out',required=True,type=Path);a=p.parse_args()

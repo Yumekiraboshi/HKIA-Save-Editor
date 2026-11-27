@@ -22,7 +22,7 @@ def cstr(b,p):
 
 def align(n): return (n+3)&~3
 
-def extract(source,furniture_reference_rows=None):
+def extract(source,furniture_reference_rows=None,tradeable_rows=None,tradeable_reference_rows=None,wand_ingredients=None):
     B=source.read_bytes()
     require(hashlib.sha256(B).hexdigest()==SOURCE,'unsupported source bundle')
     spec=importlib.util.spec_from_file_location('unityfs_audit',ROOT/'scripts/unityfs-audit.py')
@@ -94,6 +94,10 @@ def extract(source,furniture_reference_rows=None):
             j=end[j]
         id=d['Id'];stack=bool(d['ItemProperties']&2);unique=d['RequiresUniqueData'];custom=d['HasCustomMaxCount']
         cat=d['ItemCategory']
+        if wand_ingredients is not None and cat>=0 and cat&0x100000:
+            require(not unique,'item wand recipe unexpectedly includes a required-unique definition')
+            if not d['ReleaseVersion']:
+                wand_ingredients.append(id)
         candidate=(d['ItemOwnership']==18 and stack and not unique and not custom
                    and not d['ReleaseVersion'] and d['RequiredDlcContent']=='0'*32
                    and d['CollectionEventYear']=='0'*32 and d['Rarity'] in (2,3,4) and cat&2048
@@ -112,6 +116,20 @@ def extract(source,furniture_reference_rows=None):
                 h=2166136261
                 for byte in s.pack('<4I',*words): h=((h^byte)*16777619)&0xffffffff
                 furniture_reference_rows.append((id,h))
+        # Tradable (2) with or without DevInboxGiftable (16). CollectionEventYear
+        # describes collection provenance; it does not grant an event unlock.
+        # Do not include DLC, internal, key, Quest-rarity or future definitions.
+        tradeable=(d['ItemOwnership'] in (2,18) and stack and not unique and not custom
+                   and not d['ReleaseVersion'] and d['RequiredDlcContent']=='0'*32
+                   and d['Rarity'] in (2,3,4) and cat>=0 and not cat&(1|2|134217728))
+        if tradeable_rows is not None and tradeable:tradeable_rows.append(id)
+        if tradeable_reference_rows is not None and tradeable and not cat&256:
+            guid=d['SerializedGuid']
+            require(len(guid)==32 and all(c in '0123456789abcdefABCDEF' for c in guid),'invalid tradeable GUID')
+            words=[int(guid[i:i+8][::-1],16) for i in range(0,32,8)]
+            h=2166136261
+            for byte in s.pack('<4I',*words): h=((h^byte)*16777619)&0xffffffff
+            tradeable_reference_rows.append((id,h))
         rows.append((id,int(stack)|unique*2|custom*4|int(bool(candidate))*8|int(bool(cosmetic))*16))
         if custom:caps.append((id,d['CustomMaxCount']))
         # Native raw masks: CreationStationIngredient | Fish / Critter.
@@ -167,12 +185,52 @@ def render_furniture_references(rows):
             "pub(super) const FURNITURE_REFERENCE_KEYS:&[(i32,u32)]=&[\n")
     return header+''.join(' '+','.join(f'({i},0x{h:08x})' for i,h in rows[j:j+4])+',\n' for j in range(0,len(rows),4))+'];\n'
 
+def render_tradeable(rows,ids):
+    ids=sorted(ids)
+    require(len(ids)==6521 and len(set(ids))==6521,'tradeable creation coverage')
+    require(hashlib.sha256(b''.join(s.pack('<i',id) for id in ids)).hexdigest()=='4dc7ed5ce734e90cf6777d4310c55352f5cd04c5759df3b47d860be4f6973d5b','tradeable Item ID fingerprint')
+    members=set(ids);bits=bytearray((len(rows)+7)//8)
+    for i,(id,flags) in enumerate(rows):
+        if id in members:
+            require(flags&7==1,'tradeable quantity flags')
+            bits[i//8]|=1<<(i%8)
+    fingerprint='3a9e06f1b2385881ebcd3db406a39120913b798902cdf4482876a44f7b206824'
+    require(hashlib.sha256(bits).hexdigest()==fingerprint,'tradeable bitset fingerprint')
+    return ("// Generated from pinned Steam v3.0.1 definitions; bit order is RULES ascending Item ID.\n"
+            "// See extract-inventory-quantity-rules.py. Native ordinary tradeable addition candidates only.\n"
+            f"// SHA256 {fingerprint}\n"
+            "pub(super) const TRADEABLE_CREATION_BITS:&[u8]=&[\n"
+            +''.join(' '+','.join(f'0x{v:02x}' for v in bits[i:i+16])+',\n' for i in range(0,len(bits),16))+'];\n')
+
+def render_tradeable_references(rows):
+    rows=sorted(rows)
+    require(len(rows)==2575 and len({i for i,_ in rows})==2575 and len({h for _,h in rows})==2575,'tradeable nonclothing reference coverage')
+    header=("// Generated from pinned Steam v3.0.1 source Item ID/GUID and raw category tables.\n"
+            "// Ordinary tradeable non-clothing definitions; GUID fingerprints are denial-only.\n"
+            "pub(super) const TRADEABLE_NONCLOTHING_REFERENCE_KEYS:&[(i32,u32)]=&[\n")
+    return header+''.join(' '+','.join(f'({i},0x{h:08x})' for i,h in rows[j:j+4])+',\n' for j in range(0,len(rows),4))+'];\n'
+
+def render_wand_ingredients(rows,ids):
+    require(len(ids)==len(set(ids))==8601,'wand ingredient coverage')
+    members=set(ids);bits=bytearray((len(rows)+7)//8)
+    for i,(id,flags) in enumerate(rows):
+        if id in members:
+            require(not flags&2,'wand ingredient requires unique data')
+            bits[i//8]|=1<<(i%8)
+    fingerprint='433ec9faa61477cfc61bb069222522f2daa82f3c89d9c9474223a59e6e5afcca'
+    require(hashlib.sha256(bits).hexdigest()==fingerprint,'wand ingredient fingerprint')
+    return ("// Generated from pinned Steam v3.0.1 definitions; ascending RULES Item ID order.\n"
+            "// Item-wand recipe mask 0x100000, no required unique data or release string.\n"
+            f"// SHA256 {fingerprint}\n"
+            "pub(super) const WAND_ITEM_SOURCE_BITS:&[u8]=&[\n"
+            +''.join(' '+','.join(f'0x{v:02x}' for v in bits[i:i+16])+',\n' for i in range(0,len(bits),16))+'];\n')
+
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source',type=Path);parser.add_argument('--check',action='store_true')
     args=parser.parse_args()
-    furniture_references=[]
-    rows,caps,gathered,food_bait=extract(args.source,furniture_references)
+    furniture_references=[];tradeable=[];tradeable_references=[];wand_ingredients=[]
+    rows,caps,gathered,food_bait=extract(args.source,furniture_references,tradeable,tradeable_references,wand_ingredients)
     generated=render(rows,caps)
     gathered_source=("// Generated from the pinned original Steam v3.0.1 definitions.\n"
                      "// 168 fish, 56 critters; native ordinary, always-periodic definitions.\n"
@@ -183,8 +241,8 @@ if __name__=='__main__':
                       f"// ID little-endian SHA256 {FOOD_BAIT}\n"
                       "pub(super) const FOOD_BAIT_IDS:&[i32]=&[\n"
                       +''.join(' '+','.join(str(id) for id in food_bait[i:i+8])+',\n' for i in range(0,len(food_bait),8))+'];\n')
-    for name,content in [('inventory_source_data.rs',generated),('inventory_gathered_data.rs',gathered_source),('inventory_furniture_reference_data.rs',render_furniture_references(furniture_references))]:
+    for name,content in [('inventory_source_data.rs',generated),('inventory_gathered_data.rs',gathered_source),('inventory_furniture_reference_data.rs',render_furniture_references(furniture_references)),('inventory_tradeable_data.rs',render_tradeable(rows,tradeable)),('inventory_tradeable_reference_data.rs',render_tradeable_references(tradeable_references)),('inventory_wand_ingredient_data.rs',render_wand_ingredients(rows,wand_ingredients))]:
         target=ROOT/'core/src'/name
         if args.check: require(target.read_text()==content,'checked-in source differs: '+name)
         else: target.write_text(content)
-    print('Verified 12163 item definitions, 13 custom caps, 224 gathered-item 236 food/bait and 3549 furniture/clothing creation candidates')
+    print('Verified 12163 item definitions, 13 custom caps, 224 gathered-item 236 food/bait and 3549 original furniture/clothing candidates; 6521 total ordinary tradeable addition candidates')

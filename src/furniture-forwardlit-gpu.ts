@@ -158,7 +158,7 @@ export function validateFurnitureForwardInputs(s:FurnitureForwardScene,m:Furnitu
  if(m.rim!==undefined)validateFurnitureRim(m.rim);
  if(m.terrain!==undefined){validateTerrainParameters(m.terrain);if(m.glass||m.customLit||m.rim||m.worldUV||m.useBaseMapMask||m.baseColor[3]!==1)throw Error('FURNITURE_TERRAIN_INPUT');}
  if(m.glass!==undefined){const g=m.glass;if(!g||m.customLit||m.rim||m.worldUV||m.useBaseMapMask||!finite(g.rim,4)||![g.roughness,g.metallic,g.lightingClamp].every(Number.isFinite)||g.roughness<0||g.roughness>1||g.metallic<0||g.metallic>1||g.lightingClamp<0)throw Error('FURNITURE_GLASS_INPUT');}
- if(m.customLit!==undefined&&(!m.customLit||![0,1].includes(m.customLit.materialAlpha)||m.baseColor[3]!==1||m.worldUV||m.useBaseMapMask)||m.useComboEmissionMask!==undefined&&typeof m.useComboEmissionMask!=='boolean')throw Error('FURNITURE_FORWARD_INPUT');
+ if(m.customLit!==undefined&&(!m.customLit||![0,1].includes(m.customLit.materialAlpha)||(m.customLit.materialAlpha===0?m.baseColor[3]!==1:!Number.isFinite(m.baseColor[3])||m.baseColor[3]<0||m.baseColor[3]>1)||m.worldUV||m.useBaseMapMask)||m.useComboEmissionMask!==undefined&&typeof m.useComboEmissionMask!=='boolean')throw Error('FURNITURE_FORWARD_INPUT');
  if(!finite(s.model,16)||!finite(s.viewProjection,16)||!finite(s.normalMatrix,9)||![1,-1].includes(s.tangentParity)||
  !sceneVectors.every(k=>finite(s[k],3))||!sceneScalars.every(k=>Number.isFinite(s[k]))||
  Math.abs(Math.hypot(...s.mainLightDirection)-1)>1e-5||s.reflectionBlendWeight<0||s.reflectionBlendWeight>1||
@@ -216,7 +216,7 @@ export function createFurnitureForwardRenderer(gl:WebGL2RenderingContext){
    for(const [i,k] of textureNames.entries()){
     gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(i<4?gl.TEXTURE_2D:gl.TEXTURE_CUBE_MAP,textures[k]);gl.uniform1i(u(k),i);
    }
-   gl.drawElements(gl.TRIANGLES,range.indexCount,gl.UNSIGNED_SHORT,range.firstByte);
+   gl.drawElements(gl.TRIANGLES,range.indexCount,mesh.indexFormat===1?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT,range.firstByte);
    if(gl.getError()!==gl.NO_ERROR)throw Error('FURNITURE_FORWARD_DRAW');
   },
   dispose(){if(!disposed){disposed=true;gl.deleteProgram(program);}}
