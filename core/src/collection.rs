@@ -663,7 +663,7 @@ impl Editor {
  /// allocation budget, identity/reference guards, and original tuple.
  pub fn inventory_flower_creation_variants(&self,id:u32)->Vec<FlowerVariant>{
   if let Some(f)=self.pending_flowers.get(&id){
-   if !self.inventory_changes.contains_key(&id)||!self.absent_flower_budget_available(){return Vec::new()}
+   if !self.inventory_changes.contains_key(&id)||!self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(f.item_id){return Vec::new()}
    return self.inventory_flower_variants(id).into_iter().filter(|&v|v!=f.variant).collect()
   }
   if id&PENDING_ITEM!=0{return self.absent_flower_options((id&!PENDING_ITEM) as i32)}
@@ -674,7 +674,7 @@ impl Editor {
   let Some(item)=row.item_id else{return Vec::new()};
   if crate::inventory_source::flower_clothing_reference_keys(item).is_some()&&
    !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return Vec::new()}
-  if self.slot.index.inventory_payload_item_refs.contains(&item){return Vec::new()}
+  if !self.inventory_creation_payload_safe(item){return Vec::new()}
   let Some(original)=row.unique_data.and_then(flower_variant)else{return Vec::new()};
   self.inventory_flower_variants(id).into_iter().filter(|&v|v!=original).collect()
  }
@@ -689,7 +689,7 @@ impl Editor {
  fn flower_creation_item(&self,id:u32,expected:FlowerVariant,next:FlowerVariant)->Option<i32>{
   if !self.absent_flower_budget_available(){return None}
   if let Some(f)=self.pending_flowers.get(&id){
-   if !self.inventory_changes.contains_key(&id){return None}
+   if !self.inventory_changes.contains_key(&id)||!self.inventory_creation_payload_safe(f.item_id){return None}
    let (patterns,current,reserved)=self.flower_context(id)?;
    return (expected==current&&next!=current&&next!=f.variant&&next[0]==current[0]&&
     valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(f.item_id)
@@ -707,7 +707,7 @@ impl Editor {
   let item=row.item_id?;
   if crate::inventory_source::flower_clothing_reference_keys(item).is_some()&&
    !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
-  if self.slot.index.inventory_payload_item_refs.contains(&item){return None}
+  if !self.inventory_creation_payload_safe(item){return None}
   let (patterns,current,reserved)=self.flower_context(id)?;
   let original=flower_variant(row.unique_data?)?;
   (expected==current&&next!=current&&next!=original&&next[0]==current[0]&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
@@ -747,7 +747,7 @@ impl Editor {
  }
  fn absent_flower_choices(&self,item_id:i32)->Vec<FlowerVariant>{
   if self.inventory_item_rows.contains_key(&item_id)||
-   self.slot.index.inventory_payload_item_refs.contains(&item_id)||
+   !self.inventory_creation_payload_safe(item_id)||
    self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item_id){return Vec::new()}
   if !crate::inventory_source::is_uncapped_required_unique_stack(item_id){return Vec::new()}
   // Missing crowns use only their exact source species' original default

@@ -3254,3 +3254,31 @@ fn unowned_flower_customized_first_stack_uses_verified_default_witness(){
   for (i,h) in [f,c].into_iter().enumerate(){let row=&saved.inventory()[i];assert_eq!(saved.inventory_unique_data(row.document_id),e.inventory_unique_data(h));}
  }
 }
+
+#[test]
+fn new_flower_variants_refuse_unresolved_copied_payloads(){
+ let mut p=synthetic_payload("3.0.1");p[3]=0x97;
+ p.extend(doc(1,arr(vec![u(4),u(1331175279),u(11),u(93),plain_flower(6)])));
+ p.extend(doc(22,arr(vec![u(6),arr(vec![arr(vec![u(0),guid([1,2,3,4]),plain_flower(6)])]),arr(vec![])])));
+ let raw=slot_from_payload("3.0.1",p);
+ for zipped in [false,true]{
+  let mut e=Editor::open(if zipped{zip(&raw)}else{raw.clone()}).unwrap();
+  let before=[6,6,0,0];let next=[6,8,0,0];
+  assert!(!e.inventory_flower_variants(4).is_empty());
+  assert!(e.inventory_flower_creation_variants(4).is_empty());
+  assert!(!e.inventory_flower_preview(4,before,next).unwrap().1);
+  assert!(e.create_inventory_flower_variant(4,before,next,1).is_err());
+  assert!(e.inventory_absent_flower_ids().is_empty());
+  for item in [43114910u32,1120342995]{
+   let candidate=(1u32<<31)|item;
+   assert!(e.inventory_flower_creation_variants(candidate).is_empty());
+   assert!(e.inventory_flower_preview(candidate,[6,2,0,0],[6,5,0,0]).is_err());
+   assert!(e.create_inventory_flower_variant(candidate,[0;4],[6,2,0,0],1).is_err());
+   assert!(e.create_inventory_flower_variant(candidate,[6,2,0,0],[6,5,0,0],1).is_err());
+  }
+  assert!(!e.dirty());assert!(!e.can_undo());
+  // The existing source-backed ordinary flower appearance edit remains independent.
+  e.change_inventory_flower_variant(4,before,next).unwrap();
+  assert_eq!(Editor::open(e.export().unwrap()).unwrap().inventory_unique_data(4),e.inventory_unique_data(4));
+ }
+}
