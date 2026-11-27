@@ -5956,3 +5956,42 @@ fn all_source_authorized_flower_outputs_share_empty_family_first_add(){
   assert!(Editor::open(final_save.export().unwrap()).unwrap().inventory().iter().all(|r|r.quantity>0));
  }
 }
+
+#[test]
+fn furniture_all_native_slots_can_reach_a_free_combination_when_single_slot_neighbors_are_reserved(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=61381969u32;let candidate=0x80000000|item;
+ let raw=slot("3.0.1");
+ let mut seed=Editor::open(raw).unwrap();
+ let choices=seed.inventory_furniture_creation_variants(candidate);
+ assert!(!choices.is_empty());
+ // Occupy each distinct normalized single-slot key, not each spelling.
+ let mut count=0;
+ for v in choices{
+  if seed.create_inventory_furniture_variant(candidate,[0;3],v,1).is_ok(){count+=1;}
+ }
+ let saved=Editor::open(seed.export().unwrap()).unwrap();
+ assert!(count>1);
+ let ids=saved.inventory().iter().map(|r|r.document_id).collect::<Vec<_>>();
+ let mut saved=saved;
+ let zero:Vec<_>=ids.iter().map(|&id|(id,1,0)).collect();
+ saved.change_inventory_quantities(&zero).unwrap();
+ let raw=saved.export().unwrap();
+ for zipped in [false,true]{
+  let input=if zipped{zip(&raw)}else{raw.clone()};
+  let mut e=Editor::open(input.clone()).unwrap();let before=e.inventory();
+  assert!(e.inventory_absent_furniture_ids().contains(&(item as i32)));
+  let variants=e.inventory_furniture_creation_variants(candidate);
+  assert_eq!(variants.len(),1);
+  let target=variants[0];assert!(target.iter().filter(|&&v|v!=0).count()>=2);
+  assert!(e.inventory_furniture_preview(candidate,[0;3],[0;3]).unwrap().0.contains(&target));
+  assert!(e.inventory_furniture_preview(candidate,[0;3],target).unwrap().1);
+  e.create_inventory_furniture_variant(candidate,[0;3],target,3).unwrap();
+  assert!(e.create_inventory_furniture_variant(candidate,[0;3],target,3).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),before);assert!(restored.redo_scope(Inventory));
+  let reopened=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory().len(),count+1);
+  assert_eq!(reopened.inventory().iter().filter(|r|r.quantity==0).count(),count);
+ }
+}
