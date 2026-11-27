@@ -1262,6 +1262,38 @@ fn exact_unique_payloads_retain_all_native_union_branches(){
 }
 
 #[test]
+fn special_inventory_metadata_preserves_exact_names_and_ids_without_write_authority(){
+ let name=|s:&str|{let mut bytes=vec![0xd9,s.len() as u8];bytes.extend(s.as_bytes());bytes};
+ let schematic=arr(vec![vec![0],arr(vec![guid([0x12345678,0xffffffff,0,0x80000000])])]);
+ let layout=arr(vec![vec![10],arr(vec![arr(vec![name("間取り🌸"),l(0x0123456789abcdef),vec![0xc3]])])]);
+ let home=arr(vec![doc(0,arr(vec![])),doc(0,arr(vec![])),u(0),arr(vec![]),u(0),u(0),guid([0;4]),u(0)]);
+ let kit=arr(vec![vec![11],arr(vec![u(12345),arr(vec![name("ホームキット"),home])])]);
+ let partial=arr(vec![vec![10],arr(vec![vec![0xc0]])]);
+ for zipped in [false,true]{
+  let mut p=synthetic_payload("3.0.1");p[3]=0x9a;
+  p.extend(doc(1,arr(vec![u(4),u(315822),u(0),u(6),vec![0xc0]])));
+  for (id,payload) in [(5,&schematic),(6,&layout),(7,&kit),(8,&partial)]{
+   p.extend(doc(1,arr(vec![u(id),u(315822),u(20+id),u(1),payload.clone()])));
+  }
+  let raw=slot_from_payload("3.0.1",p);let mut e=Editor::open(if zipped{zip(&raw)}else{raw}).unwrap();
+  let metadata=e.inventory_special_metadata_rows().collect::<Vec<_>>();
+  assert_eq!(metadata.len(),3);
+  assert_eq!(metadata[0],(5,0,vec![0x12345678,0xffffffff,0,0x80000000]));
+  assert_eq!(&metadata[1].2[..4],&[0x89abcdef,0x01234567,1,"間取り🌸".len() as u32]);
+  assert_eq!(&metadata[2].2[..2],&[12345,"ホームキット".len() as u32]);
+  for (row,offset,expected) in [(&metadata[1],4,"間取り🌸"),(&metadata[2],2,"ホームキット")]{
+   let bytes:Vec<u8>=row.2[offset..].iter().flat_map(|w|w.to_le_bytes()).collect();
+   assert_eq!(&bytes[..expected.len()],expected.as_bytes());
+  }
+  for id in 5..=8{assert!(e.change_inventory_quantity(id,1,0).is_err());}
+  e.change_inventory_quantity(4,6,8).unwrap();
+  let saved=Editor::open(e.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory_special_metadata_rows().collect::<Vec<_>>(),metadata);
+  for (id,payload) in [(5,&schematic),(6,&layout),(7,&kit),(8,&partial)]{assert_eq!(saved.inventory_original_unique_payload(id),Some(payload.as_slice()));}
+ }
+}
+
+#[test]
 fn flower_variants_are_source_bounded_atomic_and_recoverable(){
  use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
  let input=flower_color_slot("3.0.1",None);

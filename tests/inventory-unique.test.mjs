@@ -153,3 +153,16 @@ test('nested furniture wand snapshot and net draft preserve all three material w
  assert.ok(!inventoryPatchesEqual(add,[{...add[0],nestedMaterials:[13,2,0]}]));
  assert.throws(()=>decodeInventoryUnique(wire([1,8,1,21,9,5,10,61381969,104,125,0,7,4,6,6,0,0,4]),new Set([8])));
 });
+
+
+test('special identity metadata preserves UTF-8 names and both Int64 words without edit hints',async()=>{
+ const {inventorySavedHomeName}=await load('../src/inventory-unique.ts');
+ const pack=s=>{const b=Buffer.from(s,'utf8'),p=Buffer.alloc(Math.ceil(b.length/4)*4);b.copy(p);return [b.length,...Array.from({length:p.length/4},(_,i)=>p.readUInt32LE(i*4))]};
+ const layout=[0x89abcdef,0x01234567,1,...pack('間取り🌸')],kit=[12345,...pack('ホームキット')];
+ const rows=decodeInventoryUnique(wire([3,1,1,21,0,1,4,0x12345678,0xffffffff,0,0x80000000,0,2,1,22,10,1,layout.length,...layout,0,3,1,23,11,2,kit.length,...kit,0]),new Set([1,2,3]));
+ assert.equal(inventorySavedHomeName(rows.get(2)),'間取り🌸');assert.equal(inventorySavedHomeName(rows.get(3)),'ホームキット');
+ assert.equal((BigInt(rows.get(2).words[1])<<32n)|BigInt(rows.get(2).words[0]),0x0123456789abcdefn);
+ assert.equal(inventorySavedHomeName(rows.get(1)),null);
+ for(const bad of [[0,0,2,0],[0,0,0,126],[0,0,0,1,0xffffffff],[0,0,0,1,0x1000041]])assert.throws(()=>decodeInventoryUnique(wire([1,2,1,22,10,1,bad.length,...bad,0]),new Set([2])));
+ assert.throws(()=>decodeInventoryUnique(wire([1,2,1,22,10,1,layout.length,...layout,2]),new Set([2])));
+});

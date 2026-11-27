@@ -501,6 +501,50 @@ impl Editor {
   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
   self.slot.envelope.decoded.get(row.fields[3].clone()?)
  }
+ /// Read-only special identity projection from already schema-validated
+ /// native spans. Names stay UTF-8 and Int64 IDs stay two exact words.
+ /// No generated identity or edit authority is implied.
+ pub fn inventory_special_metadata_rows(&self)->impl Iterator<Item=(u32,i32,Vec<u32>)>+'_{
+  self.slot.index.inventory.iter().filter_map(move |r|{
+   if self.slot.envelope.version!=Version::V301||r.item_id.is_none()||r.quantity.is_none(){return None}
+   let Some(InventoryUniqueData::Opaque{tag})=r.unique_data else{return None};
+   let decoded=&self.slot.envelope.decoded;
+   let mut words=Vec::new();
+   match tag{
+    0 if r.unique_fields.len()==1=>{
+     let mut c=Cursor::new(decoded.get(r.unique_fields[0].clone())?);
+     for _ in 0..4{words.push(c.int(0,u32::MAX as i128).ok()? as u32)}
+     if c.pos!=c.bytes.len(){return None}
+    },
+    10|11=>{
+     if r.unique_fields.len()!=if tag==10{1}else{2}{return None}
+     let mut c=Cursor::new(decoded.get(r.unique_fields[if tag==10{0}else{1}].clone())?);
+     if c.array().ok()?!=if tag==10{3}else{2}{return None}
+     let Token::Str(name)=c.token().ok()? else{return None};
+     if name.len()>125{return None}
+     if tag==10{
+      let id=c.int(i64::MIN as i128,i64::MAX as i128).ok()? as i64;
+      let Token::Bool(reported)=c.token().ok()? else{return None};
+      if c.pos!=c.bytes.len(){return None}
+      words.extend([id as u32,((id as u64)>>32) as u32,u32::from(reported)]);
+     }else{
+      let mut id=Cursor::new(decoded.get(r.unique_fields[0].clone())?);
+      words.push(id.int(i32::MIN as i128,i32::MAX as i128).ok()? as i32 as u32);
+      if id.pos!=id.bytes.len()||c.array().ok()?!=8{return None}
+      // The entire embedded HomeLayoutModel was validated by the typed
+      // native walk; never reconstruct or expose its objects here.
+     }
+     words.push(name.len() as u32);
+     for chunk in name.as_bytes().chunks(4){
+      let mut bytes=[0;4];bytes[..chunk.len()].copy_from_slice(chunk);
+      words.push(u32::from_le_bytes(bytes));
+     }
+    },
+    _=>return None
+   }
+   Some((r.id,tag,words))
+  })
+ }
  fn effective_unique(&self,row:&crate::native::InventoryRow)->Option<InventoryUniqueData>{
   if let Some(&identity)=self.wand_variant_changes.get(&row.id){
    return Self::wand_appearance(row.item_id?,identity)
