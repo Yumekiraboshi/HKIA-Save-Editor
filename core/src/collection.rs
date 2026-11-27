@@ -1512,13 +1512,18 @@ impl Editor {
   sources
  }
  // Native ItemWandProcessor copies the selected InventoryItem's unique data.
- // A positive verified saved furniture row is an exact witness; never synthesize
- // a nested tuple from a bare Item ID or an absent furniture definition.
+ // A positive verified saved or active staged furniture row is an exact
+ // witness; never synthesize a nested tuple from a bare Item ID.
  fn owned_furniture_wand_witness(&self,id:u32)->Option<WandData>{
-  let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
-  if !self.unique_quantity_ids.contains(&id)||!row.quantity.is_some_and(|q|q>0)||
-   !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
-  let item=row.item_id?;
+  let item=if let Some(furniture)=self.pending_furniture.get(&id){
+   if !self.inventory_changes.get(&id).is_some_and(|&q|q>0){return None}
+   furniture.item_id
+  }else{
+   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+   if !self.unique_quantity_ids.contains(&id)||!row.quantity.is_some_and(|q|q>0)||
+    !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
+   row.item_id?
+  };
   let (source,original,current,_)=self.furniture_context(id)?;
   Self::wand_material_source(crate::inventory_source::ITEM_WAND_ID,item)?;
   if !Self::valid_furniture_target(source,original,current){return None}
@@ -1554,9 +1559,9 @@ impl Editor {
   let item=crate::inventory_source::ITEM_WAND_ID;
   if candidate!=(PENDING_ITEM|item as u32)||!self.absent_wand_source_gate(item){return Vec::new()}
   let Some(keys)=self.nested_wand_output_reservations()else{return Vec::new()};
-  let mut rows:Vec<_>=self.slot.index.inventory.iter().filter_map(|r|{
-   let witness=self.owned_furniture_wand_witness(r.id)?;
-   (!Self::furniture_wand_pairs(witness,&keys).is_empty()).then_some(r.id)
+  let mut rows:Vec<_>=self.slot.index.inventory.iter().map(|r|r.id).chain(self.pending_furniture.keys().copied()).filter_map(|id|{
+   let witness=self.owned_furniture_wand_witness(id)?;
+   (!Self::furniture_wand_pairs(witness,&keys).is_empty()).then_some(id)
   }).collect();
   rows.sort_unstable();rows.dedup();rows
  }
