@@ -564,7 +564,7 @@ impl Editor {
   Some(InventoryUniqueData::WandAppearance{source_item_id,magic:values[0],fleck:values[1],style:values[2],source_tag,source_count:0,source_words:[0;12]})
  }
  pub fn inventory_unique_rows(&self)->impl Iterator<Item=(u32,Option<i32>,Option<bool>,Option<InventoryUniqueData>,usize)>+'_{
-  self.slot.index.inventory.iter().filter(|r|r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,r.unique_is_nil,self.displayed_unique(r),r.unique_fields.len()))
+  self.slot.index.inventory.iter().filter(|r|!self.inventory_removed.contains(&r.id)&&r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,r.unique_is_nil,self.displayed_unique(r),r.unique_fields.len()))
    .chain(self.pending_inventory_rows().into_iter().map(|r|if self.pending_palettes.contains_key(&r.document_id){(r.document_id,None,Some(false),self.inventory_unique_data(r.document_id),3)}else if self.pending_bobas.contains_key(&r.document_id){(r.document_id,None,Some(false),self.inventory_unique_data(r.document_id),5)}else if self.pending_cafes.contains_key(&r.document_id){(r.document_id,None,Some(false),self.inventory_unique_data(r.document_id),2)}else if self.pending_wands.contains_key(&r.document_id){(r.document_id,None,Some(false),self.inventory_unique_data(r.document_id),5)}else{match self.pending_flowers.get(&r.document_id){
     Some(f)=>(r.document_id,None,Some(false),Some(flower_unique(self.flower_variant_changes.get(&r.document_id).copied().unwrap_or(f.variant))),4),
     None=>match self.pending_furniture.get(&r.document_id){Some(f)=>(r.document_id,None,Some(false),Some(InventoryUniqueData::Furniture{materials:self.furniture_variant_changes.get(&r.document_id).copied().unwrap_or(f.variant)}),3),None=>(r.document_id,Some(0),Some(true),None,0)}
@@ -645,7 +645,7 @@ impl Editor {
   Some(source)
  }
  pub fn inventory_furniture_edit_hints(&self)->impl Iterator<Item=u32>+'_ {
-  self.slot.index.inventory.iter().filter_map(|r|self.furniture_source(r).map(|_|r.id)).chain(self.pending_furniture.keys().copied().filter(|id|self.inventory_changes.contains_key(id)))
+  self.slot.index.inventory.iter().filter(|r|!self.inventory_removed.contains(&r.id)).filter_map(|r|self.furniture_source(r).map(|_|r.id)).chain(self.pending_furniture.keys().copied().filter(|id|self.inventory_changes.contains_key(id)))
  }
  fn original_furniture_variant(&self,id:u32)->Option<FurnitureVariant>{
   self.pending_furniture.get(&id).map(|f|f.variant)
@@ -785,6 +785,7 @@ impl Editor {
  pub fn inventory_default_furniture_ids(&self)->Vec<u32>{
   if !self.absent_flower_budget_available(){return Vec::new()}
   self.slot.index.inventory.iter().filter_map(|r|{
+   if self.inventory_removed.contains(&r.id){return None}
    let item=self.saved_default_furniture_source(r)?;
    (!self.default_furniture_choices(item).is_empty()).then_some(r.id)
   }).chain(self.inventory_changes.iter().filter_map(|(&id,&qty)|{
@@ -867,7 +868,7 @@ impl Editor {
  /// Cheap presentation hint. Actual source/collision check happens on demand,
  /// never an O(inventory squared) scan in the complete inventory snapshot.
  pub fn inventory_flower_edit_hints(&self)->impl Iterator<Item=u32>+'_ {
-  self.slot.index.inventory.iter().filter_map(|r|self.flower_source(r).map(|_|r.id)).chain(self.pending_flowers.keys().copied().filter(|id|self.inventory_changes.contains_key(id)))
+  self.slot.index.inventory.iter().filter(|r|!self.inventory_removed.contains(&r.id)).filter_map(|r|self.flower_source(r).map(|_|r.id)).chain(self.pending_flowers.keys().copied().filter(|id|self.inventory_changes.contains_key(id)))
  }
  fn original_flower_variant(&self,id:u32)->Option<FlowerVariant>{
   self.pending_flowers.get(&id).map(|f|f.variant)
@@ -1124,6 +1125,7 @@ impl Editor {
  /// Display-only v3.0.1 flower rows, keyed by native document identity.
  pub fn inventory_flowers(&self)->impl Iterator<Item=(u32,u8,i32,i32,i32)>+'_{
   self.slot.index.inventory.iter().filter_map(move |row|{
+   if self.inventory_removed.contains(&row.id){return None}
    if self.slot.envelope.version!=Version::V301||row.item_id.is_none()||row.quantity.is_none(){return None}
    match self.displayed_unique(row){
     Some(crate::native::InventoryUniqueData::Flower{grow_state,base_color,pattern,pattern_color})=>Some((row.id,grow_state,base_color,pattern,pattern_color)),
@@ -1134,6 +1136,7 @@ impl Editor {
  /// Effective palette colors, retaining exact original binary32 words unless explicitly changed.
  pub fn inventory_palettes(&self)->impl Iterator<Item=(u32,[[u32;4];3])>+'_{
   self.slot.index.inventory.iter().filter_map(move |row|{
+   if self.inventory_removed.contains(&row.id){return None}
    if self.slot.envelope.version!=Version::V301||row.item_id.is_none()||row.quantity.is_none(){return None}
    match self.effective_unique(row){
     Some(crate::native::InventoryUniqueData::Palette{rgba_bits})=>Some((row.id,rgba_bits)),
@@ -1484,6 +1487,7 @@ impl Editor {
  }
  pub fn inventory_wand_edit_hints(&self)->impl Iterator<Item=u32>+'_{
   self.slot.index.inventory.iter().filter_map(move |r|{
+   if self.inventory_removed.contains(&r.id){return None}
    let item=r.item_id?;
    let identity=Self::wand_identity(r).or_else(||self.legacy_wand_identity(r))?;
    (self.unique_quantity_ids.contains(&r.id)&&!self.slot.index.inventory_wand_copies&&
@@ -1838,6 +1842,7 @@ impl Editor {
  pub fn inventory_boba_rows(&self)->impl Iterator<Item=(u32,BobaVariant,bool)>+'_{
   let family_count=self.boba_family_count();
   self.slot.index.inventory.iter().filter_map(move |r|{
+   if self.inventory_removed.contains(&r.id){return None}
    if self.slot.envelope.version!=Version::V301{return None}
    let original=Self::boba_words(&self.slot.envelope.decoded,r)?;
    let editable=family_count<=256&&self.unique_quantity_ids.contains(&r.id)&&crate::inventory_source::supported_boba_base(original);
@@ -2018,6 +2023,7 @@ impl Editor {
  }
  pub fn inventory_cafe_rows(&self)->impl Iterator<Item=(u32,CafeVariant,bool)>+'_{
   self.slot.index.inventory.iter().filter_map(move |r|{
+   if self.inventory_removed.contains(&r.id){return None}
    if self.slot.envelope.version!=Version::V301{return None}
    let item=r.item_id?;let original=Self::cafe_words(&self.slot.envelope.decoded,r)?;
    let editable=self.unique_quantity_ids.contains(&r.id)&&Self::valid_cafe_saved(item,original);
@@ -2244,6 +2250,7 @@ impl Editor {
  }
  pub fn inventory_palette_edit_hints(&self)->impl Iterator<Item=u32>+'_{
   self.slot.index.inventory.iter().filter_map(move |r|{
+   if self.inventory_removed.contains(&r.id){return None}
    if !self.unique_quantity_ids.contains(&r.id)||self.slot.index.inventory_palette_copies_incomplete{return None}
    let original=Self::palette_identity(r)?;
    (!self.slot.index.inventory_palette_copies.iter().any(|&p|Self::palette_equal(p,original))).then_some(r.id)
@@ -2611,7 +2618,7 @@ impl Editor {
  /// Existing-record removal is deliberately independent of appearance editability.
  /// Known source classes and the native reference index, not variant creation
  /// policy, authorize removal of an entire record. No unique payload is rebuilt.
- fn physical_inventory_reference_safe(index:&crate::native::NativeIndex,row:&crate::native::InventoryRow)->bool{
+ fn physical_inventory_reference_safe(index:&crate::native::NativeIndex,row:&crate::native::InventoryRow,uid_unique:bool)->bool{
   let (Some(item),Some(uid))=(row.item_id,row.unique_id)else{return false};
   if item<=0||uid<0||row.id==0||row.id>=PENDING_ITEM||row.quantity.is_none_or(|q|q<0)||
    !row.fields.iter().all(Option::is_some)||index.inventory_item_refs_unscoped||
@@ -2620,7 +2627,7 @@ impl Editor {
    index.inventory_payload_item_refs.contains(&item)||index.inventory_furniture_item_refs.contains(&item)||
    index.inventory_item_refs.iter().any(|&(i,u)|i==item&&(uid==0||u==0||u==uid))||
    (uid>0&&(index.inventory_legacy_uid_refs.contains(&uid)||
-    index.inventory.iter().filter(|r|r.unique_id==Some(uid)).count()!=1)){return false}
+    !uid_unique)){return false}
   let Some(key)=crate::inventory_source::inventory_item_denial_key(item)else{return false};
   if index.inventory_furniture_guid_refs.contains(&key)||index.inventory_clothing_guid_refs.contains(&key){return false}
   let outfit=crate::inventory_source::ordinary_clothing_reference_keys(item);
@@ -2660,7 +2667,14 @@ impl Editor {
  }
  pub fn inventory_entry_removable(&self,id:u32)->bool{
   self.slot.envelope.version==Version::V301&&!self.inventory_removed.contains(&id)&&
-   self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|Self::physical_inventory_reference_safe(&self.slot.index,r))
+   self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|Self::physical_inventory_reference_safe(&self.slot.index,r,self.slot.index.inventory.iter().filter(|p|p.unique_id==r.unique_id).count()==1))
+ }
+ pub fn inventory_removable_ids(&self)->Vec<u32>{
+  if self.slot.envelope.version!=Version::V301{return Vec::new()}
+  let mut uids=HashMap::<i32,usize>::new();
+  for row in &self.slot.index.inventory{if let Some(uid)=row.unique_id{*uids.entry(uid).or_default()+=1;}}
+  self.slot.index.inventory.iter().filter_map(|r|(!self.inventory_removed.contains(&r.id)&&
+   Self::physical_inventory_reference_safe(&self.slot.index,r,r.unique_id.is_some_and(|uid|uids.get(&uid)==Some(&1)))).then_some(r.id)).collect()
  }
  /// Exact persisted document removal; quantity zero is a separate operation.
  pub fn remove_inventory_entries(&mut self,requests:&[(u32,i32)])->Result<(),Error>{
@@ -3427,7 +3441,7 @@ impl Editor {
    let mut keys:Vec<_>=self.inventory_removed.iter().map(|&id|(1,id)).collect();keys.sort_unstable();
    for &(_,id) in &keys{
     let row=index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
-    if !Self::physical_inventory_reference_safe(&index,row){return Err(Error::Schema)}
+    if !Self::physical_inventory_reference_safe(&index,row,index.inventory.iter().filter(|p|p.unique_id==row.unique_id).count()==1){return Err(Error::Schema)}
    }
    let (result,changed_at)=crate::document_membership::rewrite(&next_payload,self.slot.envelope.version,&index,&keys,None)?;
    (result,first.min(changed_at))
