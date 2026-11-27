@@ -266,3 +266,16 @@ test('single source-pinned transparent CustomLit range is permitted only after v
  d.base.materials[other[0][1]].floats._Material_SrcBlend=5;
  assert.throws(()=>resolveFurnitureMultiDiagnostic(d,request(d,id)),/TRANSPARENT_ORDER_UNVERIFIED/);
 });
+
+test('ordinary furniture-only plans validate the original cull mode, not just mixed shader plans',()=>{
+ const d=sources(),id=32709745,bind=d.base.rows.find(x=>x.itemId===id).bindings[0],material=d.base.materials[bind[1]];
+ const r=request(d,id,[207,0,0]);
+ const original=resolveFurnitureMultiDiagnostic(d,r);
+ assert.equal(original.mixed,false);assert.equal(original.plans[0].cull,2);
+ material.floats._Cull=0;
+ assert.equal(resolveFurnitureMultiDiagnostic(d,r).plans[0].cull,0);
+ for(const invalid of [1,-1,3,undefined,NaN]){
+  material.floats._Cull=invalid;
+  assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/CULL_UNSUPPORTED/);
+ }
+});
