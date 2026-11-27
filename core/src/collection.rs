@@ -619,6 +619,9 @@ impl Editor {
  /// include the corresponding secondary-color change in the same candidate.
  pub fn inventory_flower_variants(&self,id:u32)->Vec<FlowerVariant>{
   let Some((patterns,current,reserved))=self.flower_context(id)else{return Vec::new()};
+  Self::flower_choices(patterns,current,&reserved)
+ }
+ fn flower_choices(patterns:&[i32],current:FlowerVariant,reserved:&HashSet<FlowerVariant>)->Vec<FlowerVariant>{
   let mut out=Vec::new();
   let mut add=|v:FlowerVariant|{if v!=current&&valid_flower_variant(patterns,v)&&!reserved.contains(&v)&&!out.contains(&v){out.push(v)}};
   for &color in FLOWER_COLORS{
@@ -660,29 +663,39 @@ impl Editor {
  /// existing validated species row. No persisted UID is assigned until
  /// export. Multiple variants of one species use independent handles.
  pub fn create_inventory_flower_variant(&mut self,source_id:u32,expected:FlowerVariant,next:FlowerVariant,quantity:i32)->Result<u32,Error>{
-  if let Some(f)=self.pending_flowers.get(&source_id).copied(){
-   if quantity<=0||!self.inventory_changes.contains_key(&source_id)||!self.absent_flower_budget_available(){return Err(Error::Schema)}
-   let (patterns,current,reserved)=self.flower_context(source_id).ok_or(Error::Schema)?;
-   if expected!=current||next==current||next==f.variant||next[0]!=current[0]||
-    !valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
-   return self.stage_new_flower(source_id,f.item_id,expected,next,quantity)
-  }
-  if source_id&PENDING_ITEM!=0{
-   let item_id=(source_id&!PENDING_ITEM) as i32;
-   if quantity<=0||expected!=[0;4]||!self.absent_flower_options(item_id).contains(&next){return Err(Error::Schema)}
-   return self.stage_new_flower(source_id,item_id,expected,next,quantity)
-  }
-  if quantity<=0||!self.inventory_creation_source_valid()||!self.unique_quantity_ids.contains(&source_id){return Err(Error::Schema)}
-  let row=self.slot.index.inventory.iter().find(|r|r.id==source_id).ok_or(Error::Schema)?;
-  let item_id=row.item_id.ok_or(Error::Schema)?;
-  if crate::inventory_source::flower_clothing_reference_keys(item_id).is_some()&&
-   !self.inventory_changes.get(&source_id).copied().or(row.quantity).is_some_and(|q|q>0){return Err(Error::Schema)}
-  // The same exact species/processor source gate and reference index apply.
-  if self.slot.index.inventory_payload_item_refs.contains(&item_id){return Err(Error::Schema)}
-  let (patterns,current,reserved)=self.flower_context(source_id).ok_or(Error::Schema)?;
-  let original=flower_variant(row.unique_data.ok_or(Error::Schema)?).ok_or(Error::Schema)?;
-  if expected!=current||next==current||next==original||next[0]!=current[0]||!valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
+  if quantity<=0{return Err(Error::Schema)}
+  let item_id=self.flower_creation_item(source_id,expected,next).ok_or(Error::Schema)?;
   self.stage_new_flower(source_id,item_id,expected,next,quantity)
+ }
+ fn flower_creation_item(&self,id:u32,expected:FlowerVariant,next:FlowerVariant)->Option<i32>{
+  if !self.absent_flower_budget_available(){return None}
+  if let Some(f)=self.pending_flowers.get(&id){
+   if !self.inventory_changes.contains_key(&id){return None}
+   let (patterns,current,reserved)=self.flower_context(id)?;
+   return (expected==current&&next!=current&&next!=f.variant&&next[0]==current[0]&&
+    valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(f.item_id)
+  }
+  if id&PENDING_ITEM!=0{
+   let item=(id&!PENDING_ITEM) as i32;
+   return (expected==[0;4]&&self.absent_flower_options(item).contains(&next)).then_some(item)
+  }
+  if !self.unique_quantity_ids.contains(&id){return None}
+  let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+  let item=row.item_id?;
+  if crate::inventory_source::flower_clothing_reference_keys(item).is_some()&&
+   !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
+  if self.slot.index.inventory_payload_item_refs.contains(&item){return None}
+  let (patterns,current,reserved)=self.flower_context(id)?;
+  let original=flower_variant(row.unique_data?)?;
+  (expected==current&&next!=current&&next!=original&&next[0]==current[0]&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
+ }
+ /// Read-only dialog planning from an uncommitted full tuple.
+ pub fn inventory_flower_preview(&self,id:u32,expected:FlowerVariant,draft:FlowerVariant)->Result<(Vec<FlowerVariant>,bool),Error>{
+  let (patterns,current,reserved)=self.flower_context(id).ok_or(Error::Schema)?;
+  if expected!=current||draft[0]!=current[0]||!valid_flower_variant(patterns,draft)||reserved.contains(&draft){return Err(Error::Schema)}
+  let choices=Self::flower_choices(patterns,draft,&reserved);
+  let creatable=self.flower_creation_item(id,expected,draft).is_some();
+  Ok((choices,creatable))
  }
  fn absent_flower_budget_available(&self)->bool{
   self.inventory_creation_source_valid()&&self.undo.len()+self.redo.len()<MAX_UNDO&&
