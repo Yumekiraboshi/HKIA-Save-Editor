@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {fileURLToPath} from 'node:url';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/furniture-diagnostic-image.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {renderFurnitureDiagnosticImage,renderFurnitureDiagnosticFrame,inspectFurnitureDiagnosticRgba}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {renderFurnitureDiagnosticImage,renderFurnitureDiagnosticFrame,inspectFurnitureDiagnosticRgba,compareFurnitureDiagnosticRgba}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 function mock({empty=false,png=true,lost=false,readError=false,hidden=false}={}){
  const events=[];let read=false;
  const gl=new Proxy({drawingBufferWidth:32,drawingBufferHeight:32,NO_ERROR:0,isContextLost:()=>lost,getError:()=>read&&readError?1282:0,
@@ -49,4 +49,32 @@ test('native additive glass RGB survives raw readback; never silently encode a l
  const zeroAlpha=mock({empty:true,hidden:true});
  const raw=await renderFurnitureDiagnosticFrame({}, {},async()=>new ArrayBuffer(0),32,()=>zeroAlpha.canvas,async()=>result);
  assert.equal(raw.visiblePixels,0);assert.equal(raw.hiddenRgbPixels,1);
+});
+
+test('authored nonblack transparent background is not an object or hidden glass contribution',async()=>{
+ const clear=[49,77,121,0];
+ assert.deepEqual(compareFurnitureDiagnosticRgba(Uint8Array.from([...clear,50,77,121,0,10,20,30,255,...clear]),clear),{changedPixels:2,hiddenChangedPixels:1});
+ const read=async()=>new ArrayBuffer(0),draw=async()=>result;
+ const create=(mode)=>{
+  const m=mock();let calls=0;
+  m.gl.readPixels=(...args)=>{
+   const bytes=args[6];calls++;m.events.push('read');
+   for(let i=0;i<bytes.length;i+=4)bytes.set(clear,i);
+   if(calls===1&&mode==='nonuniform')bytes[4]=50;
+   if(calls===1&&mode==='alpha')bytes[3]=1;
+   if(calls===2&&mode==='draw')bytes.set([50,77,121,0,10,20,30,255],4);
+  };
+  return m;
+ };
+ const m=create('draw');
+ const frame=await renderFurnitureDiagnosticFrame({}, {},read,32,()=>m.canvas,draw,[49/255,77/255,121/255]);
+ assert.deepEqual(frame.clearRgba,clear);assert.equal(frame.changedPixels,2);assert.equal(frame.hiddenChangedPixels,1);
+ assert.equal(frame.hiddenRgbPixels,1023);assert.equal(frame.visiblePixels,1);
+ assert.equal(m.events.at(-1),'release');
+ for(const [mode,e] of [['empty',/EMPTY/],['nonuniform',/NONUNIFORM/],['alpha',/CLEAR_READ/]]){
+  const q=create(mode);
+  await assert.rejects(renderFurnitureDiagnosticFrame({}, {},read,32,()=>q.canvas,draw,[49/255,77/255,121/255]),e);
+  assert.equal(q.events.at(-1),'release');
+ }
+ await assert.rejects(renderFurnitureDiagnosticFrame({}, {},read,32,()=>{throw Error('allocation');},draw,[0,-1,0]),/CLEAR/);
 });
