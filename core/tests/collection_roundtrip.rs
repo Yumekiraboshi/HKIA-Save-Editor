@@ -4086,6 +4086,6 @@ fn only_complete_verified_bag_furniture_wand_copies_release_source_reference(){
   let mut e=Editor::open(make(id,materials,style)).unwrap();
   assert!(!e.inventory()[0].editable);
   assert!(e.change_inventory_quantity(4,93,0).is_err());
-  assert!(e.change_inventory_furniture_variant(4,[13,2,0],[13,3,0]).is_err());
+  assert!(e.inventory_furniture_creation_variants(4).is_empty());
  }
 }
