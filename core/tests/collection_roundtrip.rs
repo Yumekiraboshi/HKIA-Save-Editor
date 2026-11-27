@@ -5623,3 +5623,44 @@ fn ordinary_zero_refill_is_independent_of_last_copy_removal_authority(){
   assert_eq!(reopened.inventory()[0].quantity_minimum,1);
  }
 }
+
+#[test]
+fn referenced_empty_nil_furniture_base_refills_beside_distinct_custom_peers(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=61381969u32;
+ let custom=|id,uid,materials|doc(1,arr(vec![u(id),u(item),u(uid),u(2),furniture_payload(materials)]));
+ let make=|peers:Vec<Vec<u8>>|{
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x97+peers.len() as u8;
+  p.extend(doc(1,arr(vec![u(4),u(item),u(0),u(0),vec![0xc0]])));
+  for peer in peers{p.extend(peer);}
+  let home=arr(vec![guid([41,42,43,44]),arr(vec![]),u(item),u(0),guid([0;4]),l(0),
+   vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])]);
+  p.extend(doc(32,arr(vec![u(9),guid([7,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![home])]))])])));
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(vec![custom(5,11,[0,2,0]),custom(6,12,[0,3,0])]);
+  let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert_eq!(original[0].quantity,0);assert!(original[0].editable);assert_eq!(original[0].quantity_minimum,1);
+  let peer=e.inventory_original_unique_payload(5).unwrap().to_vec();
+  e.change_inventory_quantity(4,0,4).unwrap();
+  assert!(e.change_inventory_quantity(4,4,0).is_err());
+  assert!(e.undo_scope(Inventory));assert_eq!(e.inventory(),original);assert!(e.redo_scope(Inventory));
+  let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();recovered.restore_history(&cp).unwrap();
+  let mut saved=Editor::open(recovered.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity,4);assert_eq!(saved.inventory()[0].quantity_minimum,1);
+  assert_eq!(saved.inventory_original_unique_payload(4),Some([0xc0].as_slice()));
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(peer.as_slice()));
+  assert_eq!(saved.inventory()[1..],original[1..]);assert!(saved.change_inventory_quantity(4,4,0).is_err());
+ }
+ for peers in [
+  vec![doc(1,arr(vec![u(5),u(item),u(0),u(2),vec![0xc0]]))],
+  vec![custom(5,11,[0,1,0])],
+  vec![custom(5,11,[0,2,0]),custom(6,12,[0,2,0])],
+  vec![custom(5,11,[0,2,0]),custom(6,11,[0,3,0])],
+ ]{
+  let mut e=Editor::open(make(peers)).unwrap();
+  assert!(!e.inventory()[0].editable);assert!(e.change_inventory_quantity(4,0,4).is_err());assert!(!e.dirty());
+ }
+}

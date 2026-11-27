@@ -2412,7 +2412,8 @@ impl Editor {
    r.quantity?<0||r.unique_is_nil!=Some(true)||r.fields[2].is_none()||
    (r.quantity==Some(0)&&!self.inventory_can_empty(r)&&
     !(crate::inventory_source::ordinary_bag_definition(r.item_id?).is_some()&&r.unique_id==Some(0)&&
-      r.fields.iter().all(Option::is_some)&&self.inventory_item_rows.get(&r.item_id?)==Some(&1))){return None}
+      r.fields.iter().all(Option::is_some)&&(self.inventory_item_rows.get(&r.item_id?)==Some(&1)||
+      self.ordinary_furniture_base_distinct(r,r.item_id?)))){return None}
   let item_id=r.item_id?;
   let cap=crate::inventory_source::ordinary_quantity_limit(item_id)?;
   // A finite definition limit must not be treated as an independent cap for
@@ -2444,8 +2445,12 @@ impl Editor {
  // A single UID-zero nil base can coexist with distinct verified tag-8 peers.
  // Require the stricter complete item-wide reference gate for this extension.
  fn ordinary_furniture_base_zero_with_peers(&self,row:&crate::native::InventoryRow,item:i32)->bool{
-  self.ordinary_bag_zero_reference_safe(item)&&
-   crate::inventory_source::ordinary_quantity_limit(item)==Some(i32::MAX)&&
+  self.ordinary_bag_zero_reference_safe(item)&&self.ordinary_furniture_base_distinct(row,item)
+ }
+ // Identity proof is independent of last-copy removal permission. A saved
+ // empty nil base can be refilled beside distinct verified nondefault peers.
+ fn ordinary_furniture_base_distinct(&self,row:&crate::native::InventoryRow,item:i32)->bool{
+  crate::inventory_source::ordinary_quantity_limit(item)==Some(i32::MAX)&&
    furniture_source::item(item).is_some_and(|s|!s.is_home_layout)&&
    self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)&&r.id!=row.id)
     .all(|r|self.permits_separate_ordinary_base(r))

@@ -114,7 +114,7 @@ export function browseInventory(
 
 /** A known refillable empty stack remains a native record available in Add. */
 export function inventoryRefillable(row:InventoryEntry):boolean{
- return row.quantity===0&&row.editable&&(row.quantityMinimum===0||row.unique?.tag===-1);
+ return row.quantity===0&&row.editable;
 }
 /** Positive source stacks can open their native customization chooser in Add.
  * They are presentation-only rows in this view, never quantity-add candidates. */
