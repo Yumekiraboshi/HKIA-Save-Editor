@@ -5366,7 +5366,7 @@ fn mermaidifier_flower_copy_protects_exact_item_without_blocking_unrelated_inven
  use hkia_save_core::collection::HistoryScope::Inventory;
  let flower=plain_flower(6);
  let make=|g:[u32;4]|{
-  let mut p=synthetic_payload("3.0.1");p[2]=9;p[3]=0x99;
+  let mut p=synthetic_payload("3.0.1");p[2]=9;p[3]=0x9a;
   for (id,item,uid,payload) in [(4,897617923,21,flower.clone()),(5,105502901,22,flower.clone()),(6,71754032,0,vec![0xc0])]{
    p.extend(doc(1,arr(vec![u(id),u(item),u(uid),u(2),payload])));
   }
