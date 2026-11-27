@@ -1002,7 +1002,8 @@ impl Editor {
      !self.slot.index.inventory_payload_refs_incomplete&&
      !self.slot.index.inventory_payload_item_refs.contains(&item_id)))&&
    r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.quantity.is_some_and(|q|q>=0)&&
-   r.fields.iter().all(Option::is_some)&&self.inventory_item_rows.get(&item_id)==Some(&1)&&
+   r.fields.iter().all(Option::is_some)&&(self.inventory_item_rows.get(&item_id)==Some(&1)||
+    self.ordinary_furniture_base_zero_with_peers(r,item_id))&&
    !self.slot.index.inventory_item_refs_incomplete&&
    !self.slot.index.inventory_item_refs.contains(&(item_id,0))
  }
@@ -1724,6 +1725,15 @@ impl Editor {
   let Some(default)=furniture_key(source,[0;3])else{return false};
   [row.unique_data,self.effective_unique(row)].into_iter().all(|value|
    value.and_then(furniture_variant).and_then(|v|furniture_key(source,v)).is_some_and(|key|key!=default))
+ }
+ // A single UID-zero nil base can coexist with distinct verified tag-8 peers.
+ // Require the stricter complete item-wide reference gate for this extension.
+ fn ordinary_furniture_base_zero_with_peers(&self,row:&crate::native::InventoryRow,item:i32)->bool{
+  self.ordinary_tradeable_nonclothing_zero_reference_safe(item)&&
+   crate::inventory_source::ordinary_quantity_limit(item)==Some(i32::MAX)&&
+   furniture_source::item(item).is_some_and(|s|!s.is_home_layout)&&
+   self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)&&r.id!=row.id)
+    .all(|r|self.permits_separate_ordinary_base(r))
  }
  fn can_create_inventory_item(&self,item_id:i32)->bool{
   self.inventory_creation_source_valid()&&crate::inventory_source::ordinary_creation_item(item_id)&&

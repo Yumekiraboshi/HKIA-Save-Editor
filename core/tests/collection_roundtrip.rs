@@ -3589,3 +3589,48 @@ fn first_seed_and_uprooted_plant_use_verified_species_and_full_tuple(){
   assert!(matches!(saved.inventory_unique_data(saved.inventory()[1].document_id),Some(U::Flower{grow_state:7,..})));
  }
 }
+
+
+#[test]
+fn ordinary_furniture_base_zero_refill_keeps_distinct_custom_peers(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=61381969u32;
+ let make=|peers:Vec<Vec<u8>>|{
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x96+peers.len() as u8;
+  p.extend(doc(1,arr(vec![u(4),u(item),u(0),u(3),vec![0xc0]])));
+  for peer in peers{p.extend(peer);}
+  slot_from_payload("3.0.1",p)
+ };
+ let custom=|id,uid,materials|doc(1,arr(vec![u(id),u(item),u(uid),u(2),furniture_payload(materials)]));
+ for zipped in [false,true]{
+  let raw=make(vec![custom(5,11,[0,2,0]),custom(6,12,[0,3,0])]);
+  let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert_eq!(e.inventory()[0].quantity_minimum,0);
+  let before=e.inventory_original_unique_payload(5).unwrap().to_vec();
+  e.change_inventory_quantity(4,3,0).unwrap();
+  assert!(e.inventory_furniture_creation_variants(4).is_empty());
+  assert_eq!(e.inventory_unique_data(5),Some(U::Furniture{materials:[0,2,0]}));
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut reopened=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory()[0].quantity,0);assert_eq!(reopened.inventory()[0].quantity_minimum,0);
+  assert_eq!(reopened.inventory()[1].quantity,2);assert_eq!(reopened.inventory()[2].quantity,2);
+  assert_eq!(reopened.inventory_original_unique_payload(5),Some(before.as_slice()));
+  reopened.change_inventory_quantity(4,0,7).unwrap();
+  let final_save=Editor::open(reopened.export().unwrap()).unwrap();
+  assert_eq!(final_save.inventory()[0].quantity,7);
+  assert_eq!(final_save.inventory_original_unique_payload(4),Some([0xc0].as_slice()));
+  assert_eq!(final_save.inventory_original_unique_payload(5),Some(before.as_slice()));
+ }
+ for peers in [
+  vec![doc(1,arr(vec![u(5),u(item),u(0),u(2),vec![0xc0]]))],
+  vec![custom(5,11,[0,1,0])],
+  vec![custom(5,11,[0,2,0]),custom(6,12,[0,2,0])],
+  vec![custom(5,11,[0,2,0]),custom(6,11,[0,3,0])],
+ ]{
+  let mut e=Editor::open(make(peers)).unwrap();
+  assert_eq!(e.inventory()[0].quantity_minimum,1);
+  assert!(e.change_inventory_quantity(4,3,0).is_err());assert!(!e.dirty());
+ }
+}
