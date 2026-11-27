@@ -101,9 +101,10 @@ test('every registered exact image is an audited, local, unmodified PNG or WebP'
 test('Collection and Inventory select original images without inferred recoloring',()=>{
  const app=read('../src/App.svelte'),sprite=read('../src/DyeSprite.svelte');
  assert.match(app,/loadVariantArtSources\(import\.meta\.env\.BASE_URL\)/);
+ assert.match(app,/<DyeSprite sprite=\{resultSprite\}[^>]*originalArtUrl=\{resultOriginal\}/);
  assert.equal((app.match(/exactArtUrl=\{/g)||[]).length,6);
  assert.match(app,/exactArtUrl=\{exactVariantArt\[String\(representative\)\]\}/);
- assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,6);
+ assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,7);
  assert.match(app,/originalArtUrl=\{originalVariantArt\[String\(representative\)\]\}/);
  assert.match(sprite,/if\(original\)showExact\(original,showOriginalFallback\)/);
  assert.match(sprite,/if\(url\)showExact\(url,showReconstruction\)/);
