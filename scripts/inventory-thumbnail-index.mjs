@@ -37,6 +37,8 @@ export function buildInventoryThumbnailIndex(root){
  const extras=new Map(extra.records.map(row=>[row[0],row]));
  const withheld=new Map(extra.withheld.map(row=>[row[0],row[2]]));
  const originals=new Set([...Object.keys(original.records),...Object.keys(dynamic.records)].map(Number));
+ const named=read(root,'data/named-original-item-sprites-v3.0.1.json');
+ const namedOriginals=new Set(Object.keys(named.records).map(Number));
  const dynamicFlags=new Map(flags.rows.map(row=>[row.itemId,row.key]));
  const customFurniture=new Set(furniture.items.map(row=>row[0]));
  // Source definition flags, not an appearance classifier by themselves.
@@ -54,13 +56,14 @@ export function buildInventoryThumbnailIndex(root){
  assert([...byId.keys(),...extras.keys(),...withheld.keys()].every(id=>all.has(id)),'UNKNOWN_ID');
  assert([...byId.keys()].every(id=>!extras.has(id)&&!withheld.has(id))&&[...extras.keys()].every(id=>!withheld.has(id)),'OVERLAP');
  assert(originals.size===5383&&Object.keys(dyes.records).every(id=>originals.has(Number(id))),'COLORWAY_COVERAGE');
+ assert(namedOriginals.size===1&&[...namedOriginals].every(id=>all.has(id)&&!originals.has(id)&&byId.get(id)?.[1]===named.records[id].itemKey),'NAMED_ITEM_COVERAGE');
  const routes={},rows=[],counts={},byCategory={};
  const increment=(object,key)=>{object[key]=(object[key]??0)+1;};
  for(const [id,tuple] of all){
   const item=byId.get(id),preferred=item?.[3],groups=packMembership.get(id)??[];
   const route=selectCollectionRoute(preferred,groups);
   if(item&&route&&route!==preferred)routes[id]=route;
-  const source=originals.has(id)?'original-colorway':extras.has(id)?'native-inventory':
+  const source=originals.has(id)?'original-colorway':namedOriginals.has(id)?'original-named-item':extras.has(id)?'native-inventory':
    withheld.has(id)?withheld.get(id):route?'collection-pack':groups.length?'ambiguous-pack':'missing-pack';
   const appearance=customFurniture.has(id)?'furniture-customization':dynamicFlags.has(id)?'native-dynamic-flag':
    requiresUnique.has(id)?'other-unique-data':'no-known-dynamic-marker';

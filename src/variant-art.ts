@@ -1,3 +1,4 @@
+import namedItemSprites from '../data/named-original-item-sprites-v3.0.1.json';
 /** Verified per-item image overrides (not guesses from the 5-channel palette).
  * A file is accepted only when its Item ID, same-origin path and source
  * provenance are registered. Validation of local bytes is performed in CI.
@@ -126,6 +127,28 @@ export async function loadDynamicColorwayIndex(base:string):Promise<Record<strin
  if(!response.ok)throw Error('DYNAMIC_COLORWAY_INDEX_FETCH');
  return parseDynamicColorwayIndex(await response.json(),base);
 }
+/** Already completed, named non-dye original item sprites, distinct from the
+ * 5,383 dye-colorway source records. The asset is not a reconstructed render. */
+export function parseNamedOriginalItemSprites(value:unknown,base:string):Record<string,string>{
+ const raw=value as {schema?:string;version?:string;definitionsSha256?:string;runtimeUiIconReferenceMatches?:boolean;records?:Record<string,{file:string;sha256:string;itemKey:string;sourceSpriteName:string;sourceSpriteBundle:string;sourceBundleSha256:string;sourceSpritePathId:string;texturePathId:string;textureName:string;textureSha256:string;rgbaSha256:string;width:number;height:number;bytes:number}>};
+ if(!raw||raw.schema!=='HKIA.NamedOriginalItemSprites.1'||raw.version!=='3.0.1'||raw.definitionsSha256!==DEFINITIONS_SHA||
+  raw.runtimeUiIconReferenceMatches!==false||!raw.records||typeof raw.records!=='object'||Array.isArray(raw.records)||Object.keys(raw.records).length>1000)
+  throw Error('NAMED_ITEM_SPRITE_INDEX_INVALID');
+ if(!base.startsWith('/')||!base.endsWith('/')||base.includes('..')||base.includes('\\')||base.includes('//'))throw Error('VARIANT_ART_BASE_INVALID');
+ const urls:Record<string,string>={};
+ for(const [id,row] of Object.entries(raw.records)){
+  if(!ITEM_ID.test(id)||Number(id)>0x7fffffff||!row||row.file!==id+'.png'||
+   !/^item_[a-z0-9_]{1,180}$/.test(row.itemKey)||SOURCE_KEY.test(row.itemKey)||
+   row.sourceSpriteName!=='icon_'+row.itemKey||row.textureName!==row.sourceSpriteName||
+   !/^dynamicinventory_icons_\d{2}$/.test(row.sourceSpriteBundle)||
+   ![row.sha256,row.sourceBundleSha256,row.textureSha256,row.rgbaSha256].every(x=>typeof x==='string'&&SHA.test(x))||
+   ![row.sourceSpritePathId,row.texturePathId].every(x=>typeof x==='string'&&I64.test(x))||
+   row.width!==256||row.height!==256||!Number.isSafeInteger(row.bytes)||row.bytes<40||row.bytes>1048576)
+    throw Error('NAMED_ITEM_SPRITE_RECORD_INVALID');
+  urls[id]=base+'source-item-art/'+row.file+'?v='+row.sha256;
+ }
+ return urls;
+}
 export async function loadVariantArtSources(base:string):Promise<{primary:Record<string,string>;originals:Record<string,string>;reconstructions:Record<string,string>}>{
  const [original,dynamic,verified]=await Promise.allSettled([
   loadSourceColorwayIndex(base),
@@ -136,10 +159,11 @@ export async function loadVariantArtSources(base:string):Promise<{primary:Record
    return parseVariantArtIndex(await response.json(),base);
   })()
  ]);
- if(original.status==='rejected'&&dynamic.status==='rejected'&&verified.status==='rejected')throw verified.reason;
+ const named=parseNamedOriginalItemSprites(namedItemSprites,base);
+ if(original.status==='rejected'&&dynamic.status==='rejected'&&verified.status==='rejected'&&!Object.keys(named).length)throw verified.reason;
  // A finished original source sprite outranks a reconstruction. A failed
  // optional index must not hide valid artwork from the other index.
- const originals={...(dynamic.status==='fulfilled'?dynamic.value:{}),
+ const originals={...named,...(dynamic.status==='fulfilled'?dynamic.value:{}),
   ...(original.status==='fulfilled'?original.value:{})};
  const reconstructions=verified.status==='fulfilled'?verified.value:{};
  return {originals,reconstructions,primary:{...reconstructions,...originals}};
