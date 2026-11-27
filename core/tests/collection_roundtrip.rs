@@ -5772,7 +5772,7 @@ fn physical_removal_uses_document_identity_not_appearance_editability(){
  for zipped in [false,true]{
   let raw=make(false,false);let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
-  assert!(!original[0].editable);assert!(e.inventory_entry_removable(4));assert!(e.inventory_entry_removable(5));
+  assert!(original[0].editable&&original[1].editable);assert!(e.inventory_entry_removable(4));assert!(e.inventory_entry_removable(5));
   assert!(e.remove_inventory_entries(&[(4,2),(5,1)]).is_err());assert_eq!(e.inventory(),original);assert!(!e.dirty());
   e.remove_inventory_entries(&[(4,2),(5,0)]).unwrap();
   assert_eq!(e.inventory().len(),1);assert!(!e.inventory_entry_removable(4));assert!(e.change_inventory_quantity(4,2,3).is_err());
@@ -5815,4 +5815,57 @@ fn complete_ordinary_bag_class_supports_physical_document_removal(){
   let saved=Editor::open(e.export().unwrap()).unwrap();assert!(saved.inventory().is_empty());
   assert_eq!(saved.entries(),e.entries());assert_eq!(saved.achievements(),e.achievements());
  }
+}
+
+#[test]
+fn complete_unique_union_records_use_structural_quantity_authority(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let cases=vec![
+  (61381969,arr(vec![vec![1],arr(vec![guid([1,2,3,4]),guid([0;4]),guid([0;4])])])),
+  (43114910,arr(vec![vec![2],arr(vec![u(6),guid([1,2,3,4]),guid([0;4]),guid([0;4])])])),
+  (203331651,arr(vec![vec![3],arr(vec![arr(vec![u(99)]),arr(vec![u(999)])])])),
+  (1798633565,arr(vec![vec![4],arr(vec![u(999),u(6),u(11),u(19),u(99)])])),
+  (39246601,arr(vec![vec![5],arr(vec![guid([0;4]),vec![0xc0],u(999),u(125),u(120)])])),
+  (1835273963,arr(vec![vec![6],arr(vec![arr(vec![f(0.25),f(0.5),f(0.),f(1.)]);3])])),
+  (43114910,arr(vec![vec![7],arr(vec![u(6),u(999),u(0),u(0)])])),
+  (61381969,arr(vec![vec![8],arr(vec![u(999),u(2),u(0)])])),
+  (1429161083,arr(vec![vec![9],arr(vec![u(0),vec![0xc0],u(999),u(125),u(118)])]))
+ ];
+ for (item,payload) in cases{
+  for zipped in [false,true]{
+   let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x99;
+   for (id,uid,qty) in [(4,21,2),(5,22,0)]{
+    p.extend(doc(1,arr(vec![u(id),u(item),u(uid),u(qty),payload.clone()])));
+   }
+   p.extend(doc(10,arr(vec![u(6),guid([0;4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([0;4]),vec![0xc3],vec![0xc0]])));
+   p.extend(doc(22,arr(vec![u(7),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
+   let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
+   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+   assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==0), "item {item}: {original:?}");
+   assert!(e.change_inventory_quantities(&[(4,2,8),(5,1,9)]).is_err());assert!(!e.dirty());
+   e.change_inventory_quantities(&[(4,2,0),(5,0,9)]).unwrap();
+   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+   assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);assert!(restored.redo_scope(Inventory));
+   let saved=Editor::open(restored.export().unwrap()).unwrap();
+   assert_eq!(saved.inventory().iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![0,9]);
+   for id in [4,5]{assert_eq!(saved.inventory_original_unique_payload(id),Some(payload.as_slice()));}
+  }
+ }
+}
+
+#[test]
+fn structural_quantity_aggregate_cap_is_atomic_for_uninterpreted_peers(){
+ let unknown=arr(vec![vec![3],arr(vec![arr(vec![u(99)]),arr(vec![u(999)])])]);
+ let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x97;
+ for (id,uid,qty) in [(4,21,i32::MAX-2),(5,22,1)]{
+  p.extend(doc(1,arr(vec![u(id),u(203331651),u(uid),u(qty as u32),unknown.clone()])));
+ }
+ let mut e=Editor::open(slot_from_payload("3.0.1",p)).unwrap();let original=e.inventory();
+ assert!(original.iter().all(|r|r.editable));
+ assert!(e.change_inventory_quantity(5,1,3).is_err());assert_eq!(e.inventory(),original);assert!(!e.dirty());
+ e.change_inventory_quantities(&[(4,i32::MAX-2,i32::MAX-3),(5,1,3)]).unwrap();
+ let saved=Editor::open(e.export().unwrap()).unwrap();
+ assert_eq!(saved.inventory().iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![i32::MAX-3,3]);
+ for id in [4,5]{assert_eq!(saved.inventory_original_unique_payload(id),Some(unknown.as_slice()));}
+ assert!(!saved.inventory_cafe_rows().any(|(_,_,editable)|editable));
 }
