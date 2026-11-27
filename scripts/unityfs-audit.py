@@ -61,7 +61,15 @@ def lz4(src,expected):
                 n=src[pos];pos+=1;repeat+=n
                 if n!=255:break
         if len(out)+repeat>expected:raise InvalidAsset('invalid LZ4 repetition')
-        for _ in range(repeat):out.append(out[-offset])
+        # The match repeats the preceding offset-byte window, including overlap.
+        # Slice only what is needed for a nonoverlapping match; repeat the
+        # original window for overlapping matches. All prior bounds still apply.
+        start=len(out)-offset
+        if repeat<=offset:
+            out.extend(out[start:start+repeat])
+        else:
+            seed=out[start:];count,tail=divmod(repeat,offset)
+            out.extend(seed*count);out.extend(seed[:tail])
     if len(out)!=expected:raise InvalidAsset('LZ4 decoded byte count')
     return bytes(out)
 
@@ -306,6 +314,24 @@ def self_test():
         try:lz4(source,expected)
         except InvalidAsset:pass
         else:raise AssertionError('invalid LZ4 accepted')
+    # Cover offsets on both sides of the match length, extended literal/match
+    # sizes and nonempty final literals. The byte-at-a-time reference is
+    # independent of the optimized repeated-window copy.
+    def extension(n):
+        return bytes([255])*(n//255)+bytes([n%255])
+    for literal_count in (1,3,14,15,16,32,270):
+        literal=bytes(i%251 for i in range(literal_count))
+        for offset in sorted({1,literal_count,max(1,literal_count//2)}):
+            for repeat in sorted({4,18,19,20,274,1024,max(4,offset),max(4,offset-1),max(4,offset+1)}):
+                token=(min(literal_count,15)<<4)|min(repeat-4,15)
+                src=bytes([token])+(extension(literal_count-15) if literal_count>=15 else b'')+literal+struct.pack('<H',offset)+(extension(repeat-19) if repeat>=19 else b'')+b'\x20xy'
+                reference=bytearray(literal)
+                for _ in range(repeat):reference.append(reference[-offset])
+                reference.extend(b'xy')
+                assert lz4(src,len(reference))==bytes(reference)
+                try:lz4(src,len(reference)-1)
+                except InvalidAsset:pass
+                else:raise AssertionError('LZ4 overrun accepted')
     assert decompress(b'abc',3,0)==b'abc'
     # Synthetic v22 object-table fixture: one Material with a shader PPtr.
     # This guards against misaligned object table parsing without including
