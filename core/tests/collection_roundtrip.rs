@@ -3344,3 +3344,33 @@ fn ordinary_furniture_zero_refill_with_distinct_customized_peers(){
   assert!(e.change_inventory_quantity(4,3,0).is_err());assert!(!e.dirty());
  }
 }
+
+#[test]
+fn ordinary_furniture_source_remains_available_after_custom_stack_export(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=61381969;let staged=(1u32<<31)|item as u32;
+ for saved_base in [false,true]{for zipped in [false,true]{
+  let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=if saved_base{0x97}else{0x96};
+  p.extend(doc(1,arr(vec![u(4),u(item),u(11),u(2),furniture_payload([0,2,0])])));
+  if saved_base{p.extend(doc(1,arr(vec![u(5),u(item),u(0),u(3),vec![0xc0]])))}
+  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let base=if saved_base{5}else{e.change_inventory_quantity(staged,0,3).unwrap();staged};
+  assert!(e.inventory_default_furniture_ids().contains(&base));
+  assert!(!e.inventory_furniture_creation_variants(base).contains(&[0,2,0]));
+  assert!(e.inventory_furniture_creation_variants(base).contains(&[0,3,0]));
+  assert!(e.create_inventory_furniture_variant(base,[0;3],[0,2,0],1).is_err());
+  let child=e.create_inventory_furniture_variant(base,[0;3],[0,3,0],4).unwrap();
+  assert_eq!(e.inventory_unique_data(child),Some(U::Furniture{materials:[0,3,0]}));
+  assert_eq!(e.inventory().iter().find(|r|r.document_id==base).unwrap().quantity,3);
+  assert!(e.create_inventory_furniture_variant(base,[0;3],[0,3,0],1).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let reopened=Editor::open(restored.export().unwrap()).unwrap();
+  let base=reopened.inventory().into_iter().find(|r|r.quantity==3).unwrap().document_id;
+  assert!(reopened.inventory_default_furniture_ids().contains(&base));
+  assert!(!reopened.inventory_furniture_creation_variants(base).contains(&[0,2,0]));
+  assert!(!reopened.inventory_furniture_creation_variants(base).contains(&[0,3,0]));
+  assert_eq!(reopened.inventory_unique_data(base),None);
+ }}
+}

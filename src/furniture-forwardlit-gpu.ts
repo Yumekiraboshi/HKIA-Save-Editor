@@ -7,6 +7,7 @@ import {nativeMeshDrawRange,type UploadedNativeMesh} from './native-furniture-me
 import {furnitureRimGLSL,validateFurnitureRim,type FurnitureRimParameters} from './furniture-rim-v3.0.1';
 import {customLitSurfaceGLSL} from './furniture-customlit-v3.0.1';
 import {nativeGlassGLSL} from './furniture-glass-v3.0.1';
+import {nativeTerrainGLSL,validateTerrainParameters,type TerrainParameters} from './furniture-terrain-v3.0.1';
 export const furnitureForwardVertex=`#version 300 es
 precision highp float;
 layout(location=0) in vec3 position;
@@ -22,10 +23,15 @@ uniform bool worldUV;
 uniform vec2 rotationCenter;
 out vec2 bUV,pUV;
 out vec3 worldPosition, worldNormal, worldTangent, worldBitangent;
+out vec3 terrainN,terrainV;
+uniform vec3 cameraPosition;
 void main(){
  vec4 p=model*vec4(position,1.);
  gl_Position=viewProjection*p;
  worldPosition=p.xyz;
+ vec3 tN=mat3(model)*normal,tV=cameraPosition-p.xyz;
+ terrainN=tN*inversesqrt(max(dot(tN,tN),1.1754943508222875e-38));
+ terrainV=tV*inversesqrt(max(dot(tV,tV),1.1754943508222875e-38));
  worldNormal=normalize(normalMatrix*normal);
  worldTangent=normalize(mat3(model)*tangent.xyz);
  worldBitangent=cross(worldNormal,worldTangent)*tangent.w*tangentParity;
@@ -76,6 +82,10 @@ export const furnitureForwardFragment=`#version 300 es
 precision highp float;
 in vec2 bUV,pUV;
 in vec3 worldPosition,worldNormal,worldTangent,worldBitangent;
+in vec3 terrainN,terrainV;
+uniform bool terrainEnabled;
+uniform vec3 terrainTopTint,terrainSideTint,terrainParams2;
+uniform vec4 terrainParams;
 uniform sampler2D baseMap,patternMap,comboMap,normalMap;
 uniform samplerCube reflectionPrimary,reflectionSecondary;
 uniform vec4 baseColor,patternTint;
@@ -89,8 +99,9 @@ uniform float smoothnessShift,metallicShift,patternSmoothnessShift,patternMetall
 uniform vec3 cameraPosition,mainLightDirection,mainLightColor,ambient,emissionColor,ambientMain,ambientFill;
 uniform float screenOcclusion,screenOcclusionStrength,reflectionBlendWeight,reflectionIntensity,reflectionStrength,emissionMask,fogVarying,fogMultiplier;
 out vec4 color;
-`+furnitureForwardLightingGLSL+customLitSurfaceGLSL+nativeGlassGLSL+`
+`+furnitureForwardLightingGLSL+customLitSurfaceGLSL+nativeGlassGLSL+nativeTerrainGLSL+`
 void main(){
+ if(terrainEnabled){color=nativeTerrainPixel();return;}
  if(glassEnabled){
   vec4 b=texture(baseMap,bUV),nm=texture(normalMap,bUV);
   vec3 n=nativeGlassNormal(nm,mat3(worldTangent,worldBitangent,worldNormal));
@@ -136,7 +147,7 @@ export type FurnitureForwardScene={
  screenOcclusion:number;screenOcclusionStrength:number;reflectionBlendWeight:number;
  reflectionIntensity:number;reflectionStrength:number;emissionMask:number;fogVarying:number;fogMultiplier:number;
 };
-export type FurnitureForwardMaterial=FurnitureSurfaceUniforms&{baseST:Vec4;patternST:Vec4;rotationTurns:number;rotationCenter:Vec2;worldUV:boolean;rim?:FurnitureRimParameters;customLit?:{materialAlpha:number};useComboEmissionMask?:boolean;glass?:{roughness:number;metallic:number;lightingClamp:number;rim:Vec4}};
+export type FurnitureForwardMaterial=FurnitureSurfaceUniforms&{baseST:Vec4;patternST:Vec4;rotationTurns:number;rotationCenter:Vec2;worldUV:boolean;rim?:FurnitureRimParameters;customLit?:{materialAlpha:number};useComboEmissionMask?:boolean;terrain?:TerrainParameters;glass?:{roughness:number;metallic:number;lightingClamp:number;rim:Vec4}};
 export type FurnitureForwardTextures={baseMap:WebGLTexture;patternMap:WebGLTexture;comboMap:WebGLTexture;normalMap:WebGLTexture;reflectionPrimary:WebGLTexture;reflectionSecondary:WebGLTexture};
 const textureNames=['baseMap','patternMap','comboMap','normalMap','reflectionPrimary','reflectionSecondary'] as const;
 const sceneVectors=['cameraPosition','mainLightDirection','mainLightColor','ambient','emissionColor','ambientMain','ambientFill'] as const;
@@ -145,6 +156,7 @@ const materialScalars=['smoothnessShift','metallicShift','patternSmoothnessShift
 const finite=(a:readonly number[],length:number)=>a.length===length&&a.every(Number.isFinite);
 export function validateFurnitureForwardInputs(s:FurnitureForwardScene,m:FurnitureForwardMaterial){
  if(m.rim!==undefined)validateFurnitureRim(m.rim);
+ if(m.terrain!==undefined){validateTerrainParameters(m.terrain);if(m.glass||m.customLit||m.rim||m.worldUV||m.useBaseMapMask||m.baseColor[3]!==1)throw Error('FURNITURE_TERRAIN_INPUT');}
  if(m.glass!==undefined){const g=m.glass;if(!g||m.customLit||m.rim||m.worldUV||m.useBaseMapMask||!finite(g.rim,4)||![g.roughness,g.metallic,g.lightingClamp].every(Number.isFinite)||g.roughness<0||g.roughness>1||g.metallic<0||g.metallic>1||g.lightingClamp<0)throw Error('FURNITURE_GLASS_INPUT');}
  if(m.customLit!==undefined&&(!m.customLit||![0,1].includes(m.customLit.materialAlpha)||m.baseColor[3]!==1||m.worldUV||m.useBaseMapMask)||m.useComboEmissionMask!==undefined&&typeof m.useComboEmissionMask!=='boolean')throw Error('FURNITURE_FORWARD_INPUT');
  if(!finite(s.model,16)||!finite(s.viewProjection,16)||!finite(s.normalMatrix,9)||![1,-1].includes(s.tangentParity)||
@@ -170,7 +182,7 @@ export function createFurnitureForwardRenderer(gl:WebGL2RenderingContext){
   vs=compile(gl.VERTEX_SHADER,furnitureForwardVertex);fs=compile(gl.FRAGMENT_SHADER,furnitureForwardFragment);
   gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
   if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error('FURNITURE_FORWARD_LINK '+gl.getProgramInfoLog(program));
-  const names=['model','viewProjection','normalMatrix','tangentParity','baseST','patternST','rotationCenter','worldUV','baseColor','patternTint','useBaseMapMask','rimEnabled','rimParameters','customLit','materialAlpha','useComboEmissionMask','glassEnabled','glassProperties','glassRim',...textureNames,...sceneVectors,...sceneScalars,...materialScalars];
+  const names=['model','viewProjection','normalMatrix','tangentParity','baseST','patternST','rotationCenter','worldUV','baseColor','patternTint','useBaseMapMask','rimEnabled','rimParameters','customLit','materialAlpha','useComboEmissionMask','glassEnabled','glassProperties','glassRim','terrainEnabled','terrainTopTint','terrainSideTint','terrainParams','terrainParams2',...textureNames,...sceneVectors,...sceneScalars,...materialScalars];
   for(const name of names){const u=gl.getUniformLocation(program,name);if(u===null)throw Error('FURNITURE_FORWARD_UNIFORM '+name);uniforms.set(name,u);}
  }catch(e){gl.deleteProgram(program);throw e;}
  finally{if(vs)gl.deleteShader(vs);if(fs)gl.deleteShader(fs);}
@@ -193,6 +205,12 @@ export function createFurnitureForwardRenderer(gl:WebGL2RenderingContext){
    gl.uniform1i(u('customLit'),Number(m.customLit!==undefined));gl.uniform1f(u('materialAlpha'),m.customLit?.materialAlpha??0);gl.uniform1i(u('useComboEmissionMask'),Number(m.useComboEmissionMask===true));
    gl.uniform1i(u('glassEnabled'),Number(m.glass!==undefined));
    const glass=m.glass;gl.uniform3fv(u('glassProperties'),new Float32Array(glass?[glass.roughness,glass.metallic,glass.lightingClamp]:[0,0,0]));gl.uniform4fv(u('glassRim'),new Float32Array(glass?glass.rim:[0,0,0,0]));
+   const terrain=m.terrain;
+   gl.uniform1i(u('terrainEnabled'),Number(terrain!==undefined));
+   gl.uniform3fv(u('terrainTopTint'),new Float32Array(terrain?.topTint??[0,0,0]));
+   gl.uniform3fv(u('terrainSideTint'),new Float32Array(terrain?.sideTint??[0,0,0]));
+   gl.uniform4fv(u('terrainParams'),new Float32Array(terrain?[terrain.blend,terrain.topTiling,terrain.sideTiling,terrain.topNormalScale]:[1,1,1,0]));
+   gl.uniform3fv(u('terrainParams2'),new Float32Array(terrain?[terrain.sideNormalScale,terrain.topSmoothShift,terrain.sideSmoothShift]:[0,0,0]));
    gl.uniform1i(u('rimEnabled'),Number(m.rim!==undefined));
    const rim=m.rim;gl.uniform4fv(u('rimParameters'),new Float32Array(rim?[rim.power,rim.feathering,rim.intensity,rim.coloring]:[0,0,0,0]));
    for(const [i,k] of textureNames.entries()){

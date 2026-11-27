@@ -75,3 +75,13 @@ test('explicit CustomLit alpha sampling is bound and resets; unknown alpha mode 
  assert.throws(()=>r.draw(mesh,textures,s,{...material,customLit:{materialAlpha:.5}}),/INPUT/);
  r.dispose();
 });
+
+test('Terrain branch resets between draws and rejects incompatible modes',()=>{
+ const a=fake(),r=createFurnitureForwardRenderer(a.gl),terrain={blend:.915,topTiling:.6,sideTiling:.6,topTint:[.63,.85,.33],sideTint:[.54,.69,.32],topNormalScale:.5,sideNormalScale:.5,topSmoothShift:-.5,sideSmoothShift:-.5};
+ const material={...m,useBaseMapMask:false,terrain};
+ r.draw(mesh,textures,s,material);r.draw(mesh,textures,s,m);
+ assert.deepEqual(a.calls.filter(x=>x[0]==='int'&&x[1]==='terrainEnabled').map(x=>x[2]),[1,0]);
+ assert.throws(()=>r.draw(mesh,textures,s,{...material,customLit:{materialAlpha:0}}),/TERRAIN_INPUT/);
+ assert.throws(()=>r.draw(mesh,textures,s,{...material,terrain:{...terrain,blend:0}}),/TERRAIN_PARAMETERS/);
+ r.dispose();
+});

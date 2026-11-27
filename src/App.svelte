@@ -10,7 +10,7 @@
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,type FurnitureDisplay} from './inventory-furniture-display';
- import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryRefillable,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryRefillable,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,flowerGrowthKind,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
@@ -109,7 +109,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryBatchQuantity=$state<number|undefined>(undefined);
  // Presentation only: the tightest bound returned by Rust for selected rows.
  const inventoryBatchMinimum=$derived.by(()=>{
-  if(!snapshot||inventoryBatchSelected.size===0)return 1;
+  if(inventoryAddMode||!snapshot||inventoryBatchSelected.size===0)return 1;
   return inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantityMinimum!==0)?1:0;
  });
  const inventoryBatchCanDelete=$derived.by(()=>!inventoryAddMode&&inventoryBatchSelected.size>0&&inventoryBatchMinimum===0&&inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantity>0));
@@ -815,7 +815,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function closeCafeEditor(){if(cafeDialogEl?.open)cafeDialogEl.close()}
  async function applyInventoryCafeVariant(event:SubmitEvent){
-  event.preventDefault();const edit=cafeEdit;
+  event.preventDefault();if(inventoryAddMode)return;const edit=cafeEdit;
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
   const next=cafeDraft;if(!next||next.every((n,i)=>n===edit.before[i]))return;
   busy=true;error='';
@@ -843,7 +843,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function closeWandEditor(){if(wandDialogEl?.open)wandDialogEl.close()}
  async function applyInventoryWandVariant(event:SubmitEvent){
-  event.preventDefault();const edit=wandEdit;
+  event.preventDefault();if(inventoryAddMode)return;const edit=wandEdit;
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
   const next=edit.options[wandSelection];if(!next)return;
   busy=true;error='';
@@ -870,7 +870,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function closeBobaEditor(){if(bobaDialogEl?.open)bobaDialogEl.close()}
  async function applyInventoryBobaVariant(event:SubmitEvent){
-  event.preventDefault();const edit=bobaEdit;
+  event.preventDefault();if(inventoryAddMode)return;const edit=bobaEdit;
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
   const next=edit.options[bobaSelection];if(!next)return;
   busy=true;error='';
@@ -911,7 +911,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function closePaletteEditor(){if(paletteDialogEl?.open)paletteDialogEl.close()}
  async function applyInventoryPaletteVariant(event:SubmitEvent){
-  event.preventDefault();const edit=paletteEdit;
+  event.preventDefault();if(inventoryAddMode)return;const edit=paletteEdit;
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
   const next=paletteDraft;if(!next||next.every((n,i)=>n===edit.before[i]))return;
   busy=true;error='';
@@ -928,7 +928,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function resetFurniturePart(slot:number){if(furnitureEdit&&furnitureDraft){const next:FurnitureVariant=[...furnitureDraft];next[slot]=furnitureEdit.before[slot];furnitureDraft=next;furnitureSelection=-1}}
  function closeFurnitureEditor(){if(furnitureDialogEl?.open)furnitureDialogEl.close()}
  async function applyInventoryFurnitureVariant(event:SubmitEvent){
-  event.preventDefault();
+  event.preventDefault();if(inventoryAddMode)return;
   const selected=furnitureEdit;
   if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
   const next=furnitureDraft;if(!next||next.every((v,i)=>v===selected.before[i]))return;
@@ -972,7 +972,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function closeFlowerEditor(){if(flowerDialogEl?.open)flowerDialogEl.close()}
  async function applyInventoryFlowerVariant(event:SubmitEvent){
-  event.preventDefault();
+  event.preventDefault();if(inventoryAddMode)return;
   const selected=flowerEdit;
   if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
   const next=flowerDraft;if(!next||next.every((n,i)=>n===selected.before[i]))return;
@@ -1063,7 +1063,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    error=copy.fileError;return;
   }
   const next=Number(value);
-  if(!Number.isSafeInteger(next)||row.quantityLimit===null||next<row.quantityMinimum||next>row.quantityLimit){error=copy.fileError;return}
+  if(!Number.isSafeInteger(next)||row.quantityLimit===null||next<(inventoryAddMode?Math.max(1,row.quantityMinimum):row.quantityMinimum)||next>row.quantityLimit){error=copy.fileError;return}
   if(next===row.quantity)return;
   if(next===0){requestInventoryDelete([row],false,(event.submitter??event.currentTarget) as HTMLElement);return;}
   busy=true;error='';
@@ -1578,7 +1578,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const canCafe=!!item.cafe?.editable}
      {@const canWand=!!item.unique?.wandEditable&&!!wand}
      {@const canBoba=!!item.boba?.editable}
-      <article class="inventory-card" class:inventory-empty-stack={!inventoryAddMode&&inventoryRefillable(item)} class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!item.flowerCreatable} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
+      <article class="inventory-card" class:inventory-empty-stack={!inventoryAddMode&&inventoryRefillable(item)} class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
       {#if inventoryBatchMode&&item.editable}
        <input class="inventory-batch-checkbox" type="checkbox" checked={inventoryBatchSelected.has(item.documentId)} aria-label={iBatchCopy+': '+inventoryName(item.itemId)}
         disabled={busy||(!inventoryBatchSelected.has(item.documentId)&&inventoryBatchSelected.size>=snapshot.inventoryBatchLimit)} onchange={()=>toggleInventoryBatch(item)}/>
@@ -1623,7 +1623,7 @@ import {verifiedFloorplanName} from './floorplan-names';
        <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>
         <label>
          <span class="visually-hidden">{iCopy.quantity}</span>
-         <input type="number" name="quantity" min={item.quantityMinimum} max={item.quantityLimit??1} step="1"
+         <input type="number" name="quantity" min={inventoryAddMode?Math.max(1,item.quantityMinimum):item.quantityMinimum} max={item.quantityLimit??1} step="1"
           value={inventoryAddMode?1:item.quantity} disabled={busy||inventoryBatchMode} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
         </label>
         <button type="submit" class="primary" disabled={busy||inventoryBatchMode} title={iCopy.apply} aria-label={iCopy.apply}>
@@ -1637,6 +1637,13 @@ import {verifiedFloorplanName} from './floorplan-names';
          </button>
         {/if}
        </form>
+      {:else if inventoryAddMode&&inventoryCustomizationSource(item)&&(canFlower||canFurniture||canPalette||canBoba||canCafe||canWand)}
+       <button class="inventory-unique-edit-button inventory-add-source" type="button" disabled={busy||inventoryBatchMode}
+        title={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)}
+        onclick={()=>void (canWand?openWandEditor(item):canCafe?openCafeEditor(item):canBoba?openBobaEditor(item):canPalette?openPaletteEditor(item):canFurniture?openFurnitureEditor(item):openFlowerEditor(item))}>
+        <span>{item.quantity.toLocaleString(locale)}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+       </button>
       {:else if item.flowerCreatable}
        <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openAbsentFlowerEditor(item)}>{inventoryAddCopy(locale)}</button>
       {:else if canFurniture}
@@ -1843,7 +1850,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {#if edit.creationOptions.length}
       <button type="button" class="inventory-create-cafe" disabled={busy||!validVariantAddQuantity||!canCreate} onclick={()=>void addInventoryCafeVariant()}>{inventoryAddCopy(locale)}</button>
      {/if}
-     <button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>
+     {#if !inventoryAddMode}<button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>{/if}
     </div>
    </form>
   {/if}
@@ -1879,7 +1886,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {#if edit.creationOptions.length}
       <button type="button" class="inventory-create-wand" disabled={busy||!validVariantAddQuantity||wandSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[wandSelection]?.[i]))} onclick={()=>void addInventoryWandVariant()}>{inventoryAddCopy(locale)}</button>
      {/if}
-     <button type="submit" formnovalidate class="primary" disabled={busy||wandSelection<0}>{copy.apply}</button>
+     {#if !inventoryAddMode}<button type="submit" formnovalidate class="primary" disabled={busy||wandSelection<0}>{copy.apply}</button>{/if}
     </div>
    </form>
   {/if}
@@ -1921,7 +1928,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {#if edit.creationOptions.length}
       <button type="button" class="inventory-create-boba" disabled={busy||!validVariantAddQuantity||bobaSelection<0||!edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[bobaSelection]?.[i]))} onclick={()=>void addInventoryBobaVariant()}>{inventoryAddCopy(locale)}</button>
      {/if}
-     <button type="submit" formnovalidate class="primary" disabled={busy||bobaSelection<0}>{copy.apply}</button>
+     {#if !inventoryAddMode}<button type="submit" formnovalidate class="primary" disabled={busy||bobaSelection<0}>{copy.apply}</button>{/if}
     </div>
    </form>
   {/if}
@@ -1973,7 +1980,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {#if canCreate}
       <button type="button" class="inventory-create-palette" disabled={busy||!validVariantAddQuantity} onclick={()=>void addInventoryPaletteVariant()}>{inventoryAddCopy(locale)}</button>
      {/if}
-     <button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>
+     {#if !inventoryAddMode}<button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>{/if}
     </div>
    </form>
   {/if}
@@ -2039,7 +2046,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {#if edit.creationOptions.length}
       <button type={edit.createOnly?'submit':'button'} class="inventory-create-furniture" disabled={busy||!validVariantAddQuantity||!canCreate} onclick={()=>{if(!edit.createOnly)void addInventoryFurnitureVariant()}}>{inventoryAddCopy(locale)}</button>
      {/if}
-     {#if !edit.createOnly}<button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>{/if}
+     {#if !edit.createOnly&&!inventoryAddMode}<button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>{/if}
     </div>
    </form>
   {/if}
@@ -2096,7 +2103,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {#if edit.creationOptions.length||flowerDraftCreatable}
       <button type="button" class="inventory-create-flower" disabled={busy||!validVariantAddQuantity||!flowerDraftCreatable} onclick={()=>void addInventoryFlowerVariant()}>{inventoryAddCopy(locale)}</button>
      {/if}
-     {#if !edit.absent}<button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>{/if}
+     {#if !edit.absent&&!inventoryAddMode}<button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>{/if}
     </div>
    </form>
   {/if}

@@ -474,11 +474,12 @@ impl Editor {
   let item=row.item_id?;
   if row.id==0||row.id>=PENDING_ITEM||row.unique_id!=Some(0)||row.unique_is_nil!=Some(true)||
    self.inventory_changes.get(&row.id).copied().or(row.quantity)?<=0||
-   !row.fields.iter().all(Option::is_some)||self.inventory_item_rows.get(&item)!=Some(&1)||
+   !row.fields.iter().all(Option::is_some)||
    !crate::inventory_source::ordinary_creation_item(item)||!self.inventory_creation_payload_safe(item)||
    self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item){return None}
   let source=furniture_source::item(item)?;
   if source.is_home_layout||crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX){return None}
+  if self.inventory_item_rows.get(&item)!=Some(&1)&&self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)&&r.id!=row.id).any(|r|!self.permits_separate_ordinary_base(r)){return None}
   Some(item)
  }
  fn default_furniture_choices(&self,item_id:i32)->Vec<FurnitureVariant>{
@@ -486,14 +487,7 @@ impl Editor {
   let Some(source)=furniture_source::item(item_id)else{return Vec::new()};
   if source.is_home_layout{return Vec::new()}
   let Some(default)=furniture_key(source,[0;3])else{return Vec::new()};
-  let mut reserved=HashSet::new();
-  for (&id,f) in &self.pending_furniture{
-   if f.item_id!=item_id||!self.inventory_changes.contains_key(&id){continue}
-   for v in [f.variant,self.furniture_variant_changes.get(&id).copied().unwrap_or(f.variant)]{
-    let Some(key)=furniture_key(source,v)else{return Vec::new()};
-    reserved.insert(key);
-   }
-  }
+  let Some(reserved)=self.default_furniture_reserved(source)else{return Vec::new()};
   let mut out=Vec::new();
   for slot in source.slots{
    for &n in slot.allowed{
@@ -504,6 +498,26 @@ impl Editor {
    }
   }
   out
+ }
+ // Both original and effective identities remain reserved across history.
+ fn default_furniture_reserved(&self,source:&FurnitureItemSource)->Option<HashSet<FurnitureVariant>>{
+  let mut reserved=HashSet::new();
+  if self.inventory_item_rows.contains_key(&source.item_id){
+  for row in self.slot.index.inventory.iter().filter(|r|r.item_id==Some(source.item_id)){
+   if row.unique_is_nil==Some(true){reserved.insert(furniture_key(source,[0;3])?);continue}
+   if !self.permits_separate_ordinary_base(row){return None}
+   for value in [row.unique_data,self.effective_unique(row)]{
+    reserved.insert(furniture_key(source,furniture_variant(value?)?)?);
+   }
+  }
+  }
+  for (&id,f) in &self.pending_furniture{
+   if f.item_id!=source.item_id||!self.inventory_changes.contains_key(&id){continue}
+   for v in [f.variant,self.furniture_variant_changes.get(&id).copied().unwrap_or(f.variant)]{
+    reserved.insert(furniture_key(source,v)?);
+   }
+  }
+  Some(reserved)
  }
  pub fn inventory_absent_furniture_ids(&self)->Vec<i32>{
   if !self.absent_flower_budget_available(){return Vec::new()}
@@ -518,14 +532,19 @@ impl Editor {
    (!self.default_furniture_choices(item).is_empty()).then_some(r.id)
   }).chain(self.inventory_changes.iter().filter_map(|(&id,&qty)|{
    if id&PENDING_ITEM==0||qty<=0||self.pending_flowers.contains_key(&id)||self.pending_furniture.contains_key(&id)||self.pending_palettes.contains_key(&id)||self.pending_bobas.contains_key(&id)||self.pending_cafes.contains_key(&id)||self.pending_wands.contains_key(&id){return None}
-   (!self.absent_furniture_choices((id&!PENDING_ITEM) as i32).is_empty()).then_some(id)
+   let item=(id&!PENDING_ITEM) as i32;
+   (self.can_create_inventory_item(item)&&!self.default_furniture_choices(item).is_empty()).then_some(id)
   })).collect()
  }
  pub fn inventory_furniture_creation_variants(&self,id:u32)->Vec<FurnitureVariant>{
   if !self.absent_flower_budget_available(){return Vec::new()}
   if self.pending_furniture.contains_key(&id){
    if !self.inventory_changes.contains_key(&id){return Vec::new()}
-  }else if id&PENDING_ITEM!=0{return self.absent_furniture_choices((id&!PENDING_ITEM) as i32)}
+  }else if id&PENDING_ITEM!=0{
+   let item=(id&!PENDING_ITEM) as i32;
+   if self.inventory_changes.get(&id).is_some_and(|&q|q>0)&&self.can_create_inventory_item(item){return self.default_furniture_choices(item)}
+   return self.absent_furniture_choices(item)
+  }
   else if !self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|
    self.inventory_changes.get(&id).copied().or(r.quantity).is_some_and(|q|q>0)){return Vec::new()}
   if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|self.saved_default_furniture_source(r)){
@@ -569,14 +588,7 @@ impl Editor {
   if let Some((_,original,current,reserved))=self.furniture_context(source_id){
    if Some(key)==furniture_key(source,original)||Some(key)==furniture_key(source,current)||reserved.contains(&key){return Err(Error::Schema)}
   }else{
-   // The only other eligible paths are absent/default sources, whose
-   // saved peers are absent or one nil base. Reserve all active staged peers.
-   for (&id,f) in &self.pending_furniture{
-    if f.item_id!=item_id||!self.inventory_changes.contains_key(&id){continue}
-    for v in [f.variant,self.furniture_variant_changes.get(&id).copied().unwrap_or(f.variant)]{
-     if furniture_key(source,v).ok_or(Error::Schema)?==key{return Err(Error::Schema)}
-    }
-   }
+   if self.default_furniture_reserved(source).ok_or(Error::Schema)?.contains(&key){return Err(Error::Schema)}
   }
   let document_id=self.allocate_staged_unique_handle()?;
   let revision=self.next_edit_revision()?;
