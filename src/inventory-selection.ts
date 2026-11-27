@@ -13,3 +13,13 @@ export function selectMatchingInventoryRows(
  }
  return next;
 }
+
+/** Remove only the current filtered matches; selections from other categories
+ * or queries are kept. No native save or quantity rule is involved. */
+export function deselectMatchingInventoryRows(
+ rows:readonly InventoryEntry[],selected:ReadonlySet<number>
+):Set<number>{
+ const next=new Set(selected);
+ for(const row of rows)next.delete(row.documentId);
+ return next;
+}

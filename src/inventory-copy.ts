@@ -79,6 +79,15 @@ const selectVisibleLabels:Record<Locale,string>={
 };
 export function inventorySelectVisibleCopy(locale:Locale):string{return selectVisibleLabels[locale]}
 
+/** Clear only matching items from the temporary batch selection. */
+const deselectVisibleLabels:Record<Locale,string>={
+ ar:'إلغاء تحديد العناصر المطابقة',de:'Passende Gegenstände abwählen',en:'Deselect matching items','en-GB':'Deselect matching items',
+ es:'Deseleccionar objetos coincidentes',fr:'Désélectionner les objets correspondants','fr-CA':'Désélectionner les objets correspondants',
+ it:'Deseleziona gli oggetti corrispondenti',ja:'該当するアイテムの選択を解除',ko:'일치하는 아이템 선택 해제',nl:'Overeenkomende items deselecteren',
+ 'pt-BR':'Desmarcar itens correspondentes',ru:'Снять выделение с подходящих предметов',tr:'Eşleşen eşyaların seçimini kaldır','zh-Hans':'取消选择匹配的物品','zh-Hant':'取消選取相符的物品'
+};
+export function inventoryDeselectVisibleCopy(locale:Locale):string{return deselectVisibleLabels[locale]}
+
 /** Explicit removal of all units in the selected stack(s). */
 const deleteLabels:Record<Locale,string>={
  ar:'حذف',de:'Löschen',en:'Delete','en-GB':'Delete',es:'Eliminar',fr:'Supprimer','fr-CA':'Supprimer',it:'Elimina',ja:'削除',ko:'삭제',nl:'Verwijderen','pt-BR':'Excluir',ru:'Удалить',tr:'Sil','zh-Hans':'删除','zh-Hant':'刪除'

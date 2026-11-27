@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/inventory-selection.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
-const {selectMatchingInventoryRows}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {selectMatchingInventoryRows,deselectMatchingInventoryRows}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 test('selection includes unrendered matches, preserves other tabs, skips locked rows and obeys live Rust limit',()=>{
  const rows=Array.from({length:350},(_,i)=>({documentId:i+1,editable:i%2===0}));
  const original=new Set([999,1]);
@@ -17,4 +17,14 @@ test('selection includes unrendered matches, preserves other tabs, skips locked 
  assert.equal(all.size,176);
  assert.ok(all.has(349));
  assert.deepEqual([...selectMatchingInventoryRows([],original,256)],[...original]);
+});
+
+test('deselect matching rows clears unmounted matches and preserves other categories and searches',()=>{
+ const rows=Array.from({length:350},(_,i)=>({documentId:i+1,editable:i%2===0}));
+ const selected=new Set([1,3,349,999]);
+ const next=deselectMatchingInventoryRows(rows,selected);
+ assert.deepEqual([...next],[999]);
+ assert.deepEqual([...selected],[1,3,349,999]);
+ assert.deepEqual([...deselectMatchingInventoryRows([],selected)],[...selected]);
+ assert.deepEqual([...deselectMatchingInventoryRows(rows,new Set())],[]);
 });
