@@ -27,7 +27,15 @@ export function generateFurnitureSource(d){
   'pub fn item(id:i32)->Option<&\'static FurnitureItemSource>{ITEMS.binary_search_by_key(&id,|x|x.item_id).ok().map(|i|&ITEMS[i])}',
   'pub fn slot(id:i32,slot:u8)->Option<&\'static FurnitureSlotSource>{item(id)?.slots.iter().find(|x|x.slot==slot)}',
   'pub fn material_unlock_item(index:i32)->Option<i32>{MATERIAL_UNLOCK_ITEMS.iter().find(|x|x.0==index).map(|x|x.1)}',
-  '');
+  'pub const MATERIAL_GUID_INDEX:&[([u32;4],i32)]=&[');
+ const guids=d.materials.map(([index,guid])=>{
+  if(!/^[0-9a-f]{32}$/.test(guid))throw Error('Invalid material GUID');
+  return {index,words:guid.match(/.{8}/g).map(x=>parseInt(x.split('').reverse().join(''),16))};
+ });
+ if(guids.length!==877||guids.some(x=>x.words.every(n=>n===0))||new Set(guids.map(x=>x.words.join(','))).size!==guids.length)throw Error('Ambiguous material GUID');
+ guids.sort((a,b)=>{for(let i=0;i<4;i++)if(a.words[i]!==b.words[i])return a.words[i]-b.words[i];return 0});
+ for(const {index,words} of guids)lines.push(' (['+words.map(n=>'0x'+n.toString(16).padStart(8,'0')).join(',')+'],'+index+'),');
+ lines.push('];','pub fn material_index_for_guid(guid:[u32;4])->Option<i32>{if guid==[0;4]{return Some(0)}MATERIAL_GUID_INDEX.binary_search_by_key(&guid,|x|x.0).ok().map(|i|MATERIAL_GUID_INDEX[i].1)}','');
  return lines.join('\n');
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)){

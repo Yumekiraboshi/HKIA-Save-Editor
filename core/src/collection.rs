@@ -982,12 +982,32 @@ impl Editor {
  }
  // Family eligibility only; full UID, source tuple and peer validation
  // is still required in index_unique_quantity_ids before zero/refill.
+ fn legacy_furniture_quantity_source(&self,r:&crate::native::InventoryRow)->Option<i32>{
+  if !matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:1}))||r.unique_fields.len()!=3{return None}
+  let item=r.item_id?;let source=furniture_source::item(item)?;
+  if source.is_home_layout||crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX)||
+   self.inventory_item_rows.get(&item)!=Some(&1){return None}
+  let mut materials=[0;3];
+  for (slot,span) in materials.iter_mut().zip(&r.unique_fields){
+   let raw=self.slot.envelope.decoded.get(span.clone())?;
+   let mut c=Cursor::new(raw);let mut words=[0;4];
+   for word in &mut words{*word=c.int(0,u32::MAX as i128).ok()? as u32;}
+   if c.pos!=raw.len(){return None}
+   *slot=furniture_source::material_index_for_guid(words)?;
+  }
+  if materials==[0;3]||furniture_key(source,materials)?==furniture_key(source,[0;3])?{return None}
+  Some(item)
+ }
+ fn legacy_furniture_zero_reference_safe(&self,item:i32)->bool{
+  self.ordinary_tradeable_nonclothing_zero_reference_safe(item)||self.extra_custom_furniture_zero_reference_safe(item)
+ }
  fn is_emptyable_unique_family(&self,r:&crate::native::InventoryRow)->bool{
   use crate::inventory_source::{CAFE_IDS,BOBA_ID};
   Self::is_emptyable_flower_species(r)||match (r.item_id,r.unique_data){
    (Some(item),Some(InventoryUniqueData::CafeAppearance{..}))=>CAFE_IDS.binary_search(&item).is_ok(),
    (Some(item),Some(InventoryUniqueData::BobaAppearance{..}))=>item==BOBA_ID,
    (Some(_),Some(InventoryUniqueData::WandAppearance{..}))=>self.wand_zero_reference_safe(r),
+   (Some(item),Some(InventoryUniqueData::Opaque{tag:1}))=>self.legacy_furniture_zero_reference_safe(item),
    (Some(item),Some(InventoryUniqueData::Furniture{..}))=>self.furniture_zero_reference_safe(item)||
     (furniture_source::item(item).is_some_and(|s|!s.is_home_layout)&&self.ordinary_tradeable_nonclothing_zero_reference_safe(item))||
     self.extra_custom_furniture_zero_reference_safe(item),
@@ -2060,9 +2080,15 @@ impl Editor {
   }
   self.slot.index.inventory.iter().filter_map(|row|{
    let item=row.item_id?;let uid=row.unique_id?;
-   if ambiguous.contains(&item)||uid_counts.get(&uid)!=Some(&1)||
-    self.slot.index.inventory_payload_item_refs.contains(&item)||
+   if uid_counts.get(&uid)!=Some(&1)||self.slot.index.inventory_payload_item_refs.contains(&item)||
     !row.fields.iter().all(Option::is_some){return None}
+   // Legacy furniture is never normalized or reconstructed by this endpoint.
+   // One original row per Item ID excludes nil, tag-8 and legacy peer aliases.
+   if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:1})){
+    self.unique_row_source(row,3)?;
+    return (self.legacy_furniture_quantity_source(row).is_some()&&self.legacy_furniture_zero_reference_safe(item)).then_some(row.id)
+   }
+   if ambiguous.contains(&item){return None}
    if Self::palette_identity(row).is_some(){
     self.unique_row_source(row,3)?;
     return (!palette_conflicts.contains(&row.id)).then_some(row.id)
