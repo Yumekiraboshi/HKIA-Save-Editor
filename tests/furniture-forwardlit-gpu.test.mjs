@@ -85,3 +85,10 @@ test('Terrain branch resets between draws and rejects incompatible modes',()=>{
  assert.throws(()=>r.draw(mesh,textures,s,{...material,terrain:{...terrain,blend:0}}),/TERRAIN_PARAMETERS/);
  r.dispose();
 });
+
+test('CustomLit transparent tint alpha is bounded; opaque source still requires one',()=>{
+ const material={...m,useBaseMapMask:false,customLit:{materialAlpha:1}};
+ for(const alpha of [0,.38,1])assert.doesNotThrow(()=>validateFurnitureForwardInputs(s,{...material,baseColor:[1,1,1,alpha]}));
+ for(const alpha of [-.1,1.1,NaN])assert.throws(()=>validateFurnitureForwardInputs(s,{...material,baseColor:[1,1,1,alpha]}),/FURNITURE_FORWARD_INPUT/);
+ assert.throws(()=>validateFurnitureForwardInputs(s,{...material,customLit:{materialAlpha:0},baseColor:[1,1,1,.38]}),/FURNITURE_FORWARD_INPUT/);
+});

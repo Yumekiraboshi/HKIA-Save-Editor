@@ -18,12 +18,14 @@ const white=make('white'),bump=make('bump');
 /** The exact Furniture shader declares white Base/Combo and bump Normal.
  * A non-null source reference must always use the original source reader.
  * The exact Refractive shader also declares white Base and bump Normal.
- * This helper is intentionally scoped to the two verified shader objects. */
+ * CustomLit declares the same white Base/Combo and bump Normal defaults.
+ * This helper is scoped to these exact verified shader objects. */
 export function furnitureNativeBuiltinTexture(shaderObjectSha256:string,property:string):NativeTextureSource{
  const furniture=shaderObjectSha256==='cdb64e92e92cbc2b88b3ce48c8a3ed302a16972a23528c27e766b7a646d852d0';
  const glass=shaderObjectSha256==='39080ec3a7154ee8032ee36bab5f861630dfe745b3bd1e35ad275662b1c6e332';
- if(!furniture&&!glass)throw Error('FURNITURE_BUILTIN_SHADER');
- if(property==='_BaseMap'||furniture&&property==='_MetallicGlossMap')return white;
+ const custom=shaderObjectSha256==='7c32f4b3f7c0c0d580af1e22584952aa29d266dfbe98de3b916c3fecb7339931';
+ if(!furniture&&!glass&&!custom)throw Error('FURNITURE_BUILTIN_SHADER');
+ if(property==='_BaseMap'||(furniture||custom)&&property==='_MetallicGlossMap')return white;
  if(property==='_BumpMap')return bump;
  throw Error('FURNITURE_BUILTIN_PROPERTY');
 }
