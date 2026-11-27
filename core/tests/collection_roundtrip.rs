@@ -4881,7 +4881,7 @@ fn definition_driven_bag_operations_cross_category_and_ownership_boundaries(){
 #[test]
 fn saved_restricted_furniture_material_is_a_row_local_witness_not_an_unlock(){
  use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
- let item=77485988u32;let make=|value:i32,peer:bool|{
+ let item=77485988u32;let make=|value:u32,peer:bool|{
   let mut p=synthetic_payload("3.0.1");p[3]=if peer{0x97}else{0x96};p[2]=if peer{6}else{5};
   p.extend(doc(1,arr(vec![u(4),u(item),u(11),u(1),furniture_payload([value,0,0])])));
   if peer{p.extend(doc(1,arr(vec![u(5),u(item),u(0),u(1),vec![0xc0]])));}
