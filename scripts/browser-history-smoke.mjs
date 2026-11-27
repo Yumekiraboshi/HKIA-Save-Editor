@@ -2222,6 +2222,14 @@ async function inventoryNativeResultArtSmoke(){
    await search.fill('10455890');
    const card=page.locator('.inventory-card').first();
    await card.locator('[data-result-icon-target="357184380"][data-inventory-art="'+(missing?'native-result-unavailable':'native-result')+'"]').waitFor({timeout:30_000});
+   const grid=card.locator('[data-native-blueprint-pattern="bp_grid"]');
+   await grid.waitFor({timeout:30_000});
+   assert.ok(await grid.evaluate(async el=>{
+    const css=getComputedStyle(el),url=css.backgroundImage.match(/^url\("(.+)"\)$/)?.[1];
+    if(!url||!url.endsWith('/inventory-ui/bp-grid.webp')||Math.abs(Number(css.opacity)-0.392156869)>0.000001||css.zIndex!=='0'||css.backgroundRepeat!=='repeat')return false;
+    const image=new Image();image.src=url;await image.decode();
+    return image.naturalWidth===158&&image.naturalHeight===157;
+   }));
    if(missing)assert.equal(await card.locator('.inventory-item-art .item-sprite').count(),0);
    else{
     const art=card.locator('[data-result-icon-target="357184380"]');
@@ -2233,6 +2241,7 @@ async function inventoryNativeResultArtSmoke(){
    }
    await search.fill('1217231008');
    await page.locator('.inventory-card .inventory-item-art [data-icon-fidelity="game-original-placeholder"]').waitFor({timeout:30_000});
+   await page.locator('.inventory-card [data-native-blueprint-pattern="bp_grid"]').waitFor({timeout:30_000});
   }finally{await context.close();}
  }
  console.log('CHROMIUM NATIVE RESULT ICON PASS: original result Sprite, original placeholder, unavailable target does not substitute source art');
