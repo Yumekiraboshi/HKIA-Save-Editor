@@ -268,3 +268,7 @@ For existing eligible saved and staged flower/flower-crafted clothing variants, 
 #### Customize first unowned flower/clothing stack
 
 For the already supported 50 absent Item IDs only, a currently available original default tuple witnesses the same eligibility as the legacy initial-add path. Rust validates the complete customized state 6 tuple using the same species/processor pattern and color rules as staged-row editing, including reserved original/effective pending identities. The UI previews from that default and creates only the final stack, without intermediate history or UID allocation. Legacy zero-witness requests remain restricted to native defaults. No new species, entitlement, growth state or unrestricted reference assumption. Game acceptance remains unverified.
+
+#### Customization sources in Add view
+
+The Add view also exposes positive owned or staged customization source stacks with an existing native edit/creation hint when no equivalent customizable absent candidate is available. These cards open the shared customization chooser directly; the existing quantity is displayed but not editable in Add, and batch quantity selection excludes them. The dialog offers only the Add operation in this view, never an in-place appearance edit. The native option and final CAS checks remain authoritative; a hint does not guarantee a new variant is available. No new Item ID, material, entitlement or ownership authorization is introduced.
