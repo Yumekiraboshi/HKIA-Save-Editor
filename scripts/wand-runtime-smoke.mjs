@@ -83,7 +83,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
     const blob=await renderWandArt(384749651,{...invAppearance,sourceItemId});
     placeholders.push({pixels:await pixels(blob),same:blob===await renderWandArt(384749651,{...invAppearance,sourceItemId:328475120})});
    }
-   // Nul Rug is a verified inventory-only UiIcon outside the sampled set.
+   // Original inventory-only UiIcon now covered by the remaining sampled set.
    // Its display does not imply a legal wand creation ingredient.
    const outsideId=427689,cell=selectInventoryWandOriginalCell(outsideId,inventory.entries);
    const outside=[];
@@ -92,7 +92,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
     const blob=await renderWandArt(row.itemId,a,cell);
     outside.push({id:row.itemId,art:await pixels(blob),plain:await pixels(await renderWandBaseArt(row.itemId,a)),
      cached:blob===await renderWandArt(row.itemId,a,cell),
-     noCell:await renderWandArt(row.itemId,a)===null,
+     noCell:blob===await renderWandArt(row.itemId,a),
      mismatched:await renderWandArt(row.itemId,{...a,sourceItemId:315823},cell)===null});
    }
    // The native saved source selection is independent of the wand shape.
@@ -169,9 +169,10 @@ export async function wandRuntimeSmoke(browser,origin,base){
       cached:first===await render(315822),
       unknown:await render(315823)===null,
       shaped:await bytes(await renderWandArt(1304219546,{...a,sourceItemId:315822})),
-      shapedUnknown:await renderWandArt(1304219546,{...a,sourceItemId:7285157})===null};
+      shapedRemaining:await bytes(await renderWandArt(1304219546,{...a,sourceItemId:7285157})),
+      shapedUnknown:await renderWandArt(1304219546,{...a,sourceItemId:315823})===null};
     },base);
-    assert.ok(failed.first&&failed.guarded&&failed.plain&&failed.cached&&failed.unknown&&failed.shaped&&failed.shapedUnknown,pattern);
+    assert.ok(failed.first&&failed.guarded&&failed.plain&&failed.cached&&failed.unknown&&failed.shaped&&failed.shapedRemaining&&failed.shapedUnknown,pattern);
     assert.notDeepEqual(failed.first,failed.plain,pattern);
     assert.notDeepEqual(failed.guarded,failed.plain,pattern);
     assert.notDeepEqual(failed.first,failed.guarded,pattern);
@@ -184,6 +185,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
    await fallbackPage.route(root+'__wand_runtime_fixture__.html',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html><body></body></html>'}));
    await fallbackPage.route(root+'__wand_runtime_fixture__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
    await fallbackPage.route('**/dynamic-wand-art/candidate-source/index.json',r=>r.fulfill({status:503,body:'unavailable'}));
+   await fallbackPage.route('**/dynamic-wand-art/remaining-source/index.json',r=>r.fulfill({status:503,body:'unavailable'}));
    await fallbackPage.goto(root+'__wand_runtime_fixture__.html');
    const results=await fallbackPage.evaluate(async base=>{
     const {renderWandArt,renderWandBaseArt,selectWandOriginalCell,selectInventoryWandOriginalCell,loadIconPack,loadInventoryNativeArt}=await import(base+'__wand_runtime_fixture__.mjs');
@@ -191,7 +193,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
     const definition=catalog.items.find(r=>r[0]===315822),pack=await loadIconPack(definition[3],base);
     try{
      const native=await loadInventoryNativeArt(base);
-     const cells=[selectWandOriginalCell(315822,definition[3],pack.entries),selectInventoryWandOriginalCell(15761463,native.entries)];
+     const cells=[selectWandOriginalCell(315822,definition[3],pack.entries),selectInventoryWandOriginalCell(15761463,native.entries),selectInventoryWandOriginalCell(427689,native.entries)];
      const manifest=await (await fetch(base+'dynamic-wand-art/wand-runtime-source-v3.0.1.json')).json();
      const out=[];
      for(const row of manifest.rows)for(const cell of cells){
@@ -205,7 +207,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
      return out;
     }finally{pack.dispose();}
    },base);
-   assert.equal(results.length,18);assert.ok(results.every(r=>r.different&&r.cached&&r.missing));
+   assert.equal(results.length,27);assert.ok(results.every(r=>r.different&&r.cached&&r.missing));
   }finally{await fallbackPage.close();}
   // Untinted source overlay has no dependency on the source item's mask.
   const templatePage=await context.newPage();
