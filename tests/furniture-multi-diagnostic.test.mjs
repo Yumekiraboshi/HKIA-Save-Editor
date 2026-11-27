@@ -165,28 +165,6 @@ test('combined plans preflight all three fixed/customized material ranges and re
  assert.throws(()=>resolveFurnitureMultiDiagnostic(d,request(d,id)),/SHADER_UNSUPPORTED/);
 });
 
-test('exact null BaseMap aliases unused pattern or uses verified original white, never a dangling reference',()=>{
- const d=sources(),id=32709745,r=request(d,id,[207,0,0]);
- const g=d.geometry.rows.find(x=>x.itemId===id),node=g.nodes.find(x=>x.rendererPathId);
- const bind=d.base.rows.find(x=>x.itemId===id).bindings[0],m=d.base.materials[bind[1]];
- const original=resolveFurnitureMultiDiagnostic(d,r).plans[0];
- const row=d.variants.rows.find(x=>x[0]===207);
- // Synthetic null pointer test: not a new source record or material identity.
- row[3]=[1,1,1,0];m.textures._BaseMap.texture=null;
- const p=resolveFurnitureMultiDiagnostic(d,r).plans[0];
- assert.equal(p.baseMap,p.patternMap);
- assert.deepEqual(p.material.baseST,original.material.baseST);
- assert.equal(p.normalMap,original.normalMap);assert.equal(p.comboMap,original.comboMap);
- assert.equal(p.material.baseColor[3],0);
- row[3]=[1,1,1,1];
- const white=resolveFurnitureMultiDiagnostic(d,r).plans[0].baseMap;
- assert.equal(white,furnitureNativeBuiltinTexture(d.base.shaders[m.shader].objectSha256,'_BaseMap'));
- row[3]=[1,1,1,0];m.textures._BaseMap.texture='absent-source-texture';
- assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/FURNITURE_MULTI_TEXTURE/);
- m.textures._BaseMap.texture=null;d.additionalPatterns.rows=[];d.patterns.rows=[];
- assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/PATTERN_UNAVAILABLE/);
-});
-
 test('original UnityPlayer constant maps retain the exact bytes and verify through the native texture validator',async()=>{
  const shader='cdb64e92e92cbc2b88b3ce48c8a3ed302a16972a23528c27e766b7a646d852d0';
  for(const [name,pixel,digest] of [['_BaseMap',[255,255,255,255],'8667e718294e9e0df1d30600ba3eeb201f764aad2dad72748643e4a285e1d1f7'],['_BumpMap',[127,127,255,255],'33869922b91375cf2b77363e8858a3aee06bae988641ad07f99e817b272d2c35']]){
@@ -208,4 +186,27 @@ test('original UnityPlayer constant maps retain the exact bytes and verify throu
  assert.equal(plan.comboMap,furnitureNativeBuiltinTexture(shader,'_MetallicGlossMap'));
  m.textures._BumpMap.texture='missing-source-normal';
  assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/FURNITURE_MULTI_TEXTURE/);
+});
+
+
+test('exact null BaseMap aliases unused pattern or uses verified original white, never a dangling reference',()=>{
+ const d=sources(),id=32709745,r=request(d,id,[207,0,0]);
+ const g=d.geometry.rows.find(x=>x.itemId===id),node=g.nodes.find(x=>x.rendererPathId);
+ const bind=d.base.rows.find(x=>x.itemId===id).bindings[0],m=d.base.materials[bind[1]];
+ const original=resolveFurnitureMultiDiagnostic(d,r).plans[0];
+ const row=d.variants.rows.find(x=>x[0]===207);
+ // Synthetic null pointer test: not a new source record or material identity.
+ row[3]=[1,1,1,0];m.textures._BaseMap.texture=null;
+ const p=resolveFurnitureMultiDiagnostic(d,r).plans[0];
+ assert.equal(p.baseMap,p.patternMap);
+ assert.deepEqual(p.material.baseST,original.material.baseST);
+ assert.equal(p.normalMap,original.normalMap);assert.equal(p.comboMap,original.comboMap);
+ assert.equal(p.material.baseColor[3],0);
+ row[3]=[1,1,1,1];
+ const white=resolveFurnitureMultiDiagnostic(d,r).plans[0].baseMap;
+ assert.equal(white,furnitureNativeBuiltinTexture(d.base.shaders[m.shader].objectSha256,'_BaseMap'));
+ row[3]=[1,1,1,0];m.textures._BaseMap.texture='absent-source-texture';
+ assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/FURNITURE_MULTI_TEXTURE/);
+ m.textures._BaseMap.texture=null;d.additionalPatterns.rows=[];d.patterns.rows=[];
+ assert.throws(()=>resolveFurnitureMultiDiagnostic(d,r),/PATTERN_UNAVAILABLE/);
 });
