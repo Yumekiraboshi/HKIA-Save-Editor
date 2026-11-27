@@ -64,6 +64,11 @@ const CURRENCY_CREATION_IDS:&[i32]=&[
   ordinary_quantity_limit(item_id)?;
   Some((flags&2!=0,*ITEM_GUID_DENIAL_KEYS.get(i)?))
  }
+ /// Exact source GUID fingerprint, for reference denial only.
+ pub(crate) fn inventory_item_denial_key(item_id:i32)->Option<u32>{
+  let i=RULES.binary_search_by_key(&item_id,|r|r.0).ok()?;
+  ITEM_GUID_DENIAL_KEYS.get(i).copied()
+ }
  pub(crate) fn ordinary_bag_creation_item(item_id:i32)->bool{
   RULES.binary_search_by_key(&item_id,|r|r.0).ok().is_some_and(|i|
    BAG_FLAGS.get(i).is_some_and(|&f|f&5==5)&&ordinary_quantity_limit(item_id).is_some())
