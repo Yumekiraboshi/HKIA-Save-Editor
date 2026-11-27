@@ -136,7 +136,7 @@ test('Inventory UI selects native source definitions, retains original game art 
  assert.doesNotMatch(app,/\{iCopy\.all\}/);
  assert.match(app,/inventoryIconPacks\[definition\[3\]\]/);
  assert.match(app,/changeInventoryQuantity\(row.documentId,row.quantity,next\)/);
- assert.match(app,/class:inventory-readonly=\{!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable\}/);
+ assert.match(app,/class:inventory-readonly=\{!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable&&!item.wandCreatableStyle\}/);
  assert.match(app,/changeInventoryFurnitureVariant\(selected.documentId,selected.before,next\)/);
  assert.match(app,/requestFurnitureVariants\(row.documentId\)/);
  assert.match(app,/\{@const canFurniture=!!item.unique\?\.furnitureEditable\|\|!!item.furnitureCreatable\}/);
@@ -243,4 +243,13 @@ test('Add exposes positive customization sources without enabling their quantity
  assert.deepEqual(rows.map(r=>r.documentId),[candidate.documentId,32,34]);
  assert.ok(rows.every(r=>!r.editable));assert.equal(rows[1].quantity,7);assert.equal(base.editable,true);
  assert.equal(inventoryAddRows([flower],[])[0].documentId,33);
+});
+
+
+test('unowned wand candidate is searchable and does not expose ordinary quantity or duplicate customization source',()=>{
+ const candidate={documentId:2147483648+1429161083,itemId:1429161083,quantity:0,editable:false,wandCreatableStyle:118};
+ const source={documentId:36,itemId:1429161083,quantity:2,editable:true,unique:{wandEditable:true}};
+ assert.deepEqual(inventoryAddRows([source],[candidate]),[candidate]);
+ assert.equal(inventoryAddRows([source],[])[0].editable,false);
+ assert.equal(inventoryAddRows([source],[])[0].documentId,36);
 });
