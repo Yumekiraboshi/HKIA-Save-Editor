@@ -5,7 +5,7 @@ function fixture(){
  const ref={kind:'texture',sha256:'a'.repeat(64),bytes:4};
  const sources={base:{textures:{}},additionalPatterns:{rows:[]}},cubemaps={a:{sha256:'a'},b:{sha256:'b'}},authored={rig:{maxObjectSize:1,considerLossyScale:false}};
  const cases=[{itemId:1,indices:[0,0,0]},{itemId:2,indices:[0,0,0]}],calls=[];
- const api={furniturePayloadReferences:()=>[ref,ref],authoredPreviewCamera:()=>({mountWorld:[],viewProjection:[],cameraPosition:[]}),fitFurnitureMultiStaticBounds:(_s,request)=>({request}),resolveFurnitureMultiDiagnostic:(_s,r)=>{if(r.itemId===2)throw Error('UNSUPPORTED');return [{},{}]}};
+ const api={furniturePayloadReferences:()=>[ref,ref],authoredPreviewCamera:()=>({mountWorld:[],viewProjection:[],cameraPosition:[]}),fitFurnitureMultiStaticBounds:(_s,request)=>({request}),resolveFurnitureMultiDiagnostic:(_s,r)=>{if(r.itemId===2)throw Error('UNSUPPORTED');return {plans:[{},{}]}}};
  const pack={sources,cubemaps,read:async r=>{calls.push(r);return new ArrayBuffer(4)}};
  return {api,pack,cases,authored,calls};
 }
