@@ -28,7 +28,7 @@ export function wandVariantOf(info:InventoryUniqueInfo|undefined):WandVariant|nu
 export function decodeWandVariants(bytes:Uint8Array):WandVariant[]{
  if(bytes.length<4)throw Error('WAND_OPTIONS_INVALID');
  const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),n=v.getUint32(0,true);
- if(n>35||bytes.length!==4+n*8)throw Error('WAND_OPTIONS_INVALID');
+ if(n>36||bytes.length!==4+n*8)throw Error('WAND_OPTIONS_INVALID');
  return Array.from({length:n},(_,i)=>[v.getInt32(4+i*8,true),v.getInt32(8+i*8,true)]);
 }
 // Source ingredient Item ID witnesses for presentation only. Rust supplies

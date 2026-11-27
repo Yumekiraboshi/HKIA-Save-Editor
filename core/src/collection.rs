@@ -47,6 +47,58 @@ const FLOWER_SPECIES:&[(i32,&[i32])]=&[
 // Steam v3.0.1 item_instruction_clothing_flowercrown (2140092170)
 // FlowerToCrownDictionary: exact PPtr key/value pairing, restricted to the
 // 23 output + source definitions without DLC/event-year gates.
+// Original short/tall unpatterned candle recipes: output, source flower, denial GUID fingerprint.
+const FLOWER_CANDLE_SPECIES:&[(i32,i32,u32)]=&[
+ (1873326,1223758923,0x8df55774),
+ (30197386,1554283135,0x1eb0e2be),
+ (52086842,183701770,0xff67a541),
+ (55132619,1299466625,0x8bc24c20),
+ (65427158,43114910,0xc45636f6),
+ (145970187,1583118562,0xad7a7af9),
+ (155538483,668399845,0x131bb787),
+ (195708471,462608550,0xd0364295),
+ (236135446,275816250,0x4713f49a),
+ (282150062,1554283135,0x9e5df1d5),
+ (302852764,274491259,0xca25c0af),
+ (371833720,203856820,0x3c73ca70),
+ (469825649,261557677,0x20986e93),
+ (510997667,1561432864,0xdfbd6e75),
+ (571502700,1968535430,0xcbeb8781),
+ (641105964,252458237,0x49f4e7c9),
+ (646834705,1331175279,0xd51e8a0a),
+ (713218636,1669522060,0xa1c8e7d2),
+ (821446423,1968535430,0x14c37578),
+ (826626504,1804880447,0xe7b2dbf7),
+ (877491806,2105820233,0xc9f16c6c),
+ (879044439,228573412,0x55fa6405),
+ (892074831,228573412,0x645e4049),
+ (894640834,252458237,0x90a39f38),
+ (1124067577,43114910,0x1adbe13e),
+ (1137627495,203856820,0xcc0b5c0c),
+ (1170993638,668399845,0xd9f7e275),
+ (1221419078,1331175279,0x059a5d37),
+ (1221620580,261557677,0xb722e11f),
+ (1257505968,1223758923,0xfc1a4f58),
+ (1283860765,1299466625,0x2f4a57eb),
+ (1348991543,1583118562,0x5973d51a),
+ (1367911683,462608550,0x5fcc113d),
+ (1395596528,1695731578,0x8effa38a),
+ (1396910324,1386186941,0xed35296b),
+ (1417320481,1695731578,0xf14ffd6b),
+ (1417459756,2105820233,0xa601ba44),
+ (1449320177,1386186941,0x262ec654),
+ (1682411201,275816250,0x765cd8d1),
+ (1685968411,1934826268,0x47d47576),
+ (1860644541,274491259,0x4eb22aad),
+ (1894513639,1669522060,0x3be8d683),
+ (1924806266,183701770,0x12e0bd1f),
+ (2056044876,1561432864,0xdec24cd8),
+ (2057109142,1934826268,0x51cfe130),
+ (2103772766,1804880447,0x5ec8feff),
+];
+fn flower_candle_source(item:i32)->Option<&'static (i32,i32,u32)>{
+ FLOWER_CANDLE_SPECIES.binary_search_by_key(&item,|r|r.0).ok().map(|i|&FLOWER_CANDLE_SPECIES[i])
+}
 const FLOWER_CROWN_SPECIES:&[(i32,i32)]=&[
  (108363489,2105820233),
  (475585922,1695731578),
@@ -146,7 +198,7 @@ fn flower_item_patterns(item:i32,grow:i32)->Option<&'static [i32]>{
   return FLOWER_SPECIES.iter().find(|(id,_)|*id==species).map(|&(_,p)|p)
  }
  if FLOWER_CLOTHING_GENERIC.contains(&item){Some(ALL_UNRESTRICTED_FLOWER_PATTERNS)}
- else if item==FLOWER_CLOTHING_NO_PATTERN{Some(&[])}else{None}
+ else if item==FLOWER_CLOTHING_NO_PATTERN||flower_candle_source(item).is_some(){Some(&[])}else{None}
 }
 fn valid_flower_variant(patterns:&[i32],v:FlowerVariant)->bool{
  matches!(v[0],0|6|7)&&FLOWER_COLORS.contains(&v[1])&&
@@ -646,11 +698,28 @@ impl Editor {
   if reserved.contains(&current)||reserved.contains(&original){return None}
   Some((patterns,current,reserved))
  }
- /// On-demand choices preserve growth state and identity. Pattern changes
+ // Growth changes are inventory-only, for the same unrestricted species
+ // already supported by the first-stack native state selection. A copied
+ // payload could refer to the original growth state, so do not edit it.
+ fn flower_growth_change_allowed(&self,id:u32)->bool{
+  let item=self.pending_flowers.get(&id).map(|f|f.item_id)
+   .or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.item_id));
+  item.is_some_and(|item|Self::absent_flower_growth_supported(item,0)&&
+   self.inventory_creation_payload_safe(item)&&
+   !self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item))
+ }
+ fn flower_growth_options(current:FlowerVariant,reserved:&HashSet<FlowerVariant>,out:&mut Vec<FlowerVariant>){
+  for grow in [0,6,7]{let mut next=current;next[0]=grow;
+   if next!=current&&!reserved.contains(&next){out.push(next)}
+  }
+ }
+ /// On-demand choices preserve native identity. Pattern changes
  /// include the corresponding secondary-color change in the same candidate.
  pub fn inventory_flower_variants(&self,id:u32)->Vec<FlowerVariant>{
   let Some((patterns,current,reserved))=self.flower_context(id)else{return Vec::new()};
-  Self::flower_choices(patterns,current,&reserved)
+  let mut choices=Self::flower_choices(patterns,current,&reserved);
+  if self.flower_growth_change_allowed(id){Self::flower_growth_options(current,&reserved,&mut choices);}
+  choices
  }
  fn flower_choices(patterns:&[i32],current:FlowerVariant,reserved:&HashSet<FlowerVariant>)->Vec<FlowerVariant>{
   let mut out=Vec::new();
@@ -703,7 +772,7 @@ impl Editor {
   if let Some(f)=self.pending_flowers.get(&id){
    if !self.inventory_changes.contains_key(&id)||!self.inventory_creation_payload_safe(f.item_id){return None}
    let (patterns,current,reserved)=self.flower_context(id)?;
-   return (expected==current&&next!=current&&next!=f.variant&&next[0]==current[0]&&
+   return (expected==current&&next!=current&&next!=f.variant&&(next[0]==current[0]||self.flower_growth_change_allowed(id))&&
     valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(f.item_id)
   }
   if id&PENDING_ITEM!=0{
@@ -722,7 +791,7 @@ impl Editor {
   if !self.inventory_creation_payload_safe(item){return None}
   let (patterns,current,reserved)=self.flower_context(id)?;
   let original=flower_variant(row.unique_data?)?;
-  (expected==current&&next!=current&&next!=original&&next[0]==current[0]&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
+  (expected==current&&next!=current&&next!=original&&(next[0]==current[0]||self.flower_growth_change_allowed(id))&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
  }
  /// Read-only dialog planning from an uncommitted full tuple.
  pub fn inventory_flower_preview(&self,id:u32,expected:FlowerVariant,draft:FlowerVariant)->Result<(Vec<FlowerVariant>,bool),Error>{
@@ -732,14 +801,11 @@ impl Editor {
   }else{self.flower_context(id).ok_or(Error::Schema)?};
   let absent=id&PENDING_ITEM!=0&&!self.pending_flowers.contains_key(&id);
   let item=(id&!PENDING_ITEM) as i32;
-  if expected!=current||(draft[0]!=current[0]&&!(absent&&(draft[0]==6||Self::absent_flower_growth_supported(item,draft[0]))))||
+  let growth=if absent{Self::absent_flower_growth_supported(item,0)}else{self.flower_growth_change_allowed(id)};
+  if expected!=current||(draft[0]!=current[0]&&!growth)||
    !valid_flower_variant(patterns,draft)||reserved.contains(&draft){return Err(Error::Schema)}
   let mut choices=Self::flower_choices(patterns,draft,&reserved);
-  if absent&&Self::absent_flower_growth_supported(item,0){
-   for grow in [0,6,7]{let mut next=draft;next[0]=grow;
-    if next!=draft&&!reserved.contains(&next){choices.push(next)}
-   }
-  }
+  if growth{Self::flower_growth_options(draft,&reserved,&mut choices);}
   let creatable=self.flower_creation_item(id,expected,draft).is_some();
   Ok((choices,creatable))
  }
@@ -778,7 +844,7 @@ impl Editor {
   // Missing crowns use only their exact source species' original default
   // colors. Generic processors can use any of the unrestricted source
   // species; only their actual default colors are offered here.
-  let species=FLOWER_CROWN_SPECIES.iter().find(|&&(id,_)|id==item_id).map_or(item_id,|&(_,species)|species);
+  let species=flower_candle_source(item_id).map(|r|r.1).or_else(||FLOWER_CROWN_SPECIES.iter().find(|&&(id,_)|id==item_id).map(|&(_,species)|species)).unwrap_or(item_id);
   let colors:Vec<i32>=if let Some((_,colors))=ABSENT_FLOWER_DEFAULTS.iter().find(|&&(id,_)|id==species){
    colors.to_vec()
   }else if FLOWER_CLOTHING_GENERIC.contains(&item_id)||item_id==FLOWER_CLOTHING_NO_PATTERN{
@@ -792,6 +858,7 @@ impl Editor {
   if !self.absent_flower_budget_available(){return Vec::new()}
   ABSENT_FLOWER_DEFAULTS.iter().map(|&(id,_)|id)
    .chain(FLOWER_CROWN_SPECIES.iter().map(|&(id,_)|id))
+   .chain(FLOWER_CANDLE_SPECIES.iter().map(|r|r.0))
    .chain(FLOWER_CLOTHING_GENERIC.iter().copied())
    .chain(std::iter::once(FLOWER_CLOTHING_NO_PATTERN))
    .filter(|&id|!self.absent_flower_choices(id).is_empty()).collect()
@@ -824,7 +891,7 @@ impl Editor {
  /// Native field spans only; no creation, ownership, quantity or placement changes.
  pub fn change_inventory_flower_variant(&mut self,id:u32,expected:FlowerVariant,next:FlowerVariant)->Result<(),Error>{
   let (patterns,current,reserved)=self.flower_context(id).ok_or(Error::Schema)?;
-  if current!=expected||current==next||current[0]!=next[0]||!valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
+  if current!=expected||current==next||(current[0]!=next[0]&&!self.flower_growth_change_allowed(id))||!valid_flower_variant(patterns,next)||reserved.contains(&next){return Err(Error::Schema)}
   let original=self.original_flower_variant(id).ok_or(Error::Schema)?;
   let revision=self.next_edit_revision()?;
   let before=self.flower_variant_changes.get(&id).copied();
@@ -886,9 +953,15 @@ impl Editor {
    (Some(item),Some(InventoryUniqueData::BobaAppearance{..}))=>item==BOBA_ID,
    (Some(_),Some(InventoryUniqueData::WandAppearance{..}))=>self.wand_zero_reference_safe(r),
    (Some(item),Some(InventoryUniqueData::Furniture{..}))=>self.furniture_zero_reference_safe(item),
-   (Some(item),Some(InventoryUniqueData::Flower{grow_state:6,..}))=>crate::inventory_source::flower_clothing_reference_keys(item).is_some_and(|keys|self.clothing_zero_reference_safe(item,keys.iter())),
+   (Some(item),Some(InventoryUniqueData::Flower{grow_state:6,..}))=>crate::inventory_source::flower_clothing_reference_keys(item).is_some_and(|keys|self.clothing_zero_reference_safe(item,keys.iter()))||flower_candle_source(item).is_some_and(|r|self.flower_candle_zero_reference_safe(item,r.2)),
    _=>false
   }
+ }
+ fn flower_candle_zero_reference_safe(&self,item:i32,key:u32)->bool{
+  let index=&self.slot.index;
+  !index.inventory_furniture_refs_incomplete&&!index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
+   !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
+   !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)
  }
  fn ordinary_clothing_zero_reference_safe(&self,item:i32)->bool{
   let Some((own,group))=crate::inventory_source::ordinary_clothing_reference_keys(item)else{return false};
@@ -925,7 +998,7 @@ impl Editor {
  // already reserve original and effective peer identities in their contexts.
  fn is_flower_quantity_definition(item:i32)->bool{
   FLOWER_SPECIES.iter().any(|(id,_)|*id==item)||
-   FLOWER_CROWN_SPECIES.binary_search_by_key(&item,|&(id,_)|id).is_ok()||
+   FLOWER_CROWN_SPECIES.binary_search_by_key(&item,|&(id,_)|id).is_ok()||flower_candle_source(item).is_some()||
    FLOWER_CLOTHING_GENERIC.contains(&item)||item==FLOWER_CLOTHING_NO_PATTERN
  }
  // Full ordered source keys for native Cafe/Boba Equals. Read every
@@ -1039,7 +1112,26 @@ impl Editor {
   }
   out
  }
+ fn absent_wand_choices(&self,item:i32)->Vec<WandVariant>{
+  if crate::inventory_source::magic_wand_style(item).is_none()||
+   !crate::inventory_source::is_uncapped_required_unique_stack(item)||
+   self.inventory_item_rows.contains_key(&item)||
+   self.pending_wands.iter().any(|(&id,&(i,_))|i==item&&self.inventory_changes.contains_key(&id))||
+   self.slot.index.inventory_wand_copies||
+   !self.inventory_creation_payload_safe(item)||
+   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||
+   !self.absent_flower_budget_available(){return Vec::new()}
+  crate::inventory_source::WAND_MAGIC.iter().flat_map(|&(magic,_)|
+   crate::inventory_source::WAND_FLECK.iter().map(move |&(fleck,_)|[magic,fleck])).collect()
+ }
+ pub fn inventory_absent_wand_ids(&self)->Vec<(i32,i32)>{
+  crate::inventory_source::MAGIC_WAND_STYLES.iter().copied()
+   .filter(|&(item,_)|!self.absent_wand_choices(item).is_empty()).collect()
+ }
  pub fn inventory_wand_creation_variants(&self,id:u32)->Vec<WandVariant>{
+  if id&PENDING_ITEM!=0&&!self.pending_wands.contains_key(&id){
+   return self.absent_wand_choices((id&!PENDING_ITEM) as i32)
+  }
   let Some((item,original,_,_))=self.wand_context(id)else{return Vec::new()};
   let qty=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
   if !qty.is_some_and(|q|q>0)||self.wand_family_count(item)>=256||!self.absent_flower_budget_available()||
@@ -1048,8 +1140,14 @@ impl Editor {
  }
  pub fn create_inventory_wand_variant(&mut self,source_id:u32,expected:WandVariant,next:WandVariant,quantity:i32)->Result<u32,Error>{
   if quantity<=0||!self.inventory_wand_creation_variants(source_id).contains(&next){return Err(Error::Schema)}
-  let (item,_,current,_)=self.wand_context(source_id).ok_or(Error::Schema)?;
-  if expected!=current{return Err(Error::Schema)}
+  let item=if source_id&PENDING_ITEM!=0&&!self.pending_wands.contains_key(&source_id){
+   if expected!=[0;2]{return Err(Error::Schema)}
+   (source_id&!PENDING_ITEM) as i32
+  }else{
+   let (item,_,current,_)=self.wand_context(source_id).ok_or(Error::Schema)?;
+   if expected!=current{return Err(Error::Schema)}
+   item
+  };
   let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
   let change=Change::WandCreated{document_id,source_id,item_id:item,expected,variant:next,quantity};
   self.restore_change(&change,false);self.undo.push(change);
@@ -2181,10 +2279,11 @@ impl Editor {
     let (patterns,current,reserved)=self.flower_context(row.id).ok_or(Error::Schema)?;
     if current!=*v||!valid_flower_variant(patterns,*v)||reserved.contains(v){return Err(Error::Schema)}
     let original=flower_variant(row.unique_data.ok_or(Error::Schema)?).ok_or(Error::Schema)?;
-    for i in 1..4{
+    if original[0]!=v[0]&&!self.flower_growth_change_allowed(row.id){return Err(Error::Schema)}
+    for i in 0..4{
      if original[i]==v[i]{continue}
      let span=row.unique_fields.get(i).cloned().ok_or(Error::Schema)?;
-     let mut encoded=vec![0xd2];encoded.extend(v[i].to_be_bytes());
+     let encoded=if i==0{vec![v[i] as u8]}else{let mut bytes=vec![0xd2];bytes.extend(v[i].to_be_bytes());bytes};
      patches.push((span,encoded));
     }
    }
