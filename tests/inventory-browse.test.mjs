@@ -136,7 +136,7 @@ test('Inventory UI selects native source definitions, retains original game art 
  assert.doesNotMatch(app,/\{iCopy\.all\}/);
  assert.match(app,/inventoryIconPacks\[definition\[3\]\]/);
  assert.match(app,/changeInventoryQuantity\(row.documentId,row.quantity,next\)/);
- assert.match(app,/class:inventory-readonly=\{!item.editable&&!canFlower&&!canFurniture&&!item.flowerCreatable\}/);
+ assert.match(app,/class:inventory-readonly=\{!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable\}/);
  assert.match(app,/changeInventoryFurnitureVariant\(selected.documentId,selected.before,next\)/);
  assert.match(app,/requestFurnitureVariants\(row.documentId\)/);
  assert.match(app,/\{@const canFurniture=!!item.unique\?\.furnitureEditable\|\|!!item.furnitureCreatable\}/);
@@ -231,4 +231,16 @@ test('inventory search normalizes Japanese width and kana without losing native 
  assert.equal(counts('ひんく').size,0);
  assert.equal(variantName(),'ピンク · グラデーション');
  assert.equal(flowers[0].quantity,2);
+});
+
+test('Add exposes positive customization sources without enabling their quantity or batch edits',()=>{
+ const base={documentId:32,itemId:315822,quantity:7,editable:true,quantityMinimum:0,furnitureCreatable:true};
+ const flower={documentId:33,itemId:43114910,quantity:3,editable:true,unique:{flowerEditable:true}};
+ const boba={documentId:34,itemId:1798633565,quantity:2,editable:true,boba:{editable:true}};
+ const ordinary={documentId:35,itemId:567052,quantity:5,editable:true};
+ const candidate={documentId:2147483648+43114910,itemId:43114910,quantity:0,editable:false,flowerCreatable:true};
+ const rows=inventoryAddRows([base,flower,boba,ordinary],[candidate]);
+ assert.deepEqual(rows.map(r=>r.documentId),[candidate.documentId,32,34]);
+ assert.ok(rows.every(r=>!r.editable));assert.equal(rows[1].quantity,7);assert.equal(base.editable,true);
+ assert.equal(inventoryAddRows([flower],[])[0].documentId,33);
 });

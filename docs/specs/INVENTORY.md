@@ -269,6 +269,10 @@ For existing eligible saved and staged flower/flower-crafted clothing variants, 
 
 For the already supported 50 absent Item IDs only, a currently available original default tuple witnesses the same eligibility as the legacy initial-add path. Rust validates the complete customized state 6 tuple using the same species/processor pattern and color rules as staged-row editing, including reserved original/effective pending identities. The UI previews from that default and creates only the final stack, without intermediate history or UID allocation. Legacy zero-witness requests remain restricted to native defaults. No new species, entitlement, growth state or unrestricted reference assumption. Game acceptance remains unverified.
 
+#### Customization sources in Add view
+
+The Add view also exposes positive owned or staged customization source stacks with an existing native edit/creation hint when no equivalent customizable absent candidate is available. These cards open the shared customization chooser directly; the existing quantity is displayed but not editable in Add, and batch quantity selection excludes them. The dialog offers only the Add operation in this view, never an in-place appearance edit. The native option and final CAS checks remain authoritative; a hint does not guarantee a new variant is available. No new Item ID, material, entitlement or ownership authorization is introduced.
+
 #### Native preview for composed palette edits
 
 The palette dialog refreshes one-channel choices against its uncommitted full tuple, using the existing Rust source and peer checks. The Add action is offered only when the complete draft satisfies the same native creation predicate as the final CAS, including replacing all inherited non-source colors. Preview and per-channel reset do not mutate history or save data. No new color source, absent Item ID generation, or entitlement change is authorized.
@@ -276,3 +280,7 @@ The palette dialog refreshes one-channel choices against its uncommitted full tu
 #### Native preview for composed Cafe variants
 
 The shared Cafe editor refreshes the available ordered ingredient-pair choices after every draft selection. Rust validates the complete uncommitted tuple, reserves original and effective peer identities and returns whether the same tuple may be added as a distinct stack. The Add action uses the same native full-tuple predicate as final CAS; the draft has no save or history effect. Existing optional nigiri side and owned ingredient witness rules remain unchanged. No new recipes, absent Item IDs or entitlements are authorized.
+
+#### Retain the ordinary furniture customization source alongside customized stacks
+
+A positive verified nil/UID-zero furniture base remains an eligible customization source when the same Item ID also has distinct verified nondefault tag-8 stacks. The ordinary base may be saved or staged from the existing source-bounded ordinary creation endpoint. Reject multiple defaults, unknown or ambiguous saved peers, and all existing reference and version restrictions. Reserve every saved and active staged nondefault peer's original and effective normalized key in both option planning and final CAS. Creating another distinct customization leaves the base and all peers unchanged; no new furniture definition, material, placement, entitlement, or recipe is authorized.
