@@ -766,6 +766,19 @@ pub extern "C" fn hkia_inventory_palette_variants(id:u32)->u32{
  })
 }
 #[no_mangle]
+pub extern "C" fn hkia_inventory_absent_palette_default()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let mut out=Vec::with_capacity(56);
+  if let Some((item,default))=e.inventory_absent_palette_default(){
+   out.extend(1u32.to_le_bytes());out.extend(item.to_le_bytes());
+   for word in default.into_iter().flatten(){out.extend(word.to_le_bytes());}
+  }else{out.extend(0u32.to_le_bytes());}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
 pub extern "C" fn hkia_inventory_palette_preview(id:u32,b0:u32,b1:u32,b2:u32,b3:u32,b4:u32,b5:u32,b6:u32,b7:u32,b8:u32,b9:u32,b10:u32,b11:u32,a0:u32,a1:u32,a2:u32,a3:u32,a4:u32,a5:u32,a6:u32,a7:u32,a8:u32,a9:u32,a10:u32,a11:u32)->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();
