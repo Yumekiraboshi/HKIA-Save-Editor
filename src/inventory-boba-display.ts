@@ -79,3 +79,10 @@ export function bobaBaseLabel(v:BobaVariant,locale:string,witnesses:readonly Bob
 export function fullBobaLabel(v:BobaVariant,locale:string,witnesses:readonly BobaWitness[],name:(id:number)=>string):string{
  return [bobaBaseLabel(v,locale,witnesses,name),bobaVariantLabel(v,locale)].filter(Boolean).join(' · ');
 }
+
+/** Preserve the selected pearls/sweetness only when the exact tuple was offered by Rust. */
+export function bobaSelectionForBase(before:BobaVariant,options:readonly BobaVariant[],selection:number,base:string):number{
+ const current=options[selection]??before;
+ if(bobaBaseKey(before)===base&&before[2]===current[2]&&before[4]===current[4])return -1;
+ return options.findIndex(v=>bobaBaseKey(v)===base&&v[2]===current[2]&&v[4]===current[4]);
+}

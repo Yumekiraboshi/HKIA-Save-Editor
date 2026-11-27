@@ -5,6 +5,7 @@
 import type {Vec3,Vec4} from './furniture-surface-v3.0.1';
 import type {RugNativeSources} from './furniture-rug-source';
 import type {FurnitureForwardMaterial} from './furniture-forwardlit-gpu';
+import {furnitureNativeBuiltinTexture} from './furniture-native-builtin-textures-v3.0.1';
 const sat=(x:number)=>Math.min(1,Math.max(0,x)),f=Math.fround;
 const dot=(a:Vec3,b:Vec3)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const rgb=(fn:(i:0|1|2)=>number):Vec3=>[fn(0),fn(1),fn(2)];
@@ -71,7 +72,7 @@ export type GlassState={queue:3001|3201;srcBlend:1|3;dstBlend:10;zWrite:false;cu
 const finite=(v:readonly number[]|undefined,n:number)=>Array.isArray(v)&&v.length===n&&v.every(Number.isFinite);
 const fail=(s:string):never=>{throw Error('FURNITURE_GLASS_'+s);};
 /** Gate the actual fixed PAPE26 glass and shared shelf glass separately.
- * Neither enables the REFRACTION_ON variant or invents a missing map. */
+ * Neither enables the REFRACTION_ON variant or substitutes a missing referenced map. */
 export function glassMaterialState(base:RugNativeSources['base'],id:string):GlassState{
  const m=base.materials[id];
  if(!m||m.shader!==glassShaderId||base.shaders[glassShaderId]?.objectSha256!==glassShaderHash||m.validKeywords.length!==1||m.validKeywords[0]!=='CUSTOM_RIMLIGHT_ON')return fail('SOURCE');
@@ -89,9 +90,14 @@ export function resolveGlassFixedMaterial(base:RugNativeSources['base'],id:strin
  ![f._Roughness,f._Metallic].every(x=>x>=0&&x<=1)||f._Lighting_Clamp<0)return fail('PROPERTIES');
  const tex=(name:string)=>{
   const link=m.textures[name];if(!link||link.scale.join(',')!=='1,1'||link.offset.join(',')!=='0,0')return fail('TEXTURE_LINK');
-  // Shared_Glass names Unity built-ins white/bump via null pointers.
-  // Their actual built-in texture pixels are not extracted yet.
-  if(!link.texture)return fail('BUILTIN_TEXTURE_UNVERIFIED');
+  // Only the exact Shared_Glass source object uses serialized null maps.
+  // Reuse the source-proven engine-generated constant textures, not an
+  // approximate map. Keep the side-table's non-null source requirements.
+  if(link.texture===null){
+   if(id!=='CAB-b7b9619989a948060360e493812c1b7f:635830900356876204')return fail('BUILTIN_TEXTURE_UNVERIFIED');
+   return furnitureNativeBuiltinTexture(glassShaderHash,name);
+  }
+  if(!link.texture)return fail('TEXTURE_LINK');
   const t=base.textures[link.texture];if(!t)return fail('TEXTURE');return t;
  };
  const b=tex('_BaseMap'),n=tex('_BumpMap');
