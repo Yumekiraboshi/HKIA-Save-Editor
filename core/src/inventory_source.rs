@@ -14,6 +14,12 @@ use crate::inventory_gathered_data::{GATHERED_IDS,FOOD_BAIT_IDS};
 pub(crate) fn ordinary_quantity_limit(item_id:i32)->Option<i32>{
  let flags=RULES[RULES.binary_search_by_key(&item_id,|row|row.0).ok()?].1;
  if flags&2!=0{return None}
+ definition_quantity_limit(item_id)
+}
+/// Native MaxCount is independent of whether a definition requires unique
+/// data. This is only a bound, not permission to create or alter a payload.
+pub(crate) fn definition_quantity_limit(item_id:i32)->Option<i32>{
+ let flags=RULES[RULES.binary_search_by_key(&item_id,|row|row.0).ok()?].1;
  if flags&1==0{return Some(1)}
  if flags&4==0{return Some(i32::MAX)}
  CUSTOM_CAPS.binary_search_by_key(&item_id,|row|row.0).ok().map(|i|CUSTOM_CAPS[i].1).filter(|&cap|cap>0)
