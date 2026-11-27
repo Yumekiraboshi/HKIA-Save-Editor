@@ -2,7 +2,7 @@
 """Extract original growth-state Sprite crops, not generated flower variants.
 Requires Pillow and existing UnityFS helpers. Original bundles stay local.
 """
-import argparse,base64,hashlib,json,struct
+import argparse,hashlib,json,struct
 from pathlib import Path
 from PIL import Image
 import importlib.util
@@ -79,7 +79,6 @@ def extract(definitions,atlas,out,mesh,typed,audit):
     raw=(json.dumps(meta,separators=(',',':'))+'\n').encode()
     require(sha(raw)=='bf99336e9eaf20de7d2f81f57f00fd2a514e59db03c2e161219f528fed59ff48','manifest identity')
     (out/'flower-growth-source-v3.0.1.json').write_bytes(raw)
-    (out/(file.name+'.b64')).write_bytes(base64.b64encode(payload)+b'\n')
     print('HKIA_FLOWER_GROWTH_ART_OK 50 original sprites')
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
