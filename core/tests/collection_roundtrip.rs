@@ -2085,7 +2085,9 @@ fn absent_cosmetics_respect_copied_outfit_references_and_legacy_ambiguity(){
  let mut e=Editor::open(make(legacy)).unwrap();
  assert!(e.inventory_creatable().iter().all(|r|r.item_id!=clothing&&r.item_id!=furniture));
  assert!(e.change_inventory_quantity(pending(furniture),0,1).is_err());
- e.change_inventory_quantity(pending(material),0,2).unwrap();
+ // The generalized path must not bypass an unresolved copied-item reference.
+ assert!(e.change_inventory_quantity(pending(material),0,2).is_err());
+ assert!(!e.dirty());
 }
 
 #[test]
@@ -2959,15 +2961,19 @@ fn large_inventory_batch_and_full_journal_roundtrip(){
  use hkia_save_core::collection::{MAX_INVENTORY_BATCH,HISTORY_MAX_BYTES,HistoryScope::Inventory};
  assert_eq!(MAX_INVENTORY_BATCH,256);
  let pristine=Editor::open(slot("3.0.1")).unwrap();
- let ids:Vec<_>=pristine.inventory_creatable().into_iter().take(MAX_INVENTORY_BATCH).map(|r|r.item_id).collect();
+ let ids:Vec<_>=pristine.inventory_creatable().into_iter().filter(|r|r.quantity_limit.is_some_and(|cap|cap>=2)).take(MAX_INVENTORY_BATCH).map(|r|r.item_id).collect();
  assert_eq!(ids.len(),MAX_INVENTORY_BATCH);
  let mut payload=synthetic_payload("3.0.1");
- let count=(5+ids.len()) as u16;
+ let count=(7+ids.len()) as u16;
  payload.splice(3..4,[0xdc,(count>>8) as u8,count as u8]);
- payload.splice(2..3,u((ids.len()+4) as u32));
+ payload.splice(2..3,u((ids.len()+6) as u32));
  for (i,item) in ids.iter().enumerate(){
   payload.extend(doc(1,arr(vec![u(i as u32+4),u(*item as u32),u(0),u(1),vec![0xc0]])));
  }
+ // Include complete native avatar/general settings so the fixture can use
+ // ordinary clothing as well as materials and furniture without ambiguity.
+ payload.extend(doc(10,arr(vec![u((ids.len()+4) as u32),guid([1,2,3,4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([1,2,3,4]),vec![0xc3],vec![0xc0]])));
+ payload.extend(doc(22,arr(vec![u((ids.len()+5) as u32),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
  let input=slot_from_payload("3.0.1",payload);
  let mut editor=Editor::open(input.clone()).unwrap();
  let original=editor.inventory();
