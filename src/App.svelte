@@ -2428,7 +2428,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel removal-cancel" autofocus disabled={busy} onclick={closeRemovalConfirmation}>{removalCopy.cancel}</button>
      {#if pendingRemoval.kind!=='inventory'||pendingRemoval.zero}<button type="button" class="removal-confirm-action" disabled={busy} onclick={()=>void confirmRemoval()}>{pendingRemoval.kind==='inventory'?inventoryZeroStackCopy(locale):removalCopy.remove}</button>{/if}
-     {#if pendingRemoval.kind==='inventory'&&pendingRemoval.physical}<button type="button" class="removal-confirm-action inventory-remove-entry-action" disabled={busy} onclick={()=>void confirmRemoval(true)}>{inventoryRemoveEntryCopy(locale)}</button>{/if}
+     {#if pendingRemoval.kind==='inventory'&&pendingRemoval.physical}<button type="button" class="inventory-remove-entry-action" disabled={busy} onclick={()=>void confirmRemoval(true)}>{inventoryRemoveEntryCopy(locale)}</button>{/if}
     </div>
    </div>
   {/if}
