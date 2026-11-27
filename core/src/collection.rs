@@ -1222,7 +1222,7 @@ impl Editor {
   out
  }
  fn absent_wand_source_gate(&self,item:i32)->bool{
-  crate::inventory_source::wand_output_item(item)&&
+  item!=crate::inventory_source::GENERIC_MAGIC_WAND_ID&&crate::inventory_source::wand_output_item(item)&&
    crate::inventory_source::is_uncapped_required_unique_stack(item)&&
    (if crate::inventory_source::magic_wand_style(item).is_some(){
     !self.inventory_item_rows.contains_key(&item)&&
