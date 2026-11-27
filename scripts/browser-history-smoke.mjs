@@ -438,10 +438,14 @@ async function inventoryCafeEditSmoke(){
   const option=select.locator('option[data-ingredient-id="1622861092"]');
   const value=await option.getAttribute('value');assert.ok(value!==null);
   await select.selectOption(value);
+  const firstSlot=dialog.locator('[data-cafe-slot="0"]:not([disabled])');
+  await firstSlot.waitFor();
+  const firstLabel=await firstSlot.textContent();
   await dialog.locator('[data-cafe-slot="1"]').click();
   const second=await select.locator('option[data-ingredient-id]:not([data-ingredient-id="0"])').first().getAttribute('value');assert.ok(second!==null);
   await select.selectOption(second);
-  await dialog.locator('[data-cafe-slot="0"]').click();assert.equal(await select.inputValue(),value);
+  await firstSlot.click();assert.equal(await select.inputValue(),'-1');
+  assert.equal(await firstSlot.textContent(),firstLabel);
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await page.locator('button[title="Redo"]:not([disabled])').click();
@@ -476,7 +480,9 @@ async function inventoryCafeCreationAndOptionalSideSmoke(){
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();await dialog.waitFor();
   const select=dialog.locator('select[name="cafe-variant"]');
   await select.selectOption(await select.locator('option[data-ingredient-id="1240730051"]').getAttribute('value'));
-  await dialog.locator('input[name="variant-add-quantity"]').fill('3');
+  await dialog.locator('[data-cafe-slot="1"]').click();
+  await select.selectOption(await select.locator('option[data-ingredient-id="1254065963"]').getAttribute('value'));
+  await dialog.locator('input[name="variant-add-quantity"]:not([disabled])').fill('3');
   await dialog.locator('.inventory-create-cafe:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
   await page.locator('button[title="Undo"]:not([disabled])').click();await rows.nth(1).waitFor({state:'detached'});
@@ -501,7 +507,7 @@ async function inventoryCafeCreationAndOptionalSideSmoke(){
   const words=at=>Array.from({length:6},(_,i)=>v.getInt32(at+i*4,true));
   assert.deepEqual(words(12),[44,49,48,6,46,9]);
   assert.deepEqual(words(44),[44,0,0,6,0,0]);
-  assert.deepEqual(words(76),[62,49,48,6,46,9]);
+  assert.deepEqual(words(76),[62,50,48,6,46,9]);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM CAFE ADD AND NIGIRI SIDE PASS: source preserved, staged stack, optional native list, reload, reparse');
  }finally{await context.close()}

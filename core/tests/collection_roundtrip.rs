@@ -3182,7 +3182,16 @@ fn cafe_multiple_ingredient_pairs_create_one_independent_stack(){
   assert!(options.iter().any(|&(v,_,_)|v==[62,49,48,6,46,9]));
   assert!(options.iter().any(|&(v,_,_)|v==[44,50,48,6,46,9]));
   assert!(!options.iter().any(|&(v,_,_)|v==target));
+  let first=[62,49,48,6,46,9];
+  let (initial,creatable)=e.inventory_cafe_preview(4,original,original).unwrap();
+  assert!(!creatable&&initial.iter().any(|&(v,_,_)|v==first));
+  let (next_options,creatable)=e.inventory_cafe_preview(4,original,first).unwrap();
+  assert!(creatable&&next_options.iter().any(|&(v,_,_)|v==target));
+  assert!(e.inventory_cafe_preview(4,original,target).unwrap().1);
+  assert!(e.inventory_cafe_preview(4,first,target).is_err());
+  assert!(!e.dirty());assert!(e.history().is_empty());
   let mut bad=target;bad[4]=999;
+  assert!(e.inventory_cafe_preview(4,original,bad).is_err());
   assert!(e.create_inventory_cafe_variant(4,original,bad,3).is_err());assert!(!e.dirty());
   let id=e.create_inventory_cafe_variant(4,original,target,3).unwrap();
   assert_eq!(e.history().len(),1);assert!(e.create_inventory_cafe_variant(4,original,target,1).is_err());
@@ -3196,6 +3205,9 @@ fn cafe_multiple_ingredient_pairs_create_one_independent_stack(){
   assert!(e.inventory_cafe_rows().any(|(doc,v,_)|doc==id&&v==target));
  }
  let mut collision=Editor::open(make(true)).unwrap();
+ let (choices,_)=collision.inventory_cafe_preview(4,original,[62,49,48,6,46,9]).unwrap();
+ assert!(!choices.iter().any(|&(v,_,_)|v==target));
+ assert!(collision.inventory_cafe_preview(4,original,target).is_err());
  assert!(collision.create_inventory_cafe_variant(4,original,target,1).is_err());assert!(!collision.dirty());
 }
 

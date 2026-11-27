@@ -1253,6 +1253,9 @@ impl Editor {
  /// pair in its final slot represents removal, not a serialized zero entry.
  pub fn inventory_cafe_variants(&self,id:u32)->Vec<(CafeVariant,i32,usize)>{
   let Some((item,original,current,reserved))=self.cafe_context(id)else{return Vec::new()};
+  self.cafe_choices(item,original,current,&reserved)
+ }
+ fn cafe_choices(&self,item:i32,original:CafeVariant,current:CafeVariant,reserved:&HashSet<CafeVariant>)->Vec<(CafeVariant,i32,usize)>{
   let mut out=Vec::new();let mut seen=HashSet::new();
   let slots=if item==crate::inventory_source::NIGIRI_ID{2}else{crate::inventory_source::cafe_slot_count(item).unwrap_or(0)};
   for i in 0..slots{
@@ -1278,9 +1281,19 @@ impl Editor {
   self.inventory_cafe_variants(id).into_iter().filter(|&(v,_,_)|
    v!=original&&v!=current&&self.valid_cafe_creation(item,v)).collect()
  }
+ fn cafe_creation_target(&self,item:i32,original:CafeVariant,current:CafeVariant,reserved:&HashSet<CafeVariant>,next:CafeVariant)->bool{
+  next!=current&&next!=original&&!reserved.contains(&next)&&self.valid_cafe_creation(item,next)
+ }
+ /// Preview a complete uncommitted tuple without staging a record or history.
+ pub fn inventory_cafe_preview(&self,id:u32,expected:CafeVariant,draft:CafeVariant)->Result<(Vec<(CafeVariant,i32,usize)>,bool),Error>{
+  let (item,original,current,reserved)=self.cafe_context(id).ok_or(Error::Schema)?;
+  if expected!=current||!self.valid_cafe_target(item,original,draft)||reserved.contains(&draft){return Err(Error::Schema)}
+  let creatable=self.cafe_creation_context(id).is_some()&&self.cafe_creation_target(item,original,current,&reserved,draft);
+  Ok((self.cafe_choices(item,original,draft,&reserved),creatable))
+ }
  pub fn create_inventory_cafe_variant(&mut self,source_id:u32,expected:CafeVariant,next:CafeVariant,quantity:i32)->Result<u32,Error>{
   let (item,original,current,reserved)=self.cafe_creation_context(source_id).ok_or(Error::Schema)?;
-  if quantity<=0||current!=expected||next==current||next==original||reserved.contains(&next)||!self.valid_cafe_creation(item,next){return Err(Error::Schema)}
+  if quantity<=0||current!=expected||!self.cafe_creation_target(item,original,current,&reserved,next){return Err(Error::Schema)}
   let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
   let change=Change::CafeCreated{document_id,source_id,item_id:item,expected,variant:next,quantity};
   self.restore_change(&change,false);self.undo.push(change);
