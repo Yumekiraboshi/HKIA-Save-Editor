@@ -13,6 +13,7 @@ import {createFurnitureForwardRenderer,validateFurnitureForwardInputs,type Furni
 import type {Vec3,Vec4} from './furniture-surface-v3.0.1';
 import {furnitureNativeBuiltinTexture,furnitureNativeBuiltinBytes} from './furniture-native-builtin-textures-v3.0.1';
 import {furnitureRimFromMaterial} from './furniture-rim-v3.0.1';
+import {terrainShaderId,resolveTrellisTerrainMaterial} from './furniture-terrain-v3.0.1';
 import {resolveCustomLitFixedMaterial,type CustomLitBlendState} from './furniture-customlit-v3.0.1';
 import {glassShaderId,resolveGlassFixedMaterial,type GlassState} from './furniture-glass-v3.0.1';
 import {resolveSparkleFixedMaterial,validateSparkleGpuInputs,createSparkleGpuRenderer} from './furniture-sparkle-gpu';
@@ -88,6 +89,14 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
    const transform=authoredRendererModel(modelNodes,p.rendererPathId,request.mountWorld,request.runtimeRoot,request.fit);
    return {...request.scene,model:transform.model,normalMatrix:transform.normalMatrix,tangentParity:transform.tangentParity,reflectionStrength,emissionColor};
   };
+  if(base.shader===terrainShaderId){
+   if(p.choice!==null)fail('SHADER_UNSUPPORTED');
+   const r=resolveTrellisTerrainMaterial(d.base,p.baseMaterialId),scene=sceneFor(1,[0,0,0]);
+   const attributes:MeshAttributeLocations={0:0,1:1,2:2,4:4};
+   if(Object.keys(attributes).some(i=>!(mesh.channels[Number(i)]?.[3]&15)))fail('MESH_CHANNEL');
+   validateFurnitureForwardInputs(scene,r.material);checkTextures(Object.values(r.textures));
+   return {...common,kind:'forward' as const,material:r.material,scene,attributes,...r.textures,patternMap:null};
+  }
   if(base.shader===glassShaderId){
    if(p.choice!==null)fail('SHADER_UNSUPPORTED');
    const r=resolveGlassFixedMaterial(d.base,p.baseMaterialId),scene=sceneFor(1,r.emissionColor);
@@ -173,7 +182,7 @@ export function resolveFurnitureMultiDiagnostic(d:FurnitureMultiSources,request:
  // Only one known transparent range after opaque. Do not infer ordering
  // of multiple transparent ranges or mix unrelated transparency modes.
  if(hasTransparent&&(transparent.length!==1||plans.some(p=>!p.glassState&&!p.customLitBlendState&&!p.opaque)))fail(hasGlass?'GLASS_ORDER_UNVERIFIED':'TRANSPARENT_ORDER_UNVERIFIED');
- const mixed=hasTransparent||plans.some(p=>p.kind==='sparkle'||p.kind==='forward'&&p.material.customLit!==undefined);
+ const mixed=hasTransparent||plans.some(p=>p.kind==='sparkle'||p.kind==='forward'&&(p.material.customLit!==undefined||p.material.terrain!==undefined));
  if(mixed&&plans.some(p=>![0,2].includes(p.cull)))fail('CULL_UNSUPPORTED');
  const locations:Record<string,MeshAttributeLocations>={};
  for(const p of plans){
