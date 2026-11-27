@@ -2,6 +2,8 @@ import type {PixelBuffer,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,type TextureAsset} from './dynamic-art-assets';
 
 const ROOT=import.meta.env.BASE_URL+'dynamic-wand-art/candidate-source/';
+export const WAND_NON_SQUARE_SOURCE_SHA='950095992ecb78341afb1cf6c5c2afaf16de8b6b365cf66c8fcb66c692d7096a';
+const NON_SQUARE_IDS=[371479572,583339916,803563219,1057045178,1314269583] as const;
 export const WAND_CANDIDATE_SOURCE_SHA='1b006f3ed28cfb16f4f25738d1d57ec2f86a447bf9e717a85124c3827d78dd09';
 const ID=/^[1-9][0-9]{0,9}$/;
 const PID=/^-?[1-9][0-9]{0,18}$/;
@@ -52,8 +54,10 @@ export function candidateWandSprite(binding:Binding,itemId:number,transform:Tran
  * Place those samples directly on the same centers (no second resize).
  * All tinting and alpha composition with the wand base stay on demand. */
 export function sampledWandOverlay(texture:PixelBuffer,row:Row):SpriteOverlay{
- const x=row[2]%24*34,y=Math.floor(row[2]/24)*34;
- return {texture,sampleRect:[x,y,34,34],trim:[0,0,34,34],alphaOffsetY:816,
+ return sampledCellOverlay(texture,row[2]%24*34,Math.floor(row[2]/24)*34,816);
+}
+function sampledCellOverlay(texture:PixelBuffer,x:number,y:number,alphaOffsetY:number):SpriteOverlay{
+ return {texture,sampleRect:[x,y,34,34],trim:[0,0,34,34],alphaOffsetY,
   logicalWidth:34,logicalHeight:34,scale:34/84,offsetPercent:[-.25,.25],rotation:0,
   sampleClamp:[x+.5,y+.5,x+33.5,y+33.5]};
 }
@@ -65,10 +69,35 @@ function source(){
  })().catch(e=>{loading=undefined;throw e;});
  return loading;
 }
-export async function loadSampledWandOverlay(itemId:number,transform:Transform):Promise<{spritePathId:string;overlay:SpriteOverlay}|null>{
+type NonSquareRow={itemId:number;spritePathId:string;definitionPathId:string;texturePathId:string;logicalSize:[number,number];cell:number;kind:number;format:number};
+type NonSquareManifest={schema:string;version:string;definitionsSha256:string;atlasSha256:string;sampleSize:number;sampleOrigin:number[];logicalSize:number;scale:number;offsetPercent:number[];rotation:number;alphaOffsetY:number;texture:TextureAsset;rows:NonSquareRow[]};
+export function decodeWandNonSquareSource(raw:unknown):NonSquareManifest{
+ const m=raw as NonSquareManifest;
+ if(!m||m.schema!=='HKIA.WandNonSquareSource.1'||m.version!=='3.0.1'||
+  m.definitionsSha256!=='ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0'||m.atlasSha256!=='04c1f4c191b0a821a0bbcb15e67a75bec85cf343a0b2e875ee8e525e1e8dfc7b'||
+  m.sampleSize!==34||m.sampleOrigin?.length!==2||m.sampleOrigin[0]!==4||m.sampleOrigin[1]!==4||m.logicalSize!==84||m.scale!==Math.fround(.4)||m.offsetPercent?.length!==2||m.offsetPercent[0]!==-.25||m.offsetPercent[1]!==.25||m.rotation!==0||m.alphaOffsetY!==34||
+  m.texture?.file!=='wand-nonsquare.webp'||m.texture.width!==170||m.texture.height!==68||m.texture.bytes!==6226||m.texture.sha256!=='e1f90466bf5ebdb1c1810e83f7b2510bffd201d658821f189bcee57f8ec4fd95'||m.texture.rgbSha256!=='0e85b7addc5cabd49ed3309bd6651b5b8b44564161afc0df149d94c5882a204e'||
+  !Array.isArray(m.rows)||m.rows.length!==NON_SQUARE_IDS.length||new Set(m.rows.map(r=>r.spritePathId)).size!==5)throw Error('WAND_NON_SQUARE_SOURCE');
+ for(const [i,r] of m.rows.entries())if(!r||r.itemId!==NON_SQUARE_IDS[i]||r.cell!==i||![r.spritePathId,r.definitionPathId,r.texturePathId].every(v=>typeof v==='string'&&PID.test(v))||
+  !Array.isArray(r.logicalSize)||r.logicalSize.length!==2||r.logicalSize.some(n=>!Number.isFinite(n)||n<=0)||r.logicalSize[0]===r.logicalSize[1]||r.kind!==(i===2?0:1)||r.format!==(i===2?12:3))throw Error('WAND_NON_SQUARE_ROW');
+ return m;
+}
+let nonSquareLoading:Promise<NonSquareManifest>|undefined;
+function nonSquareSource(){
+ if(!nonSquareLoading)nonSquareLoading=(async()=>decodeWandNonSquareSource(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(await loadVerifiedArtAsset(ROOT,'wand-nonsquare.json',WAND_NON_SQUARE_SOURCE_SHA,8192)))))().catch(e=>{nonSquareLoading=undefined;throw e;});
+ return nonSquareLoading;
+}
+export async function loadSampledWandOverlay(itemId:number,transform:Transform):Promise<{spritePathId:string;sourceHash:string;overlay:SpriteOverlay}|null>{
  try{
+  if((NON_SQUARE_IDS as readonly number[]).includes(itemId)){
+   if(transform.scale!==Math.fround(.4)||transform.offsetPercent[0]!==-.25||transform.offsetPercent[1]!==.25||transform.rotation!==0)return null;
+   const m=await nonSquareSource(),r=m.rows.find(r=>r.itemId===itemId);if(!r)return null;
+   // Source aspect and original trim were applied at sample time; the 34px
+   // square is just the target sample grid, with transparent unused pixels.
+   return {spritePathId:r.spritePathId,sourceHash:WAND_NON_SQUARE_SOURCE_SHA,overlay:sampledCellOverlay(await loadOpaqueArtTexture(ROOT,m.texture),r.cell*34,0,34)};
+  }
   const b=await source(),r=candidateWandSprite(b,itemId,transform);
   if(!r)return null;
-  return {spritePathId:r[0],overlay:sampledWandOverlay(await loadOpaqueArtTexture(ROOT,b.manifest.textures[r[1]]),r)};
+  return {spritePathId:r[0],sourceHash:WAND_CANDIDATE_SOURCE_SHA,overlay:sampledWandOverlay(await loadOpaqueArtTexture(ROOT,b.manifest.textures[r[1]]),r)};
  }catch{return null;}
 }
