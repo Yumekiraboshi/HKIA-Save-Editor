@@ -450,7 +450,14 @@ impl<'a> Walk<'a>{
        "Sunblink.Game.WandUniqueData"|"Sunblink.Game.WandUniqueDataDeprecatedV75"=>2,
        _=>0,
       };
-      if n<furniture_min_fields||furniture_ref_keys.iter().any(|&key|key>=n)||furniture_guid_key.is_some_and(|key|key>=n){
+      // Native v3.0.1 HomeModel/HomeObjectModel formatters allocate the
+      // object, run its constructor, then read exactly the array length.
+      // Omitted tail fields retain zero IDs and empty/null lists; they are
+      // not unknown references. Keep the actual leading identities and all
+      // present nested references; this does not certify a Home for restore.
+      let known_empty_home_tail=self.version==Version::V301&&
+       matches!(name,HOME|"Sunblink.UserData.HomeObjectModel")&&n>=2;
+      if !known_empty_home_tail&&(n<furniture_min_fields||furniture_ref_keys.iter().any(|&key|key>=n)||furniture_guid_key.is_some_and(|key|key>=n)){
        self.index.inventory_furniture_refs_incomplete=true;
       }
       // Source metadata keys for saved piece, outfit, item and NPC GUIDs.
@@ -483,7 +490,13 @@ impl<'a> Walk<'a>{
        "Sunblink.UserData.MermaidifierOutfitModel"=>3,
        _=>0,
       };
-      if n<clothing_min_fields{
+      // The v3.0.1 AvatarGeneralSettingsModel constructor initializes the
+      // three omitted collections empty; its formatter reads only present
+      // array elements. A saved document ID followed by an omitted tail
+      // cannot hide another serialized item/piece reference.
+      let known_empty_general_tail=self.version==Version::V301&&
+       name=="Sunblink.UserData.AvatarGeneralSettingsModel"&&n>=1;
+      if n<clothing_min_fields&&!known_empty_general_tail{
        self.index.inventory_clothing_refs_incomplete=true;
        // These models may omit direct ItemId/copied-payload records, not
        // merely outfit/piece GUIDs. Keep their uncertainty item-wide.
