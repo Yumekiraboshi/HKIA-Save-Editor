@@ -522,8 +522,44 @@ impl Editor {
    .or_else(||self.boba_variant_changes.get(&row.id).map(|v|InventoryUniqueData::BobaAppearance{color_id:v[0]}))
    .or_else(||self.cafe_variant_changes.get(&row.id).copied().map(Self::cafe_appearance)).or(row.unique_data)
  }
+ /// Presentation only. A denied edit does not imply an unknown appearance.
+ /// Never use this projection for eligibility, CAS, identity, or writing.
+ fn displayed_unique(&self,row:&crate::native::InventoryRow)->Option<InventoryUniqueData>{
+  let effective=self.effective_unique(row);
+  if self.slot.envelope.version!=Version::V301{return effective}
+  if !matches!(effective,None|Some(InventoryUniqueData::Opaque{..})){return effective}
+  let decoded=&self.slot.envelope.decoded;
+  let display=match row.unique_data{
+   Some(InventoryUniqueData::Opaque{tag:1})=>Self::legacy_furniture_materials(decoded,row).map(|materials|InventoryUniqueData::Furniture{materials}),
+   Some(InventoryUniqueData::Opaque{tag:2})=>Self::legacy_flower_variant(decoded,row).map(flower_unique),
+   Some(InventoryUniqueData::Opaque{tag:5})=>Self::legacy_wand_display(decoded,row),
+   _=>None
+  };
+  display.or(effective)
+ }
+ fn legacy_wand_display(decoded:&[u8],row:&crate::native::InventoryRow)->Option<InventoryUniqueData>{
+  if !matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))||row.unique_fields.len()!=5{return None}
+  let mut c=Cursor::new(decoded.get(row.unique_fields[0].clone())?);
+  let mut guid=[0;4];for word in &mut guid{*word=c.int(0,u32::MAX as i128).ok()? as u32;}
+  if c.pos!=c.bytes.len(){return None}
+  let source_item_id=if guid==[0;4]{0}else{crate::inventory_source::native_item_reference_id(guid)?};
+  let raw=decoded.get(row.unique_fields[1].clone())?;
+  let source_tag=if raw==[0xc0]{-1}else{
+   // Nested payload was already schema-walked. Native sub-icon selection
+   // ignores nested appearance, so retain only the original union tag.
+   let mut c=Cursor::new(raw);if c.array().ok()?!=2{return None}
+   c.int(0,11).ok()? as i32
+  };
+  let mut values=[0;3];
+  for (v,span) in values.iter_mut().zip(&row.unique_fields[2..]){
+   let mut c=Cursor::new(decoded.get(span.clone())?);
+   *v=c.int(i32::MIN as i128,i32::MAX as i128).ok()? as i32;
+   if c.pos!=c.bytes.len(){return None}
+  }
+  Some(InventoryUniqueData::WandAppearance{source_item_id,magic:values[0],fleck:values[1],style:values[2],source_tag,source_count:0,source_words:[0;12]})
+ }
  pub fn inventory_unique_rows(&self)->impl Iterator<Item=(u32,Option<i32>,Option<bool>,Option<InventoryUniqueData>,usize)>+'_{
-  self.slot.index.inventory.iter().filter(|r|r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,r.unique_is_nil,self.effective_unique(r),r.unique_fields.len()))
+  self.slot.index.inventory.iter().filter(|r|r.item_id.is_some()&&r.quantity.is_some()).map(|r|(r.id,r.unique_id,r.unique_is_nil,self.displayed_unique(r),r.unique_fields.len()))
    .chain(self.pending_inventory_rows().into_iter().map(|r|if self.pending_palettes.contains_key(&r.document_id){(r.document_id,None,Some(false),self.inventory_unique_data(r.document_id),3)}else if self.pending_bobas.contains_key(&r.document_id){(r.document_id,None,Some(false),self.inventory_unique_data(r.document_id),5)}else if self.pending_cafes.contains_key(&r.document_id){(r.document_id,None,Some(false),self.inventory_unique_data(r.document_id),2)}else if self.pending_wands.contains_key(&r.document_id){(r.document_id,None,Some(false),self.inventory_unique_data(r.document_id),5)}else{match self.pending_flowers.get(&r.document_id){
     Some(f)=>(r.document_id,None,Some(false),Some(flower_unique(self.flower_variant_changes.get(&r.document_id).copied().unwrap_or(f.variant))),4),
     None=>match self.pending_furniture.get(&r.document_id){Some(f)=>(r.document_id,None,Some(false),Some(InventoryUniqueData::Furniture{materials:self.furniture_variant_changes.get(&r.document_id).copied().unwrap_or(f.variant)}),3),None=>(r.document_id,Some(0),Some(true),None,0)}
@@ -1081,7 +1117,7 @@ impl Editor {
  pub fn inventory_flowers(&self)->impl Iterator<Item=(u32,u8,i32,i32,i32)>+'_{
   self.slot.index.inventory.iter().filter_map(move |row|{
    if self.slot.envelope.version!=Version::V301||row.item_id.is_none()||row.quantity.is_none(){return None}
-   match self.effective_unique(row){
+   match self.displayed_unique(row){
     Some(crate::native::InventoryUniqueData::Flower{grow_state,base_color,pattern,pattern_color})=>Some((row.id,grow_state,base_color,pattern,pattern_color)),
     _=>None
    }
