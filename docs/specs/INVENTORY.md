@@ -532,3 +532,8 @@ The original furniture material source contains four material indices with separ
 #### Palette creation after emptying all saved stacks
 
 The source-defined unrestricted starter is also available when every original palette row is verified, safe to empty and effectively zero, and there is no active staged palette. The zero documents remain intact, are not positive witnesses, and reserve both original and effective complete native identities alongside copied palettes. Reuse the existing source-defined color outputs, family and allocation budget, full CAS/history and export/reparse. Reject a reserved tuple; refill the original separately. No restricted color or new entitlement is inferred. Raw/ZIP synthetic tests cover zero, new creation, history, re-open and refill. Actual game acceptance unverified.
+
+
+#### Chef creation after emptying all saved stacks
+
+For the nine source-verified cafe outputs and Boba, the existing source-defined first-add path is available when all original rows of that item are verified, independently zero/refill eligible and effectively zero, with no active staged row of that item. Reserve original and effective complete ordered identities; choose an unreserved native starter from source recipe pairs or Boba triples, and reject collisions in the same CAS. Unsupported cafe tuple lengths, missing references and family/allocation limits retain their prior denial. Zero rows are not positive witnesses; preserve their document, UID and original payload and refill independently. The same Add dialog, history and native reparse apply, without consuming or generating ingredients. Synthetic raw/ZIP regression; game acceptance unverified.
