@@ -11,7 +11,7 @@ const categoryManifest=JSON.parse(read('../public/achievement-category-atlas.jso
 const indexData=JSON.parse(read('../public/achievement-index.json').toString('utf8'));
 const image=read('../public/achievement-individual-atlas.webp');
 const index=new Map(indexData.records.map(([guid,key,titleId])=>[guid,{key,titleId}]));
-const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/achievement-individual-icons.ts',import.meta.url))],
+const {outputFiles}=await build({stdin:{contents:"export * from './achievement-individual-icons'; export * from './achievement-category-icons'; export * from './achievement-groups';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
  bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
 const icons=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 
@@ -117,13 +117,14 @@ test('individual cards use exact sprites and missing rows retain placeholder; ca
  assert.match(css,/\.achievement-tile\{height:211px;min-height:211px\}/);
 });
 
-test('achievement edit dialog reuses source-matched individual/category icons and leaves native nulls empty',()=>{
+test('achievement edit dialog uses native detail-only parent fallback; list still preserves null icons',()=>{
  const app=read('../src/App.svelte').toString('utf8');
  const css=read('../src/style.css').toString('utf8');
  const modal=app.slice(app.indexOf('<dialog class="achievement-dialog"'),app.indexOf('</dialog>',app.indexOf('<dialog class="achievement-dialog"')));
  assert.ok(modal.includes('editingSaveGuid=achievementGuid(editingAchievement.guid)'));
  assert.ok(modal.includes('achievementIndividualAtlas?.bySaveGuid.get(editingSaveGuid)'));
- assert.ok(modal.includes('achievementCategoryAtlas?.bySaveGuid.get(editingSaveGuid)'));
+ assert.ok(modal.includes('resolveAchievementDetailCategoryArt(editingSaveGuid,snapshot.version,achievementCategoryAtlas,achievementIndividualAtlas,achievementGroupHierarchy)'));
+ assert.ok(modal.includes("'native-parent'"));
  assert.ok(modal.includes('{#if dialogIndividualArt}'));
  assert.ok(modal.includes('{:else if dialogCategoryArt}'));
  assert.ok(modal.includes('<span class="item-art-empty">✧</span>'));
@@ -136,4 +137,27 @@ test('achievement edit dialog reuses source-matched individual/category icons an
  const categorySaveGuids=new Set(categoryManifest.categories.map(c=>[...index].find(([,r])=>r.key===c.sourceKey)?.[0]));
  assert.equal(categorySaveGuids.size,63);
  assert.equal([...index.keys()].filter(g=>!bySaveGuid.has(g)&&!categorySaveGuids.has(g)).length,559);
+});
+
+test('all 559 original null leaf icons resolve their direct parent in the details view only',()=>{
+ const base='/HKIA-Save-Editor/';
+ const hierarchy=icons.decodeAchievementGroups(JSON.parse(read('../public/achievement-groups.json')),index);
+ const category=icons.decodeAchievementCategoryAtlas(categoryManifest,index,hierarchy,base);
+ const individual=icons.decodeAchievementIndividualAtlas(manifest,index,base);
+ let inherited=0,own=0,individualCount=0;
+ for(const guid of index.keys()){
+  const art=icons.resolveAchievementDetailCategoryArt(guid,'3.0.1',category,individual,hierarchy);
+  if(category.bySaveGuid.has(guid)){assert.equal(art,category.bySaveGuid.get(guid));own++;}
+  else if(individual.bySaveGuid.has(guid)){assert.equal(art,undefined);individualCount++;}
+  else{
+   assert.ok(art);assert.equal(art.saveGuid,hierarchy.owner.get(guid));
+   assert.equal(art,category.bySaveGuid.get(art.saveGuid));inherited++;
+   assert.equal(icons.resolveAchievementDetailCategoryArt(guid,'3.0.0',category,individual,hierarchy),undefined);
+   assert.equal(icons.resolveAchievementDetailCategoryArt(guid,'3.0.1',category,null,hierarchy),undefined);
+   assert.equal(icons.resolveAchievementDetailCategoryArt(guid,'3.0.1',category,individual,null),undefined);
+   assert.equal(icons.resolveAchievementDetailCategoryArt(guid,'3.0.1',null,individual,hierarchy),undefined);
+  }
+ }
+ assert.deepEqual([own,individualCount,inherited],[63,198,559]);
+ assert.equal(icons.resolveAchievementDetailCategoryArt('unknown','3.0.1',category,individual,hierarchy),undefined);
 });

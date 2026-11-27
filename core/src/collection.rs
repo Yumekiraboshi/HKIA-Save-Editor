@@ -648,29 +648,37 @@ impl Editor {
     (furniture_source::material_unlock_item(n).is_none()||original[i]==n)&&
     source.slots.iter().find(|s|s.slot as usize==i).is_some_and(|s|s.allowed.contains(&n)||original[i]==n)))
  }
- /// Rust issues source-defined one-slot choices. The commit accepts an
- /// independently validated complete tuple for atomic draft replay.
- pub fn inventory_furniture_variants(&self,id:u32)->Vec<FurnitureVariant>{
-  let Some((source,original,current,reserved))=self.furniture_context(id)else{return Vec::new()};
-  let current_key=furniture_key(source,current).unwrap();
+ fn furniture_edit_target(&self,id:u32,source:&FurnitureItemSource,original:FurnitureVariant,target:FurnitureVariant,reserved:&HashSet<FurnitureVariant>)->bool{
   let legacy=self.slot.index.inventory.iter().any(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:1})));
+  Self::valid_furniture_target(source,original,target)&&furniture_key(source,target).is_some_and(|key|
+   !reserved.contains(&key)&&((!legacy&&!self.pending_furniture.contains_key(&id))||Some(key)!=furniture_key(source,[0;3])))
+ }
+ fn furniture_draft_choices(source:&FurnitureItemSource,draft:FurnitureVariant,mut allowed:impl FnMut(FurnitureVariant)->bool)->Vec<FurnitureVariant>{
+  let draft_key=furniture_key(source,draft);
   let mut out=Vec::new();
   for slot in source.slots{
    let i=slot.slot as usize;
    for n in std::iter::once(0).chain(slot.allowed.iter().copied()){
-    let mut v=current;v[i]=n;
-    if v==current||!Self::valid_furniture_target(source,original,v){continue}
-    let key=furniture_key(source,v).unwrap();
-    if key!=current_key&&!reserved.contains(&key)&&!out.contains(&v)&&
-     ((!legacy&&!self.pending_furniture.contains_key(&id))||Some(key)!=furniture_key(source,[0;3])){out.push(v)}
+    let mut v=draft;v[i]=n;
+    if v!=draft&&furniture_key(source,v)!=draft_key&&allowed(v)&&!out.contains(&v){out.push(v)}
    }
   }
   out
  }
+ pub fn inventory_furniture_variants(&self,id:u32)->Vec<FurnitureVariant>{
+  let Some((source,original,current,reserved))=self.furniture_context(id)else{return Vec::new()};
+  Self::furniture_draft_choices(source,current,|v|self.furniture_edit_target(id,source,original,v,&reserved))
+ }
  // Only the intersection of verified ordinary acquisition definitions and
  // original non-layout customizable furniture. No inferred ownership.
+ // An empty verified saved family does not need to supply a positive
+ // ownership witness when the definition independently allows acquisition.
+ fn saved_item_family_empty(&self,item:i32)->bool{
+  !self.inventory_item_rows.contains_key(&item)||self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)).all(|r|
+   self.inventory_can_empty(r)&&self.inventory_changes.get(&r.id).copied().or(r.quantity)==Some(0))
+ }
  fn absent_furniture_choices(&self,item_id:i32)->Vec<FurnitureVariant>{
-  if self.inventory_item_rows.contains_key(&item_id)||!self.can_create_inventory_item(item_id){return Vec::new()}
+  if !self.can_create_inventory_item(item_id)||!self.saved_item_family_empty(item_id){return Vec::new()}
   self.default_furniture_choices(item_id)
  }
  // A single source-verified ordinary saved stack is sufficient evidence
@@ -678,7 +686,8 @@ impl Editor {
  fn saved_default_furniture_source(&self,row:&crate::native::InventoryRow)->Option<i32>{
   let item=row.item_id?;
   if row.id==0||row.id>=PENDING_ITEM||row.unique_id!=Some(0)||row.unique_is_nil!=Some(true)||
-   self.inventory_changes.get(&row.id).copied().or(row.quantity)?<=0||
+   !self.inventory_changes.get(&row.id).copied().or(row.quantity).is_some_and(|q|
+    q>0||(q==0&&crate::inventory_source::ordinary_bag_creation_item(item)&&self.saved_item_family_empty(item)))||
    !row.fields.iter().all(Option::is_some)||
    !(crate::inventory_source::ordinary_creation_item(item)||self.extra_custom_furniture_zero_reference_safe(item))||
    !self.inventory_creation_payload_safe(item)||
@@ -742,63 +751,59 @@ impl Editor {
    (self.can_create_inventory_item(item)&&!self.default_furniture_choices(item).is_empty()).then_some(id)
   })).collect()
  }
- pub fn inventory_furniture_creation_variants(&self,id:u32)->Vec<FurnitureVariant>{
-  if !self.absent_flower_budget_available(){return Vec::new()}
+ fn furniture_creation_context(&self,id:u32)->Option<(&'static FurnitureItemSource,FurnitureVariant,FurnitureVariant,HashSet<FurnitureVariant>,bool)>{
+  if !self.absent_flower_budget_available(){return None}
   if let Some(row)=self.slot.index.inventory.iter().find(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:1}))){
-   if !row.item_id.is_some_and(|item|self.legacy_furniture_zero_reference_safe(item)&&self.inventory_creation_payload_safe(item)){return Vec::new()}
+   if !row.item_id.is_some_and(|item|self.legacy_furniture_zero_reference_safe(item)&&self.inventory_creation_payload_safe(item)){return None}
   }
-  if self.pending_furniture.contains_key(&id){
-   if !self.inventory_changes.contains_key(&id){return Vec::new()}
+  let default_item=if self.pending_furniture.contains_key(&id){
+   if !self.inventory_changes.contains_key(&id){return None}
+   None
   }else if id&PENDING_ITEM!=0{
    let item=(id&!PENDING_ITEM) as i32;
-   if self.inventory_changes.get(&id).is_some_and(|&q|q>0)&&self.can_create_inventory_item(item){return self.default_furniture_choices(item)}
-   return self.absent_furniture_choices(item)
+   if !(self.inventory_changes.get(&id).is_some_and(|&q|q>0)&&self.can_create_inventory_item(item))&&self.absent_furniture_choices(item).is_empty(){return None}
+   Some(item)
+  }else{
+   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+   let item=self.saved_default_furniture_source(row);
+   if item.is_none()&&!self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
+   item
+  };
+  if let Some(item)=default_item{
+   let source=furniture_source::item(item)?;
+   if source.is_home_layout||crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX){return None}
+   return Some((source,[0;3],[0;3],self.default_furniture_reserved(source)?,true))
   }
-  else if !self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|
-   self.inventory_changes.get(&id).copied().or(r.quantity).is_some_and(|q|q>0)){return Vec::new()}
-  if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|self.saved_default_furniture_source(r)){
-   return self.default_furniture_choices(item)
+  if !self.pending_furniture.contains_key(&id)&&!self.unique_quantity_ids.contains(&id){return None}
+  let (source,original,current,reserved)=self.furniture_context(id)?;
+  if self.slot.index.inventory_payload_item_refs.contains(&source.item_id){return None}
+  Some((source,original,current,reserved,false))
+ }
+ fn furniture_creation_target(source:&FurnitureItemSource,original:FurnitureVariant,current:FurnitureVariant,target:FurnitureVariant,reserved:&HashSet<FurnitureVariant>)->bool{
+  Self::valid_furniture_target(source,[0;3],target)&&furniture_key(source,target).is_some_and(|key|
+   Some(key)!=furniture_key(source,[0;3])&&Some(key)!=furniture_key(source,original)&&Some(key)!=furniture_key(source,current)&&!reserved.contains(&key))
+ }
+ fn furniture_creation_item(&self,id:u32,expected:FurnitureVariant,next:FurnitureVariant)->Option<i32>{
+  let (source,original,current,reserved,_)=self.furniture_creation_context(id)?;
+  (expected==current&&Self::furniture_creation_target(source,original,current,next,&reserved)).then_some(source.item_id)
+ }
+ pub fn inventory_furniture_creation_variants(&self,id:u32)->Vec<FurnitureVariant>{
+  let Some((source,original,current,reserved,_))=self.furniture_creation_context(id)else{return Vec::new()};
+  Self::furniture_draft_choices(source,current,|v|Self::furniture_creation_target(source,original,current,v,&reserved))
+ }
+ /// Read-only complete material tuple preview; commit shares the same predicates.
+ pub fn inventory_furniture_preview(&self,id:u32,expected:FurnitureVariant,draft:FurnitureVariant)->Result<(Vec<FurnitureVariant>,bool),Error>{
+  if let Some((source,original,current,reserved))=self.furniture_context(id){
+   if current!=expected||(draft!=current&&!self.furniture_edit_target(id,source,original,draft,&reserved)){return Err(Error::Schema)}
+   return Ok((Self::furniture_draft_choices(source,draft,|v|self.furniture_edit_target(id,source,original,v,&reserved)),self.furniture_creation_item(id,expected,draft).is_some()))
   }
-  if !self.pending_furniture.contains_key(&id)&&!self.unique_quantity_ids.contains(&id){return Vec::new()}
-  let Some((source,original,current,_))=self.furniture_context(id)else{return Vec::new()};
-  // No new restricted ownership: only existing, source-validated furniture.
-  if self.slot.index.inventory_payload_item_refs.contains(&source.item_id){return Vec::new()}
-  let default=furniture_key(source,[0;3]);
-  let old=furniture_key(source,original);let now=furniture_key(source,current);
-  self.inventory_furniture_variants(id).into_iter().filter(|&v|{
-   let key=furniture_key(source,v);
-   key!=default&&key!=old&&key!=now&&Self::valid_furniture_target(source,[0;3],v)
-  }).collect()
+  let (source,original,current,reserved,default_only)=self.furniture_creation_context(id).ok_or(Error::Schema)?;
+  if !default_only||expected!=current||(draft!=current&&!Self::furniture_creation_target(source,original,current,draft,&reserved)){return Err(Error::Schema)}
+  Ok((Self::furniture_draft_choices(source,draft,|v|Self::furniture_creation_target(source,original,current,v,&reserved)),draft!=current))
  }
  pub fn create_inventory_furniture_variant(&mut self,source_id:u32,expected:FurnitureVariant,next:FurnitureVariant,quantity:i32)->Result<u32,Error>{
-  let options=self.inventory_furniture_creation_variants(source_id);
-  // Compose only source-issued slot choices. Final identity checks below
-  // are against the complete tuple, not the individual one-slot examples.
-  if quantity<=0||options.is_empty()||expected==next||
-   next.iter().enumerate().any(|(i,&n)|n!=expected[i]&&!options.iter().any(|v|v[i]==n)){return Err(Error::Schema)}
-  let item_id=if self.pending_furniture.contains_key(&source_id){
-   let (source,_,current,_)=self.furniture_context(source_id).ok_or(Error::Schema)?;
-   if current!=expected{return Err(Error::Schema)}
-   source.item_id
-  }else if source_id&PENDING_ITEM!=0{
-   if expected!=[0;3]{return Err(Error::Schema)}
-   (source_id&!PENDING_ITEM) as i32
-  }else if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==source_id).and_then(|r|self.saved_default_furniture_source(r)){
-   if expected!=[0;3]{return Err(Error::Schema)}
-   item
-  }else{
-   let (source,_,current,_)=self.furniture_context(source_id).ok_or(Error::Schema)?;
-   if current!=expected{return Err(Error::Schema)}
-   source.item_id
-  };
-  let source=furniture_source::item(item_id).ok_or(Error::Schema)?;
-  let key=furniture_key(source,next).ok_or(Error::Schema)?;
-  if !Self::valid_furniture_target(source,[0;3],next)||Some(key)==furniture_key(source,[0;3]){return Err(Error::Schema)}
-  if let Some((_,original,current,reserved))=self.furniture_context(source_id){
-   if Some(key)==furniture_key(source,original)||Some(key)==furniture_key(source,current)||reserved.contains(&key){return Err(Error::Schema)}
-  }else{
-   if self.default_furniture_reserved(source).ok_or(Error::Schema)?.contains(&key){return Err(Error::Schema)}
-  }
+  if quantity<=0{return Err(Error::Schema)}
+  let item_id=self.furniture_creation_item(source_id,expected,next).ok_or(Error::Schema)?;
   let document_id=self.allocate_staged_unique_handle()?;
   let revision=self.next_edit_revision()?;
   let change=Change::FurnitureCreated{document_id,source_id,expected,furniture:PendingFurniture{item_id,variant:next},quantity};
@@ -807,10 +812,7 @@ impl Editor {
  }
  pub fn change_inventory_furniture_variant(&mut self,id:u32,expected:FurnitureVariant,next:FurnitureVariant)->Result<(),Error>{
   let (source,original,current,reserved)=self.furniture_context(id).ok_or(Error::Schema)?;
-  let legacy=self.slot.index.inventory.iter().any(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:1})));
-  if current!=expected||current==next||!Self::valid_furniture_target(source,original,next)||
-   ((legacy||self.pending_furniture.contains_key(&id))&&furniture_key(source,next)==furniture_key(source,[0;3]))||
-   reserved.contains(&furniture_key(source,next).ok_or(Error::Schema)?){return Err(Error::Schema)}
+  if current!=expected||current==next||!self.furniture_edit_target(id,source,original,next,&reserved){return Err(Error::Schema)}
   let revision=self.next_edit_revision()?;
   let before=self.furniture_variant_changes.get(&id).copied();
   let after=if original==next{None}else{Some(next)};
@@ -1247,7 +1249,8 @@ impl Editor {
   match row.unique_data?{
    InventoryUniqueData::CafeAppearance{..} if CAFE_IDS.binary_search(&item).is_ok()&&row.unique_fields.len()==2=>{
     let flavors=read_list(0)?;let colors=read_list(1)?;
-    if !flavors.iter().all(|&n|n>0)||!colors.iter().all(|&n|is_chef_color(n)){return None}
+    // Exact ordered equality is independent of recipe or color validity.
+    // A fully decoded unsupported peer reserves its own key, not the family.
     Some((flavors,colors))
    }
    InventoryUniqueData::BobaAppearance{..} if item==BOBA_ID&&row.unique_fields.len()==5=>{
@@ -1448,7 +1451,7 @@ impl Editor {
   item!=crate::inventory_source::GENERIC_MAGIC_WAND_ID&&crate::inventory_source::wand_output_item(item)&&
    crate::inventory_source::is_uncapped_required_unique_stack(item)&&
    (if crate::inventory_source::magic_wand_style(item).is_some(){
-    !self.inventory_item_rows.contains_key(&item)&&
+    self.saved_item_family_empty(item)&&self.wand_source_reservations(item).is_some()&&
     !self.pending_wands.iter().any(|(&id,&(i,_))|i==item&&self.inventory_changes.contains_key(&id))
    }else{self.wand_source_reservations(item).is_some()})&&
    !self.slot.index.inventory_wand_copies&&self.inventory_creation_payload_safe(item)&&
@@ -1582,8 +1585,13 @@ impl Editor {
   if crate::inventory_source::magic_wand_style(item).is_none()&&
    self.inventory_absent_wand_sources(PENDING_ITEM|item as u32).is_empty()&&
    self.inventory_owned_furniture_wand_sources(PENDING_ITEM|item as u32).is_empty(){return Vec::new()}
+  let reserved=if crate::inventory_source::magic_wand_style(item).is_some(){
+   let Some(mut keys)=self.wand_source_reservations(item)else{return Vec::new()};
+   keys.remove(&0).unwrap_or_default()
+  }else{HashSet::new()};
   crate::inventory_source::WAND_MAGIC.iter().flat_map(|&(magic,_)|
-   crate::inventory_source::WAND_FLECK.iter().map(move |&(fleck,_)|[magic,fleck])).collect()
+   crate::inventory_source::WAND_FLECK.iter().map(move |&(fleck,_)|[magic,fleck]))
+   .filter(|pair|!reserved.contains(pair)).collect()
  }
  pub fn inventory_absent_wand_ids(&self)->Vec<(i32,i32)>{
   crate::inventory_source::MAGIC_WAND_STYLES.iter().copied().chain([
@@ -1823,7 +1831,7 @@ impl Editor {
  // variants, but have no existing player payload to copy.
  fn absent_chef_allowed(&self,item:i32)->bool{
   crate::inventory_source::is_uncapped_required_unique_stack(item)&&
-   self.inventory_item_rows.get(&item).copied().unwrap_or(0)<256&&
+   (item!=crate::inventory_source::BOBA_ID||self.inventory_item_rows.get(&item).copied().unwrap_or(0)<256)&&
    self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)).all(|r|
     self.unique_quantity_ids.contains(&r.id)&&self.inventory_can_empty(r)&&
     self.inventory_changes.get(&r.id).copied().or(r.quantity)==Some(0))&&
@@ -1913,9 +1921,14 @@ impl Editor {
  fn original_cafe_variant(&self,id:u32)->Option<CafeVariant>{
   self.pending_cafes.get(&id).map(|&(_,v)|v).or_else(||Self::cafe_words(&self.slot.envelope.decoded,self.slot.index.inventory.iter().find(|r|r.id==id)?))
  }
+ fn valid_cafe_saved(item:i32,v:CafeVariant)->bool{
+  let n=Self::cafe_count(v);
+  crate::inventory_source::cafe_count_allowed(item,n)&&(0..3).all(|i|
+   if i<n{v[i]>0&&crate::inventory_source::is_chef_color(v[i+3])}else{v[i]==0&&v[i+3]==0})
+ }
  fn valid_cafe_original(item:i32,v:CafeVariant)->bool{
   let n=Self::cafe_count(v);
-  if !crate::inventory_source::cafe_count_allowed(item,n){return false}
+  if !Self::valid_cafe_saved(item,v){return false}
   (0..3).all(|i|if i>=n{v[i]==0&&v[i+3]==0}
    else if item==crate::inventory_source::NIGIRI_ID&&i==1{
     crate::inventory_source::NIGIRI_SIDES.iter().any(|&(_,f,c)|(f,c)==(v[i],v[i+3]))
@@ -1947,14 +1960,11 @@ impl Editor {
  pub fn inventory_cafe_witnesses(&self)->&'static [(i32,i32,i32)]{
   if self.slot.envelope.version==Version::V301{crate::inventory_source::CAFE_INGREDIENT_WITNESSES}else{&[]}
  }
- fn cafe_family_count(&self,item:i32)->usize{
-  self.inventory_item_rows.get(&item).copied().unwrap_or(0)+self.pending_cafes.values().filter(|&&(i,_)|i==item).count()
- }
  pub fn inventory_cafe_rows(&self)->impl Iterator<Item=(u32,CafeVariant,bool)>+'_{
   self.slot.index.inventory.iter().filter_map(move |r|{
    if self.slot.envelope.version!=Version::V301{return None}
    let item=r.item_id?;let original=Self::cafe_words(&self.slot.envelope.decoded,r)?;
-   let editable=self.unique_quantity_ids.contains(&r.id)&&self.cafe_family_count(item)<=256&&Self::valid_cafe_original(item,original);
+   let editable=self.unique_quantity_ids.contains(&r.id)&&Self::valid_cafe_saved(item,original);
    Some((r.id,self.cafe_variant_changes.get(&r.id).copied().unwrap_or(original),editable))
   }).chain(self.pending_cafes.iter().filter(|(id,_)|self.inventory_changes.contains_key(*id)).map(|(&id,&(_,v))|
    (id,self.cafe_variant_changes.get(&id).copied().unwrap_or(v),true)))
@@ -1967,16 +1977,17 @@ impl Editor {
    if !self.unique_quantity_ids.contains(&id){return None}
    self.slot.index.inventory.iter().find(|r|r.id==id)?.item_id?
   };
-  if self.cafe_family_count(item)>256{return None}
   let original=self.original_cafe_variant(id)?;
-  if !Self::valid_cafe_original(item,original){return None}
+  if !Self::valid_cafe_saved(item,original){return None}
   let current=self.cafe_variant_changes.get(&id).copied().unwrap_or(original);
   let mut reserved=HashSet::new();
   for other in &self.slot.index.inventory{
    if other.id==id||other.item_id!=Some(item){continue}
    let (flavors,colors)=self.chef_identity(other)?;
    if flavors.len()!=colors.len()||!crate::inventory_source::cafe_count_allowed(item,flavors.len()){continue}
-   let v=Self::cafe_words(&self.slot.envelope.decoded,other)?;
+   // Complete keys that cannot be represented by the positive paired editor
+   // cannot collide with its targets. Preserve their original bytes.
+   let Some(v)=Self::cafe_words(&self.slot.envelope.decoded,other)else{continue};
    reserved.insert(v);reserved.insert(self.cafe_variant_changes.get(&other.id).copied().unwrap_or(v));
   }
   for (&other,&(other_item,v)) in &self.pending_cafes{
@@ -1987,7 +1998,7 @@ impl Editor {
   Some((item,original,current,reserved))
  }
  fn valid_cafe_target(&self,item:i32,original:CafeVariant,next:CafeVariant)->bool{
-  if !Self::valid_cafe_original(item,next){return false}
+  if !Self::valid_cafe_saved(item,next){return false}
   let n=Self::cafe_count(next);
   (0..n).all(|i|(next[i],next[i+3])==(original[i],original[i+3])||
    self.cafe_slot_choices(item,i).iter().any(|&(_,f,c)|(f,c)==(next[i],next[i+3])))
@@ -2003,15 +2014,17 @@ impl Editor {
   self.cafe_choices(item,original,current,&reserved)
  }
  fn cafe_choices(&self,item:i32,original:CafeVariant,current:CafeVariant,reserved:&HashSet<CafeVariant>)->Vec<(CafeVariant,i32,usize)>{
+  // The current draft is already CAS-validated; each candidate changes one
+  // slot to an issued source pair or that slot's exact original pair.
   let mut out=Vec::new();let mut seen=HashSet::new();
   let slots=if item==crate::inventory_source::NIGIRI_ID{2}else{crate::inventory_source::cafe_slot_count(item).unwrap_or(0)};
   for i in 0..slots{
    for (ingredient,flavor,color) in self.cafe_slot_choices(item,i){
     let mut next=current;next[i]=flavor;next[i+3]=color;
-    if next!=current&&Self::valid_cafe_original(item,next)&&!reserved.contains(&next)&&seen.insert(next){out.push((next,ingredient,i))}
+    if next!=current&&Self::valid_cafe_saved(item,next)&&!reserved.contains(&next)&&seen.insert(next){out.push((next,ingredient,i))}
    }
    let mut next=current;next[i]=original[i];next[i+3]=original[i+3];
-   if next!=current&&Self::valid_cafe_original(item,next)&&!reserved.contains(&next)&&seen.insert(next){out.push((next,0,i))}
+   if next!=current&&Self::valid_cafe_saved(item,next)&&!reserved.contains(&next)&&seen.insert(next){out.push((next,0,i))}
   }
   out
  }
@@ -2020,16 +2033,18 @@ impl Editor {
   let item=context.0;
   let quantity=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
   if !quantity.is_some_and(|q|q>0)||!self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
-   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||self.cafe_family_count(item)>=256{return None}
+   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
   Some(context)
  }
  fn cafe_starter_reservations(&self,item:i32)->Option<HashSet<CafeVariant>>{
-  if !self.absent_chef_allowed(item)||self.cafe_family_count(item)>=256||
+  if !self.absent_chef_allowed(item)||
    self.pending_cafes.iter().any(|(&id,&(i,_))|i==item&&self.inventory_changes.contains_key(&id)){return None}
   let mut reserved=HashSet::new();
   for row in self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)){
-   // Keep malformed or unsupported ordered tuple families conservative.
-   let v=Self::cafe_words(&self.slot.envelope.decoded,row)?;
+   // Exact complete unequal-length keys cannot collide with generated tuples.
+   let (flavors,colors)=self.chef_identity(row)?;
+   if flavors.len()!=colors.len()||!crate::inventory_source::cafe_count_allowed(item,flavors.len()){continue}
+   let Some(v)=Self::cafe_words(&self.slot.envelope.decoded,row)else{continue};
    reserved.insert(v);reserved.insert(self.cafe_variant_changes.get(&row.id).copied().unwrap_or(v));
   }
   Some(reserved)
@@ -2372,6 +2387,8 @@ impl Editor {
    }
    if let Some((a,b))=self.chef_identity(row){
     self.unique_row_source(row,if item==crate::inventory_source::BOBA_ID{5}else{2})?;
+    if item!=crate::inventory_source::BOBA_ID&&
+     (!a.iter().all(|&n|n>0)||!b.iter().all(|&n|crate::inventory_source::is_chef_color(n))){return None}
     return (chef_counts.get(&(item,a,b))==Some(&1)).then_some(row.id)
    }
    if let Some(source)=self.furniture_source(row){

@@ -103,6 +103,33 @@ export async function wandRuntimeSmoke(browser,origin,base){
    assert.equal(row.original.alpha,row.a.alpha);
    assert.equal(row.original.width,96);assert.equal(row.original.height,96);
   }
+  // Fresh page modules ensure neither the manifest nor decoded textures
+  // are cached before injecting failures in the optional guarded pack.
+  for(const pattern of ['**/wand-item-subicon-source-v3.0.1.json','**/wand-item-overlay-v3.0.1-*.webp']){
+   const failurePage=await context.newPage();
+   try{
+    await failurePage.route(root+'__wand_runtime_fixture__.html',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html><body></body></html>'}));
+    await failurePage.route(root+'__wand_runtime_fixture__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
+    await failurePage.route(pattern,r=>r.fulfill({status:503,body:'unavailable'}));
+    await failurePage.goto(root+'__wand_runtime_fixture__.html');
+    const failed=await failurePage.evaluate(async base=>{
+     const {renderWandArt,renderWandBaseArt}=await import(base+'__wand_runtime_fixture__.mjs');
+     const a={magicCharacteristicId:104,fleckCharacteristicId:125};
+     const render=id=>renderWandArt(384749651,{...a,sourceItemId:id});
+     const first=await render(315822),guarded=await render(1185152302);
+     const plain=await renderWandBaseArt(384749651,a);
+     const bytes=async blob=>blob?Array.from(new Uint8Array(await blob.arrayBuffer())):null;
+     return {first:await bytes(first),guarded:await bytes(guarded),plain:await bytes(plain),
+      cached:first===await render(315822),
+      unknown:await render(315823)===null,
+      shaped:await renderWandArt(1304219546,{...a,sourceItemId:7285157})===null};
+    },base);
+    assert.ok(failed.first&&failed.guarded&&failed.plain&&failed.cached&&failed.unknown&&failed.shaped,pattern);
+    assert.notDeepEqual(failed.first,failed.plain,pattern);
+    assert.notDeepEqual(failed.guarded,failed.plain,pattern);
+    assert.notDeepEqual(failed.first,failed.guarded,pattern);
+   }finally{await failurePage.close();}
+  }
   console.log('CHROMIUM DYNAMIC WAND BASE PASS: 9 native wand base layers, color variants, alpha, shared cache and unknown-ID refusal');
  }finally{await context.close();}
 }

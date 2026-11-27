@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurnitureVariants,requestFurnitureCreationVariants,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPalettePreview,changeInventoryPaletteVariant,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafePreview,changeInventoryCafeVariant,createInventoryCafeVariant,requestWandVariants,changeInventoryWandIdentity,requestWandNestedMaterials,requestWandNestedPairs,changeInventoryWandNested,createInventoryWandNested,requestWandEditSources,requestAbsentWandSources,requestOwnedFurnitureWandSources,requestOwnedFurnitureWandPairs,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,requestFlowerVariants,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurniturePreview,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPalettePreview,changeInventoryPaletteVariant,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafePreview,changeInventoryCafeVariant,createInventoryCafeVariant,requestWandVariants,changeInventoryWandIdentity,requestWandNestedMaterials,requestWandNestedPairs,changeInventoryWandNested,createInventoryWandNested,requestWandEditSources,requestAbsentWandSources,requestOwnedFurnitureWandSources,requestOwnedFurnitureWandPairs,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,inventoryPatchesEqual,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -26,7 +26,7 @@
 import {searchAchievementRows} from './achievement-search';
  import {loadAchievementGroups,groupRows,ungroupedRows,nativeAchievementOrder,groupSummaries as summarizeAchievementGroups,type AchievementHierarchy} from './achievement-groups';
  import {achievementGroupCopy} from './achievement-group-ui';
- import {loadAchievementCategoryAtlas,type CategoryIconAtlas} from './achievement-category-icons';
+ import {loadAchievementCategoryAtlas,resolveAchievementDetailCategoryArt,type CategoryIconAtlas} from './achievement-category-icons';
  import {loadAchievementIndividualAtlas,type IndividualAchievementAtlas} from './achievement-individual-icons';
  import {loadAchievementIndex,achievementGuid,readableSourceKey,type AchievementIndex} from './achievement-index';
  import {loadAchievementTitles,type AchievementTitles} from './achievement-localization';
@@ -86,9 +86,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  const validVariantAddQuantity=$derived(typeof variantAddQuantity==='number'&&Number.isInteger(variantAddQuantity)&&variantAddQuantity>=1&&variantAddQuantity<=2147483647);
  let furnitureDialogEl:HTMLDialogElement|undefined=$state();
  let furnitureDisplay:FurnitureDisplay|null=$state(null);
- let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[];creationOptions:FurnitureVariant[];createOnly:boolean}|null>(null);
+ let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[];createOnly:boolean}|null>(null);
  let furnitureSelection=$state(-1);
  let furnitureDraft=$state<FurnitureVariant|null>(null);
+ let furnitureDraftCreatable=$state(false);
  let paletteDialogEl:HTMLDialogElement|undefined=$state();
  let paletteEdit=$state<{documentId:number;itemId:number;revision:number;before:PaletteVariant;options:PaletteVariant[]}|null>(null);
  let cafeDialogEl:HTMLDialogElement|undefined=$state();
@@ -834,11 +835,11 @@ import {verifiedFloorplanName} from './floorplan-names';
   const revision=snapshot.revision;
   busy=true;error='';
   try{
-   const [options,creationOptions,display]=await Promise.all([createOnly?Promise.resolve([] as FurnitureVariant[]):requestFurnitureVariants(row.documentId),requestFurnitureCreationVariants(row.documentId),furnitureDisplay?Promise.resolve(furnitureDisplay):loadFurnitureDisplay()]);
+   const [preview,display]=await Promise.all([requestFurniturePreview(row.documentId,before,before),furnitureDisplay?Promise.resolve(furnitureDisplay):loadFurnitureDisplay()]);
    if(!snapshot||snapshot.revision!==revision)return;
    furnitureDisplay=display;
-   furnitureEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:createOnly?creationOptions:options,creationOptions,createOnly};
-   furnitureSelection=-1;furnitureDraft=[...before];variantAddQuantity=1;await tick();
+   furnitureEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:preview.options,createOnly};
+   furnitureSelection=-1;furnitureDraft=[...before];furnitureDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
    if(furnitureDialogEl&&!furnitureDialogEl.open)furnitureDialogEl.showModal();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -1042,14 +1043,22 @@ import {verifiedFloorplanName} from './floorplan-names';
   try{update(await changeInventoryPaletteVariant(edit.documentId,edit.before,next));closePaletteEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
  }
- function furnitureCreationSelection(before:FurnitureVariant,next:FurnitureVariant,options:readonly FurnitureVariant[]):boolean{
-  return options.length>0&&next.some((v,i)=>v!==before[i])&&next.every((v,i)=>v===before[i]||options.some(option=>option[i]===v));
+ async function refreshFurnitureDraft(next:FurnitureVariant){
+  const edit=furnitureEdit;
+  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
+  busy=true;error='';
+  try{
+   const preview=await requestFurniturePreview(edit.documentId,edit.before,next);
+   if(!snapshot||snapshot.revision!==edit.revision||furnitureEdit?.documentId!==edit.documentId)return;
+   furnitureDraft=[...next];furnitureDraftCreatable=preview.creatable;furnitureEdit={...edit,options:preview.options};
+  }catch(e){error=describeError(e)}finally{furnitureSelection=-1;busy=false}
  }
- function selectFurniturePart(index:number){
-  const edit=furnitureEdit,option=edit?.options[index];
-  if(edit&&option&&furnitureDraft){const slot=option.findIndex((v,i)=>v!==edit.before[i]);if(slot>=0){const next:FurnitureVariant=[...furnitureDraft];next[slot]=option[slot];furnitureDraft=next}}
+ async function selectFurniturePart(index:number){
+  const option=furnitureEdit?.options[index];if(option)await refreshFurnitureDraft(option)
  }
- function resetFurniturePart(slot:number){if(furnitureEdit&&furnitureDraft){const next:FurnitureVariant=[...furnitureDraft];next[slot]=furnitureEdit.before[slot];furnitureDraft=next;furnitureSelection=-1}}
+ async function resetFurniturePart(slot:number){
+  if(furnitureEdit&&furnitureDraft){const next:FurnitureVariant=[...furnitureDraft];next[slot]=furnitureEdit.before[slot];await refreshFurnitureDraft(next)}
+ }
  function closeFurnitureEditor(){if(furnitureDialogEl?.open)furnitureDialogEl.close()}
  async function applyInventoryFurnitureVariant(event:SubmitEvent){
   event.preventDefault();if(inventoryAddMode)return;
@@ -1068,7 +1077,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
   const next=furnitureDraft;
   const quantity=variantAddQuantity;
-  if(!next||!validVariantAddQuantity||quantity===undefined||!furnitureCreationSelection(selected.before,next,selected.creationOptions))return;
+  if(!next||!validVariantAddQuantity||quantity===undefined||!furnitureDraftCreatable)return;
   busy=true;error='';
   try{
    update(await createInventoryFurnitureVariant(selected.documentId,selected.before,next,quantity));
@@ -1583,7 +1592,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#if editingAchievement}
      {@const editingSaveGuid=achievementGuid(editingAchievement.guid)}
      {@const dialogIndividualArt=achievementIndividualAtlas?.bySaveGuid.get(editingSaveGuid)}
-     {@const dialogCategoryArt=achievementCategoryAtlas?.bySaveGuid.get(editingSaveGuid)}
+     {@const dialogCategoryArt=resolveAchievementDetailCategoryArt(editingSaveGuid,snapshot.version,achievementCategoryAtlas,achievementIndividualAtlas,achievementGroupHierarchy)}
      <form class="achievement-form" onsubmit={e=>{e.preventDefault();void saveAchievement()}}>
       <div class="date-dialog-heading">
        <h2>{compactCopy.date}</h2>
@@ -1594,7 +1603,7 @@ import {verifiedFloorplanName} from './floorplan-names';
         {#if dialogIndividualArt}
          <span class="achievement-individual-sprite" style:background-image={`url("${achievementIndividualAtlas?.url}")`} style:background-position={`${dialogIndividualArt.x} ${dialogIndividualArt.y}`}></span>
         {:else if dialogCategoryArt}
-         <span class="achievement-category-sprite" style:background-image={`url("${achievementCategoryAtlas?.url}")`} style:background-position={`${dialogCategoryArt.x} ${dialogCategoryArt.y}`}></span>
+         <span class="achievement-category-sprite" data-icon-source={dialogCategoryArt.saveGuid===editingSaveGuid?'category':'native-parent'} style:background-image={`url("${achievementCategoryAtlas?.url}")`} style:background-position={`${dialogCategoryArt.x} ${dialogCategoryArt.y}`}></span>
         {:else}
          <span class="item-art-empty">✧</span>
         {/if}
@@ -2186,12 +2195,12 @@ import {verifiedFloorplanName} from './floorplan-names';
   {/if}
  </dialog>
 
- <dialog class="date-dialog" bind:this={furnitureDialogEl} aria-labelledby="furniture-editor-title" onclose={()=>{furnitureEdit=null;furnitureSelection=-1;furnitureDraft=null}} oncancel={e=>{if(busy)e.preventDefault()}}>
+ <dialog class="date-dialog" bind:this={furnitureDialogEl} aria-labelledby="furniture-editor-title" onclose={()=>{furnitureEdit=null;furnitureSelection=-1;furnitureDraft=null;furnitureDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if furnitureEdit}
    {@const edit=furnitureEdit}
    {@const selected=furnitureDraft??edit.before}
    {@const changed=selected.some((v,i)=>v!==edit.before[i])}
-   {@const canCreate=furnitureCreationSelection(edit.before,selected,edit.creationOptions)}
+   {@const canCreate=furnitureDraftCreatable}
    <form class="date-dialog-inner" onsubmit={e=>{if(edit.createOnly){e.preventDefault();void addInventoryFurnitureVariant()}else void applyInventoryFurnitureVariant(e)}}>
     <div class="date-dialog-heading">
      <h2 id="furniture-editor-title">{inventoryName(edit.itemId)}</h2>
@@ -2200,13 +2209,13 @@ import {verifiedFloorplanName} from './floorplan-names';
     <div class="date-dialog-field">
      <span>{furnitureCopy.title}</span>
      {#each [0,1,2] as slot}
-      {#if edit.before[slot]!==0||edit.options.some(v=>v[slot]!==edit.before[slot])}
+      {#if selected[slot]!==0||edit.before[slot]!==0||edit.options.some(v=>v[slot]!==selected[slot])}
        <div style="display:flex;align-items:center;gap:8px;margin:4px 0">
         <span>{furnitureCopy.part} {String.fromCharCode(65+slot)}</span>
         <span style:background={materialSwatch(furnitureDisplay,edit.itemId,slot,selected[slot])} style="width:24px;height:24px;border:1px solid currentColor;border-radius:4px;flex-shrink:0" aria-hidden="true"></span>
         <span>{materialLabel(furnitureDisplay,selected[slot],furnitureCopy.defaultMaterial)}</span>
         {#if selected[slot]!==edit.before[slot]}
-         <button type="button" class="inventory-furniture-reset" data-furniture-reset={slot} disabled={busy} aria-label={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} title={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} onclick={()=>resetFurniturePart(slot)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>
+         <button type="button" class="inventory-furniture-reset" data-furniture-reset={slot} disabled={busy} aria-label={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} title={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} onclick={()=>void resetFurniturePart(slot)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>
         {/if}
        </div>
       {/if}
@@ -2215,13 +2224,13 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#if edit.options.length}
      <label class="date-dialog-field">
       <span>{furnitureCopy.material}</span>
-      <select bind:value={furnitureSelection} onchange={e=>selectFurniturePart(Number(e.currentTarget.value))} disabled={busy}>
+      <select bind:value={furnitureSelection} onchange={e=>void selectFurniturePart(Number(e.currentTarget.value))} disabled={busy}>
        <option value={-1} disabled>{furnitureCopy.title}</option>
        {#each [0,1,2] as slot}
-        {#if edit.options.some(v=>v[slot]!==edit.before[slot])}
+        {#if edit.options.some(v=>v[slot]!==selected[slot])}
          <optgroup label={furnitureCopy.part+' '+String.fromCharCode(65+slot)}>
           {#each edit.options as v,i}
-           {#if v[slot]!==edit.before[slot]}
+           {#if v[slot]!==selected[slot]}
             <option value={i} data-material-index={v[slot]}>{materialLabel(furnitureDisplay,v[slot],furnitureCopy.defaultMaterial)}</option>
            {/if}
           {/each}
@@ -2240,10 +2249,9 @@ import {verifiedFloorplanName} from './floorplan-names';
      </label>
     {/if}
     {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
-    {#if error}<p class="date-dialog-error" role="alert">{error}</p>{/if}
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFurnitureEditor}>{copy.cancel}</button>
-     {#if edit.creationOptions.length}
+     {#if edit.createOnly||inventoryAddMode||canCreate}
       <button type={edit.createOnly?'submit':'button'} class="inventory-create-furniture" disabled={busy||!validVariantAddQuantity||!canCreate} onclick={()=>{if(!edit.createOnly)void addInventoryFurnitureVariant()}}>{inventoryAddCopy(locale)}</button>
      {/if}
      {#if !edit.createOnly&&!inventoryAddMode}<button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>{/if}
