@@ -3681,6 +3681,50 @@ mod tests {
  }
 
  #[test]
+ fn historical_display_is_independent_of_mutation_eligibility(){
+  let original=revision_test_slot();
+  let mut editor=Editor::open(original.clone()).unwrap();
+  fn uint(n:u32)->Vec<u8>{let mut b=vec![0xce];b.extend(n.to_be_bytes());b}
+  fn guid(g:[u32;4])->Vec<u8>{g.into_iter().flat_map(uint).collect()}
+  fn row(editor:&mut Editor,id:u32,item:i32,tag:i32,parts:Vec<Vec<u8>>)->crate::native::InventoryRow{
+   let mut spans=Vec::new();
+   for part in parts{
+    let start=editor.slot.envelope.decoded.len();
+    editor.slot.envelope.decoded.extend(part);
+    spans.push(start..editor.slot.envelope.decoded.len());
+   }
+   crate::native::InventoryRow{id,item_id:Some(item),unique_id:Some(id as i32),quantity:Some(1),
+    fields:[None,None,None,None],unique_is_nil:Some(false),unique_data:Some(InventoryUniqueData::Opaque{tag}),unique_fields:spans}
+  }
+  let flower=row(&mut editor,100,43114910,2,vec![vec![6],guid(LEGACY_FLOWER_COLOR_GUIDS[1]),guid(LEGACY_FLOWER_PATTERN_GUIDS[0]),guid(LEGACY_FLOWER_COLOR_GUIDS[0])]);
+  let furniture=row(&mut editor,101,61381969,1,vec![guid([0;4]),guid([0;4]),guid([0;4])]);
+  let (source_guid,source_id)=crate::inventory_legacy_wand_guid_data::OTHER_NATIVE_ITEM_GUIDS[0];
+  assert!(crate::inventory_source::legacy_wand_source_id(source_guid).is_none());
+  let wand=row(&mut editor,102,384749651,5,vec![guid(source_guid),vec![0xc0],uint(104),uint(125),uint(0)]);
+  let unknown=row(&mut editor,103,384749651,5,vec![guid([u32::MAX;4]),vec![0xc0],uint(104),uint(125),uint(0)]);
+  let magic=row(&mut editor,104,1429161083,5,vec![guid([0;4]),vec![0xc0],uint(104),uint(125),uint(118)]);
+  let nested=row(&mut editor,105,384749651,5,vec![guid(source_guid),vec![0x92,0x04,0x95,6,1,2,3,4],uint(104),uint(125),uint(0)]);
+  assert_eq!(editor.displayed_unique(&flower).unwrap().display_words(),(7,vec![6,1,0,0]));
+  assert_eq!(editor.displayed_unique(&furniture).unwrap().display_words(),(8,vec![0,0,0]));
+  assert_eq!(editor.displayed_unique(&wand).unwrap().display_words(),(9,vec![source_id as u32,104,125,0,u32::MAX,0]));
+  assert_eq!(editor.displayed_unique(&magic).unwrap().display_words(),(9,vec![0,104,125,118,u32::MAX,0]));
+  assert_eq!(editor.displayed_unique(&nested).unwrap().display_words(),(9,vec![source_id as u32,104,125,0,4,0]));
+  assert_eq!(editor.displayed_unique(&unknown),unknown.unique_data);
+  for r in [&flower,&furniture,&wand,&magic,&nested,&unknown]{
+   assert_eq!(editor.effective_unique(r),r.unique_data);
+   assert!(!editor.unique_quantity_ids.contains(&r.id));
+  }
+  editor.slot.index.inventory.extend([flower,furniture,wand,unknown,magic,nested]);
+  assert_eq!(editor.inventory_flowers().collect::<Vec<_>>(),vec![(100,6,1,0,0)]);
+  assert_eq!(editor.inventory_unique_rows().find(|r|r.0==102).unwrap().3.unwrap().display_words().1[0],source_id as u32);
+  assert_eq!(editor.inventory_flower_edit_hints().count(),0);
+  assert_eq!(editor.inventory_furniture_edit_hints().count(),0);
+  assert_eq!(editor.inventory_wand_edit_hints().count(),0);
+  assert_eq!(editor.inventory_unique_data(102),Some(InventoryUniqueData::Opaque{tag:5}));
+  assert_eq!(editor.revision(),0);
+ }
+
+ #[test]
  fn revision_overflow_rejects_both_edits_without_changing_native_data_or_history(){
   let original=revision_test_slot();
   let mut editor=Editor::open(original.clone()).expect("synthetic source must parse");
