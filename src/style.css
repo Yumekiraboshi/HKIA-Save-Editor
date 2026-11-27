@@ -306,6 +306,12 @@
  /* Scale the entire original sprite cell, not its background coordinates. */
 .inventory-item-art .item-sprite{flex:0 0 96px;transform:scale(calc(.6666667 * var(--inventory-icon-scale,1)))}
 .inventory-item-art .item-art-empty{font-size:24px}
+/* Original bp_grid, behind the result image. The native tiled 114x151
+ * pattern is clipped by its 110x144 Pattern parent; normalize the tile
+ * width to the compact editor's icon area rather than the game's card. */
+.inventory-item-art.inventory-blueprint{isolation:isolate}
+.inventory-blueprint-pattern{position:absolute;inset:0;z-index:0;pointer-events:none;background-size:136.7965% auto;background-position:left bottom;background-repeat:repeat;opacity:0.392156869}
+.inventory-blueprint>.item-sprite,.inventory-blueprint>.item-art-empty{position:relative;z-index:1}
 .inventory-name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;overflow-wrap:anywhere;text-align:center;font-size:11px;line-height:1.35;min-height:2.7em;width:100%}
 .inventory-quantity-form{display:flex;align-items:center;gap:4px}
 .inventory-quantity-form label{display:flex;flex:1;min-width:0;color:var(--muted)}

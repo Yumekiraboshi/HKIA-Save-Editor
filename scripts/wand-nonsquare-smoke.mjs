@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import {wandRemainingSmoke} from './wand-remaining-smoke.mjs';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 
 export async function wandNonSquareSmoke(browser,origin,base){
+ await wandRemainingSmoke(browser,origin,base);
  const {outputFiles}=await build({
   stdin:{contents:"export * from './wand-runtime-art'; export {loadSampledWandOverlay} from './wand-candidate-source';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
   bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env.BASE_URL':JSON.stringify(base)}

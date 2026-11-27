@@ -2478,7 +2478,8 @@ impl Editor {
   if self.slot.envelope.version!=Version::V301||r.id==0||r.id>i32::MAX as u32||
    r.quantity?<0||r.unique_is_nil!=Some(true)||r.fields[2].is_none()||
    (r.quantity==Some(0)&&!self.inventory_can_empty(r)&&
-    !(crate::inventory_source::ordinary_bag_definition(r.item_id?).is_some()&&r.unique_id==Some(0)&&
+    !((crate::inventory_source::ordinary_bag_definition(r.item_id?).is_some()||
+       crate::inventory_source::custom_furniture_extra_reference(r.item_id?).is_some())&&r.unique_id==Some(0)&&
       r.fields.iter().all(Option::is_some)&&(self.inventory_item_rows.get(&r.item_id?)==Some(&1)||
       self.ordinary_furniture_base_distinct(r,r.item_id?)))){return None}
   let item_id=r.item_id?;

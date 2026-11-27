@@ -5816,3 +5816,47 @@ fn complete_ordinary_bag_class_supports_physical_document_removal(){
   assert_eq!(saved.entries(),e.entries());assert_eq!(saved.achievements(),e.achievements());
  }
 }
+#[path="../src/inventory_custom_furniture_reference_data.rs"]
+mod extra_nil_furniture_source;
+
+#[test]
+fn all_verified_extra_nil_furniture_can_refill_without_removal_authority(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let ids:Vec<_>=extra_nil_furniture_source::CUSTOM_FURNITURE_EXTRA_REFERENCE_KEYS.iter()
+  .filter_map(|&(id,_)|{
+   let i=complete_quantity_source::RULES.binary_search_by_key(&id,|r|r.0).unwrap();
+   (complete_bag_source::BAG_FLAGS[i]&1==0).then_some(id)
+  }).collect();
+ assert_eq!(ids.len(),42);
+ let n=(7+ids.len()) as u16;
+ let mut p=vec![0x93,0];p.extend(u(7+ids.len() as u32));p.push(0xdc);p.extend(n.to_be_bytes());
+ p.extend_from_slice(&synthetic_payload("3.0.1")[4..]);
+ for (i,&item) in ids.iter().enumerate(){
+  p.extend(doc(1,arr(vec![u(4+i as u32),u(item as u32),u(0),u(0),vec![0xc0]])));
+ }
+ // An unresolved native reference context prevents last-copy removal,
+ // but the already persisted complete nil rows can be replenished.
+ p.extend(doc(10,arr(vec![u(4+ids.len() as u32),guid([0;4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([0;4]),vec![0xc3],vec![0xc0]])));
+ p.extend(doc(22,arr(vec![u(5+ids.len() as u32)])));
+ let raw=slot_from_payload("3.0.1",p);
+ for zipped in [false,true]{
+  let input=if zipped{zip(&raw)}else{raw.clone()};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let original=e.inventory();assert_eq!(original.len(),ids.len());
+  assert!(original.iter().all(|r|r.editable&&r.quantity==0&&r.quantity_minimum==1&&r.quantity_limit==Some(i32::MAX)));
+  let refill:Vec<_>=original.iter().map(|r|(r.document_id,0,2)).collect();
+  e.change_inventory_quantities(&refill).unwrap();
+  for r in &original{assert!(e.change_inventory_quantity(r.document_id,2,0).is_err());}
+  let cp=e.history_checkpoint().unwrap();
+  let mut recovered=Editor::open(input).unwrap();recovered.restore_history(&cp).unwrap();
+  assert!(recovered.undo_scope(Inventory));assert_eq!(recovered.inventory(),original);
+  assert!(recovered.redo_scope(Inventory));
+  let saved=Editor::open(recovered.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory(),recovered.inventory());
+  assert!(saved.inventory().iter().all(|r|r.quantity==2&&r.quantity_minimum==1));
+  for r in &original{assert_eq!(saved.inventory_original_unique_payload(r.document_id),Some([0xc0].as_slice()));}
+ }
+ let absent=Editor::open(slot("3.0.1")).unwrap();
+ assert!(absent.inventory_creatable().iter().all(|r|!ids.contains(&r.item_id)));
+}
+
