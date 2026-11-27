@@ -45,6 +45,7 @@ import {searchAchievementRows} from './achievement-search';
  import DynamicWandSprite from './DynamicWandSprite.svelte';
  import DynamicArtSprite from './DynamicArtSprite.svelte';
  import {renderNativePlaceholderArt} from './native-placeholder-art';
+ import {nativeResultIconTarget} from './native-result-icon';
  import {selectWandOriginalCell,selectInventoryWandOriginalCell} from './wand-original-subicon';
  import {inventoryWandAppearance,hasNativeWandArt,wandVariantOf,wandVariantLabel,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
@@ -449,6 +450,11 @@ import {verifiedFloorplanName} from './floorplan-names';
    // Native TryGetSubIcon returns the source item's normal UiIcon, even
    // when the wand itself has a native inventory-art entry.
    if(row.itemId===384749651)addWandSource(inventoryWandAppearance(row.itemId,row.unique)?.sourceItemId);
+   const resultId=nativeResultIconTarget(row.itemId,snapshot.version);
+   if(resultId!==undefined&&!inventoryNativeArt?.entries.has(resultId)&&!inventoryNativeArt?.withheld.has(resultId)){
+    const result=inventorySourceItems.get(resultId);
+    if(result&&inventorySourceGroups.has(result[3]))groups.add(result[3]);
+   }
    if(inventoryNativeArt?.entries.has(row.itemId)||inventoryNativeArt?.withheld.has(row.itemId))continue;
    const item=inventorySourceItems.get(row.itemId);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
@@ -1703,6 +1709,10 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#each inventoryRows.slice(0,inventoryLimit) as item (item.documentId)}
      {@const definition=inventorySourceItems.get(item.itemId)}
      {@const nativeSprite=inventoryNativeArt?.entries.get(item.itemId)}
+     {@const resultId=nativeResultIconTarget(item.itemId,snapshot.version)}
+     {@const resultSprite=resultId===undefined?undefined:inventoryOriginalSprite(resultId)}
+     {@const resultOriginal=resultId===undefined?undefined:originalVariantArt[String(resultId)]}
+     {@const resultPlaceholder=resultId!==undefined&&inventoryNativeArt?.placeholders.has(resultId)}
      {@const sprite=definition&&!inventoryNativeArt?.withheld.has(item.itemId)?inventoryIconPacks[definition[3]]?.entries[String(item.itemId)]:undefined}
      {@const flower=flowerDisplay(item.flower,flowerDefinitions,flowerLabels[locale]??{})}
      {@const growth=flowerGrowthKind(item.itemId,item.flower)}
@@ -1736,6 +1746,13 @@ import {verifiedFloorplanName} from './floorplan-names';
          <DynamicPaletteSprite itemId={item.itemId} palette={item.palette} fallback={nativeSprite??sprite}/>
         {:else if (item.flower||hasNativeFlowerArt(item.itemId))&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicFlowerSprite itemId={item.itemId} flower={item.flower} definitions={flowerDefinitions} fallback={nativeSprite??sprite}/>
+        {:else if resultId!==undefined&&resultOriginal}
+         <DyeSprite sprite={resultSprite} sourceKey={inventorySourceItems.get(resultId)?.[1]??''} originalArtUrl={resultOriginal}/>
+        {:else if resultId!==undefined&&resultSprite}
+         <span class="item-sprite" data-inventory-art="native-result" data-result-icon-target={resultId} style:background-image={'url("'+resultSprite.url+'")'}
+          style:background-position={'-'+resultSprite.x+'px -'+resultSprite.y+'px'}></span>
+        {:else if resultPlaceholder}
+         <DynamicArtSprite source="native-placeholder" render={renderNativePlaceholderArt}/>
         {:else if originalVariantArt[String(item.itemId)]||exactVariantArt[String(item.itemId)]||(!nativeSprite&&sprite&&nativeDyePalettes[String(item.itemId)])}
          <DyeSprite sprite={nativeSprite??sprite} palette={nativeDyePalettes[String(item.itemId)]}
           sourceKey={definition?.[1]??''} exactArtUrl={exactVariantArt[String(item.itemId)]} originalArtUrl={originalVariantArt[String(item.itemId)]}/>
