@@ -1,30 +1,30 @@
 <script lang="ts">
  import type {SpriteCell} from './icon-packs';
  import {flowerGrowthKind,type InventoryFlower,type FlowerDisplayDefinitions} from './inventory-flower-display';
- import {renderFlowerArt,renderFlowerOriginalBaseArt} from './flower-runtime-art';
+ import {renderFlowerArt,renderFlowerOriginalBaseArt,renderFlowerDefinitionBaseArt} from './flower-runtime-art';
  import {isStaticFlowerCreationIcon} from './flower-icon-route';
  import {loadFlowerGrowthCell} from './flower-growth-art';
  import {watchDynamicArtVisibility} from './dynamic-art-view';
  import DynamicArtSprite from './DynamicArtSprite.svelte';
- let {itemId,flower,definitions,fallback}:{itemId:number;flower:InventoryFlower;definitions:FlowerDisplayDefinitions;fallback?:SpriteCell}=$props();
+ let {itemId,flower,definitions,fallback}:{itemId:number;flower?:InventoryFlower;definitions:FlowerDisplayDefinitions|null;fallback?:SpriteCell}=$props();
  const growth=$derived(flowerGrowthKind(itemId,flower));
  let near=$state(false);
  let resolved=$state<{id:number;state:number;cell:SpriteCell}|undefined>();
  const setNear=(value:boolean)=>{near=value;};
- const growthCell=$derived(resolved?.id===itemId&&resolved.state===flower.growState?resolved.cell:undefined);
+ const growthCell=$derived(resolved?.id===itemId&&resolved.state===flower?.growState?resolved.cell:undefined);
  const displayed=$derived(growthCell??fallback);
  $effect(()=>{
-  const id=itemId,fields={growState:flower.growState,baseColor:flower.baseColor,pattern:flower.pattern,patternColor:flower.patternColor};
-  if(!near||(growth!=='seed'&&growth!=='uprooted'))return;
+  if(!flower||!near||(growth!=='seed'&&growth!=='uprooted'))return;
+  const id=itemId,fields={...flower};
   let active=true;
   void loadFlowerGrowthCell(id,fields).then(cell=>{if(active&&cell)resolved={id,state:fields.growState,cell};});
   return ()=>{active=false;};
  });
  let render=$derived.by(()=>{
-  const id=itemId,defs=definitions,fields={growState:flower.growState,baseColor:flower.baseColor,pattern:flower.pattern,patternColor:flower.patternColor};
-  return ()=>renderFlowerArt(id,fields,defs);
+  const id=itemId,defs=definitions,fields=flower?{...flower}:undefined;
+  return ()=>fields&&defs?renderFlowerArt(id,fields,defs):Promise.resolve(null);
  });
- let renderPartial=$derived.by(()=>{const id=itemId,fields={growState:flower.growState,baseColor:flower.baseColor,pattern:flower.pattern,patternColor:flower.patternColor};return ()=>renderFlowerOriginalBaseArt(id,fields);});
+ let renderPartial=$derived.by(()=>{const id=itemId,fields=flower?{...flower}:undefined;return ()=>fields?renderFlowerOriginalBaseArt(id,fields):renderFlowerDefinitionBaseArt(id);});
 </script>
 {#if growth==='seed'||growth==='uprooted'}
  <span use:watchDynamicArtVisibility={setNear} class:item-sprite={!!displayed} class:item-art-empty={!displayed}

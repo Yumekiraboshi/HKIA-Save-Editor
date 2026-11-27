@@ -2,6 +2,7 @@
 export type InventoryFlower={growState:number;baseColor:number;pattern:number;patternColor:number};
 // Source species only: tag 7 is also used by flower-crafted clothing.
 const FLOWER_SPECIES=new Set<number>([43114910,183701770,203856820,228573412,252458237,261557677,274491259,275816250,312661096,462608550,668399845,1223758923,1299466625,1331175279,1386186941,1466319046,1554283135,1561432864,1583118562,1669522060,1695731578,1804880447,1934826268,1968535430,2105820233]);
+export function hasNativeFlowerArt(itemId:number):boolean{return FLOWER_SPECIES.has(itemId);}
 export type FlowerGrowthKind='seed'|'plucked'|'uprooted'|'unknown';
 /** Display classification, not an edit rule. Never infer an unknown state. */
 export function flowerGrowthKind(itemId:number,flower:InventoryFlower|undefined):FlowerGrowthKind|null{
