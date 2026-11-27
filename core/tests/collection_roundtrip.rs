@@ -4923,3 +4923,33 @@ fn ordinary_cosmetic_quest_rarity_and_capped_effect_items_share_native_bag_rules
   assert!(empty.change_inventory_quantity((1u32<<31)|item,0,1).is_err())
  }
 }
+
+#[test]
+fn saved_restricted_furniture_material_is_a_row_local_witness_not_an_unlock(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=77485988u32;let make=|value:u32,peer:bool|{
+  let mut p=synthetic_payload("3.0.1");p[3]=if peer{0x97}else{0x96};p[2]=if peer{6}else{5};
+  p.extend(doc(1,arr(vec![u(4),u(item),u(11),u(1),furniture_payload([value,0,0])])));
+  if peer{p.extend(doc(1,arr(vec![u(5),u(item),u(0),u(1),vec![0xc0]])));}
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(287,false);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let before=[287,0,0];let next=[286,0,0];
+  assert_eq!(e.inventory_unique_data(4),Some(U::Furniture{materials:before}));
+  assert!(e.inventory_furniture_variants(4).contains(&next));
+  for bad in [[288,0,0],[289,0,0],[287,287,0]]{assert!(e.change_inventory_furniture_variant(4,before,bad).is_err());}
+  assert!(e.create_inventory_furniture_variant(4,before,[288,0,0],1).is_err());assert!(!e.dirty());
+  e.change_inventory_furniture_variant(4,before,next).unwrap();
+  assert!(e.inventory_furniture_variants(4).contains(&before));
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory_unique_data(4),Some(U::Furniture{materials:before}));
+  assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory_unique_data(4),Some(U::Furniture{materials:next}));
+  assert!(saved.change_inventory_furniture_variant(4,next,before).is_err());
+  assert_eq!(saved.entries(),e.entries());assert_eq!(saved.achievements(),e.achievements());
+ }
+ let mut collision=Editor::open(make(287,true)).unwrap();
+ assert!(collision.change_inventory_furniture_variant(4,[287,0,0],[286,0,0]).is_err());assert!(!collision.dirty());
+}
