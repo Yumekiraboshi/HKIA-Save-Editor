@@ -126,7 +126,7 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
    const guarded=await guardedItemOverlay(appearance.sourceItemId,transform);
    if(guarded){
     ({spritePathId,sourceHash,overlay}=guarded);
-   }else if(itemId===384749651&&PLACEHOLDER_SOURCE_IDS.has(appearance.sourceItemId)){
+   }else if(PLACEHOLDER_SOURCE_IDS.has(appearance.sourceItemId)){
     // Native GetUiIcon returns the same original placeholder Sprite.
     spritePathId='-6646601456236922891';sourceHash=PLACEHOLDER_ASSET.sha256;
     overlay={texture:await loadNativePlaceholderTexture(),
@@ -134,14 +134,16 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
      logicalWidth:256,logicalHeight:256,sampleClamp:[.5,.5,257.5,257.5],
      scale:transform.scale,offsetPercent:transform.offsetPercent,rotation:transform.rotation};
    }else{
-    // The item wand can use a source definition's already-published normal
-    // UiIcon cell; never substitute named dye-colorway art or nested colors.
-    if(itemId!==384749651)return null;
+    // Every native wand uses TryGetSubIcon and the same source transform.
+    // The sampled route checks exact source identity and geometry. It is
+    // read-only artwork, not permission to create or edit a wand variant.
     const direct=await loadSampledWandOverlay(appearance.sourceItemId,transform);
     if(direct){
      sourceHash=WAND_CANDIDATE_SOURCE_SHA;spritePathId=direct.spritePathId;overlay=direct.overlay;
     }else{
-     if(!originalCell||originalCell.itemId!==appearance.sourceItemId)return null;
+     // Retain the existing normalized-cell fallback scope; never infer
+     // a new source identity from the saved wand's shape.
+     if(itemId!==384749651||!originalCell||originalCell.itemId!==appearance.sourceItemId)return null;
      sourceHash='original-item-cell-v2';spritePathId=originalWandCellKey(originalCell);
      overlay=await originalWandOverlay(originalCell,transform);
     }
