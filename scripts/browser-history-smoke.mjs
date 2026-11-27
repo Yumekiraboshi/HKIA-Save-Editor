@@ -327,7 +327,7 @@ async function inventoryFirstWandSmoke(){
   const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
   const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
   assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_absent_wand_ids(),0);
-  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(v.getUint32(0,true),5);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(v.getUint32(0,true),6);
   assert.equal(e.hkia_inventory_snapshot(),0);const iv=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
   const rows=Array.from({length:iv.getUint32(0,true)},(_,i)=>[iv.getInt32(4+i*16+4,true),iv.getInt32(4+i*16+8,true)]);
   assert.ok(rows.some(([id,q])=>id===1429161083&&q===2));

@@ -1133,20 +1133,50 @@ impl Editor {
   }
   out
  }
+ fn absent_wand_source_gate(&self,item:i32)->bool{
+  crate::inventory_source::wand_output_item(item)&&
+   crate::inventory_source::is_uncapped_required_unique_stack(item)&&
+   !self.inventory_item_rows.contains_key(&item)&&
+   !self.pending_wands.iter().any(|(&id,&(i,_,_))|i==item&&self.inventory_changes.contains_key(&id))&&
+   !self.slot.index.inventory_wand_copies&&self.inventory_creation_payload_safe(item)&&
+   !self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)&&self.absent_flower_budget_available()
+ }
+ // Existing positive original ordinary source rows are witnesses only:
+ // neither their quantity nor any acquisition/entitlement data is written.
+ fn has_owned_wand_source(&self,source:i32)->bool{
+  self.inventory_item_rows.get(&source)==Some(&1)&&self.slot.index.inventory.iter().any(|r|
+   r.item_id==Some(source)&&r.id>0&&r.id<PENDING_ITEM&&r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&
+   r.fields.iter().all(Option::is_some)&&r.quantity.is_some_and(|q|q>0)&&
+   self.inventory_changes.get(&r.id).copied().or(r.quantity).is_some_and(|q|q>0))
+ }
+ fn absent_wand_source_allowed(&self,item:i32,source:i32)->bool{
+  source>0&&crate::inventory_source::wand_source_style(item,source)==Some(0)&&
+   (crate::inventory_source::ordinary_creation_item(source)||self.has_owned_wand_source(source))
+ }
+ pub fn inventory_absent_wand_sources(&self,id:u32)->Vec<i32>{
+  if id&PENDING_ITEM==0||self.pending_wands.contains_key(&id){return Vec::new()}
+  let item=(id&!PENDING_ITEM) as i32;
+  if !matches!(item,crate::inventory_source::ITEM_WAND_ID|crate::inventory_source::CRITTER_WAND_ID)||!self.absent_wand_source_gate(item){return Vec::new()}
+  let mut sources=crate::inventory_source::ordinary_creation_ids().filter(|&source|
+   crate::inventory_source::ordinary_creation_item(source)&&crate::inventory_source::wand_source_style(item,source)==Some(0)).collect::<Vec<_>>();
+  sources.extend(self.slot.index.inventory.iter().filter_map(|r|{
+   let source=r.item_id?;
+   (crate::inventory_source::wand_source_style(item,source)==Some(0)&&self.inventory_item_rows.get(&source)==Some(&1)&&
+    r.id>0&&r.id<PENDING_ITEM&&r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.fields.iter().all(Option::is_some)&&
+    r.quantity.is_some_and(|q|q>0)&&self.inventory_changes.get(&r.id).copied().or(r.quantity).is_some_and(|q|q>0)).then_some(source)
+  }));
+  sources.sort_unstable();sources.dedup();sources
+ }
  fn absent_wand_choices(&self,item:i32)->Vec<WandVariant>{
-  if crate::inventory_source::magic_wand_style(item).is_none()||
-   !crate::inventory_source::is_uncapped_required_unique_stack(item)||
-   self.inventory_item_rows.contains_key(&item)||
-   self.pending_wands.iter().any(|(&id,&(i,_,_))|i==item&&self.inventory_changes.contains_key(&id))||
-   self.slot.index.inventory_wand_copies||
-   !self.inventory_creation_payload_safe(item)||
-   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||
-   !self.absent_flower_budget_available(){return Vec::new()}
+  if !self.absent_wand_source_gate(item){return Vec::new()}
+  if crate::inventory_source::magic_wand_style(item).is_none()&&
+   self.inventory_absent_wand_sources(PENDING_ITEM|item as u32).is_empty(){return Vec::new()}
   crate::inventory_source::WAND_MAGIC.iter().flat_map(|&(magic,_)|
    crate::inventory_source::WAND_FLECK.iter().map(move |&(fleck,_)|[magic,fleck])).collect()
  }
  pub fn inventory_absent_wand_ids(&self)->Vec<(i32,i32)>{
-  crate::inventory_source::MAGIC_WAND_STYLES.iter().copied()
+  crate::inventory_source::MAGIC_WAND_STYLES.iter().copied().chain([
+   (crate::inventory_source::ITEM_WAND_ID,0),(crate::inventory_source::CRITTER_WAND_ID,0)])
    .filter(|&(item,_)|!self.absent_wand_choices(item).is_empty()).collect()
  }
  pub fn inventory_wand_creation_variants(&self,id:u32)->Vec<WandVariant>{
@@ -1162,8 +1192,14 @@ impl Editor {
  pub fn create_inventory_wand_variant(&mut self,source_id:u32,expected:WandVariant,next:WandVariant,quantity:i32)->Result<u32,Error>{
   if quantity<=0||!self.inventory_wand_creation_variants(source_id).contains(&next){return Err(Error::Schema)}
   let (item,source_item_id)=if source_id&PENDING_ITEM!=0&&!self.pending_wands.contains_key(&source_id){
-   if expected!=[0;2]{return Err(Error::Schema)}
-   ((source_id&!PENDING_ITEM) as i32,0)
+   let item=(source_id&!PENDING_ITEM) as i32;
+   if crate::inventory_source::magic_wand_style(item).is_some(){
+    if expected!=[0;2]{return Err(Error::Schema)}
+    (item,0)
+   }else{
+    if expected[1]!=0||!self.absent_wand_source_allowed(item,expected[0]){return Err(Error::Schema)}
+    (item,expected[0])
+   }
   }else{
    let (item,source_item_id,_,current,_)=self.wand_context(source_id).ok_or(Error::Schema)?;
    if expected!=current{return Err(Error::Schema)}

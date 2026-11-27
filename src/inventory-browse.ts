@@ -79,7 +79,7 @@ function normalizeInventorySearch(value:string):string{
 /** Shared presentation predicate for browsing and per-category search counts. */
 function matchesInventorySearch(row:InventoryEntry,q:string,editableOnly:boolean,
  localizedNames:Readonly<Record<string,string>>,sourceItems:ReadonlyMap<number,CollectionItem>,variantName?:(row:InventoryEntry)=>string):boolean{
- if(editableOnly&&!row.editable&&!row.unique?.flowerEditable&&!row.unique?.furnitureEditable&&!row.unique?.paletteEditable&&!row.unique?.wandEditable&&!row.cafe?.editable&&!row.boba?.editable&&!row.flowerCreatable&&!row.furnitureCreatable&&!row.wandCreatableStyle)return false;
+ if(editableOnly&&!row.editable&&!row.unique?.flowerEditable&&!row.unique?.furnitureEditable&&!row.unique?.paletteEditable&&!row.unique?.wandEditable&&!row.cafe?.editable&&!row.boba?.editable&&!row.flowerCreatable&&!row.furnitureCreatable&&row.wandCreatableStyle===undefined)return false;
  if(!q)return true;
  const source=sourceItems.get(row.itemId);
  const fields=[String(row.itemId),localizedNames[String(row.itemId)]??'',source?.[5]??'',source?.[6]??'',variantName?.(row)??''].map(normalizeInventorySearch);
@@ -126,7 +126,7 @@ export function inventoryCustomizationSource(row:InventoryEntry):boolean{
   row.unique?.wandEditable||row.cafe?.editable||row.boba?.editable||row.furnitureCreatable);
 }
 export function inventoryAddRows(owned:readonly InventoryEntry[],creatable:readonly InventoryEntry[]):InventoryEntry[]{
- const customCandidates=new Set(creatable.filter(row=>row.flowerCreatable||row.furnitureCreatable||row.wandCreatableStyle).map(row=>row.itemId));
+ const customCandidates=new Set(creatable.filter(row=>row.flowerCreatable||row.furnitureCreatable||row.wandCreatableStyle!==undefined).map(row=>row.itemId));
  const sources=owned.filter(row=>inventoryCustomizationSource(row)&&!customCandidates.has(row.itemId)).map(row=>({...row,editable:false}));
  return [...owned.filter(inventoryRefillable),...creatable,...sources];
 }
