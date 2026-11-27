@@ -1408,10 +1408,10 @@ async function inventoryDynamicFlowerArtSmoke(){
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');
   await page.locator('.inventory-controls input[type="search"]').fill('43114910');
-  const sprites=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"]');
+  const sprites=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"][data-icon-fidelity="source-derived-runtime"]');
   await sprites.nth(3).waitFor({timeout:30_000});
   assert.equal(await sprites.count(),4);
-  await page.locator('.inventory-card .item-sprite[data-icon-fidelity="species-fallback"]').waitFor({timeout:30_000});
+  await page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"][data-icon-fidelity="source-derived-base-only"]').waitFor({timeout:30_000});
   await page.locator('.inventory-card [data-native-decorator="11"] img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
   const effectCard=page.locator('.inventory-card').filter({has:page.locator('[data-native-decorator="11"] img[src$="pattern-3.webp"]')});
   assert.deepEqual(await effectCard.locator('[data-native-decorator]').evaluateAll(els=>els.map(e=>e.getAttribute('data-native-decorator'))),['12','11']);

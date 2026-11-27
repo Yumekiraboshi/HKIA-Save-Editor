@@ -1,7 +1,7 @@
 import {resolveWandBaseTints,type WandBaseAppearance,type WandColor} from './wand-appearance';
 import type {Rgba} from './dynamic-sprite-color';
 import type {PixelBuffer,Rect,SpriteOverlay} from './dynamic-sprite-raster';
-import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,type TextureAsset} from './dynamic-art-assets';
+import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
 import {originalWandOverlay,originalWandCellKey,type WandOriginalCell} from './wand-original-subicon';
 
 const ROOT=import.meta.env.BASE_URL+'dynamic-wand-art/';
@@ -15,6 +15,8 @@ export const WAND_MANIFEST_SHA='5d4d42d95417c8e6222747433b784a32ee9aaebb91216366
 type Row={itemId:number;maskGuid:string;base:{spritePathId:string;sampleRect:Rect;trimTopLeft:Rect;logicalSize:number};mask:{spritePathId:string;sampleRect:Rect;colorSpace:number;filterMode:number;mipCount:number}};
 type Manifest={schema:string;version:string;base:TextureAsset;mask:TextureAsset;alphaOffsetY:number;magic:WandColor[];flecks:WandColor[];rows:Row[]};
 type Source={manifest:Manifest;base:PixelBuffer;mask:PixelBuffer;rows:Map<number,Row>;magic:Map<number,Rgba>;flecks:Map<number,Rgba>};
+type Binding=Omit<Source,'base'|'mask'>;
+let binding:Promise<Binding>|undefined;
 let loading:Promise<Source>|undefined;
 export const WAND_SUBICON_MANIFEST_SHA='e69a97ec439e0574a024aaf9ec4379cb83d6946adc460cc2d7c53ab7b617d1a6';
 type SubRow={characteristicId:number;spritePathId:string;sampleRect:Rect;trimTopLeft:Rect;guardRect:Rect;logicalSize:number};
@@ -46,18 +48,32 @@ function itemSubSources(){
  })().catch(e=>{itemSubLoading=undefined;throw e;});
  return itemSubLoading;
 }
-function sources():Promise<Source>{
- if(!loading)loading=(async()=>{
+function sourceBinding():Promise<Binding>{
+ if(!binding)binding=(async()=>{
   const raw=await loadVerifiedArtAsset(ROOT,'wand-runtime-source-v3.0.1.json',WAND_MANIFEST_SHA,65536);
   const manifest=JSON.parse(new TextDecoder().decode(raw)) as Manifest;
   const rows=new Map(manifest.rows.map(r=>[r.itemId,r]));
   const magic=new Map(manifest.magic.map(r=>[r.characteristicId,r.rgba])),flecks=new Map(manifest.flecks.map(r=>[r.characteristicId,r.rgba]));
   if(manifest.schema!=='HKIA.WandRuntimeSource.1'||manifest.version!=='3.0.1'||rows.size!==9||manifest.rows.length!==9||
     magic.size!==13||flecks.size!==3||manifest.rows.some(r=>r.mask.colorSpace!==0||r.mask.filterMode!==2||r.mask.mipCount!==1))throw Error('WAND_ART_BINDING');
-  const [base,mask]=await Promise.all([loadOpaqueArtTexture(ROOT,manifest.base),loadOpaqueArtTexture(ROOT,manifest.mask)]);
-  return {manifest,base,mask,rows,magic,flecks};
+  return {manifest,rows,magic,flecks};
+ })().catch(error=>{binding=undefined;throw error;});
+ return binding;
+}
+function sources():Promise<Source>{
+ if(!loading)loading=(async()=>{
+  const source=await sourceBinding();
+  const [base,mask]=await Promise.all([loadOpaqueArtTexture(ROOT,source.manifest.base),loadOpaqueArtTexture(ROOT,source.manifest.mask)]);
+  return {...source,base,mask};
  })().catch(error=>{loading=undefined;throw error;});
  return loading;
+}
+export async function renderWandOriginalBaseArt(itemId:number):Promise<Blob|null>{
+ try{
+  const s=await sourceBinding(),row=s.rows.get(itemId);if(!row)return null;
+  const base=await loadOpaqueArtTexture(ROOT,s.manifest.base);
+  return await renderCachedOriginalBase(JSON.stringify([WAND_MANIFEST_SHA,itemId]),{base,baseRect:row.base.sampleRect,trim:row.base.trimTopLeft,alphaOffsetY:s.manifest.alphaOffsetY,logicalSize:row.base.logicalSize});
+ }catch{return null;}
 }
 /** Original dynamic base layer only. Not an inventory-ready final icon:
  * source-item sub-icon selection, transform and composition are separate.

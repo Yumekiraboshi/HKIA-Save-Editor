@@ -1,7 +1,7 @@
 <script lang="ts">
  import type {SpriteCell} from './icon-packs';
  import {flowerGrowthKind,type InventoryFlower,type FlowerDisplayDefinitions} from './inventory-flower-display';
- import {renderFlowerArt} from './flower-runtime-art';
+ import {renderFlowerArt,renderFlowerOriginalBaseArt} from './flower-runtime-art';
  import {isStaticFlowerCreationIcon} from './flower-icon-route';
  import {loadFlowerGrowthCell} from './flower-growth-art';
  import {watchDynamicArtVisibility} from './dynamic-art-view';
@@ -24,6 +24,7 @@
   const id=itemId,defs=definitions,fields={growState:flower.growState,baseColor:flower.baseColor,pattern:flower.pattern,patternColor:flower.patternColor};
   return ()=>renderFlowerArt(id,fields,defs);
  });
+ let renderPartial=$derived.by(()=>{const id=itemId,fields={growState:flower.growState,baseColor:flower.baseColor,pattern:flower.pattern,patternColor:flower.patternColor};return ()=>renderFlowerOriginalBaseArt(id,fields);});
 </script>
 {#if growth==='seed'||growth==='uprooted'}
  <span use:watchDynamicArtVisibility={setNear} class:item-sprite={!!displayed} class:item-art-empty={!displayed}
@@ -38,5 +39,5 @@
   style:background-image={fallback?'url("'+fallback.url+'")':undefined}
   style:background-position={fallback?'-'+fallback.x+'px -'+fallback.y+'px':undefined}>{#if !fallback}✧{/if}</span>
 {:else}
- <DynamicArtSprite {render} source="native-flower" {fallback}/>
+ <DynamicArtSprite {render} {renderPartial} source="native-flower" {fallback}/>
 {/if}

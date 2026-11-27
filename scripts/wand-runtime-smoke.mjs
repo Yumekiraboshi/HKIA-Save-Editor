@@ -16,7 +16,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
   await page.route(root+'__wand_runtime_fixture__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
   await page.goto(root+'__wand_runtime_fixture__.html');
   const out=await page.evaluate(async base=>{
-   const {renderWandBaseArt,renderWandMagicArt,renderWandArt,selectWandOriginalCell,selectInventoryWandOriginalCell,loadIconPack,loadInventoryNativeArt}=await import(base+'__wand_runtime_fixture__.mjs');
+   const {renderWandBaseArt,renderWandOriginalBaseArt,renderWandMagicArt,renderWandArt,selectWandOriginalCell,selectInventoryWandOriginalCell,loadIconPack,loadInventoryNativeArt}=await import(base+'__wand_runtime_fixture__.mjs');
    const m=await (await fetch(base+'dynamic-wand-art/wand-runtime-source-v3.0.1.json')).json();
    const sha=async b=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b)),v=>v.toString(16).padStart(2,'0')).join('');
    const pixels=async blob=>{
@@ -33,7 +33,8 @@ export async function wandRuntimeSmoke(browser,origin,base){
     const a={magicCharacteristicId:104,fleckCharacteristicId:125};
     const b={magicCharacteristicId:109,fleckCharacteristicId:127};
     const first=await renderWandBaseArt(row.itemId,a),second=await renderWandBaseArt(row.itemId,b);
-    rows.push({id:row.itemId,a:await pixels(first),b:await pixels(second),cache:first===await renderWandBaseArt(row.itemId,a)});
+    const original=await renderWandOriginalBaseArt(row.itemId);
+    rows.push({id:row.itemId,a:await pixels(first),b:await pixels(second),original:await pixels(original),originalCache:original===await renderWandOriginalBaseArt(row.itemId),cache:first===await renderWandBaseArt(row.itemId,a)});
    }
    const composed=[];
    for(const magic of m.magic){
@@ -75,9 +76,9 @@ export async function wandRuntimeSmoke(browser,origin,base){
     const blob=await renderWandArt(384749651,{...invAppearance,sourceItemId});
     placeholders.push({pixels:await pixels(blob),same:blob===await renderWandArt(384749651,{...invAppearance,sourceItemId:328475120})});
    }
-   return {rows,composed,itemRows,added,inv,placeholders,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315822,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
+   return {rows,composed,itemRows,added,inv,placeholders,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315822,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
   },base);
-  assert.equal(out.rows.length,9);assert.ok(out.unknown);
+  assert.equal(out.rows.length,9);assert.ok(out.unknown&&out.unknownOriginal);
   assert.equal(out.composed.length,13);assert.ok(out.unsupportedSource);
   assert.equal(out.itemRows.length,25);
   assert.ok(out.added.art.visible&&out.added.cached&&out.added.mismatch&&out.added.noCell);
@@ -91,7 +92,9 @@ export async function wandRuntimeSmoke(browser,origin,base){
   for(const row of out.rows){
    assert.equal(row.a.width,96);assert.equal(row.a.height,96);assert.ok(row.a.visible&&row.b.visible);
    assert.equal(row.a.alpha,row.b.alpha);assert.notEqual(row.a.rgba,row.b.rgba,'same item must render different original color inputs: '+row.id);
-   assert.ok(row.cache);
+   assert.ok(row.cache&&row.originalCache&&row.original.visible);
+   assert.equal(row.original.alpha,row.a.alpha);
+   assert.equal(row.original.width,96);assert.equal(row.original.height,96);
   }
   console.log('CHROMIUM DYNAMIC WAND BASE PASS: 9 native wand base layers, color variants, alpha, shared cache and unknown-ID refusal');
  }finally{await context.close();}
