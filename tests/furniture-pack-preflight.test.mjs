@@ -5,7 +5,7 @@ function fixture(){
  const ref={kind:'texture',sha256:'a'.repeat(64),bytes:4};
  const sources={base:{textures:{}},additionalPatterns:{rows:[]}},cubemaps={a:{sha256:'a'},b:{sha256:'b'}},authored={rig:{maxObjectSize:1,considerLossyScale:false}};
  const cases=[{itemId:1,indices:[0,0,0]},{itemId:2,indices:[0,0,0]}],calls=[];
- const api={furniturePayloadReferences:()=>[ref,ref],authoredPreviewCamera:()=>({mountWorld:[],viewProjection:[],cameraPosition:[]}),fitFurnitureMultiStaticBounds:(_s,request)=>({request}),resolveFurnitureMultiDiagnostic:(_s,r)=>{if(r.itemId===2)throw Error('UNSUPPORTED');return {plans:[{},{}]}}};
+ const api={furnitureNullPatternRequiresOpacity:p=>!!p.requiresOpacity,verifyFurnitureNullPatternOpacity:async()=>assert.fail('unexpected opacity proof'),furniturePayloadReferences:()=>[ref,ref],authoredPreviewCamera:()=>({mountWorld:[],viewProjection:[],cameraPosition:[]}),fitFurnitureMultiStaticBounds:(_s,request)=>({request}),resolveFurnitureMultiDiagnostic:(_s,r)=>{if(r.itemId===2)throw Error('UNSUPPORTED');return {plans:[{},{}]}}};
  const pack={sources,cubemaps,read:async r=>{calls.push(r);return new ArrayBuffer(4)}};
  return {api,pack,cases,authored,calls};
 }
@@ -17,4 +17,21 @@ test('payload verification failure aborts before drawing plans',async()=>{
  const {api,pack,cases,authored}=fixture();api.fitFurnitureMultiStaticBounds=()=>assert.fail('must not plan before verifying');
  await assert.rejects(furniturePackPreflight(api,{...pack,read:async()=>{throw Error('FURNITURE_PAYLOAD_HASH')}},cases,authored),/FURNITURE_PAYLOAD_HASH/);
  await assert.rejects(furniturePackPreflight(api,{...pack,read:async()=>new ArrayBuffer(3)},cases,authored),/FURNITURE_PREFLIGHT_PAYLOAD/);
+});
+
+test('preflight enforces the shared draw-time byte prerequisite and reuses the proof for repeated variants',async()=>{
+ const {api,pack,authored}=fixture(),baseMap={format:12,sha256:'a'.repeat(64),bytes:4};
+ const draw={kind:'forward',requiresOpacity:true,baseMap};
+ api.resolveFurnitureMultiDiagnostic=()=>({plans:[draw,draw]});
+ let calls=0;
+ api.verifyFurnitureNullPatternOpacity=async(p,read)=>{
+  calls++;assert.equal(p,draw);assert.equal((await read({kind:'texture',sha256:baseMap.sha256,bytes:4})).byteLength,4);
+  throw Error('FURNITURE_MULTI_NULL_PATTERN_CONTRIBUTES');
+ };
+ const cases=[{itemId:1,indices:[0,0,0]},{itemId:1,indices:[1,0,0]}];
+ const refused=await furniturePackPreflight(api,pack,cases,authored);
+ assert.equal(calls,1);assert.equal(refused.prepared,0);assert.equal(refused.rejected,2);assert.equal(refused.reasonCounts.FURNITURE_MULTI_NULL_PATTERN_CONTRIBUTES,2);
+ api.verifyFurnitureNullPatternOpacity=async()=>{calls++};
+ const allowed=await furniturePackPreflight(api,pack,cases,authored);
+ assert.equal(calls,2);assert.equal(allowed.prepared,2);assert.equal(allowed.result[0].draws,2);
 });

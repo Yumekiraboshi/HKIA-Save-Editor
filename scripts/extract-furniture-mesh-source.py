@@ -91,13 +91,15 @@ def array_ptr(b):
 
 def native_submeshes(sm,fmt,nv,ib):
     n=u(sm) if len(sm)>=4 else 0
-    if fmt!=0 or not 1<=n<=64 or len(sm)!=4+48*n or not 1<=nv<=65536 or len(ib)%2:raise ValueError('unsupported submesh/index format')
+    if fmt not in (0,1):raise ValueError('unsupported submesh/index format')
+    width=2 if fmt==0 else 4;code='H' if fmt==0 else 'I'
+    if not 1<=n<=64 or len(sm)!=4+48*n or not 1<=nv<=(65536 if fmt==0 else 64*1024*1024//12) or len(ib)%width or len(ib)//width>6*1024*1024:raise ValueError('unsupported submesh/index format')
     cursor=0;rows=[]
     for i in range(n):
         p=4+48*i;first,count,top,base,fv,vc=struct.unpack_from('<6I',sm,p);bounds=list(struct.unpack_from('<6f',sm,p+24))
-        if first!=cursor or not count or count%3 or top or base or not vc or fv+vc>nv or first+2*count>len(ib) or not all(math.isfinite(x) for x in bounds) or any(x<0 for x in bounds[3:]):raise ValueError('submesh range')
-        if any(not fv<=x[0]<fv+vc for x in struct.iter_unpack('<H',ib[first:first+2*count])):raise ValueError('submesh index bounds')
-        rows.append({'firstByte':first,'indexCount':count,'firstVertex':fv,'vertexCount':vc,'bounds':bounds});cursor+=2*count
+        if first!=cursor or not count or count%3 or top or base or not vc or fv+vc>nv or first+width*count>len(ib) or not all(math.isfinite(x) for x in bounds) or any(x<0 for x in bounds[3:]):raise ValueError('submesh range')
+        if any(not fv<=x[0]<fv+vc or x[0]==(1<<(8*width))-1 for x in struct.iter_unpack('<'+code,ib[first:first+width*count])):raise ValueError('submesh index bounds')
+        rows.append({'firstByte':first,'indexCount':count,'firstVertex':fv,'vertexCount':vc,'bounds':bounds});cursor+=width*count
     if cursor!=len(ib) or (n==1 and (rows[0]['firstVertex']!=0 or rows[0]['vertexCount']!=nv)):raise ValueError('submesh coverage')
     return rows
 
@@ -164,6 +166,7 @@ def extract(raw, bundle_name, guid, item_id, audit, resolve_cab=None):
     if p!=len(s):raise ValueError('slot object length')
     packed=bytearray();meshes={};scene=[];seen=set();materials={};mesh_origins={};external_meshes={}
     def put(data):
+        if ((len(packed)+3)&~3)+len(data)>64*1024*1024:raise ValueError('geometry payload limit')
         while len(packed)%4:packed.append(0)
         pos=len(packed);packed.extend(data);return [pos,len(data),sha(data)]
     def mesh(ref):
@@ -204,10 +207,10 @@ def extract(raw, bundle_name, guid, item_id, audit, resolve_cab=None):
             end=max(end,o+fmt[ft]*dim)
         if end!=stride or channels[0]!=[0,0,0,3]:raise ValueError('stride mismatch')
         vb=source_stream[off:off+size];ib=m['m_IndexBuffer'];n=u(ib);ib=ib[4:4+n];fmt=u(m['m_IndexFormat']);sm=m['m_SubMeshes']
-        subs=native_submeshes(sm,fmt,nv,ib);count=len(ib)//2
-        positions=[struct.unpack_from('<3f',vb,i*stride) for i in range(nv)]
-        if not all(math.isfinite(x) for row in positions for x in row):raise ValueError('nonfinite vertices')
+        subs=native_submeshes(sm,fmt,nv,ib);count=len(ib)//(2 if fmt==0 else 4)
+        if not all(math.isfinite(x) for i in range(nv) for x in struct.unpack_from('<3f',vb,i*stride)):raise ValueError('nonfinite vertices')
         meshes[pid]={'name':string(m['m_Name'])[0],'objectSha256':sha(mesh_object),'vertexCount':nv,'indexCount':count,'stride':stride,'channels':channels,'vertexBytes':put(vb),'indexBytes':put(ib),'bounds':[list(struct.unpack('<6f',m['m_LocalAABB']))], 'streamOffset':off}
+        if fmt==1:meshes[pid]['indexFormat']=1
         if len(subs)>1:meshes[pid]['submeshes']=subs
         if file_id:meshes[pid].update(sourceCab=origin,sourceBundle=source_name,sourceBundleSha256=source_hash)
         return pid
