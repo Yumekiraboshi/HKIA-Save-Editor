@@ -2444,11 +2444,63 @@ fn chef_quantities_distinguish_complete_ordered_native_variant_keys(){
  }
  for (item,first,peer) in [
   (203331651,a.clone(),a.clone()),(1798633565,d.clone(),d.clone()),
-  (203331651,a.clone(),cafe(vec![0],vec![6])),(1798633565,d.clone(),boba([14,0,11,19,99])),
+  (1798633565,d.clone(),boba([14,0,11,19,99])),
   (203331651,a.clone(),vec![0xc0]),(1798633565,d.clone(),vec![0xc0])
  ]{
   let mut ed=Editor::open(make(vec![(item,first),(item,peer)])).unwrap();
   assert!(!ed.inventory()[0].editable);assert!(ed.change_inventory_quantity(4,2,0).is_err());assert!(!ed.dirty());
+ }
+}
+
+#[test]
+fn cafe_existing_pairs_and_complete_unsupported_peers_are_independent(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=1338995084u32;
+ let original=[44,49,48,9,6,9];let intermediate=[44,49,48,6,6,9];let target=[44,49,48,6,46,9];
+ let encode=|v:[i32;6]|arr(vec![vec![3],arr(vec![arr(v[..3].iter().map(|&w|u(w as u32)).collect()),arr(v[3..].iter().map(|&w|u(w as u32)).collect())])]);
+ let unsupported=arr(vec![vec![3],arr(vec![arr(vec![u(0)]),arr(vec![u(6)])])]);
+ for zipped in [false,true]{
+  let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=0x97;
+  p.extend(doc(1,arr(vec![u(4),u(item),u(21),u(2),encode(original)])));
+  p.extend(doc(1,arr(vec![u(5),u(item),u(22),u(2),unsupported.clone()])));
+  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory()[0].editable);assert!(!e.inventory()[1].editable);
+  assert!(e.inventory_cafe_rows().any(|(id,v,edit)|id==4&&v==original&&edit));
+  let (options,creatable)=e.inventory_cafe_preview(4,original,original).unwrap();
+  assert!(!creatable&&options.iter().any(|r|r.0==intermediate));
+  assert!(!e.inventory_cafe_preview(4,original,intermediate).unwrap().1);
+  assert!(e.create_inventory_cafe_variant(4,original,intermediate,1).is_err());
+  assert!(e.inventory_cafe_preview(4,original,target).unwrap().1);
+  assert!(!e.dirty());
+  e.change_inventory_cafe_variant(4,original,intermediate).unwrap();
+  e.change_inventory_cafe_variant(4,intermediate,target).unwrap();
+  e.change_inventory_quantity(4,2,0).unwrap();
+  assert!(e.undo_scope(Inventory));assert!(e.redo_scope(Inventory));
+  let saved=Editor::open(e.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity,0);assert!(saved.inventory()[0].editable);
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(unsupported.as_slice()));
+  assert!(saved.inventory_cafe_rows().any(|(id,v,edit)|id==4&&v==target&&edit));
+ }
+}
+#[test]
+fn large_dango_family_has_no_arbitrary_variant_count_limit(){
+ let item=1338995084u32;
+ let pairs=[(44,6),(49,46),(48,9),(62,6),(50,46),(55,25),(39,46)];
+ let mut variants=Vec::new();
+ for &(a,x) in &pairs{for &(b,y) in &pairs{for &(c,z) in &pairs{variants.push([a,b,c,x,y,z]);}}}
+ let original=variants[0];let target=variants[300];
+ let encode=|v:[i32;6]|arr(vec![vec![3],arr(vec![arr(v[..3].iter().map(|&w|u(w as u32)).collect()),arr(v[3..].iter().map(|&w|u(w as u32)).collect())])]);
+ for zipped in [false,true]{
+  let base=synthetic_payload("3.0.1");let mut p=vec![0x93,0];p.extend(u(300));p.push(0xdc);p.extend(262u16.to_be_bytes());p.extend(&base[4..]);
+  for (i,&v) in variants[..257].iter().enumerate(){p.extend(doc(1,arr(vec![u(4+i as u32),u(item),u(301+i as u32),u(2),encode(v)])));}
+  let raw=slot_from_payload("3.0.1",p);let mut e=Editor::open(if zipped{zip(&raw)}else{raw}).unwrap();
+  assert_eq!(e.inventory_cafe_rows().filter(|r|r.2).count(),257);
+  assert!(e.inventory_cafe_preview(4,original,target).unwrap().1);
+  e.create_inventory_cafe_variant(4,original,target,3).unwrap();
+  let saved=Editor::open(e.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory_cafe_rows().count(),258);
+  assert!(saved.inventory_cafe_rows().any(|(_,v,edit)|v==target&&edit));
  }
 }
 
