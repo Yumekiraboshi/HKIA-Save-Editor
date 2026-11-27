@@ -442,6 +442,9 @@ impl Editor {
   if let Some(&identity)=self.wand_variant_changes.get(&row.id){
    return Self::wand_appearance(row.item_id?,identity)
   }
+  if matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))&&self.unique_quantity_ids.contains(&row.id){
+   return Self::wand_appearance(row.item_id?,self.legacy_wand_identity(row)?)
+  }
   self.flower_variant_changes.get(&row.id).copied().map(flower_unique)
    .or_else(||self.furniture_variant_changes.get(&row.id).copied().map(|materials|InventoryUniqueData::Furniture{materials}))
    .or_else(||self.palette_variant_changes.get(&row.id).copied().map(|rgba_bits|InventoryUniqueData::Palette{rgba_bits}))
@@ -1182,8 +1185,10 @@ impl Editor {
  // Zero is more restrictive than positive quantity changes. Unknown legacy
  // GUID targets cannot be joined to these six integer source IDs yet.
  fn legacy_wand_identity(&self,row:&crate::native::InventoryRow)->Option<WandData>{
+  Self::legacy_wand_identity_in(&self.slot.envelope.decoded,row)
+ }
+ fn legacy_wand_identity_in(decoded:&[u8],row:&crate::native::InventoryRow)->Option<WandData>{
   if !matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))||row.unique_fields.len()!=5{return None}
-  let decoded=&self.slot.envelope.decoded;
   let mut c=Cursor::new(decoded.get(row.unique_fields[0].clone())?);
   let mut guid=[0;4];for word in &mut guid{*word=c.int(0,u32::MAX as i128).ok()? as u32;}
   if c.pos!=c.bytes.len(){return None}
@@ -1231,7 +1236,10 @@ impl Editor {
   Some(InventoryUniqueData::WandAppearance{source_item_id,magic,fleck,style,source_tag,source_count,source_words})
  }
  fn original_wand_identity(&self,id:u32)->Option<WandData>{
-  self.pending_wands.get(&id).map(|&(_,v)|v).or_else(||Self::wand_identity(self.slot.index.inventory.iter().find(|r|r.id==id)?))
+  self.pending_wands.get(&id).map(|&(_,v)|v).or_else(||{
+   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+   Self::wand_identity(row).or_else(||self.legacy_wand_identity(row))
+  })
  }
  fn wand_family_count(&self,item:i32)->usize{
   self.inventory_item_rows.get(&item).copied().unwrap_or(0)+self.pending_wands.values().filter(|&&(i,_)|i==item).count()
@@ -1272,7 +1280,7 @@ impl Editor {
  pub fn inventory_wand_edit_hints(&self)->impl Iterator<Item=u32>+'_{
   self.slot.index.inventory.iter().filter_map(move |r|{
    let item=r.item_id?;
-   let identity=Self::wand_identity(r)?;
+   let identity=Self::wand_identity(r).or_else(||self.legacy_wand_identity(r))?;
    (self.unique_quantity_ids.contains(&r.id)&&!self.slot.index.inventory_wand_copies&&self.wand_family_count(item)<=256&&
     (Self::wand_materials(identity)==WAND_NIL_MATERIALS||self.wand_source_edit_safe(r.id,item))).then_some(r.id)
   }).chain(self.pending_wands.keys().copied().filter(|id|self.inventory_changes.contains_key(id)))
@@ -1430,6 +1438,7 @@ impl Editor {
    .filter(|&(item,_)|!self.absent_wand_choices(item).is_empty()).collect()
  }
  fn wand_creation_gate(&self,id:u32,item:i32)->bool{
+  if self.slot.index.inventory.iter().any(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))){return false}
   let qty=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
   qty.is_some_and(|q|q>0)&&self.wand_family_count(item)<256&&self.absent_flower_budget_available()&&
    self.inventory_creation_payload_safe(item)&&!self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)
@@ -1469,8 +1478,11 @@ impl Editor {
  }
  // Source replacement uses the stronger original zero/reference gate.
  fn wand_source_edit_safe(&self,id:u32,item:i32)->bool{
-  if !matches!(item,crate::inventory_source::ITEM_WAND_ID|crate::inventory_source::CRITTER_WAND_ID)||
-   self.wand_source_reservations(item).is_none(){return false}
+  if !matches!(item,crate::inventory_source::ITEM_WAND_ID|crate::inventory_source::CRITTER_WAND_ID){return false}
+  if let Some(row)=self.slot.index.inventory.iter().find(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))){
+   return self.unique_quantity_ids.contains(&id)&&self.legacy_wand_zero_reference_safe(row)
+  }
+  if self.wand_source_reservations(item).is_none(){return false}
   if id&PENDING_ITEM!=0{return self.pending_wands.contains_key(&id)&&self.inventory_changes.contains_key(&id)&&
    self.inventory_creation_payload_safe(item)&&!self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)}
   self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|self.wand_zero_reference_safe(r))
@@ -2832,7 +2844,11 @@ impl Editor {
     for (i,field) in [0usize,2,3].into_iter().enumerate(){
      if original[i]==v[i]{continue}
      let span=row.unique_fields.get(field).cloned().ok_or(Error::Schema)?;
-     let mut encoded=vec![0xd2];encoded.extend(v[i].to_be_bytes());patches.push((span,encoded));
+     let encoded=if field==0&&matches!(row.unique_data,Some(InventoryUniqueData::Opaque{tag:5})){
+      let words=crate::inventory_source::legacy_wand_source_guid(v[0]).ok_or(Error::Schema)?;
+      let mut bytes=Vec::with_capacity(20);for word in words{bytes.push(0xce);bytes.extend(word.to_be_bytes());}bytes
+     }else{let mut bytes=vec![0xd2];bytes.extend(v[i].to_be_bytes());bytes};
+     patches.push((span,encoded));
     }
     if original[3..]!=v[3..]{
      if !self.valid_wand_nested_target(row.id,item,original,original,*v){return Err(Error::Schema)}
@@ -3007,7 +3023,11 @@ impl Editor {
    a.id!=b.id||a.item_id!=b.item_id||a.unique_id!=b.unique_id||
    a.unique_is_nil!=b.unique_is_nil||
    a.quantity!=self.inventory_changes.get(&b.id).copied().or(b.quantity)||
-   a.unique_data!=self.effective_unique(b)||
+   (if matches!(b.unique_data,Some(InventoryUniqueData::Opaque{tag:5})){
+    a.unique_data!=b.unique_data||
+     (self.unique_quantity_ids.contains(&b.id)&&Self::legacy_wand_identity_in(&reread.envelope.decoded,a)!=
+      self.wand_variant_changes.get(&b.id).copied().or_else(||self.legacy_wand_identity(b)))
+   }else{a.unique_data!=self.effective_unique(b)})||
    if self.flower_variant_changes.contains_key(&b.id){
     a.unique_fields.len()!=4||b.unique_fields.len()!=4||
     (0..4).any(|i|{
@@ -3020,7 +3040,8 @@ impl Editor {
     b.unique_data.and_then(furniture_variant).is_none_or(|original|(0..3).any(|i|
      original[i]==next[i]&&reread.envelope.decoded[a.unique_fields[i].clone()]!=original_payload[b.unique_fields[i].clone()]))
    }else if let Some(next)=self.wand_variant_changes.get(&b.id){
-    Self::wand_identity(a)!=Some(*next)||Self::wand_identity(b).is_none_or(|original|{
+    Self::wand_identity(a).or_else(||Self::legacy_wand_identity_in(&reread.envelope.decoded,a))!=Some(*next)||
+    Self::wand_identity(b).or_else(||self.legacy_wand_identity(b)).is_none_or(|original|{
      if a.unique_fields.len()!=5||b.unique_fields.len()!=5{return true}
      if (0usize..5).any(|i|{
       let unchanged=match i{0=>original[0]==next[0],1=>original[3..]==next[3..],2=>original[1]==next[1],3=>original[2]==next[2],_=>true};

@@ -360,6 +360,10 @@ pub(crate) fn magic_wand_style(item:i32)->Option<i32>{
 pub(crate) const ITEM_WAND_ID:i32=384749651;
 pub(crate) const CRITTER_WAND_ID:i32=1304219546;
 const CRITTER_WAND_SOURCES:&[i32]=&[7285157,79024873,112622136,702286800,711665739,767798085,897162761,1112156413,1327542038,2011076305];
+pub(crate) fn legacy_wand_source_guid(item:i32)->Option<[u32;4]>{
+ if item==0{return Some([0;4])}
+ crate::inventory_legacy_wand_guid_data::LEGACY_WAND_SOURCE_GUIDS.iter().find(|r|r.1==item).map(|r|r.0)
+}
 pub(crate) fn legacy_wand_source_id(guid:[u32;4])->Option<i32>{
  if guid==[0;4]{return Some(0)}
  use crate::inventory_legacy_wand_guid_data::LEGACY_WAND_SOURCE_GUIDS as ROWS;
