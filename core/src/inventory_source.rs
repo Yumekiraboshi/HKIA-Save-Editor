@@ -1,6 +1,7 @@
 //! Source-defined v3.0.1 item quantity semantics. No entitlement inference.
 use crate::inventory_source_data::{RULES,CUSTOM_CAPS};
 use crate::inventory_tradeable_data::TRADEABLE_CREATION_BITS;
+use crate::inventory_tradeable_reference_data::TRADEABLE_NONCLOTHING_REFERENCE_KEYS;
 use crate::inventory_furniture_reference_data::FURNITURE_REFERENCE_KEYS;
 use crate::inventory_clothing_reference_data::{CLOTHING_REFERENCE_ROWS,CLOTHING_REFERENCE_GROUPS,FLOWER_CLOTHING_REFERENCE_KEYS};
 use crate::inventory_gathered_data::{GATHERED_IDS,FOOD_BAIT_IDS};
@@ -92,6 +93,13 @@ fn ordinary_tradeable_creation_index(i:usize)->bool{
 pub(crate) fn ordinary_creation_item(item_id:i32)->bool{
  RULES.binary_search_by_key(&item_id,|row|row.0).ok().is_some_and(ordinary_tradeable_creation_index)
 }
+/// Exact source Item ID/GUID join. Non-clothing only: outfit/piece GUID
+/// references require the independently verified clothing crosswalk.
+pub(crate) fn ordinary_tradeable_nonclothing_reference(item_id:i32)->Option<u32>{
+ TRADEABLE_NONCLOTHING_REFERENCE_KEYS.binary_search_by_key(&item_id,|row|row.0).ok()
+  .map(|i|TRADEABLE_NONCLOTHING_REFERENCE_KEYS[i].1)
+  .filter(|_|ordinary_creation_item(item_id))
+}
 pub(crate) fn ordinary_creation_ids()->impl Iterator<Item=i32>{
  ordinary_membership_ids().chain(RULES.iter().enumerate().filter_map(|(i,&(id,_))|(ordinary_tradeable_creation_index(i)&&!ordinary_membership_item(id)).then_some(id)))
 }
@@ -155,6 +163,18 @@ mod tests{
   assert!(RULES.iter().filter(|&&(_,f)|f&16!=0).all(|&(id,_)|ordinary_creation_item(id)));
   for id in [517031,13938575,21295337,40179426,362307007]{assert!(ordinary_creation_item(id));}
   for id in [2773515,3445697,3919283,4881112,1835273963,1798633565,1900000001,460708033]{assert!(!ordinary_creation_item(id));}
+ }
+ #[test]fn tradeable_nonclothing_reference_crosswalk_is_complete_and_denial_only(){
+  let rows=TRADEABLE_NONCLOTHING_REFERENCE_KEYS;
+  assert_eq!(rows.len(),2575);
+  assert!(rows.windows(2).all(|r|r[0].0<r[1].0));
+  assert_eq!(rows.iter().map(|r|r.1).collect::<std::collections::HashSet<_>>().len(),2575);
+  assert!(rows.iter().all(|&(id,key)|ordinary_creation_item(id)&&ordinary_tradeable_nonclothing_reference(id)==Some(key)&&ordinary_quantity_limit(id)==Some(i32::MAX)));
+  assert!(FURNITURE_REFERENCE_KEYS.iter().all(|&(id,key)|ordinary_tradeable_nonclothing_reference(id)==Some(key)));
+  for (id,key) in [(13938575,1491140200),(21295337,3885305771),(40179426,735223230),(362307007,3217519292)]{
+   assert_eq!(ordinary_tradeable_nonclothing_reference(id),Some(key));
+  }
+  for id in [517031,315822,460708033,1900000001]{assert_eq!(ordinary_tradeable_nonclothing_reference(id),None);}
  }
  #[test]fn limits_and_required_unique_are_not_guessed(){
   assert_eq!(ordinary_quantity_limit(315822),Some(i32::MAX));

@@ -296,3 +296,8 @@ The ordinary Add catalog uses the complete source-verified 6,521-ID tradeable, n
 #### First seed and uprooted plant stacks
 
 For the 23 unrestricted species with verified default color definitions and source-native SeedIcon/GrownTroweledIcon bindings (see flower-growth-art.md), the absent-flower editor may create the first complete tag-7 stack in the native inventory states Seed (0), Plucked (6), or GrownTroweled (7). A currently offered plucked default remains the source witness, and Rust validates the full chosen tuple and reserves all active peer identities. Legacy zero-witness requests remain plucked-default-only. Crafted clothing remains state 6; existing stack growth state edits remain unsupported. No new species, recipe, entitlement, planted garden state or placement mutation. Raw/ZIP tests and reparse are required; real game acceptance remains unverified.
+
+
+#### Existing ordinary tradeable non-clothing zero/refill (v3.0.1)
+
+For the 2,575 non-clothing members of the 6,521 verified ordinary tradeable definitions, the native Item ID/GUID reference crosswalk extends the existing zero/refill path. Require a single complete UID-zero nil ordinary row, complete typed item/payload/placement/clothing-reference indexes, no matching direct or copied Item ID and no matching GUID fingerprint in either reference index. Existing independently authorized families keep their prior gates. The 3,946 clothing candidates do not use this new fallback; outfit/piece reference closure must be established separately. Native zero clamp preserves the saved document and payload, and the same CAS, batch, history, recovery and reparse apply. No event, quest, entitlement or placement mutations. Actual game acceptance remains unverified.

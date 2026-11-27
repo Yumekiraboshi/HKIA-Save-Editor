@@ -3406,6 +3406,44 @@ fn ordinary_furniture_source_remains_available_after_custom_stack_export(){
 }
 
 #[test]
+fn expanded_nonclothing_tradeable_zero_refill_and_reference_guards(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=13938575u32;let other=21295337u32;
+ let native_guid=[0xea8e0484,0x4ff95a6a,0xf2e7d4b6,0xb50963dd];
+ let legacy=arr(vec![guid(native_guid),guid([1,2,3,4]),u(0),u(0),u(0),u(0),u(0),u(0),
+  vec![0xc0],vec![0xc0],vec![0xc0],u(0),arr(vec![]),arr(vec![]),u(0)]);
+ let home=|legacy:Vec<Vec<u8>>,wall:u32|{
+  arr(vec![guid([41,42,43,44]),arr(legacy),u(wall),u(0),guid([0;4]),l(0),
+   vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])])
+ };
+ let make=|h:Option<Vec<u8>>|{
+  let mut payload=synthetic_payload("3.0.1");payload[3]=0x97+u8::from(h.is_some());
+  for (id,it) in [(4,item),(5,other)]{payload.extend(doc(1,arr(vec![u(id),u(it),u(0),u(6),vec![0xc0]])))}
+  if let Some(h)=h{payload.extend(doc(32,arr(vec![u(6),guid([7,0,0,0]),u(0),
+   arr(vec![doc(8,arr(vec![arr(vec![h])]))])])));}
+  slot_from_payload("3.0.1",payload)
+ };
+ for zipped in [false,true]{
+  let raw=make(None);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory().iter().all(|r|r.quantity_minimum==0));
+  e.change_inventory_quantities(&[(4,6,0),(5,6,0)]).unwrap();
+  assert_eq!(e.history().len(),1);
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert!(saved.inventory().iter().all(|r|r.quantity==0&&r.quantity_minimum==0));
+  saved.change_inventory_quantity(4,0,3).unwrap();
+  let reopened=Editor::open(saved.export().unwrap()).unwrap();assert_eq!(reopened.inventory()[0].quantity,3);
+  assert_eq!(reopened.inventory_original_unique_payload(4),Some([0xc0].as_slice()));
+ }
+ for h in [home(vec![legacy],0),home(vec![],item)]{
+  let mut e=Editor::open(make(Some(h))).unwrap();
+  assert_eq!(e.inventory()[0].quantity_minimum,1);assert_eq!(e.inventory()[1].quantity_minimum,0);
+  assert!(e.change_inventory_quantities(&[(4,6,0),(5,6,0)]).is_err());assert!(!e.dirty());
+ }
+}
+#[test]
 fn ordinary_tradeable_event_comic_music_and_material_addition_uses_native_membership(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let ids=[517031,13938575,21295337,40179426,362307007];
