@@ -4031,7 +4031,14 @@ fn first_item_wand_copies_verified_owned_furniture_without_touching_source(){
   let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();recovered.restore_history(&cp).unwrap();
   assert_eq!(recovered.inventory(),e.inventory());assert!(recovered.undo_scope(Inventory));assert!(recovered.redo_scope(Inventory));
   let mut saved=Editor::open(recovered.export().unwrap()).unwrap();
-  assert_eq!(saved.inventory()[0],original);assert_eq!(saved.inventory_original_unique_payload(4),Some(payload.as_slice()));
+  let source_row=saved.inventory().into_iter().find(|r|r.document_id==4).unwrap();
+  assert_eq!((source_row.item_id,source_row.quantity),(original.item_id,original.quantity));
+  assert_eq!(saved.inventory_original_unique_payload(4),Some(payload.as_slice()));
+  // Reopening discovers the new wand's copied source reference. The existing
+  // conservative item-wide reference guard deliberately disables source edits.
+  assert!(!source_row.editable);
+  assert!(saved.change_inventory_quantity(4,original.quantity,0).is_err());
+  assert_eq!(saved.inventory_unique_rows().find(|r|r.0==4).unwrap().1,Some(11));
   for id in [h,h2]{
    let row=e.inventory().into_iter().find(|r|r.document_id==id).unwrap();
    let actual=saved.inventory().into_iter().find(|r|r.item_id==item&&r.quantity==row.quantity).unwrap();
