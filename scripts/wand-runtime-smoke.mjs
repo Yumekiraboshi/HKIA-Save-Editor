@@ -63,7 +63,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
     added={art:await pixels(first),plain:await pixels(await renderWandBaseArt(384749651,a)),
      cached:first===await renderWandArt(384749651,a,cell),
      mismatch:await renderWandArt(384749651,{...a,sourceItemId:315823},cell)===null,
-     noCell:await renderWandArt(384749651,a)===null};
+     noCell:first===await renderWandArt(384749651,a)};
    }finally{pack.dispose();}
    const inventory=await loadInventoryNativeArt(base);
    const inventoryCell=selectInventoryWandOriginalCell(15761463,inventory.entries);
@@ -71,12 +71,17 @@ export async function wandRuntimeSmoke(browser,origin,base){
    const invBlob=await renderWandArt(384749651,invAppearance,inventoryCell);
    const inv={art:await pixels(invBlob),plain:await pixels(await renderWandBaseArt(384749651,invAppearance)),
     cache:invBlob===await renderWandArt(384749651,invAppearance,inventoryCell)};
+   const directSources=[];
+   for(const sourceItemId of [608452994,750862373,42715431,1026094637,587092528,1787941842,33246451,1678725721,90977533]){
+    const a={...invAppearance,sourceItemId};const blob=await renderWandArt(384749651,a);
+    directSources.push({pixels:await pixels(blob),cached:blob===await renderWandArt(384749651,a)});
+   }
    const placeholders=[];
    for(const sourceItemId of [328475120,1254006907,1731977601]){
     const blob=await renderWandArt(384749651,{...invAppearance,sourceItemId});
     placeholders.push({pixels:await pixels(blob),same:blob===await renderWandArt(384749651,{...invAppearance,sourceItemId:328475120})});
    }
-   return {rows,composed,itemRows,added,inv,placeholders,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315822,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
+   return {rows,composed,itemRows,added,inv,directSources,placeholders,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315822,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
   },base);
   assert.equal(out.rows.length,9);assert.ok(out.unknown&&out.unknownOriginal);
   assert.equal(out.composed.length,13);assert.ok(out.unsupportedSource);
@@ -84,6 +89,8 @@ export async function wandRuntimeSmoke(browser,origin,base){
   assert.ok(out.added.art.visible&&out.added.cached&&out.added.mismatch&&out.added.noCell);
   assert.notEqual(out.added.art.rgba,out.added.plain.rgba);
   assert.ok(out.inv.art.visible&&out.inv.cache);assert.notEqual(out.inv.art.rgba,out.inv.plain.rgba);
+  assert.equal(out.directSources.length,9);assert.ok(out.directSources.every(r=>r.pixels.visible&&r.cached));
+  assert.equal(new Set(out.directSources.map(r=>r.pixels.rgba)).size,9);
   assert.equal(out.placeholders.length,3);assert.ok(out.placeholders.every(r=>r.pixels.visible&&r.same));
   assert.notEqual(out.placeholders[0].pixels.rgba,out.inv.plain.rgba);
   for(const r of out.itemRows){assert.ok(r.result.visible&&r.cache);assert.notEqual(r.result.rgba,r.plain.rgba);}

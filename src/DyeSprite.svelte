@@ -2,6 +2,7 @@
  import type {SpriteCell} from './icon-packs';
  import type {NativeDyePalette} from './native-dye-palettes';
  import {displayedDyeIconFidelity,isSourceColorwayUrl,isNamedOriginalItemUrl} from './item-icon-art';
+ import {loadRegisteredColorwayFallback} from './colorway-fallback';
 
  let {sprite,exactArtUrl,originalArtUrl}:{
   sprite?:SpriteCell;palette?:NativeDyePalette;sourceKey?:string;
@@ -33,7 +34,15 @@
   const showReconstruction=()=>{
    if(exact&&exact!==original)showExact(exact,showSharedReference);
   };
-  if(original)showExact(original,showReconstruction);
+  const showOriginalFallback=()=>{
+   if(!original||canceled)return;
+   void loadRegisteredColorwayFallback(original,import.meta.env.BASE_URL).then(url=>{
+    if(canceled)return;
+    if(url)showExact(url,showReconstruction);
+    else showReconstruction();
+   }).catch(()=>{if(!canceled)showReconstruction();});
+  };
+  if(original)showExact(original,showOriginalFallback);
   else showReconstruction();
   return ()=>{canceled=true;};
  });

@@ -1392,9 +1392,6 @@ impl Editor {
    Self::wand_identity(row).or_else(||self.legacy_wand_identity(row))
   })
  }
- fn wand_family_count(&self,item:i32)->usize{
-  self.inventory_item_rows.get(&item).copied().unwrap_or(0)+self.pending_wands.values().filter(|&&(i,_)|i==item).count()
- }
  fn wand_full_context(&self,id:u32)->Option<(i32,WandData,WandData,HashSet<WandData>)>{
   if self.slot.index.inventory_wand_copies{return None}
   let item=if let Some(&(item,_))=self.pending_wands.get(&id){
@@ -1404,7 +1401,6 @@ impl Editor {
    if !self.unique_quantity_ids.contains(&id){return None}
    self.slot.index.inventory.iter().find(|r|r.id==id)?.item_id?
   };
-  if self.wand_family_count(item)>256{return None}
   let original=self.original_wand_identity(id)?;
   let current=self.wand_variant_changes.get(&id).copied().unwrap_or(original);
   let mut reserved=HashSet::new();
@@ -1432,7 +1428,7 @@ impl Editor {
   self.slot.index.inventory.iter().filter_map(move |r|{
    let item=r.item_id?;
    let identity=Self::wand_identity(r).or_else(||self.legacy_wand_identity(r))?;
-   (self.unique_quantity_ids.contains(&r.id)&&!self.slot.index.inventory_wand_copies&&self.wand_family_count(item)<=256&&
+   (self.unique_quantity_ids.contains(&r.id)&&!self.slot.index.inventory_wand_copies&&
     (Self::wand_materials(identity)==WAND_NIL_MATERIALS||self.wand_source_edit_safe(r.id,item))).then_some(r.id)
   }).chain(self.pending_wands.keys().copied().filter(|id|self.inventory_changes.contains_key(id)))
  }
@@ -1454,7 +1450,7 @@ impl Editor {
    (if crate::inventory_source::magic_wand_style(item).is_some(){
     !self.inventory_item_rows.contains_key(&item)&&
     !self.pending_wands.iter().any(|(&id,&(i,_))|i==item&&self.inventory_changes.contains_key(&id))
-   }else{self.wand_family_count(item)<256&&self.wand_source_reservations(item).is_some()})&&
+   }else{self.wand_source_reservations(item).is_some()})&&
    !self.slot.index.inventory_wand_copies&&self.inventory_creation_payload_safe(item)&&
    !self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)&&self.absent_flower_budget_available()
  }
@@ -1598,7 +1594,7 @@ impl Editor {
   if self.slot.index.inventory.iter().any(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))&&
    !self.legacy_wand_zero_reference_safe(r)){return false}
   let qty=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
-  qty.is_some_and(|q|q>0)&&self.wand_family_count(item)<256&&self.absent_flower_budget_available()&&
+  qty.is_some_and(|q|q>0)&&self.absent_flower_budget_available()&&
    self.inventory_creation_payload_safe(item)&&!self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)
  }
  pub fn inventory_wand_creation_variants(&self,id:u32)->Vec<WandVariant>{
@@ -2376,7 +2372,6 @@ impl Editor {
     self.unique_row_source(row,5)?;
     let key=Self::wand_key(item,self.legacy_wand_identity(row)?)?;
     return (!ambiguous.contains(&item)&&wand_counts.get(&(item,key))==Some(&1)&&
-     self.inventory_item_rows.get(&item).copied().unwrap_or(0)<=256&&
      crate::inventory_source::is_uncapped_required_unique_stack(item)&&self.legacy_wand_zero_reference_safe(row)).then_some(row.id)
    }
    if ambiguous.contains(&item){return None}
@@ -2393,7 +2388,7 @@ impl Editor {
    if let Some(v)=Self::wand_identity(row).and_then(|v|Self::wand_key(item,v)){
     self.unique_row_source(row,5)?;
     return (!self.slot.index.inventory_wand_copies&&wand_counts.get(&(item,v))==Some(&1)&&
-     self.inventory_item_rows.get(&item).copied().unwrap_or(0)<=256&&crate::inventory_source::is_uncapped_required_unique_stack(item)).then_some(row.id)
+     crate::inventory_source::is_uncapped_required_unique_stack(item)).then_some(row.id)
    }
    if let Some((a,b))=self.chef_identity(row){
     self.unique_row_source(row,if item==crate::inventory_source::BOBA_ID{5}else{2})?;
