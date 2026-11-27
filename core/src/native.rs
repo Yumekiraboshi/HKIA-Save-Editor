@@ -314,6 +314,15 @@ impl<'a> Walk<'a>{
           _=>InventoryUniqueData::Opaque{tag},
          },
          (Value::Fields(a),4) if a.len()==5=>InventoryUniqueData::BobaAppearance{color_id:i32::try_from(a[0].0.int()?).map_err(|_|Error::Schema)?},
+         // Only nested historical furniture is projected here. Preserve
+         // the original union bytes and keep unknown GUID tuples opaque.
+         (Value::Fields(a),1) if capture_source&&self.version==Version::V301&&a.len()==3=>{
+          let mut materials=[0;3];let mut known=true;
+          for (material,(value,_)) in materials.iter_mut().zip(a){
+           if let Some(index)=crate::furniture_source::material_index_for_guid(value.guid()?){*material=index;}else{known=false;}
+          }
+          if known{InventoryUniqueData::Furniture{materials}}else{InventoryUniqueData::Opaque{tag}}
+         },
          (Value::Fields(a),9) if capture_unique&&a.len()==5=>{
           let (source_tag,words)=match &a[1].0{
            Value::Nil=>(-1,Vec::new()),
