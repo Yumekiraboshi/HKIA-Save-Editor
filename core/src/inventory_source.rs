@@ -360,6 +360,15 @@ pub(crate) fn magic_wand_style(item:i32)->Option<i32>{
 pub(crate) const ITEM_WAND_ID:i32=384749651;
 pub(crate) const CRITTER_WAND_ID:i32=1304219546;
 const CRITTER_WAND_SOURCES:&[i32]=&[7285157,79024873,112622136,702286800,711665739,767798085,897162761,1112156413,1327542038,2011076305];
+pub(crate) fn legacy_wand_source_guid(item:i32)->Option<[u32;4]>{
+ if item==0{return Some([0;4])}
+ crate::inventory_legacy_wand_guid_data::LEGACY_WAND_SOURCE_GUIDS.iter().find(|r|r.1==item).map(|r|r.0)
+}
+pub(crate) fn legacy_wand_source_id(guid:[u32;4])->Option<i32>{
+ if guid==[0;4]{return Some(0)}
+ use crate::inventory_legacy_wand_guid_data::LEGACY_WAND_SOURCE_GUIDS as ROWS;
+ ROWS.binary_search_by_key(&guid,|r|r.0).ok().map(|i|ROWS[i].1)
+}
 pub(crate) fn wand_source_style(item:i32,source:i32)->Option<i32>{
  if source==0{return magic_wand_style(item)}
  if item==CRITTER_WAND_ID{return CRITTER_WAND_SOURCES.binary_search(&source).ok().map(|_|0)}
@@ -521,5 +530,19 @@ mod clothing_reference_tests{
    (ordinary_tradeable_nonclothing_reference(s.item_id).is_some()||custom_furniture_extra_reference(s.item_id).is_some())).count(),621);
   assert_eq!(custom_furniture_extra_reference(102286319),Some(furniture_guid_fingerprint([0xc2961421,0x4fdf4f88,0x988e1cb7,0x7f57b563])));
   assert_eq!(custom_furniture_extra_reference(1900000001),None);
+ }
+}
+
+#[cfg(test)]mod legacy_wand_source_tests{
+ use super::*;
+ #[test]fn complete_legacy_recipe_guid_crosswalk(){
+  use crate::inventory_legacy_wand_guid_data::LEGACY_WAND_SOURCE_GUIDS as ROWS;
+  assert_eq!(ROWS.len(),8611);
+  assert!(ROWS.windows(2).all(|w|w[0].0<w[1].0));
+  assert_eq!(ROWS.iter().map(|r|r.1).collect::<std::collections::HashSet<_>>().len(),ROWS.len());
+  assert_eq!(ROWS.iter().filter(|r|wand_source_style(ITEM_WAND_ID,r.1)==Some(0)).count(),8601);
+  assert_eq!(ROWS.iter().filter(|r|wand_source_style(CRITTER_WAND_ID,r.1)==Some(0)).count(),10);
+  assert_eq!(legacy_wand_source_id([0;4]),Some(0));
+  assert_eq!(legacy_wand_source_id([u32::MAX;4]),None);
  }
 }
