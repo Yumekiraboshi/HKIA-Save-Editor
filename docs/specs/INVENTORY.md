@@ -276,3 +276,7 @@ The Add view also exposes positive owned or staged customization source stacks w
 #### Native preview for composed palette edits
 
 The palette dialog refreshes one-channel choices against its uncommitted full tuple, using the existing Rust source and peer checks. The Add action is offered only when the complete draft satisfies the same native creation predicate as the final CAS, including replacing all inherited non-source colors. Preview and per-channel reset do not mutate history or save data. No new color source, absent Item ID generation, or entitlement change is authorized.
+
+#### Retain the ordinary furniture customization source alongside customized stacks
+
+A positive verified nil/UID-zero furniture base remains an eligible customization source when the same Item ID also has distinct verified nondefault tag-8 stacks. The ordinary base may be saved or staged from the existing source-bounded ordinary creation endpoint. Reject multiple defaults, unknown or ambiguous saved peers, and all existing reference and version restrictions. Reserve every saved and active staged nondefault peer's original and effective normalized key in both option planning and final CAS. Creating another distinct customization leaves the base and all peers unchanged; no new furniture definition, material, placement, entitlement, or recipe is authorized.
