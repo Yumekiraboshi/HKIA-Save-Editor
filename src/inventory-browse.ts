@@ -70,20 +70,26 @@ export function defaultInventoryGroup(counts:ReadonlyMap<InventoryGroupKey,numbe
   ((counts.get(OTHER_INVENTORY_GROUP)??0)>0?OTHER_INVENTORY_GROUP:NATIVE_INVENTORY_TABS[0].key);
 }
 
+/** Normalize only the search index, never native names or saved identities.
+ * NFKC accepts full/half-width input; canonical katakana is matched as hiragana.
+ * Retain accents, dakuten and punctuation rather than guessing missing names. */
+function normalizeInventorySearch(value:string):string{
+ return value.normalize('NFKC').toLowerCase().replace(/[ァ-ヶヽ-ヾ]/gu,c=>String.fromCharCode(c.charCodeAt(0)-0x60));
+}
 /** Shared presentation predicate for browsing and per-category search counts. */
 function matchesInventorySearch(row:InventoryEntry,q:string,editableOnly:boolean,
  localizedNames:Readonly<Record<string,string>>,sourceItems:ReadonlyMap<number,CollectionItem>,variantName?:(row:InventoryEntry)=>string):boolean{
  if(editableOnly&&!row.editable&&!row.unique?.flowerEditable&&!row.unique?.furnitureEditable&&!row.unique?.paletteEditable&&!row.unique?.wandEditable&&!row.cafe?.editable&&!row.boba?.editable&&!row.flowerCreatable&&!row.furnitureCreatable)return false;
  if(!q)return true;
  const source=sourceItems.get(row.itemId);
- const fields=[String(row.itemId),localizedNames[String(row.itemId)]??'',source?.[5]??'',source?.[6]??'',variantName?.(row)??''].map(v=>v.toLocaleLowerCase());
+ const fields=[String(row.itemId),localizedNames[String(row.itemId)]??'',source?.[5]??'',source?.[6]??'',variantName?.(row)??''].map(normalizeInventorySearch);
  // Preserve single-field substring matches; allow a flower name, color and
  // pattern to be combined as whitespace-separated terms across fields.
  return fields.some(v=>v.includes(q))||q.split(/\s+/u).every(term=>fields.some(v=>v.includes(term)));
 }
 export function inventorySearchGroupCounts(rows:readonly InventoryEntry[],term:string,editableOnly:boolean,
  localizedNames:Readonly<Record<string,string>>,sourceItems:ReadonlyMap<number,CollectionItem>,index:NativeInventoryIndex,variantName?:(row:InventoryEntry)=>string):Map<InventoryGroupKey,number>{
- const q=term.trim().toLocaleLowerCase();
+ const q=normalizeInventorySearch(term).trim();
  return inventoryGroupCounts(rows.filter(row=>matchesInventorySearch(row,q,editableOnly,localizedNames,sourceItems,variantName)),index);
 }
 /** Retain the selected native category when it contains a match; otherwise
@@ -97,7 +103,7 @@ export function browseInventory(
  editableOnly:boolean,localizedNames:Readonly<Record<string,string>>,
  sourceItems:ReadonlyMap<number,CollectionItem>,index:NativeInventoryIndex,locale:string,variantName?:(row:InventoryEntry)=>string
 ):InventoryEntry[]{
- const q=term.trim().toLocaleLowerCase();
+ const q=normalizeInventorySearch(term).trim();
  return rows.filter(row=>nativeInventoryGroups(row.itemId,index).includes(selectedGroup)&&
   matchesInventorySearch(row,q,editableOnly,localizedNames,sourceItems,variantName)).sort((a,b)=>{
   const an=localizedNames[String(a.itemId)]??sourceItems.get(a.itemId)?.[5]??String(a.itemId);
