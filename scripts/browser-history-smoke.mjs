@@ -401,7 +401,7 @@ async function inventoryFirstItemWandSmoke(){
   await select.selectOption(await select.locator('option[data-wand-variant="106:127"]').getAttribute('value'));
   await dialog.locator('input[name="variant-add-quantity"]').fill('4');
   await add.click();await dialog.waitFor({state:'hidden'});
-  await page.locator('.inventory-add-toggle:not([disabled])').click();
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('384749651');
   await card.locator('input[name="quantity"]').nth(1).waitFor();
   assert.deepEqual((await card.locator('input[name="quantity"]').evaluateAll(els=>els.map(e=>e.value))).sort(),['2','4']);
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
