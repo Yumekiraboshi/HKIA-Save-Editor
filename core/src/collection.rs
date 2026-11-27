@@ -2499,6 +2499,49 @@ impl Editor {
    Some((r.id,cap))
   }).collect()
  }
+ /// If a quantity increase uses structural rather than native semantic
+ /// equality authority, conservatively bound all same-item peers together.
+ /// Existing over-cap data may be reduced but never increased by this path.
+ /// No appearance value is interpreted, normalized or reconstructed.
+ fn validate_structural_quantity_totals(&self,deltas:&[InventoryQuantityDelta])->Result<(),Error>{
+  if self.structural_quantity_caps.is_empty(){return Ok(())}
+  let staged:HashMap<_,_>=deltas.iter().map(|d|(d.document_id,d.after)).collect();
+  let quantity=|r:&crate::native::InventoryRow|->Option<i32>{
+   if self.inventory_removed.contains(&r.id){return Some(0)}
+   staged.get(&r.id).copied().unwrap_or_else(||self.inventory_changes.get(&r.id).copied()).or(r.quantity)
+  };
+  let mut caps=HashMap::<i32,i32>::new();
+  for r in &self.slot.index.inventory{
+   if self.unique_quantity_ids.contains(&r.id){continue}
+   if let Some(&cap)=self.structural_quantity_caps.get(&r.id){
+    if quantity(r).zip(r.quantity).is_some_and(|(n,old)|n>old){
+     caps.insert(r.item_id.ok_or(Error::Schema)?,cap);
+    }
+   }
+  }
+  if caps.is_empty(){return Ok(())}
+  let mut totals=HashMap::<i32,(i64,i64)>::new();
+  for r in &self.slot.index.inventory{
+   let Some(item)=r.item_id else{return Err(Error::Schema)};
+   if !caps.contains_key(&item){continue}
+   let original=r.quantity.filter(|q|*q>=0).ok_or(Error::Schema)?;
+   let next=quantity(r).filter(|q|*q>=0).ok_or(Error::Schema)?;
+   let t=totals.entry(item).or_default();t.0+=i64::from(original);t.1+=i64::from(next);
+  }
+  let mut pending:HashMap<_,_>=self.pending_inventory_rows().into_iter().map(|r|(r.document_id,(r.item_id,r.quantity))).collect();
+  for d in deltas.iter().filter(|d|d.document_id&PENDING_ITEM!=0){
+   if let Some(q)=d.after{
+    let item=pending.get(&d.document_id).map(|r|r.0).unwrap_or((d.document_id&!PENDING_ITEM) as i32);
+    pending.insert(d.document_id,(item,q));
+   }else{pending.remove(&d.document_id);}
+  }
+  for (_, (item,q)) in pending{if caps.contains_key(&item){totals.entry(item).or_default().1+=i64::from(q);}}
+  for (item,cap) in caps{
+   let (original,next)=totals.get(&item).copied().ok_or(Error::Schema)?;
+   if next>i64::from(cap).max(original){return Err(Error::Schema)}
+  }
+  Ok(())
+ }
  fn inventory_quantity_limit(&self,r:&crate::native::InventoryRow)->Option<i32>{
   self.structural_quantity_caps.get(&r.id).copied()
  }
@@ -2581,6 +2624,7 @@ impl Editor {
   }).sum::<usize>()
  }
  fn preflight_inventory_membership(&self,deltas:&[InventoryQuantityDelta])->Result<(),Error>{
+  self.validate_structural_quantity_totals(deltas)?;
   if !deltas.iter().any(|d|d.document_id&PENDING_ITEM!=0){return Ok(())}
   let mut handles:HashSet<u32>=self.inventory_changes.keys().filter(|&&id|id&PENDING_ITEM!=0).copied().collect();
   for d in deltas{
@@ -3200,6 +3244,7 @@ impl Editor {
  pub fn reset(&mut self){self.changes.clear();self.inventory_changes.clear();self.inventory_removed.clear();self.pending_flowers.clear();self.pending_furniture.clear();self.pending_palettes.clear();self.pending_bobas.clear();self.pending_cafes.clear();self.pending_wands.clear();self.flower_variant_changes.clear();self.furniture_variant_changes.clear();self.palette_variant_changes.clear();self.boba_variant_changes.clear();self.wand_variant_changes.clear();self.cafe_variant_changes.clear();self.achievement_changes.clear();self.achievement_created.clear();self.undo.clear();self.redo.clear();self.revision=self.revision.wrapping_add(1)}
  pub fn export(&self)->Result<Vec<u8>,Error>{
   if !self.dirty(){return Err(Error::Schema)}
+  self.validate_structural_quantity_totals(&[])?;
   let original_payload=&self.slot.envelope.decoded;
   let mut patches:Vec<achievement::Replacement>=Vec::new();
   if !self.changes.is_empty(){
