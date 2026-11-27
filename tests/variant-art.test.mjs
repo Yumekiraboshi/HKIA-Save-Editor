@@ -105,7 +105,8 @@ test('Collection and Inventory select original images without inferred recolorin
  assert.match(app,/exactArtUrl=\{exactVariantArt\[String\(representative\)\]\}/);
  assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,6);
  assert.match(app,/originalArtUrl=\{originalVariantArt\[String\(representative\)\]\}/);
- assert.match(sprite,/if\(original\)showExact\(original,showReconstruction\)/);
+ assert.match(sprite,/if\(original\)showExact\(original,showOriginalFallback\)/);
+ assert.match(sprite,/if\(url\)showExact\(url,showReconstruction\)/);
  assert.match(sprite,/showExact\(exact,showSharedReference\)/);
  assert.match(sprite,/sprite\?:SpriteCell;palette\?:NativeDyePalette/);
  assert.match(sprite,/if\(canceled\)return/);
@@ -192,12 +193,12 @@ test('the newly extracted mint striped pajama source sprites are original colore
 test('all 5383 native dye IDs resolve to one genuine original sprite with a verified local digest',()=>{
  const urls=parseDynamicColorwayIndex(dynamic,'/');
  const originalUrls=parseSourceColorwayIndex(sources,'/');
- assert.equal(Object.keys(urls).length,5021);
+ assert.equal(Object.keys(urls).length,5344);
  assert.equal(Object.keys(originalUrls).length,362);
  assert.deepEqual(Object.keys({...urls,...originalUrls}).sort(),Object.keys(native.records).sort());
- assert.equal(readdirSync(new URL('../public/dynamic-colorways/',import.meta.url)).filter(x=>x.endsWith('.webp')).length,5021);
+ assert.equal(readdirSync(new URL('../public/dynamic-colorways/',import.meta.url)).filter(x=>x.endsWith('.webp')).length,5344);
  for(const [id,hash] of Object.entries(dynamic.records)){
-  assert.ok(!Object.hasOwn(originalUrls,id));
+  if(Object.hasOwn(originalUrls,id))assert.equal(sources.records[id].sourceKind,'atlas');
   const data=readFileSync(new URL('../public/dynamic-colorways/'+id+'.webp',import.meta.url));
   assert.equal(createHash('sha256').update(data).digest('hex'),hash);
   assert.equal(urls[id],'/dynamic-colorways/'+id+'.webp?v='+hash);
@@ -215,6 +216,7 @@ test('original source remains primary and verified reconstruction is retained as
   assert.equal(primary['585726126'],originals['585726126']);
   assert.equal(originals['585726126'],'/dynamic-colorways/585726126.webp?v='+dynamic.records['585726126']);
   assert.equal(Object.keys(originals).length,5384);
+  assert.equal(originals['315822'],'/dynamic-colorways/315822.webp?v='+dynamic.records['315822']);
   assert.equal(originals['1393962785'],'/source-item-art/1393962785.png?v='+namedItemSprites.records['1393962785'].sha256);
  }finally{globalThis.fetch=prev;}
 });

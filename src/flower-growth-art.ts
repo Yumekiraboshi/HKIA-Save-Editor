@@ -4,7 +4,6 @@ import {loadVerifiedArtAsset} from './dynamic-art-assets';
 const ROOT=import.meta.env.BASE_URL+'inventory-flower-art/';
 const SOURCE_SHA='bf99336e9eaf20de7d2f81f57f00fd2a514e59db03c2e161219f528fed59ff48';
 const SHEET_SHA='f9160f0302ad5cffefe28a2ee5cc69e630be2735c0e83cf3bdb9982e7495f083';
-const TRANSPORT_SHA='db4d9182b3ebc170ed0c9f66b2c97cc5b2997f530a090fc1064a80aa5e57c342';
 type GrowthSource={schema:string;version:string;definitionsSha256:string;atlasSha256:string;sheet:{file:string;sha256:string;bytes:number;width:number;height:number;size:number;columns:number};rows:ReadonlyArray<{itemId:number;state:number;spritePathId:string;cell:number}>};
 const key=(id:number,state:number)=>id+':'+state;
 export function decodeFlowerGrowthCells(value:unknown,url:string):ReadonlyMap<string,SpriteCell>{
@@ -36,13 +35,10 @@ export function resolveFlowerGrowthCell(cells:ReadonlyMap<string,SpriteCell>,ite
 let source:Promise<ReadonlyMap<string,SpriteCell>>|undefined;
 function load(){
  if(!source)source=(async()=>{
-  const [manifest,transport]=await Promise.all([
+  const [manifest,bytes]=await Promise.all([
    loadVerifiedArtAsset(ROOT,'flower-growth-source-v3.0.1.json',SOURCE_SHA,34788,34788),
-   loadVerifiedArtAsset(ROOT,'flower-growth-icons-v3.0.1.webp.b64',TRANSPORT_SHA,408289,408289)]);
-  const bytes=Uint8Array.from(atob(new TextDecoder('ascii').decode(transport).trim()),v=>v.charCodeAt(0));
-  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes.buffer)),v=>v.toString(16).padStart(2,'0')).join('');
-  if(bytes.byteLength!==306216||digest!==SHEET_SHA)throw Error('FLOWER_GROWTH_SHEET');
-  const blob=new Blob([bytes.buffer],{type:'image/webp'});
+   loadVerifiedArtAsset(ROOT,'flower-growth-icons-v3.0.1.webp',SHEET_SHA,306216,306216)]);
+  const blob=new Blob([bytes],{type:'image/webp'});
   const bitmap=await createImageBitmap(blob);
   try{if(bitmap.width!==960||bitmap.height!==480)throw Error('FLOWER_GROWTH_DIMENSIONS');}finally{bitmap.close();}
   const url=URL.createObjectURL(blob);

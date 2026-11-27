@@ -547,3 +547,8 @@ The Rust preview recomputes source-defined single-slot options from the complete
 #### Chef creation after emptying all saved stacks
 
 For the nine source-verified cafe outputs and Boba, the existing source-defined first-add path is available when all original rows of that item are verified, independently zero/refill eligible and effectively zero, with no active staged row of that item. Reserve original and effective complete ordered identities; choose an unreserved native starter from source recipe pairs or Boba triples, and reject collisions in the same CAS. Unsupported cafe tuple lengths, missing references and family/allocation limits retain their prior denial. Zero rows are not positive witnesses; preserve their document, UID and original payload and refill independently. The same Add dialog, history and native reparse apply, without consuming or generating ingredients. Synthetic raw/ZIP regression; game acceptance unverified.
+
+
+#### Native cafe draft preview
+
+Compose each complete ordered cafe tuple through the same Rust preview and creation predicate used by CAS. Recompute legal slot choices from the current draft rather than combining stale single-slot suggestions in TypeScript. Reserve original/effective peers, allow legitimate intermediate edits (including retained original ingredient pairs), and enable creation only when the full target passes source and ownership validation. A preview does not write inventory/history. Existing row mutation, first-add, zero-family addition and final export stay on their existing native paths. Synthetic raw/ZIP coverage includes a slot pair becoming selectable after changing another slot, and collision denial before commit.

@@ -947,6 +947,19 @@ pub extern "C" fn hkia_inventory_cafe_variants(id:u32)->u32{
  })
 }
 #[no_mangle]
+pub extern "C" fn hkia_inventory_cafe_preview(id:u32,b0:i32,b1:i32,b2:i32,b3:i32,b4:i32,b5:i32,a0:i32,a1:i32,a2:i32,a3:i32,a4:i32,a5:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let Ok((rows,creatable))=e.inventory_cafe_preview(id,[b0,b1,b2,b3,b4,b5],[a0,a1,a2,a3,a4,a5])else{return 1};
+  if rows.len()>147{return 1}
+  let mut out=Vec::with_capacity(8+rows.len()*32);
+  out.extend(u32::from(creatable).to_le_bytes());out.extend((rows.len() as u32).to_le_bytes());
+  for (row,ingredient,slot) in rows{for word in row{out.extend(word.to_le_bytes());}out.extend(ingredient.to_le_bytes());out.extend((slot as u32).to_le_bytes());}
+  a.reply=out;0
+ })
+}
+#[no_mangle]
 pub extern "C" fn hkia_inventory_cafe_variant_change(id:u32,b0:i32,b1:i32,b2:i32,b3:i32,b4:i32,b5:i32,a0:i32,a1:i32,a2:i32,a3:i32,a4:i32,a5:i32)->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
