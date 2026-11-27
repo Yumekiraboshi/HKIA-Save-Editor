@@ -4034,10 +4034,16 @@ fn first_item_wand_copies_verified_owned_furniture_without_touching_source(){
   let source_row=saved.inventory().into_iter().find(|r|r.document_id==4).unwrap();
   assert_eq!((source_row.item_id,source_row.quantity),(original.item_id,original.quantity));
   assert_eq!(saved.inventory_original_unique_payload(4),Some(payload.as_slice()));
-  // Reopening discovers the new wand's copied source reference. The existing
-  // conservative item-wide reference guard deliberately disables source edits.
-  assert!(!source_row.editable);
-  assert!(saved.change_inventory_quantity(4,original.quantity,0).is_err());
+  // A complete recognized native furniture wand contains an independent
+  // copied tuple. It is not an ItemId/UID reference to the bag furniture.
+  assert!(source_row.editable&&source_row.quantity_minimum==0);
+  let original_wands:Vec<_>=saved.inventory().into_iter().filter(|r|r.item_id==item).map(|r|(r.document_id,saved.inventory_unique_data(r.document_id))).collect();
+  saved.change_inventory_furniture_variant(4,[13,2,0],[13,3,0]).unwrap();
+  saved.change_inventory_quantity(4,original.quantity,0).unwrap();
+  let independently_edited=Editor::open(saved.export().unwrap()).unwrap();
+  assert_eq!(independently_edited.inventory().into_iter().find(|r|r.document_id==4).unwrap().quantity,0);
+  for (id,expected) in original_wands{assert_eq!(independently_edited.inventory_unique_data(id),expected);}
+  saved.change_inventory_quantity(4,0,original.quantity).unwrap();
   assert_eq!(saved.inventory_unique_rows().find(|r|r.0==4).unwrap().1,Some(11));
   for id in [h,h2]{
    let row=e.inventory().into_iter().find(|r|r.document_id==id).unwrap();
@@ -4055,4 +4061,31 @@ fn first_item_wand_copies_verified_owned_furniture_without_touching_source(){
  e.create_inventory_wand_nested(4,changed,target,1).unwrap();
  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(furniture_edit_slot(None)).unwrap();restored.restore_history(&cp).unwrap();
  assert_eq!(restored.inventory(),e.inventory());
+}
+
+
+#[test]
+fn only_complete_verified_bag_furniture_wand_copies_release_source_reference(){
+ let item=384749651u32;let source=61381969u32;
+ let make=|wand_item:u32,materials:Vec<u8>,style:u32|{
+  let mut p=synthetic_payload("3.0.1");p[2]=6;p[3]=0x97;
+  p.extend(doc(1,arr(vec![u(4),u(source),u(11),u(93),furniture_payload([13,2,0])])));
+  p.extend(doc(1,arr(vec![u(5),u(wand_item),u(12),u(1),arr(vec![vec![9],arr(vec![u(source),materials,u(104),u(125),u(style)])])])));
+  slot_from_payload("3.0.1",p)
+ };
+ let raw=make(item,furniture_payload([13,2,0]),0);
+ let mut e=Editor::open(raw).unwrap();
+ let copy=e.inventory_original_unique_payload(5).unwrap().to_vec();
+ e.change_inventory_furniture_variant(4,[13,2,0],[13,3,0]).unwrap();
+ e.change_inventory_quantity(4,93,0).unwrap();
+ let mut reopened=Editor::open(e.export().unwrap()).unwrap();
+ assert_eq!(reopened.inventory_original_unique_payload(5),Some(copy.as_slice()));
+ assert_eq!(reopened.inventory()[0].quantity,0);
+ reopened.change_inventory_quantity(4,0,2).unwrap();
+ for (id,materials,style) in [(item,vec![0xc0],0),(item,furniture_payload([0,0,0]),0),(item,furniture_payload([285,2,0]),0),(item,furniture_payload([13,2,0]),1),(1304219546,furniture_payload([13,2,0]),0)]{
+  let mut e=Editor::open(make(id,materials,style)).unwrap();
+  assert!(!e.inventory()[0].editable);
+  assert!(e.change_inventory_quantity(4,93,0).is_err());
+  assert!(e.change_inventory_furniture_variant(4,[13,2,0],[13,3,0]).is_err());
+ }
 }
