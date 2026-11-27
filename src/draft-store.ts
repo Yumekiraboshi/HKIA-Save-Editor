@@ -50,7 +50,7 @@ export function diffInventory(before:readonly InventoryEntry[],after:readonly In
    const furnitureBefore=furnitureVariantOf(source.unique),furnitureAfter=furnitureVariantOf(row.unique);
    if(furnitureBefore&&furnitureAfter&&furnitureBefore.some((v,i)=>v!==furnitureAfter[i]))result.push({documentId:row.documentId,before:furnitureBefore,after:furnitureAfter,kind:'furniture-variant'});
   }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===9&&row.unique.uniqueId===null&&wandVariantOf(row.unique)){
-   result.push({documentId:row.documentId,itemId:row.itemId,variant:wandVariantOf(row.unique)!,quantity:row.quantity,kind:'wand-create'});
+   result.push({documentId:row.documentId,itemId:row.itemId,variant:wandVariantOf(row.unique)!,quantity:row.quantity,kind:'wand-create',...(row.unique.words[0]>0?{sourceItemId:row.unique.words[0]}:{})});
   }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===3&&row.unique.uniqueId===null&&row.cafe){
    result.push({documentId:row.documentId,itemId:row.itemId,variant:row.cafe.variant,quantity:row.quantity,kind:'cafe-create'});
   }else if(!source&&row.documentId>2147483647&&row.itemId>0&&row.quantity>0&&row.unique?.tag===4&&row.unique.uniqueId===null&&row.boba){
@@ -84,9 +84,9 @@ export function safeInventoryPatches(value:unknown):InventoryPatch[]{
   if(ids.has(key))throw Error('DRAFT_INVALID');
   ids.add(key);
   if(p.kind==='wand-create'){
-   const variant:unknown=p.variant;
-   if(p.documentId<=2147483647||!Number.isInteger(p.itemId)||p.itemId<=0||p.itemId>2147483647||!isWandVariantWire(variant)||!Number.isInteger(p.quantity)||p.quantity<=0||p.quantity>2147483647)throw Error('DRAFT_INVALID');
-   result.push({documentId:p.documentId,itemId:p.itemId,variant:[...variant],quantity:p.quantity,kind:'wand-create'});
+   const variant:unknown=p.variant,source=p.sourceItemId===undefined?0:p.sourceItemId;
+   if(p.documentId<=2147483647||!Number.isInteger(p.itemId)||p.itemId<=0||p.itemId>2147483647||!isWandVariantWire(variant)||!Number.isInteger(p.quantity)||p.quantity<=0||p.quantity>2147483647||!Number.isInteger(source)||source<0||source>2147483647)throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,itemId:p.itemId,variant:[...variant],quantity:p.quantity,kind:'wand-create',...(source>0?{sourceItemId:source}:{})});
   }else if(p.kind==='cafe-create'){
    const variant:unknown=p.variant;
    if(p.documentId<=2147483647||!Number.isInteger(p.itemId)||p.itemId<=0||p.itemId>2147483647||!isCafeVariantWire(variant)||!Number.isInteger(p.quantity)||p.quantity<=0||p.quantity>2147483647)throw Error('DRAFT_INVALID');
