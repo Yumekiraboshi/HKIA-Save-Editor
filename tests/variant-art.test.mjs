@@ -97,7 +97,7 @@ test('every registered exact image is an audited, local, unmodified PNG or WebP'
  }
 });
 
-test('Collection and Inventory select source-registered exact images before approximations',()=>{
+test('Collection and Inventory select original images without inferred recoloring',()=>{
  const app=read('../src/App.svelte'),sprite=read('../src/DyeSprite.svelte');
  assert.match(app,/loadVariantArtSources\(import\.meta\.env\.BASE_URL\)/);
  assert.equal((app.match(/exactArtUrl=\{/g)||[]).length,5);
@@ -105,19 +105,19 @@ test('Collection and Inventory select source-registered exact images before appr
  assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,5);
  assert.match(app,/originalArtUrl=\{originalVariantArt\[String\(representative\)\]\}/);
  assert.match(sprite,/if\(original\)showExact\(original,showReconstruction\)/);
- assert.match(sprite,/showExact\(exact,showNativeIcon\)/);
+ assert.match(sprite,/showExact\(exact,showSharedReference\)/);
  assert.match(sprite,/sprite\?:SpriteCell;palette\?:NativeDyePalette/);
- assert.match(sprite,/if\(canceled\|\|!cell\|\|!colors\)return/);
+ assert.match(sprite,/if\(canceled\)return/);
  assert.match(app,/exactVariantArt\[String\(item\.itemId\)\]/);
  assert.match(app,/exactVariantArt\[String\(sub\.previewId\)\]/);
  assert.match(app,/exactVariantArt\[String\(item\[0\]\)\]/);
  assert.match(app,/exactVariantArt\[String\(dateDialogItem\[0\]\)\]/);
  assert.match(sprite,/picture\.decode\(\)\.then/);
- assert.match(sprite,/\.catch\(renderApproximation\)/);
+ assert.doesNotMatch(sprite,/renderApproximation|renderDyeSprite|source-fit|native-icon/);
  assert.match(sprite,/data-dye-source=\{imageSource\}/);
  assert.match(sprite,/imageSource='game-render'/);
  assert.match(sprite,/background-size=\{imageSource==='game-render'\?'contain'/);
- assert.match(sprite,/URL\.revokeObjectURL\(createdUrl\)/);
+ assert.match(sprite,/return \(\)=>\{canceled=true;\}/);
  for(const prohibited of [/native-dye-ring/,/native-dye-swatch/,/native-dye-preview/]){
   assert.doesNotMatch(app,prohibited);
  }

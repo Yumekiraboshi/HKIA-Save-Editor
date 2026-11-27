@@ -66,13 +66,11 @@ test('all native colorway UI views use original game-icon assets and keep per-it
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  const sprite=readFileSync(new URL('../src/DyeSprite.svelte',import.meta.url),'utf8');
  const generator=readFileSync(new URL('../scripts/generate-native-dye-icons.mjs',import.meta.url),'utf8');
- assert.match(app,/loadNativeColorwayIcons\(import\.meta\.env\.BASE_URL\)/);
- assert.equal((app.match(/previewUrl=\{nativeColorwayIcons/g)||[]).length,5);
- assert.match(app,/previewUrl=\{nativeColorwayIcons\[String\(representative\)\]\}/);
- assert.match(app,/previewUrl=\{nativeColorwayIcons\[String\(item\.itemId\)\]\}/);
- assert.match(sprite,/imageSource='native-icon'/);
- assert.match(sprite,/\.catch\(renderApproximation\)/);
- assert.match(sprite,/URL\.revokeObjectURL\(createdUrl\)/);
+ assert.doesNotMatch(app,/loadNativeColorwayIcons|previewUrl=\{nativeColorwayIcons/);
+ assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,5);
+ assert.match(sprite,/imageSource='game-source-sprite'/);
+ assert.match(sprite,/showExact\(exact,showSharedReference\)/);
+ assert.doesNotMatch(sprite,/renderDyeSprite|renderApproximation|source-fit|native-icon|createObjectURL/);
  assert.match(generator,/collectNativeSprites/);
  assert.match(generator,/sourceIconDyeRegions/);
  assert.match(generator,/recolorDyePixels/);
