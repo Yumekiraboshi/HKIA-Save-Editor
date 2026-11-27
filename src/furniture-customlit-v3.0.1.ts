@@ -29,11 +29,15 @@ export function resolveCustomLitFixedMaterial(base:RugNativeSources['base'],id:s
  const shader='CAB-46b8f8fe122147493b3113f7c1c8cd0f:-6681258383375895387',m=base.materials[id];
  const bannerAlpha=id==='CAB-6c0f768e2ed4ce159a88e4d10c87130c:-532235555454519552';
  const trellisLeaf=id==='CAB-6df9b7d36015f1762383468832407e58:-6080070135784173191';
- const sourceHash=trellisLeaf?'ab66b7d885664065bc047cd4f756db30c365827cee8281d565133d1c560e6e16':bannerAlpha?'c999d000910a1cd7a947323d5d55ba205a3365cbac45d740927a7da57edc9210':
+ const additionalOpaqueHashes:Readonly<Record<string,string>>={
+  'CAB-6ef96dd92514d121449bf26b3df2f0e4:-4094287017633679692':'a95c9bc23890d6021dcc50d3835d1453278342b0ec9444dd9ed50b591db675ef',
+  'CAB-d61f0eabee36bcd36932688765a94472:5316780692551889377':'db71ba2d2ef4a0625a42141f3a9477d8696c055ab347da4acf05062fde348fe8',
+ };
+ const sourceHash=additionalOpaqueHashes[id]??(trellisLeaf?'ab66b7d885664065bc047cd4f756db30c365827cee8281d565133d1c560e6e16':bannerAlpha?'c999d000910a1cd7a947323d5d55ba205a3365cbac45d740927a7da57edc9210':
   id==='CAB-6c0f768e2ed4ce159a88e4d10c87130c:6239858323994365581'?'02edfece5fd39fa1edf984d80ee4758d6bfa180794dd929556d29eada5d8ab46':
   id==='CAB-6c0f768e2ed4ce159a88e4d10c87130c:4614022325940026044'?'1a66af5ceb1a495b3faea68fcbdc06337b04d082a006d16b5a15133b3d635c56':
   id==='CAB-6c0f768e2ed4ce159a88e4d10c87130c:7677975864228729985'?'c234b16c48caeb781dc6c9a8603cd69dcc437e8ed7d12479cfddb0d8d34efc94':
-  '14c115bce50ad2c24a5372fd37abebc9f6fb2c535a5216685a79335b75a8c61d';
+  '14c115bce50ad2c24a5372fd37abebc9f6fb2c535a5216685a79335b75a8c61d');
  if(!m||m.shader!==shader||m.objectSha256!==sourceHash||base.shaders[shader]?.objectSha256!=='7c32f4b3f7c0c0d580af1e22584952aa29d266dfbe98de3b916c3fecb7339931'||(trellisLeaf?m.validKeywords.length!==0:m.validKeywords.length!==1||m.validKeywords[0]!=='CUSTOM_RIMLIGHT_ON'))throw Error('FURNITURE_MULTI_SHADER_UNSUPPORTED');
  const f=m.floats,c=m.colors;
  // The banner has one source-pinned transparent range; preserve its blend and depth state.
