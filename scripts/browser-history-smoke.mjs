@@ -14,6 +14,7 @@ import {chromium} from 'playwright-core';
 import {chefRuntimeSmoke} from './chef-runtime-smoke.mjs';
 import {wandRuntimeSmoke} from './wand-runtime-smoke.mjs';
 import {flowerRuntimeCoverage} from './flower-runtime-coverage.mjs';
+import {furnitureLdrGpuSmoke} from './furniture-ldr-gpu-smoke.mjs';
 
 const append=(...arrays)=>Uint8Array.from(arrays.flatMap(x=>Array.from(x)));
 const u32=n=>append([0xce],Array.from({length:4},(_,i)=>n>>>(24-8*i)&255));
@@ -2021,6 +2022,7 @@ async function achievementAtlasRetrySmoke(){
 }
 
 async function run(){
+ if(!livePages)await furnitureLdrGpuSmoke();
  await waitForServer();
  browser=await chromium.launch({headless:true,executablePath:installedChrome(),args:['--no-sandbox','--disable-dev-shm-usage']});
  const context=await browser.newContext({locale:'en-US',viewport:{width:1360,height:840},acceptDownloads:true});

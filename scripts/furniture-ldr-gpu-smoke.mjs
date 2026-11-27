@@ -1,10 +1,11 @@
 /** Real browser parity diagnostic for the LDR GPU path; synthetic source frames only. */
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
 import {chromium} from 'playwright-core';
 const entry=fileURLToPath(new URL('../src/furniture-ldr-preview-diagnostic.ts',import.meta.url));
+export async function furnitureLdrGpuSmoke(){
 const {outputFiles}=await build({entryPoints:[entry],bundle:true,format:'iife',globalName:'HKIAGrade',platform:'browser',write:false,logLevel:'silent'});
 function chrome(){if(process.env.CHROME_BIN)return process.env.CHROME_BIN;for(const n of ['google-chrome-stable','google-chrome','chromium','chromium-browser'])try{return execFileSync('which',[n],{encoding:'utf8'}).trim()}catch{}throw Error('CHROME_NOT_INSTALLED');}
 const browser=await chromium.launch({headless:true,executablePath:chrome(),args:['--no-sandbox','--disable-dev-shm-usage','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
@@ -42,3 +43,5 @@ try{
  }
  console.log('FURNITURE LDR GPU SYNTHETIC DIAGNOSTIC PASS',JSON.stringify(results));
 }finally{await browser.close();}
+}
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)await furnitureLdrGpuSmoke();
