@@ -1,6 +1,6 @@
 /** Original CustomLit rim-only pixel blob 673, Steam 3.0.1.
  * Shares verified ForwardLit lighting with CustomLitFurniture, but not its
- * pattern/alpha surface. Fixed opaque GIVE25 bow is the first source gate.
+ * pattern/alpha surface. Fixed opaque GIVE25 and SCHO furniture source gates.
  * Underwater, alpha blending, animation and other variants remain unsupported. */
 import type {Vec3,Vec4} from './furniture-surface-v3.0.1';
 import type {FurnitureForwardMaterial} from './furniture-forwardlit-gpu';
@@ -26,8 +26,13 @@ CustomLitSurface customLitSurface(vec4 b,vec4 c,vec4 nm,vec4 tint,float ss,float
 `;
 export function resolveCustomLitFixedMaterial(base:RugNativeSources['base'],id:string){
  const shader='CAB-46b8f8fe122147493b3113f7c1c8cd0f:-6681258383375895387',m=base.materials[id];
- if(!m||m.shader!==shader||m.objectSha256!=='14c115bce50ad2c24a5372fd37abebc9f6fb2c535a5216685a79335b75a8c61d'||base.shaders[shader]?.objectSha256!=='7c32f4b3f7c0c0d580af1e22584952aa29d266dfbe98de3b916c3fecb7339931'||m.validKeywords.length!==1||m.validKeywords[0]!=='CUSTOM_RIMLIGHT_ON')throw Error('FURNITURE_MULTI_SHADER_UNSUPPORTED');
+ const sourceHash=id==='CAB-6c0f768e2ed4ce159a88e4d10c87130c:4614022325940026044'?'1a66af5ceb1a495b3faea68fcbdc06337b04d082a006d16b5a15133b3d635c56':
+  id==='CAB-6c0f768e2ed4ce159a88e4d10c87130c:7677975864228729985'?'c234b16c48caeb781dc6c9a8603cd69dcc437e8ed7d12479cfddb0d8d34efc94':
+  '14c115bce50ad2c24a5372fd37abebc9f6fb2c535a5216685a79335b75a8c61d';
+ if(!m||m.shader!==shader||m.objectSha256!==sourceHash||base.shaders[shader]?.objectSha256!=='7c32f4b3f7c0c0d580af1e22584952aa29d266dfbe98de3b916c3fecb7339931'||m.validKeywords.length!==1||m.validKeywords[0]!=='CUSTOM_RIMLIGHT_ON')throw Error('FURNITURE_MULTI_SHADER_UNSUPPORTED');
  const f=m.floats,c=m.colors;
+ // The two added source objects have the exact opaque state and authored ZTest.
+ if(sourceHash!=='14c115bce50ad2c24a5372fd37abebc9f6fb2c535a5216685a79335b75a8c61d'&&(m.renderQueue!==-1||f._Material_SrcBlend!==1||f._Material_DstBlend!==0||f._ZTest!==4))throw Error('FURNITURE_MULTI_SHADER_UNSUPPORTED');
  if(f._Material_Alpha!==0||f._AlphaClip!==0||f._ZWrite!==1||f._Cull!==2||f._Lighting_Fog!==1||f._Lighting_Medium_Underwater!==0||f._Material_VertexAnimation!==0||f._Surface_Effect!==0||f._Clip_Offset!==0||f.GLIMMER!==0||f.UV_WORLD!==0||m.textures._AnimTex?.texture!==null||m.textures._Surface_EffectMap?.texture!==null||!finite(c._BaseColor,4)||c._BaseColor[3]!==1||!finite(c._EmissionColor,4))throw Error('FURNITURE_MULTI_SHADER_UNSUPPORTED');
  const tex=(name:string)=>{
   const link=m.textures[name];if(!link||!link.texture||link.scale.join(',')!=='1,1'||link.offset.join(',')!=='0,0')throw Error('CUSTOM_LIT_TEXTURE');
