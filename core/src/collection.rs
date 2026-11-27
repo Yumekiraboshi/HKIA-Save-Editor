@@ -952,7 +952,8 @@ impl Editor {
    (Some(item),Some(InventoryUniqueData::CafeAppearance{..}))=>CAFE_IDS.binary_search(&item).is_ok(),
    (Some(item),Some(InventoryUniqueData::BobaAppearance{..}))=>item==BOBA_ID,
    (Some(_),Some(InventoryUniqueData::WandAppearance{..}))=>self.wand_zero_reference_safe(r),
-   (Some(item),Some(InventoryUniqueData::Furniture{..}))=>self.furniture_zero_reference_safe(item),
+   (Some(item),Some(InventoryUniqueData::Furniture{..}))=>self.furniture_zero_reference_safe(item)||
+    (furniture_source::item(item).is_some_and(|s|!s.is_home_layout)&&self.ordinary_tradeable_nonclothing_zero_reference_safe(item)),
    (Some(item),Some(InventoryUniqueData::Flower{grow_state:6,..}))=>crate::inventory_source::flower_clothing_reference_keys(item).is_some_and(|keys|self.clothing_zero_reference_safe(item,keys.iter()))||flower_candle_source(item).is_some_and(|r|self.flower_candle_zero_reference_safe(item,r.2)),
    _=>false
   }
@@ -962,6 +963,17 @@ impl Editor {
   !index.inventory_furniture_refs_incomplete&&!index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
    !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
    !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)
+ }
+ // New non-clothing slice: the exact original item GUID is a denial key,
+ // never an identity or permission to change a referenced object.
+ fn ordinary_tradeable_nonclothing_zero_reference_safe(&self,item:i32)->bool{
+  let Some(key)=crate::inventory_source::ordinary_tradeable_nonclothing_reference(item)else{return false};
+  let index=&self.slot.index;
+  !index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
+   !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_refs_incomplete&&
+   !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
+   !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)&&
+   !index.inventory_item_refs.iter().any(|&(i,_)|i==item)
  }
  fn ordinary_clothing_zero_reference_safe(&self,item:i32)->bool{
   let Some((own,group))=crate::inventory_source::ordinary_clothing_reference_keys(item)else{return false};
@@ -985,7 +997,8 @@ impl Editor {
   self.slot.envelope.version==Version::V301&&r.id>0&&r.id<=i32::MAX as u32&&
    (crate::inventory_source::ordinary_membership_item(item_id)||
     ((crate::inventory_source::existing_currency_item(item_id)||
-      self.furniture_zero_reference_safe(item_id)||self.ordinary_clothing_zero_reference_safe(item_id))&&
+      self.furniture_zero_reference_safe(item_id)||self.ordinary_clothing_zero_reference_safe(item_id)||
+      self.ordinary_tradeable_nonclothing_zero_reference_safe(item_id))&&
      !self.slot.index.inventory_payload_refs_incomplete&&
      !self.slot.index.inventory_payload_item_refs.contains(&item_id)))&&
    r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.quantity.is_some_and(|q|q>=0)&&
