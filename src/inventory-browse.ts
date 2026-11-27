@@ -127,7 +127,7 @@ export function inventoryCustomizationSource(row:InventoryEntry):boolean{
 }
 export function inventoryAddRows(owned:readonly InventoryEntry[],creatable:readonly InventoryEntry[]):InventoryEntry[]{
  const customCandidates=new Set(creatable.filter(row=>row.flowerCreatable||row.furnitureCreatable||row.wandCreatableStyle!==undefined||row.paletteCreationDefault).map(row=>row.itemId));
- const sources=owned.filter(row=>inventoryCustomizationSource(row)&&!customCandidates.has(row.itemId)).map(row=>({...row,editable:false}));
+ const sources=owned.filter(row=>inventoryCustomizationSource(row)&&(!customCandidates.has(row.itemId)||(row.unique?.wandEditable&&row.unique.tag===9&&row.unique.words[4]===8))).map(row=>({...row,editable:false}));
  return [...owned.filter(inventoryRefillable),...creatable,...sources];
 }
 export function inventoryDisplayRows(rows:readonly InventoryEntry[],addMode:boolean,query:string):readonly InventoryEntry[]{

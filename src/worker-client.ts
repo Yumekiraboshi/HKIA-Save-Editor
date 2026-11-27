@@ -9,11 +9,11 @@ import type {FlowerVariant,FurnitureVariant,InventoryUniqueInfo} from './invento
 import type {InventoryFlower} from './inventory-flower-display';
 import type {InventoryPalette,PaletteVariant} from './inventory-palette-display';
 import type {CafeVariant,CafeOption,CafeRow,CafeWitness} from './inventory-cafe-display';
-import type {WandVariant,WandIdentity} from './inventory-wand-display';
+import type {WandVariant,WandIdentity,WandNested} from './inventory-wand-display';
 import type {InventoryBoba,BobaVariant,BobaWitness} from './inventory-boba-display';
 export type InventoryEntry={documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;quantityMinimum:number;flowerCreatable?:boolean;furnitureCreatable?:boolean;wandCreatableStyle?:number;flower?:InventoryFlower;palette?:InventoryPalette;paletteCreationDefault?:PaletteVariant;boba?:InventoryBoba;cafe?:CafeRow;unique?:InventoryUniqueInfo};
 export type InventoryQuantityRequest=[documentId:number,before:number,after:number];
-export type InventoryPatch={documentId:number;before:number;after:number;kind?:undefined}|{documentId:number;before:FlowerVariant;after:FlowerVariant;kind:'flower-variant'}|{documentId:number;before:FurnitureVariant;after:FurnitureVariant;kind:'furniture-variant'}|{documentId:number;before:PaletteVariant;after:PaletteVariant;kind:'palette-variant'}|{documentId:number;before:BobaVariant;after:BobaVariant;kind:'boba-variant'}|{documentId:number;before:WandVariant;after:WandVariant;kind:'wand-variant'}|{documentId:number;before:WandIdentity;after:WandIdentity;kind:'wand-identity'}|{documentId:number;before:CafeVariant;after:CafeVariant;kind:'cafe-variant'}|{documentId:number;itemId:number;variant:PaletteVariant;quantity:number;kind:'palette-create'}|{documentId:number;itemId:number;variant:BobaVariant;quantity:number;kind:'boba-create'}|{documentId:number;itemId:number;variant:CafeVariant;quantity:number;kind:'cafe-create'}|{documentId:number;itemId:number;variant:WandVariant;quantity:number;kind:'wand-create';sourceItemId?:number}|{documentId:number;itemId:number;variant:FlowerVariant;quantity:number;kind:'flower-create'}|{documentId:number;itemId:number;variant:FurnitureVariant;quantity:number;kind:'furniture-create'};
+export type InventoryPatch={documentId:number;before:number;after:number;kind?:undefined}|{documentId:number;before:FlowerVariant;after:FlowerVariant;kind:'flower-variant'}|{documentId:number;before:FurnitureVariant;after:FurnitureVariant;kind:'furniture-variant'}|{documentId:number;before:PaletteVariant;after:PaletteVariant;kind:'palette-variant'}|{documentId:number;before:BobaVariant;after:BobaVariant;kind:'boba-variant'}|{documentId:number;before:WandVariant;after:WandVariant;kind:'wand-variant'}|{documentId:number;before:WandIdentity;after:WandIdentity;kind:'wand-identity'}|{documentId:number;before:WandNested;after:WandNested;kind:'wand-nested'}|{documentId:number;before:CafeVariant;after:CafeVariant;kind:'cafe-variant'}|{documentId:number;itemId:number;variant:PaletteVariant;quantity:number;kind:'palette-create'}|{documentId:number;itemId:number;variant:BobaVariant;quantity:number;kind:'boba-create'}|{documentId:number;itemId:number;variant:CafeVariant;quantity:number;kind:'cafe-create'}|{documentId:number;itemId:number;variant:WandVariant;quantity:number;kind:'wand-create';sourceItemId?:number;nestedMaterials?:FurnitureVariant}|{documentId:number;itemId:number;variant:FlowerVariant;quantity:number;kind:'flower-create'}|{documentId:number;itemId:number;variant:FurnitureVariant;quantity:number;kind:'furniture-create'};
 export type HistoryScope='collections'|'achievements'|'inventory';
 export type HistoryRecord={
  scope:HistoryScope;applied:boolean;paired:boolean;
@@ -43,7 +43,7 @@ export type SaveSnapshot={
  inventoryCreatable:InventoryEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'flower-preview'|'flower-create'|'flower-create-variants'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-preview'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'boba-variants'|'boba-variant-change'|'boba-create-variants'|'boba-create'|'cafe-variants'|'cafe-variant-change'|'cafe-create-variants'|'cafe-create'|'wand-variants'|'wand-variant-change'|'wand-identity-change'|'wand-create-variants'|'wand-absent-sources'|'wand-create'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'flower-variant-change'|'flower-variants'|'flower-preview'|'flower-create'|'flower-create-variants'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-preview'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'boba-variants'|'boba-variant-change'|'boba-create-variants'|'boba-create'|'cafe-variants'|'cafe-variant-change'|'cafe-create-variants'|'cafe-create'|'wand-variants'|'wand-variant-change'|'wand-identity-change'|'wand-nested-materials'|'wand-nested-pairs'|'wand-nested-change'|'wand-nested-create'|'wand-create-variants'|'wand-absent-sources'|'wand-create'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -169,7 +169,7 @@ export function applyDraft(patches:ChangeRequest[],achievementPatches:Achievemen
  return rpc('batch',{
   patches:patches.map(workerCollectionPatch),
   achievementPatches:achievementPatches.map(workerAchievementDraftPatch),
-  inventoryPatches:inventoryPatches.map(p=>p.kind==='wand-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity,sourceItemId:p.sourceItemId}:p.kind==='cafe-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind==='boba-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind==='palette-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind==='furniture-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind==='flower-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind!==undefined?{documentId:p.documentId,kind:p.kind,before:[...p.before],after:[...p.after]}:{documentId:p.documentId,before:p.before,after:p.after})
+  inventoryPatches:inventoryPatches.map(p=>p.kind==='wand-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity,sourceItemId:p.sourceItemId,nestedMaterials:p.nestedMaterials}:p.kind==='cafe-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind==='boba-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind==='palette-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind==='furniture-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind==='flower-create'?{documentId:p.documentId,itemId:p.itemId,kind:p.kind,variant:[...p.variant],quantity:p.quantity}:p.kind!==undefined?{documentId:p.documentId,kind:p.kind,before:[...p.before],after:[...p.after]}:{documentId:p.documentId,before:p.before,after:p.after})
  }) as Promise<SaveSnapshot>;
 }
 
@@ -239,6 +239,18 @@ export function createInventoryBobaVariant(documentId:number,beforeBobaVariant:B
  return rpc('boba-create',{documentId,beforeBobaVariant:[...beforeBobaVariant],nextBobaVariant:[...nextBobaVariant],nextQuantity}) as Promise<SaveSnapshot>;
 }
 
+export function requestWandNestedMaterials(documentId:number,creation=false,nextWandVariant?:WandVariant):Promise<FurnitureVariant[]>{
+ return rpc('wand-nested-materials',{documentId,target:creation?1:0,nextWandVariant:nextWandVariant===undefined?undefined:[...nextWandVariant]}) as Promise<FurnitureVariant[]>;
+}
+export function requestWandNestedPairs(documentId:number,creation=false):Promise<WandVariant[]>{
+ return rpc('wand-nested-pairs',{documentId,target:creation?1:0}) as Promise<WandVariant[]>;
+}
+export function changeInventoryWandNested(documentId:number,beforeWandNested:WandNested,nextWandNested:WandNested):Promise<SaveSnapshot>{
+ return rpc('wand-nested-change',{documentId,beforeWandNested:[...beforeWandNested],nextWandNested:[...nextWandNested]}) as Promise<SaveSnapshot>;
+}
+export function createInventoryWandNested(documentId:number,beforeWandNested:WandNested,nextWandNested:WandNested,nextQuantity:number):Promise<SaveSnapshot>{
+ return rpc('wand-nested-create',{documentId,beforeWandNested:[...beforeWandNested],nextWandNested:[...nextWandNested],nextQuantity}) as Promise<SaveSnapshot>;
+}
 export function requestWandEditSources(documentId:number):Promise<number[]>{
  return rpc('wand-absent-sources',{documentId,target:1}) as Promise<number[]>;
 }

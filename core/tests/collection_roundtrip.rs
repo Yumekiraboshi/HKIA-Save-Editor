@@ -3972,3 +3972,72 @@ fn floral_outfits_first_add_edit_clone_zero_and_refill(){
   assert_eq!(Editor::open(reopened.export().unwrap()).unwrap().inventory()[0].quantity,4);
  }
 }
+
+
+#[test]
+fn furniture_source_wand_edits_and_additions_preserve_exact_nested_identity(){
+ use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
+ let item=384749651u32;let source=61381969i32;let candidate=0x80000000|item;
+ let wand=|source:i32,magic:u32,materials:Option<[u32;3]>|arr(vec![vec![9],arr(vec![u(source as u32),materials.map(furniture_payload).unwrap_or_else(||vec![0xc0]),u(magic),u(125),u(0)])]);
+ let make=|peer:Vec<u8>|{
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x98;
+  for (id,uid,pay) in [(4,21,wand(source,104,Some([13,2,0]))),(5,22,peer),(6,23,wand(source,104,None))]{
+   p.extend(doc(1,arr(vec![u(id),u(item),u(uid),u(2),pay])));
+  }
+  slot_from_payload("3.0.1",p)
+ };
+ let peer=wand(source,104,Some([502,2,0]));
+ for zipped in [false,true]{
+  let raw=make(peer.clone());let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let before=[source,104,125,13,2,0];let after=[source,104,125,13,3,0];
+  assert!(e.inventory().iter().all(|r|r.editable&&r.quantity_minimum==0));
+  assert!(e.inventory_wand_edit_sources(4).is_empty());
+  assert!(e.inventory_wand_nested_material_variants(4).contains(&[13,3,0]));
+  assert!(e.inventory_wand_nested_creation_material_variants(4).contains(&[13,3,0]));
+  assert!(!e.inventory_wand_nested_material_variants(4).contains(&[502,2,0]));
+  assert!(e.inventory_wand_nested_pairs(4,true).contains(&[106,127]));
+  let combined=e.inventory_wand_nested_materials_for_pair(4,[106,127],true);
+  assert!(combined.contains(&[13,2,0])&&combined.contains(&[502,2,0]));
+  assert!(e.inventory_wand_nested_materials_for_pair(4,[999,127],false).is_empty());
+  assert!(!e.inventory_wand_source_creation_variants(candidate,source).contains(&[104,125]));
+  assert!(e.change_inventory_wand_nested(4,before,[source,104,125,502,2,0]).is_err());
+  assert!(e.change_inventory_wand_nested(4,before,[source,104,125,285,2,0]).is_err());
+  assert!(e.change_inventory_wand_nested(4,before,[source,104,125,0,0,0]).is_err());
+  assert!(e.change_inventory_wand_identity(4,[source,104,125],[315822,104,125]).is_err());
+  assert!(e.create_inventory_wand_variant(4,[104,125],[106,125],1).is_err());
+  assert!(!e.dirty());
+  e.change_inventory_wand_nested(4,before,after).unwrap();
+  assert!(e.inventory_wand_nested_material_variants(4).contains(&[13,2,0]));
+  assert!(!e.inventory_wand_nested_creation_material_variants(4).contains(&[13,2,0]));
+  let material=e.inventory_wand_nested_creation_material_variants(4).into_iter().next().expect("distinct furniture material");
+  let material_target=[source,104,125,material[0],material[1],material[2]];
+  let material_child=e.create_inventory_wand_nested(4,after,material_target,4).unwrap();
+  assert!(!e.inventory_wand_nested_creation_material_variants(4).contains(&material));
+  let child=e.create_inventory_wand_nested(4,after,[source,106,125,13,3,0],3).unwrap();
+  let combination=[source,106,127,502,3,0];
+  assert!(e.inventory_wand_nested_materials_for_pair(4,[106,127],true).contains(&[502,3,0]));
+  let combined_child=e.create_inventory_wand_nested(4,after,combination,5).unwrap();
+  assert!(!e.inventory_wand_nested_materials_for_pair(4,[106,127],true).contains(&[502,3,0]));
+  assert!(matches!(e.inventory_unique_data(child),Some(U::WandAppearance{source_item_id:61381969,magic:106,fleck:125,source_tag:8,source_count:3,..})));
+  assert_eq!(e.inventory_unique_data(child).unwrap().display_words().1,vec![61381969,106,125,0,8,3,13,3,0]);
+  assert!(e.create_inventory_wand_nested(4,after,[source,106,125,13,3,0],1).is_err());
+  assert!(e.create_inventory_wand_nested(4,after,before,1).is_err());
+  e.change_inventory_quantity(4,2,0).unwrap();
+  assert!(e.inventory_wand_nested_creation_material_variants(4).is_empty());
+  let checkpoint=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&checkpoint).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity,0);assert_eq!(saved.inventory_unique_rows().next().unwrap().1,Some(21));
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(peer.as_slice()));
+  assert!(saved.inventory().iter().any(|r|r.quantity==3&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(child)));
+  assert!(saved.inventory().iter().any(|r|r.quantity==4&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(material_child)));
+  assert!(saved.inventory().iter().any(|r|r.quantity==5&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(combined_child)));
+  saved.change_inventory_quantity(4,0,2).unwrap();assert!(Editor::open(saved.export().unwrap()).is_ok());
+ }
+ for peer in [wand(source,104,Some([13,2,0])),wand(source,104,Some([285,2,0])),wand(source,104,Some([0,0,0])),wand(315822,104,Some([13,2,0]))]{
+  let mut e=Editor::open(make(peer)).unwrap();
+  assert!(e.inventory_wand_nested_material_variants(4).is_empty());
+  assert!(e.change_inventory_quantity(4,2,0).is_err());assert!(!e.dirty());
+ }
+}

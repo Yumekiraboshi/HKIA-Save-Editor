@@ -1056,6 +1056,48 @@ pub extern "C" fn hkia_inventory_wand_identity_change(id:u32,s0:i32,b0:i32,b1:i3
  })
 }
 #[no_mangle]
+pub extern "C" fn hkia_inventory_wand_nested_material_variants(id:u32,creation:u32,magic:i32,fleck:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  if creation>1{return 1}
+  let rows=if magic==0&&fleck==0{
+   if creation==0{e.inventory_wand_nested_material_variants(id)}else{e.inventory_wand_nested_creation_material_variants(id)}
+  }else{e.inventory_wand_nested_materials_for_pair(id,[magic,fleck],creation==1)};
+  if rows.len()>2634{return 1}
+  let mut out=Vec::with_capacity(4+rows.len()*12);out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for word in row{out.extend(word.to_le_bytes());}}a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_nested_pairs(id:u32,creation:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};if creation>1{return 1}
+  let rows=e.inventory_wand_nested_pairs(id,creation==1);
+  let mut out=Vec::with_capacity(4+rows.len()*8);out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{for word in row{out.extend(word.to_le_bytes());}}a.reply=out;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_nested_change(id:u32,s0:i32,m0:i32,f0:i32,b0:i32,b1:i32,b2:i32,s1:i32,m1:i32,f1:i32,a0:i32,a1:i32,a2:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.change_inventory_wand_nested(id,[s0,m0,f0,b0,b1,b2],[s1,m1,f1,a0,a1,a2])){
+   Some(Ok(()))=>0,_=>1
+  }
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_wand_nested_create(id:u32,s0:i32,m0:i32,f0:i32,b0:i32,b1:i32,b2:i32,s1:i32,m1:i32,f1:i32,a0:i32,a1:i32,a2:i32,quantity:i32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  match a.editor.as_mut().map(|e|e.create_inventory_wand_nested(id,[s0,m0,f0,b0,b1,b2],[s1,m1,f1,a0,a1,a2],quantity)){
+   Some(Ok(_))=>0,_=>1
+  }
+ })
+}
+#[no_mangle]
 pub extern "C" fn hkia_inventory_wand_creation_variants(id:u32)->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();
