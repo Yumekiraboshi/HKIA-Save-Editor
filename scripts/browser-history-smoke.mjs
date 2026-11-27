@@ -747,11 +747,16 @@ async function inventoryCafeEditSmoke(){
   const select=dialog.locator('select[name="cafe-variant"]');
   const option=select.locator('option[data-ingredient-id="1622861092"]');
   const value=await option.getAttribute('value');assert.ok(value!==null);
+  const firstSlot=dialog.locator('[data-cafe-slot="0"]'),beforeLabel=await firstSlot.innerText();
   await select.selectOption(value);
   await dialog.locator('[data-cafe-slot="1"]').click();
+  const changedLabel=await firstSlot.innerText();assert.notEqual(changedLabel,beforeLabel);
   const second=await select.locator('option[data-ingredient-id]:not([data-ingredient-id="0"])').first().getAttribute('value');assert.ok(second!==null);
   await select.selectOption(second);
-  await dialog.locator('[data-cafe-slot="0"]').click();assert.equal(await select.inputValue(),value);
+  await firstSlot.click();
+  assert.equal(await firstSlot.innerText(),changedLabel);
+  assert.equal(await select.inputValue(),'-1');
+  assert.equal(await select.locator('option:checked').innerText(),changedLabel.replace(/^1 · /,''));
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await page.locator('button[title="Redo"]:not([disabled])').click();

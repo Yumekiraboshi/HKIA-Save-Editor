@@ -2076,16 +2076,28 @@ impl Editor {
   self.inventory_cafe_variants(id).into_iter().filter(|&(v,_,_)|
    v!=original&&v!=current&&self.valid_cafe_creation(item,v)).collect()
  }
+ fn cafe_creation_item(&self,id:u32,expected:CafeVariant,next:CafeVariant)->Option<i32>{
+  if let Some((item,starter,reserved))=self.absent_cafe_context(id){
+   return (expected==starter&&!reserved.contains(&next)&&self.valid_cafe_creation(item,next)).then_some(item)
+  }
+  let (item,original,current,reserved)=self.cafe_creation_context(id)?;
+  (current==expected&&next!=current&&next!=original&&!reserved.contains(&next)&&self.valid_cafe_creation(item,next)).then_some(item)
+ }
+ /// Recompute full-tuple choices from a read-only dialog draft.
+ pub fn inventory_cafe_preview(&self,id:u32,expected:CafeVariant,draft:CafeVariant)->Result<(Vec<(CafeVariant,i32,usize)>,bool),Error>{
+  if let Some((item,starter,reserved))=self.absent_cafe_context(id){
+   if expected!=starter||reserved.contains(&draft)||!self.valid_cafe_creation(item,draft){return Err(Error::Schema)}
+   return Ok((self.cafe_choices(item,starter,draft,&reserved).into_iter()
+    .filter(|&(v,_,_)|self.valid_cafe_creation(item,v)).collect(),true))
+  }
+  let (item,original,current,reserved)=self.cafe_context(id).ok_or(Error::Schema)?;
+  if expected!=current||reserved.contains(&draft)||!self.valid_cafe_target(item,original,draft){return Err(Error::Schema)}
+  let creatable=self.cafe_creation_item(id,expected,draft).is_some();
+  Ok((self.cafe_choices(item,original,draft,&reserved),creatable))
+ }
  pub fn create_inventory_cafe_variant(&mut self,source_id:u32,expected:CafeVariant,next:CafeVariant,quantity:i32)->Result<u32,Error>{
   if quantity<=0{return Err(Error::Schema)}
-  let item=if let Some((item,starter,reserved))=self.absent_cafe_context(source_id){
-   if expected!=starter||reserved.contains(&next)||!self.valid_cafe_creation(item,next){return Err(Error::Schema)}
-   item
-  }else{
-   let (item,original,current,reserved)=self.cafe_creation_context(source_id).ok_or(Error::Schema)?;
-   if current!=expected||next==current||next==original||reserved.contains(&next)||!self.valid_cafe_creation(item,next){return Err(Error::Schema)}
-   item
-  };
+  let item=self.cafe_creation_item(source_id,expected,next).ok_or(Error::Schema)?;
   let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
   let change=Change::CafeCreated{document_id,source_id,item_id:item,expected,variant:next,quantity};
   self.restore_change(&change,false);self.undo.push(change);
