@@ -21,8 +21,8 @@ try{
   for(let y=0;y<2;y++)for(let x=0;x<4;x++)atlasRgba.set([(x%2)*255,y*255,Math.floor(x/2)*255,255],4*(y*4+x));
   const identity={width:4,height:2,rgba:atlasRgba,parameters:[.25,.5,1],rowOrder:'bottom-up',fidelity:'diagnostic-only'};
   const rows=[];
-  for(const output of ['linear','gamma20','srgb'])for(const vignetteIntensity of [0,1]){
-   const post={vignetteColor:[0,0,0],vignetteAspect:1,vignetteCenter:[.5,.5],vignetteIntensity,vignetteSmoothness:1,output,exposureMultiplier:1};
+  for(const output of ['linear','gamma20','srgb'])for(const [vignetteIntensity,vignetteSmoothness] of [[0,1],[1,1],[4,0]]){
+   const post={vignetteColor:[0,0,0],vignetteAspect:1,vignetteCenter:[.5,.5],vignetteIntensity,vignetteSmoothness,output,exposureMultiplier:1};
    for(const [label,plan] of [['identity',{atlas:identity,post}],['serialized-default',H.prepareDefaultFurnitureLdrDiagnostic(16,45,post)]]){
     const cpu=H.applyFurnitureLdrDiagnostic(frame,plan),gpu=H.applyFurnitureLdrGpuDiagnostic(frame,plan);
     let maxRgbError=0;
@@ -30,12 +30,12 @@ try{
      if(i%4===3){if(gpu.rgba[i]!==rgba[i])throw Error('ALPHA_CHANGED');}
      else maxRgbError=Math.max(maxRgbError,Math.abs(cpu.rgba[i]-gpu.rgba[i]));
     }
-    rows.push({label,output,vignetteIntensity,maxRgbError,changed:gpu.gradedChangedPixels,hidden:gpu.gradedHiddenChangedPixels,visible:gpu.visiblePixels,partial:gpu.partialAlphaPixels});
+    rows.push({label,output,vignetteIntensity,vignetteSmoothness,maxRgbError,changed:gpu.gradedChangedPixels,hidden:gpu.gradedHiddenChangedPixels,visible:gpu.visiblePixels,partial:gpu.partialAlphaPixels});
    }
   }
   return rows;
  });
- assert.equal(results.length,12);
+ assert.equal(results.length,18);
  for(const row of results){
   assert.ok(row.maxRgbError<=3,JSON.stringify(row));
   assert.equal(row.visible,2);assert.equal(row.partial,1);

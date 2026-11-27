@@ -22,7 +22,7 @@ vec4 grade(vec4 sampleColor,vec2 uv){
  vec3 c=sampleColor.rgb;
  if(vignette.w>0.){
   vec2 q=abs(uv-vignette.xy)*vignette.w*vec2(vignette.z,1.);
-  float w=pow(max(0.,1.-dot(q,q)),vignetteSmoothness);
+  float w=vignetteSmoothness==0.?1.:pow(max(0.,1.-dot(q,q)),vignetteSmoothness);
   c*=vignetteColor+w*(1.-vignetteColor);
  }
  c=nativeLdrLut(internalLut,clamp(c*exposure,0.,1.),lutParameters);
