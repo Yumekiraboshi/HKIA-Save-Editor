@@ -1314,22 +1314,26 @@ impl Editor {
  // Additional palettes only from already owned, eligible source rows.
  // Every new channel must be a permitted native output, not an inherited
  // arbitrary or event-only color. No acquisition or outfit data is written.
- pub fn inventory_palette_creation_variants(&self,id:u32)->Vec<PaletteVariant>{
-  if !self.pending_palettes.contains_key(&id)&&!self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|
-   self.inventory_changes.get(&id).copied().or(r.quantity).is_some_and(|q|q>0)){return Vec::new()}
+ fn palette_creation_context(&self,id:u32)->Option<(PaletteVariant,PaletteVariant,Vec<PaletteVariant>)>{
+  let quantity=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
+  if !quantity.is_some_and(|q|q>0){return None}
   let item=crate::inventory_source::CUSTOM_PALETTE_ID;
   if !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
    self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||
-   self.inventory_item_rows.get(&item).copied().unwrap_or(0)+self.pending_palettes.len()>=256{return Vec::new()}
-  let Some((original,current,_))=self.palette_context(id)else{return Vec::new()};
+   self.inventory_item_rows.get(&item).copied().unwrap_or(0)+self.pending_palettes.len()>=256{return None}
+  self.palette_context(id)
+ }
+ pub fn inventory_palette_creation_variants(&self,id:u32)->Vec<PaletteVariant>{
+  let Some((original,current,_))=self.palette_creation_context(id)else{return Vec::new()};
   self.inventory_palette_variants(id).into_iter().filter(|v|
    !Self::palette_equal(*v,original)&&!Self::palette_equal(*v,current)&&
    v.iter().all(|&c|Self::palette_output_choices().any(|x|x==c))).collect()
  }
  pub fn create_inventory_palette_variant(&mut self,source_id:u32,expected:PaletteVariant,next:PaletteVariant,quantity:i32)->Result<u32,Error>{
-  if quantity<=0||!self.inventory_palette_creation_variants(source_id).contains(&next){return Err(Error::Schema)}
-  let (_,current,_)=self.palette_context(source_id).ok_or(Error::Schema)?;
-  if expected!=current{return Err(Error::Schema)}
+  let (original,current,reserved)=self.palette_creation_context(source_id).ok_or(Error::Schema)?;
+  if quantity<=0||expected!=current||Self::palette_equal(next,original)||Self::palette_equal(next,current)||
+   reserved.iter().any(|&p|Self::palette_equal(p,next))||
+   !next.iter().all(|&c|Self::palette_output_choices().any(|x|x==c)){return Err(Error::Schema)}
   let document_id=self.allocate_staged_unique_handle()?;
   let revision=self.next_edit_revision()?;
   let change=Change::PaletteCreated{document_id,source_id,expected,variant:next,quantity};

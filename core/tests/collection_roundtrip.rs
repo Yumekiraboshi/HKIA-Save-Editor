@@ -3146,3 +3146,30 @@ fn cafe_multiple_ingredient_pairs_create_one_independent_stack(){
  let mut collision=Editor::open(make(true)).unwrap();
  assert!(collision.create_inventory_cafe_variant(4,original,target,1).is_err());assert!(!collision.dirty());
 }
+
+#[test]
+fn palette_multichannel_creation_is_one_native_transaction(){
+ use hkia_save_core::{collection::{HistoryScope::Inventory,PaletteVariant},inventory_palette_source::palette_output_color as color,native::InventoryUniqueData};
+ let original=[color(1,0).unwrap(),color(2,0).unwrap(),color(3,0).unwrap()];
+ let target=[color(4,3).unwrap(),color(5,4).unwrap(),color(6,0).unwrap()];
+ let encode=|v:PaletteVariant|arr(vec![vec![6],arr(v.into_iter().map(|c|arr(c.into_iter().map(|w|f(f32::from_bits(w))).collect())).collect())]);
+ let make=|v:PaletteVariant|{
+  let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=0x96;
+  p.extend(doc(1,arr(vec![u(4),u(1835273963),u(21),u(2),encode(v)])));
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(original);let input=if zipped{zip(&raw)}else{raw};let mut e=Editor::open(input.clone()).unwrap();
+  assert!(!e.inventory_palette_creation_variants(4).contains(&target));
+  let mut forbidden=target;forbidden[1]=[0,0,0,0x3f800000];
+  assert!(e.create_inventory_palette_variant(4,original,forbidden,3).is_err());assert!(!e.dirty());
+  let id=e.create_inventory_palette_variant(4,original,target,3).unwrap();
+  assert_eq!(e.history().len(),1);assert_eq!(e.inventory_unique_data(id),Some(InventoryUniqueData::Palette{rgba_bits:target}));
+  assert!(e.create_inventory_palette_variant(4,original,target,3).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert!(!restored.dirty());assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();assert_eq!(saved.inventory_original_unique_payload(4),Some(encode(original).as_slice()));
+  let new_id=saved.inventory()[1].document_id;assert_eq!(saved.inventory()[1].quantity,3);
+  assert_eq!(saved.inventory_unique_data(new_id),Some(InventoryUniqueData::Palette{rgba_bits:target}));
+ }
+}
