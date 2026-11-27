@@ -2011,15 +2011,17 @@ impl Editor {
   self.cafe_choices(item,original,current,&reserved)
  }
  fn cafe_choices(&self,item:i32,original:CafeVariant,current:CafeVariant,reserved:&HashSet<CafeVariant>)->Vec<(CafeVariant,i32,usize)>{
+  // The current draft is already CAS-validated; each candidate changes one
+  // slot to an issued source pair or that slot's exact original pair.
   let mut out=Vec::new();let mut seen=HashSet::new();
   let slots=if item==crate::inventory_source::NIGIRI_ID{2}else{crate::inventory_source::cafe_slot_count(item).unwrap_or(0)};
   for i in 0..slots{
    for (ingredient,flavor,color) in self.cafe_slot_choices(item,i){
     let mut next=current;next[i]=flavor;next[i+3]=color;
-    if next!=current&&self.valid_cafe_target(item,original,next)&&!reserved.contains(&next)&&seen.insert(next){out.push((next,ingredient,i))}
+    if next!=current&&Self::valid_cafe_saved(item,next)&&!reserved.contains(&next)&&seen.insert(next){out.push((next,ingredient,i))}
    }
    let mut next=current;next[i]=original[i];next[i+3]=original[i+3];
-   if next!=current&&self.valid_cafe_target(item,original,next)&&!reserved.contains(&next)&&seen.insert(next){out.push((next,0,i))}
+   if next!=current&&Self::valid_cafe_saved(item,next)&&!reserved.contains(&next)&&seen.insert(next){out.push((next,0,i))}
   }
   out
  }
