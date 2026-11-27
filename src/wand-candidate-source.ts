@@ -1,3 +1,4 @@
+import {hasWandMipSource,loadWandMipOverlay} from './wand-mip-source';
 import aliases from '../data/wand-original-sprite-aliases-v3.0.1.json';
 import type {PixelBuffer,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,type TextureAsset} from './dynamic-art-assets';
@@ -101,6 +102,7 @@ function nonSquareSource(){
 }
 export async function loadSampledWandOverlay(itemId:number,transform:Transform):Promise<{spritePathId:string;sourceHash:string;overlay:SpriteOverlay}|null>{
  try{
+  if(hasWandMipSource(itemId))return await loadWandMipOverlay(itemId,transform);
   if((NON_SQUARE_IDS as readonly number[]).includes(itemId)){
    if(transform.scale!==Math.fround(.4)||transform.offsetPercent[0]!==-.25||transform.offsetPercent[1]!==.25||transform.rotation!==0)return null;
    const m=await nonSquareSource(),r=m.rows.find(r=>r.itemId===itemId);if(!r)return null;
