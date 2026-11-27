@@ -6,13 +6,13 @@
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
  import {selectMatchingInventoryRows,deselectMatchingInventoryRows} from './inventory-selection';
- import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy,inventoryDeselectVisibleCopy,inventoryDeleteCopy} from './inventory-copy';
+ import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy,inventoryDeselectVisibleCopy,inventoryDeleteCopy,inventoryShowZeroCopy} from './inventory-copy';
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,furnitureHasCustomizedAppearance,type FurnitureDisplay} from './inventory-furniture-display';
  import InventoryDecorator from './InventoryDecorator.svelte';
  import {flowerDecorators} from './inventory-flower-display';
- import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryRefillable,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,flowerGrowthKind,hasNativeFlowerArt,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {loadInventoryNativeArt,type InventoryNativeArt} from './inventory-native-art';
@@ -112,6 +112,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let paletteDraftCreatable=$state(false);
  let inventoryNativeArt:InventoryNativeArt|null=$state(null);
  let inventoryEditableOnly=$state(false);
+ let inventoryShowZero=$state(false);
  let inventoryAddMode=$state(false);
  let inventoryBatchMode=$state(false);
  let inventoryBatchSelected=$state<Set<number>>(new Set());
@@ -251,7 +252,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   sourceOrderedAchievementRows);
  const inventoryAvailableToAdd=$derived(inventoryAddRows((snapshot as SaveSnapshot|null)?.inventory??[],(snapshot as SaveSnapshot|null)?.inventoryCreatable??[]));
  const inventoryBrowseRows:InventoryEntry[]=$derived(inventoryAddMode?inventoryAvailableToAdd:(snapshot as SaveSnapshot|null)?.inventory??[]);
- const inventoryDisplayedRows=$derived(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,inventoryQuery));
+ const inventoryDisplayedRows=$derived(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,inventoryShowZero));
  const inventoryGroupTotals=$derived(inventoryGroupCounts(inventoryDisplayedRows,nativeInventoryIndex));
  const inventoryMatchTotals=$derived(inventorySearchGroupCounts(inventoryDisplayedRows,inventoryQuery,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName));
  const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
@@ -554,7 +555,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function openInventoryTab(){
   clearInventoryBatch();inventoryAddMode=false;
-  activeTool='inventory';inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;
+  activeTool='inventory';inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;inventoryShowZero=false;
   inventoryLimit=BATCH_SIZE;editingAchievement=null;error='';
   // Retry transient failures only when the user reopens Inventory.
   // Successfully verified original images remain cached and unchanged.
@@ -1132,8 +1133,18 @@ import {verifiedFloorplanName} from './floorplan-names';
   const next=(event.currentTarget as HTMLInputElement).value;
   inventoryLimit=BATCH_SIZE;
   if(!next.trim())return;
-  const counts=inventorySearchGroupCounts(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,next),next,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
+  const counts=inventorySearchGroupCounts(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,inventoryShowZero),next,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
   inventoryGroup=inventorySearchTarget(activeInventoryGroup,counts);
+ }
+ function toggleInventoryShowZero(){
+  const previous=activeInventoryGroup;
+  inventoryShowZero=!inventoryShowZero;inventoryLimit=BATCH_SIZE;
+  if(!inventoryShowZero){
+   const visible=new Set(inventoryDisplayRows(inventoryBrowseRows,false,false).map(row=>row.documentId));
+   inventoryBatchSelected=new Set([...inventoryBatchSelected].filter(id=>visible.has(id)));
+  }
+  const counts=inventorySearchGroupCounts(inventoryDisplayRows(inventoryBrowseRows,false,inventoryShowZero),inventoryQuery,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
+  if(inventoryQuery.trim())inventoryGroup=inventorySearchTarget(previous,counts);
  }
  function toggleInventoryBatch(row:InventoryEntry){
   if(!snapshot||busy||!inventoryBatchMode||!row.editable)return;
@@ -1631,6 +1642,10 @@ import {verifiedFloorplanName} from './floorplan-names';
      onclick={()=>{inventoryEditableOnly=!inventoryEditableOnly;inventoryLimit=BATCH_SIZE}}>
      {iCopy.editableOnly}
     </button>
+    {#if !inventoryAddMode}
+     <button type="button" class="inventory-editable-filter inventory-show-zero-toggle" class:active={inventoryShowZero}
+      aria-pressed={inventoryShowZero} onclick={toggleInventoryShowZero}>{inventoryShowZeroCopy(locale)}</button>
+    {/if}
     <button type="button" class="inventory-editable-filter inventory-add-toggle" class:active={inventoryAddMode}
      aria-pressed={inventoryAddMode} disabled={busy||(!inventoryAddMode&&inventoryAvailableToAdd.length===0)}
      onclick={()=>{clearInventoryBatch();inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;inventoryLimit=BATCH_SIZE}}>
@@ -1712,7 +1727,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const canCafe=!!item.cafe?.editable}
      {@const canWand=!!item.unique?.wandEditable&&!!wand}
      {@const canBoba=!!item.boba?.editable}
-      <article class="inventory-card" class:inventory-empty-stack={!inventoryAddMode&&inventoryRefillable(item)} class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable&&item.wandCreatableStyle===undefined} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
+      <article class="inventory-card" class:inventory-empty-stack={!inventoryAddMode&&item.quantity===0} class:inventory-readonly={!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable&&item.wandCreatableStyle===undefined} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
       {#if inventoryBatchMode&&item.editable}
        <input class="inventory-batch-checkbox" type="checkbox" checked={inventoryBatchSelected.has(item.documentId)} aria-label={iBatchCopy+': '+inventoryName(item.itemId)}
         disabled={busy||(!inventoryBatchSelected.has(item.documentId)&&inventoryBatchSelected.size>=snapshot.inventoryBatchLimit)} onchange={()=>toggleInventoryBatch(item)}/>

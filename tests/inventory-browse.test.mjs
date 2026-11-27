@@ -196,7 +196,7 @@ test('category representatives use source item IDs chosen by visual motif, not c
  assert.doesNotMatch(app,/src=\{INVENTORY_UI\+t\.art\}/);
 });
 
-test('empty native stacks leave the owned grid but remain available to search and refill',()=>{
+test('zero stacks are hidden by default and explicitly revealed independently of refill eligibility',()=>{
  const empty={documentId:30,itemId:315822,quantity:0,editable:true,quantityMinimum:0};
  const opaque={documentId:31,itemId:517031,quantity:0,editable:false,quantityMinimum:1};
  const positive={documentId:32,itemId:315822,quantity:2,editable:true,quantityMinimum:0};
@@ -204,12 +204,14 @@ test('empty native stacks leave the owned grid but remain available to search an
  const owned=[empty,opaque,positive];
  assert.equal(inventoryRefillable(empty),true);
  assert.equal(inventoryRefillable(opaque),false);
- assert.deepEqual(inventoryDisplayRows(owned,false,'').map(r=>r.documentId),[31,32]);
- assert.deepEqual(inventoryDisplayRows(owned,false,'  ').map(r=>r.documentId),[31,32]);
- assert.deepEqual(inventoryDisplayRows(owned,false,'315822'),owned);
+ assert.deepEqual(inventoryDisplayRows(owned,false,false).map(r=>r.documentId),[32]);
+ assert.deepEqual(inventoryDisplayRows(owned,false,true),owned);
+ const hidden=inventoryDisplayRows([empty,opaque],false,false);
+ assert.equal(inventorySearchGroupCounts(hidden,'315822',false,{},items,index).size,0);
+ assert.equal(inventorySearchGroupCounts(inventoryDisplayRows([empty,opaque],false,true),'315822',false,{},items,index).get('clothes'),1);
  const add=inventoryAddRows(owned,[absent]);
  assert.deepEqual(add,[empty,absent]);
- assert.deepEqual(inventoryDisplayRows(add,true,''),add);
+ assert.deepEqual(inventoryDisplayRows(add,true,false),add);
  assert.deepEqual(owned,[empty,opaque,positive]);
  assert.deepEqual(inventoryAddRows([opaque,positive],[absent]),[absent]);
 });

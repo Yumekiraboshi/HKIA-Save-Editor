@@ -420,6 +420,12 @@ pub(crate) fn legacy_wand_source_id(guid:[u32;4])->Option<i32>{
  use crate::inventory_legacy_wand_guid_data::LEGACY_WAND_SOURCE_GUIDS as ROWS;
  ROWS.binary_search_by_key(&guid,|r|r.0).ok().map(|i|ROWS[i].1)
 }
+/// Resolve complete historical item GUID references, not acquisition rights.
+pub(crate) fn native_item_reference_id(guid:[u32;4])->Option<i32>{
+ if guid==[0;4]{return None}
+ use crate::inventory_legacy_wand_guid_data::OTHER_NATIVE_ITEM_GUIDS as ROWS;
+ legacy_wand_source_id(guid).or_else(||ROWS.binary_search_by_key(&guid,|r|r.0).ok().map(|i|ROWS[i].1))
+}
 pub(crate) fn wand_source_style(item:i32,source:i32)->Option<i32>{
  if source==0{return magic_wand_style(item)}
  if item==CRITTER_WAND_ID{return CRITTER_WAND_SOURCES.binary_search(&source).ok().map(|_|0)}
@@ -588,6 +594,22 @@ mod clothing_reference_tests{
 
 #[cfg(test)]mod legacy_wand_source_tests{
  use super::*;
+ #[test]fn complete_native_item_guid_reference_crosswalk(){
+  use crate::inventory_legacy_wand_guid_data::{LEGACY_WAND_SOURCE_GUIDS,OTHER_NATIVE_ITEM_GUIDS};
+  assert_eq!(OTHER_NATIVE_ITEM_GUIDS.len(),3552);
+  assert!(OTHER_NATIVE_ITEM_GUIDS.windows(2).all(|w|w[0].0<w[1].0));
+  let mut ids=std::collections::HashSet::new();
+  let mut guids=std::collections::HashSet::new();
+  for &(guid,id) in LEGACY_WAND_SOURCE_GUIDS.iter().chain(OTHER_NATIVE_ITEM_GUIDS){
+   assert!(ids.insert(id)&&guids.insert(guid));
+   let i=RULES.binary_search_by_key(&id,|r|r.0).unwrap();
+   assert_eq!(furniture_guid_fingerprint(guid),ITEM_GUID_DENIAL_KEYS[i]);
+   assert_eq!(native_item_reference_id(guid),Some(id));
+  }
+  assert_eq!(ids.len(),RULES.len());
+  assert_eq!(native_item_reference_id([0;4]),None);
+  assert_eq!(native_item_reference_id([u32::MAX;4]),None);
+ }
  #[test]fn complete_legacy_recipe_guid_crosswalk(){
   use crate::inventory_legacy_wand_guid_data::LEGACY_WAND_SOURCE_GUIDS as ROWS;
   assert_eq!(ROWS.len(),8611);
