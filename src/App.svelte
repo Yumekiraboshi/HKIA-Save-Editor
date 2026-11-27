@@ -109,7 +109,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryBatchQuantity=$state<number|undefined>(undefined);
  // Presentation only: the tightest bound returned by Rust for selected rows.
  const inventoryBatchMinimum=$derived.by(()=>{
-  if(!snapshot||inventoryBatchSelected.size===0)return 1;
+  if(inventoryAddMode||!snapshot||inventoryBatchSelected.size===0)return 1;
   return inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantityMinimum!==0)?1:0;
  });
  const inventoryBatchCanDelete=$derived.by(()=>!inventoryAddMode&&inventoryBatchSelected.size>0&&inventoryBatchMinimum===0&&inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantity>0));
@@ -1063,7 +1063,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    error=copy.fileError;return;
   }
   const next=Number(value);
-  if(!Number.isSafeInteger(next)||row.quantityLimit===null||next<row.quantityMinimum||next>row.quantityLimit){error=copy.fileError;return}
+  if(!Number.isSafeInteger(next)||row.quantityLimit===null||next<(inventoryAddMode?Math.max(1,row.quantityMinimum):row.quantityMinimum)||next>row.quantityLimit){error=copy.fileError;return}
   if(next===row.quantity)return;
   if(next===0){requestInventoryDelete([row],false,(event.submitter??event.currentTarget) as HTMLElement);return;}
   busy=true;error='';
@@ -1623,7 +1623,7 @@ import {verifiedFloorplanName} from './floorplan-names';
        <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>
         <label>
          <span class="visually-hidden">{iCopy.quantity}</span>
-         <input type="number" name="quantity" min={item.quantityMinimum} max={item.quantityLimit??1} step="1"
+         <input type="number" name="quantity" min={inventoryAddMode?Math.max(1,item.quantityMinimum):item.quantityMinimum} max={item.quantityLimit??1} step="1"
           value={inventoryAddMode?1:item.quantity} disabled={busy||inventoryBatchMode} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
         </label>
         <button type="submit" class="primary" disabled={busy||inventoryBatchMode} title={iCopy.apply} aria-label={iCopy.apply}>

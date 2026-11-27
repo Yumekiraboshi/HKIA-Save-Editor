@@ -759,6 +759,10 @@ async function inventoryBatchQuantitySmoke(){
   assert.ok(limit>=40);
   await page.locator('.inventory-select-visible').click();
   assert.equal(Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,'')),limit);
+  await page.locator('.inventory-deselect-visible').click();
+  assert.equal(Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,'')),0);
+  await page.locator('.inventory-select-visible').click();
+  assert.equal(Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,'')),limit);
   await page.locator('.inventory-batch-toggle').click();
   assert.equal(await page.locator('.inventory-batch-form').count(),0);
   assert.deepEqual(errors,[]);
@@ -989,6 +993,16 @@ async function inventoryEmptyBrowseSmoke(){
   const input=cards.locator('input[name="quantity"]');
   await input.waitFor();
   assert.equal(await input.inputValue(),'1');
+  assert.equal(await input.getAttribute('min'),'1');
+  await input.fill('0');
+  assert.equal(await input.evaluate(el=>el.validity.rangeUnderflow),true);
+  await page.locator('.inventory-batch-toggle').click();
+  await cards.locator('.inventory-batch-checkbox').check();
+  const batchInput=page.locator('.inventory-batch-form input[type="number"]');
+  assert.equal(await batchInput.getAttribute('min'),'1');
+  await batchInput.fill('0');
+  assert.equal(await batchInput.evaluate(el=>el.validity.rangeUnderflow),true);
+  await page.locator('.inventory-batch-toggle').click();
   await input.fill('7');
   await cards.locator('button[type="submit"]').click();
   await cards.waitFor({state:'hidden'});
