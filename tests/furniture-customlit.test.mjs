@@ -97,3 +97,27 @@ test('source-pinned Retsuko amplifier and Scholastic bleacher opaque CustomLit m
   assert.throws(()=>resolveCustomLitFixedMaterial({...base,materials:{[id+'0']:material}},id+'0'),/SHADER_UNSUPPORTED/);
  }
 });
+
+test('original sandwich board, car and potted plant materials use exact existing CustomLit branches',()=>{
+ const shader='CAB-46b8f8fe122147493b3113f7c1c8cd0f:-6681258383375895387';
+ const rows=[
+ ['CAB-5ef6817f21189d51a1959442b2f74051:-7047482495623742839','46792fb6732c4f6891287c3f4adf9454f03bf4e332645d2385b88d60e9c362a3',2,1,0,-0.18799999356269836,1,1,[0,0,0,1]],
+ ['CAB-727becbe455791108d05c4e036482727:7716668811824500502','1f5785fed9b1d2f3b8a90bdd46353f754fe7ca46bae247c309b19318768f76ed',0,0,-0.14399999380111694,0,1,1,[0,0,0,1]],
+ ['CAB-4cb7373ba004738e2471a644a799f890:6471817753889870274','e16c6bbb1062ac1acdde8d94024609e9691db4be970812d8edbd46216e2d5f93',2,0,-0.20000000298023224,0.20000000298023224,.5,1,[7.906698703765869,5.795485973358154,3.2289137840270996,1]],
+ ['CAB-4cb7373ba004738e2471a644a799f890:709974708372506574','0b3ce9b28eaf6ecabda17e848e2e01c4a132a3d6756d1ea62a074ee72d56fe19',2,0,-0.20000000298023224,-0.20000000298023224,0.7009999752044678,6,[0,0,0,1]]
+ ];
+ for(const [id,hash,cull,rim,ss,ms,occ,refl,emission] of rows){
+  const link=texture=>({texture,scale:[1,1],offset:[0,0]});
+  const material={shader,objectSha256:hash,renderQueue:-1,validKeywords:rim?['CUSTOM_RIMLIGHT_ON']:[],
+   floats:{_Material_Alpha:0,_AlphaClip:0,_ZWrite:1,_Cull:cull,_Lighting_Fog:1,_Lighting_Medium_Underwater:0,_Material_VertexAnimation:0,_Surface_Effect:0,_Clip_Offset:0,GLIMMER:0,UV_WORLD:0,_Material_SrcBlend:1,_Material_DstBlend:0,_ZTest:4,_StencilCompare:0,_StencilOverride:0,CUSTOM_RIMLIGHT:rim,_Lighting_RimPower:rim?5:1.5,_Lighting_RimFeathering:rim?.18199999630451202:.5,_Lighting_RimIntensity:rim?.9300000071525574:1,_Lighting_RimColoring:rim?.5370000004768372:0,_Smoothness_Shift:ss,_Metallic_Shift:ms,_OcclusionStrength:occ,_ReflectionStrength:refl},
+   colors:{_BaseColor:[1,1,1,1],_EmissionColor:emission},textures:{_BaseMap:link('base'),_BumpMap:link('normal'),_MetallicGlossMap:link('combo'),_AnimTex:link(null),_Surface_EffectMap:link(null)}};
+  const base={materials:{[id]:material},shaders:{[shader]:{objectSha256:'7c32f4b3f7c0c0d580af1e22584952aa29d266dfbe98de3b916c3fecb7339931'}},textures:{base:{fixture:1},normal:{fixture:2},combo:{fixture:3}}};
+  const p=resolveCustomLitFixedMaterial(base,id);
+  assert.equal(p.material.smoothnessShift,ss);assert.equal(p.material.metallicShift,ms);assert.equal(p.material.occlusionStrength,occ);assert.equal(p.reflectionStrength,refl);assert.equal(!!p.material.rim,!!rim);assert.equal(p.blendState,undefined);
+  for(const [k,v] of [['_Cull',cull===0?2:0],['_ZWrite',0],['_AlphaClip',1],['_Material_DstBlend',10],['UV_WORLD',1]]){
+   const bad=structuredClone(base);bad.materials[id].floats[k]=v;assert.throws(()=>resolveCustomLitFixedMaterial(bad,id),/SHADER_UNSUPPORTED/);
+  }
+  const wrong=structuredClone(base);wrong.materials[id].validKeywords=rim?[]:['CUSTOM_RIMLIGHT_ON'];assert.throws(()=>resolveCustomLitFixedMaterial(wrong,id),/SHADER_UNSUPPORTED/);
+  const bad=structuredClone(base);bad.materials[id].objectSha256='0'.repeat(64);assert.throws(()=>resolveCustomLitFixedMaterial(bad,id),/SHADER_UNSUPPORTED/);
+ }
+});
