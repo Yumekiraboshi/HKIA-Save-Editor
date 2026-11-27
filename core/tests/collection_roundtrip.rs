@@ -4043,7 +4043,7 @@ fn original_dlc_flower_effect_can_be_retained_but_not_granted_or_cloned(){
  use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
  let species=1331175279;
  let make=|effect:u8,accent:u8|{
-  let mut p=synthetic_payload("3.0.1");p[3]=0x97;
+  let mut p=synthetic_payload("3.0.1");p[2]=6;p[3]=0x97;
   p.extend(doc(1,arr(vec![u(4),u(species),u(11),u(93),arr(vec![vec![7],arr(vec![vec![6],vec![6],vec![effect],vec![accent]])])])));
   p.extend(doc(1,arr(vec![u(5),u(species),u(12),u(2),plain_flower(9)])));
   slot_from_payload("3.0.1",p)
