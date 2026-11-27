@@ -1933,7 +1933,7 @@ impl Editor {
    return out
   }
   src::CAFE_INGREDIENT_WITNESSES.iter().copied().filter(|&(id,f,c)|
-   src::cafe_pair_allowed(item,f,c)&&(src::ordinary_membership_item(id)||self.owned_cafe_ingredient(id))).collect()
+   src::cafe_pair_allowed(item,f,c)&&(src::ordinary_membership_item(id)||src::ordinary_bag_creation_item(id)||self.owned_cafe_ingredient(id))).collect()
  }
  pub fn inventory_cafe_witnesses(&self)->&'static [(i32,i32,i32)]{
   if self.slot.envelope.version==Version::V301{crate::inventory_source::CAFE_INGREDIENT_WITNESSES}else{&[]}
