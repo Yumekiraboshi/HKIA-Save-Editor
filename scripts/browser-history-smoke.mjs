@@ -249,6 +249,42 @@ async function inventoryPaletteRemovalSmoke(){
  }
  console.log('CHROMIUM PALETTE REMOVAL PASS: copied avatar palette protected; zero, recovery and undo');
 }
+async function inventoryFirstPaletteSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-first-palette.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
+  const search=page.locator('.inventory-controls input[type="search"]');await search.fill('1835273963');
+  const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="palette-editor-title"]');
+  await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  assert.equal(await dialog.locator('button[type="submit"]').count(),0);
+  await dialog.locator('.inventory-palette-option:not([disabled])').first().click();
+  await dialog.locator('[data-palette-slot="1"]:not([disabled])').click();
+  await dialog.locator('.inventory-palette-option:not([disabled])').first().click();
+  await dialog.locator('input[name="variant-add-quantity"]:not([disabled])').fill('2');
+  await dialog.locator('.inventory-create-palette:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await card.locator('.inventory-add-source').waitFor();
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('1835273963');
+  const qty=card.locator('input[name="quantity"]');await qty.waitFor();assert.equal(await qty.inputValue(),'2');
+  await page.locator('button[title="Undo"]:not([disabled])').click();await card.waitFor({state:'detached'});
+  await page.locator('button[title="Redo"]:not([disabled])').click();await qty.waitFor();
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('1835273963');await qty.waitFor();assert.equal(await qty.inputValue(),'2');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_absent_palette_default(),0);
+  assert.equal(new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len()).getUint32(0,true),0);
+  assert.equal(e.hkia_inventory_palettes_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());assert.equal(v.getUint32(0,true),1);
+  assert.deepEqual(errors,[]);console.log('CHROMIUM FIRST PALETTE PASS: absent chooser, history, recovery and export');
+ }finally{await context.close()}
+}
 async function inventoryPaletteCreationSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -1510,6 +1546,42 @@ async function inventoryAbsentFlowerCreationSmoke(){
   console.log('CHROMIUM UNOWNED FLOWER PASS: native default choices, staged appearance edit, draft recovery, exported reparse');
  }finally{await context.close();}
 }
+async function inventoryRareCandleSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-rare-candle.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
+  const search=page.locator('.inventory-controls input[type="search"]'),card=page.locator('.inventory-card');
+  await search.fill('22657460');await card.locator('.inventory-unique-edit-button').click();
+  const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');await dialog.waitFor();
+  assert.equal(await dialog.locator('button[type="submit"]').count(),0);
+  assert.equal(await dialog.locator('[data-flower-grow]').count(),0);
+  const choices=await dialog.locator('option[data-flower-variant]').evaluateAll(rows=>rows.map(row=>row.getAttribute('data-flower-variant').split(',').map(Number)));
+  assert.ok(choices.length>0);assert.ok(choices.every(v=>v[0]===6&&[1,2,10,11,12,13,14,16].includes(v[2])&&v[3]!==0&&v[3]!==v[1]));
+  const target=choices[0],value=await dialog.locator('option[data-flower-variant="'+target.join(',')+'"]').getAttribute('value');assert.ok(value!==null);
+  await dialog.locator('select').selectOption(value);
+  await dialog.locator('input[name="variant-add-quantity"]').fill('3');
+  await dialog.locator('.inventory-create-flower:not([disabled])').click();await dialog.waitFor({state:'hidden'});
+  await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('22657460');
+  await card.locator('input[name="quantity"]').waitFor();assert.equal(await card.locator('input[name="quantity"]').inputValue(),'3');
+  await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('22657460');await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'3');
+  await page.locator('.file-menu > summary').click();
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:30_000}),page.locator('.file-menu .menu-popover > button').nth(2).click()]);
+  const output=readFileSync(await download.path());
+  const {instance}=await WebAssembly.instantiate(readFileSync('target/wasm32-unknown-unknown/release/hkia_web_editor.wasm'),{}),e=instance.exports;
+  const ptr=e.hkia_stage(output.length);assert.ok(ptr>0);new Uint8Array(e.memory.buffer,ptr,output.length).set(output);
+  assert.equal(e.hkia_open(),0);assert.equal(e.hkia_inventory_flowers_snapshot(),0);
+  const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
+  assert.equal(v.getUint32(0,true),1);assert.deepEqual(Array.from({length:4},(_,i)=>v.getInt32(8+i*4,true)),target);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM RARE CANDLE PASS: native colored-pattern selection, recovery, export reparse');
+ }finally{await context.close();}
+}
 async function inventoryFlowerClothingCreationSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -2604,6 +2676,7 @@ async function run(){
  await achievementExportReopenRoundtrip();
  await inventoryDynamicPaletteArtSmoke();
  await inventoryPaletteCreationSmoke();
+ await inventoryFirstPaletteSmoke();
  await inventoryPaletteRemovalSmoke();
  await chefRuntimeSmoke(browser,origin,base);
  await inventoryChefArtSmoke();
@@ -2632,6 +2705,7 @@ async function run(){
  await inventoryFlowerVariantEditSmoke();
  await inventoryFlowerCreationSmoke();
  await inventoryAbsentFlowerCreationSmoke();
+ await inventoryRareCandleSmoke();
  await inventoryFlowerClothingCreationSmoke();
  await inventoryFurnitureVariantEditSmoke();
  await customizedFurnitureRemovalSmoke();

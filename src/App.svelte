@@ -890,8 +890,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   catch(e){error=describeError(e)}finally{busy=false}
  }
  async function openPaletteEditor(row:InventoryEntry){
-  const before=paletteVariantOf(row.unique);
-  if(!snapshot||busy||!row.unique?.paletteEditable||!before)return;
+  const before=row.paletteCreationDefault??paletteVariantOf(row.unique);
+  if(!snapshot||busy||(!row.paletteCreationDefault&&!row.unique?.paletteEditable)||!before)return;
   const revision=snapshot.revision;busy=true;error='';
   try{
    const preview=await requestPalettePreview(row.documentId,before,before);
@@ -1586,7 +1586,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
      {@const canFlower=!!item.flower&&!!item.unique?.flowerEditable&&!!flowerDefinitions&&!!flowerLabels[locale]}
      {@const canFurniture=!!item.unique?.furnitureEditable||!!item.furnitureCreatable}
-     {@const canPalette=!!item.unique?.paletteEditable&&!!item.palette}
+     {@const canPalette=!!item.paletteCreationDefault||!!item.unique?.paletteEditable&&!!item.palette}
      {@const canCafe=!!item.cafe?.editable}
      {@const canWand=!!item.unique?.wandEditable&&!!wand}
      {@const canBoba=!!item.boba?.editable}
@@ -1658,6 +1658,8 @@ import {verifiedFloorplanName} from './floorplan-names';
        </button>
       {:else if item.wandCreatableStyle}
        <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openAbsentWandEditor(item)}>{inventoryAddCopy(locale)}</button>
+      {:else if item.paletteCreationDefault}
+       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openPaletteEditor(item)}>{inventoryAddCopy(locale)}</button>
       {:else if item.flowerCreatable}
        <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openAbsentFlowerEditor(item)}>{inventoryAddCopy(locale)}</button>
       {:else if canFurniture}

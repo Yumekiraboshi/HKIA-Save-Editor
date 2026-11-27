@@ -190,20 +190,30 @@ fn flower_unique(v:FlowerVariant)->InventoryUniqueData{
  InventoryUniqueData::Flower{grow_state:v[0] as u8,base_color:v[1],pattern:v[2],pattern_color:v[3]}
 }
 // One source mapping for both existing and newly staged tag-7 records.
-fn flower_item_patterns(item:i32,grow:i32)->Option<&'static [i32]>{
- if let Some((_,patterns))=FLOWER_SPECIES.iter().find(|(id,_)|*id==item){return Some(*patterns)}
+const RARE_CANDLE_KEYS:&[(i32,u32)]=&[(22657460,0x3801512e),(1858821696,0xdf4cea79)];
+const RARE_CANDLE_PATTERNS:&[i32]=&[1,2,10,11,12,13,14,16];
+fn rare_candle_key(item:i32)->Option<u32>{RARE_CANDLE_KEYS.iter().find(|&&(id,_)|id==item).map(|&(_,key)|key)}
+#[derive(Clone,Copy)]
+struct FlowerPolicy{patterns:&'static [i32],require_colored_pattern:bool}
+impl FlowerPolicy{
+ fn ordinary(patterns:&'static [i32])->Self{Self{patterns,require_colored_pattern:false}}
+}
+fn flower_item_patterns(item:i32,grow:i32)->Option<FlowerPolicy>{
+ if let Some((_,patterns))=FLOWER_SPECIES.iter().find(|(id,_)|*id==item){return Some(FlowerPolicy::ordinary(patterns))}
  if grow!=6{return None}
  if let Ok(i)=FLOWER_CROWN_SPECIES.binary_search_by_key(&item,|&(id,_)|id){
   let species=FLOWER_CROWN_SPECIES[i].1;
-  return FLOWER_SPECIES.iter().find(|(id,_)|*id==species).map(|&(_,p)|p)
+  return FLOWER_SPECIES.iter().find(|(id,_)|*id==species).map(|&(_,p)|FlowerPolicy::ordinary(p))
  }
- if FLOWER_CLOTHING_GENERIC.contains(&item){Some(ALL_UNRESTRICTED_FLOWER_PATTERNS)}
- else if item==FLOWER_CLOTHING_NO_PATTERN||flower_candle_source(item).is_some(){Some(&[])}else{None}
+ if rare_candle_key(item).is_some(){Some(FlowerPolicy{patterns:RARE_CANDLE_PATTERNS,require_colored_pattern:true})}
+ else if FLOWER_CLOTHING_GENERIC.contains(&item){Some(FlowerPolicy::ordinary(ALL_UNRESTRICTED_FLOWER_PATTERNS))}
+ else if item==FLOWER_CLOTHING_NO_PATTERN||flower_candle_source(item).is_some(){Some(FlowerPolicy::ordinary(&[]))}else{None}
 }
-fn valid_flower_variant(patterns:&[i32],v:FlowerVariant)->bool{
+fn valid_flower_variant(policy:FlowerPolicy,v:FlowerVariant)->bool{
+ (!policy.require_colored_pattern||(v[0]==6&&policy.patterns.contains(&v[2])&&v[3]!=0))&&
  matches!(v[0],0|6|7)&&FLOWER_COLORS.contains(&v[1])&&
  if v[2]==0{v[3]==0}
- else if !patterns.contains(&v[2]){false}
+ else if !policy.patterns.contains(&v[2]){false}
  else if FLOWER_EFFECTS.contains(&v[2]){v[3]==0}
  else{FLOWER_COLORS.contains(&v[3])&&v[3]!=v[1]}
 }
@@ -437,7 +447,7 @@ impl Editor {
   if item<=0||uid<=0||self.slot.index.inventory_item_refs.contains(&(item,uid))||self.slot.index.inventory_legacy_uid_refs.contains(&uid){return None}
   Some(item)
  }
- fn flower_source(&self,row:&crate::native::InventoryRow)->Option<&'static [i32]>{
+ fn flower_source(&self,row:&crate::native::InventoryRow)->Option<FlowerPolicy>{
   let item=self.unique_row_source(row,4)?;
   let original=flower_variant(row.unique_data?)?;
   // Copied outfit/placement payload references also block clothing.
@@ -670,7 +680,7 @@ impl Editor {
   self.pending_flowers.get(&id).map(|f|f.variant)
    .or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.unique_data).and_then(flower_variant))
  }
- fn flower_context(&self,id:u32)->Option<(&'static [i32],FlowerVariant,HashSet<FlowerVariant>)>{
+ fn flower_context(&self,id:u32)->Option<(FlowerPolicy,FlowerVariant,HashSet<FlowerVariant>)>{
   let (item,uid,patterns)=if let Some(f)=self.pending_flowers.get(&id){
    (f.item_id,None,flower_item_patterns(f.item_id,f.variant[0])?)
   }else{
@@ -721,7 +731,7 @@ impl Editor {
   if self.flower_growth_change_allowed(id){Self::flower_growth_options(current,&reserved,&mut choices);}
   choices
  }
- fn flower_choices(patterns:&[i32],current:FlowerVariant,reserved:&HashSet<FlowerVariant>)->Vec<FlowerVariant>{
+ fn flower_choices(patterns:FlowerPolicy,current:FlowerVariant,reserved:&HashSet<FlowerVariant>)->Vec<FlowerVariant>{
   let mut out=Vec::new();
   let mut add=|v:FlowerVariant|{if v!=current&&valid_flower_variant(patterns,v)&&!reserved.contains(&v)&&!out.contains(&v){out.push(v)}};
   for &color in FLOWER_COLORS{
@@ -729,7 +739,7 @@ impl Editor {
    if v[2]!=0&&!FLOWER_EFFECTS.contains(&v[2])&&v[1]==v[3]{v[3]=default_flower_accent(color)}
    add(v);
   }
-  for pattern in std::iter::once(0).chain(patterns.iter().copied()){
+  for pattern in std::iter::once(0).chain(patterns.patterns.iter().copied()){
    if pattern==current[2]{continue}
    let mut v=current;v[2]=pattern;
    v[3]=if pattern==0||FLOWER_EFFECTS.contains(&pattern){0}else{default_flower_accent(v[1])};
@@ -811,7 +821,7 @@ impl Editor {
  }
  // Equivalent to staging a source default then editing the new row,
  // without creating an intermediate identity.
- fn absent_flower_preview_context(&self,item:i32,witness:FlowerVariant)->Option<(&'static [i32],HashSet<FlowerVariant>)>{
+ fn absent_flower_preview_context(&self,item:i32,witness:FlowerVariant)->Option<(FlowerPolicy,HashSet<FlowerVariant>)>{
   if !self.absent_flower_options(item).contains(&witness){return None}
   let patterns=flower_item_patterns(item,6)?;
   let mut reserved=HashSet::new();
@@ -844,6 +854,14 @@ impl Editor {
   // Missing crowns use only their exact source species' original default
   // colors. Generic processors can use any of the unrestricted source
   // species; only their actual default colors are offered here.
+  if rare_candle_key(item_id).is_some(){
+   let policy=flower_item_patterns(item_id,6).expect("verified rare candle");
+   return ABSENT_FLOWER_DEFAULTS.iter().flat_map(|&(species,colors)|{
+    let eligible=FLOWER_SPECIES.iter().any(|&(id,p)|id==species&&p.contains(&10));
+    colors.iter().copied().filter(move |_|eligible).map(|color|[6,color,10,default_flower_accent(color)])
+   }).collect::<std::collections::BTreeSet<_>>().into_iter().filter(|v|valid_flower_variant(policy,*v)&&
+    !self.pending_flowers.iter().any(|(&id,f)|self.inventory_changes.contains_key(&id)&&f.item_id==item_id&&(f.variant==*v||self.flower_variant_changes.get(&id)==Some(v)))).collect()
+  }
   let species=flower_candle_source(item_id).map(|r|r.1).or_else(||FLOWER_CROWN_SPECIES.iter().find(|&&(id,_)|id==item_id).map(|&(_,species)|species)).unwrap_or(item_id);
   let colors:Vec<i32>=if let Some((_,colors))=ABSENT_FLOWER_DEFAULTS.iter().find(|&&(id,_)|id==species){
    colors.to_vec()
@@ -859,6 +877,7 @@ impl Editor {
   ABSENT_FLOWER_DEFAULTS.iter().map(|&(id,_)|id)
    .chain(FLOWER_CROWN_SPECIES.iter().map(|&(id,_)|id))
    .chain(FLOWER_CANDLE_SPECIES.iter().map(|r|r.0))
+   .chain(RARE_CANDLE_KEYS.iter().map(|r|r.0))
    .chain(FLOWER_CLOTHING_GENERIC.iter().copied())
    .chain(std::iter::once(FLOWER_CLOTHING_NO_PATTERN))
    .filter(|&id|!self.absent_flower_choices(id).is_empty()).collect()
@@ -953,8 +972,9 @@ impl Editor {
    (Some(item),Some(InventoryUniqueData::BobaAppearance{..}))=>item==BOBA_ID,
    (Some(_),Some(InventoryUniqueData::WandAppearance{..}))=>self.wand_zero_reference_safe(r),
    (Some(item),Some(InventoryUniqueData::Furniture{..}))=>self.furniture_zero_reference_safe(item)||
-    (furniture_source::item(item).is_some_and(|s|!s.is_home_layout)&&self.ordinary_tradeable_nonclothing_zero_reference_safe(item)),
-   (Some(item),Some(InventoryUniqueData::Flower{grow_state:6,..}))=>crate::inventory_source::flower_clothing_reference_keys(item).is_some_and(|keys|self.clothing_zero_reference_safe(item,keys.iter()))||flower_candle_source(item).is_some_and(|r|self.flower_candle_zero_reference_safe(item,r.2)),
+    (furniture_source::item(item).is_some_and(|s|!s.is_home_layout)&&self.ordinary_tradeable_nonclothing_zero_reference_safe(item))||
+    self.extra_custom_furniture_zero_reference_safe(item),
+   (Some(item),Some(InventoryUniqueData::Flower{grow_state:6,..}))=>crate::inventory_source::flower_clothing_reference_keys(item).is_some_and(|keys|self.clothing_zero_reference_safe(item,keys.iter()))||flower_candle_source(item).map(|r|r.2).or_else(||rare_candle_key(item)).is_some_and(|key|self.flower_candle_zero_reference_safe(item,key)),
    _=>false
   }
  }
@@ -968,6 +988,17 @@ impl Editor {
  // never an identity or permission to change a referenced object.
  fn ordinary_tradeable_nonclothing_zero_reference_safe(&self,item:i32)->bool{
   let Some(key)=crate::inventory_source::ordinary_tradeable_nonclothing_reference(item)else{return false};
+  let index=&self.slot.index;
+  !index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
+   !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_refs_incomplete&&
+   !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
+   !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)&&
+   !index.inventory_item_refs.iter().any(|&(i,_)|i==item)
+ }
+ // Saved typed customized furniture outside the ordinary creation slice.
+ // The exact original GUID is used only to reject referenced rows.
+ fn extra_custom_furniture_zero_reference_safe(&self,item:i32)->bool{
+  let Some(key)=crate::inventory_source::custom_furniture_extra_reference(item)else{return false};
   let index=&self.slot.index;
   !index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
    !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_refs_incomplete&&
@@ -1002,7 +1033,8 @@ impl Editor {
      !self.slot.index.inventory_payload_refs_incomplete&&
      !self.slot.index.inventory_payload_item_refs.contains(&item_id)))&&
    r.unique_id==Some(0)&&r.unique_is_nil==Some(true)&&r.quantity.is_some_and(|q|q>=0)&&
-   r.fields.iter().all(Option::is_some)&&self.inventory_item_rows.get(&item_id)==Some(&1)&&
+   r.fields.iter().all(Option::is_some)&&(self.inventory_item_rows.get(&item_id)==Some(&1)||
+    self.ordinary_furniture_base_zero_with_peers(r,item_id))&&
    !self.slot.index.inventory_item_refs_incomplete&&
    !self.slot.index.inventory_item_refs.contains(&(item_id,0))
  }
@@ -1011,7 +1043,7 @@ impl Editor {
  // already reserve original and effective peer identities in their contexts.
  fn is_flower_quantity_definition(item:i32)->bool{
   FLOWER_SPECIES.iter().any(|(id,_)|*id==item)||
-   FLOWER_CROWN_SPECIES.binary_search_by_key(&item,|&(id,_)|id).is_ok()||flower_candle_source(item).is_some()||
+   FLOWER_CROWN_SPECIES.binary_search_by_key(&item,|&(id,_)|id).is_ok()||flower_candle_source(item).is_some()||rare_candle_key(item).is_some()||
    FLOWER_CLOTHING_GENERIC.contains(&item)||item==FLOWER_CLOTHING_NO_PATTERN
  }
  // Full ordered source keys for native Cafe/Boba Equals. Read every
@@ -1584,7 +1616,33 @@ impl Editor {
    self.inventory_item_rows.get(&item).copied().unwrap_or(0)+self.pending_palettes.len()>=256{return None}
   self.palette_context(id)
  }
+ /// Offer a native default selection for a missing palette, not a saved identity.
+ pub fn inventory_absent_palette_default(&self)->Option<(i32,PaletteVariant)>{
+  let item=crate::inventory_source::CUSTOM_PALETTE_ID;
+  let index=&self.slot.index;
+  if !crate::inventory_source::is_uncapped_required_unique_stack(item)||
+   self.inventory_item_rows.contains_key(&item)||
+   self.pending_palettes.keys().any(|id|self.inventory_changes.contains_key(id))||
+   index.inventory_palette_context_incomplete||index.inventory_palette_copies_incomplete||
+   !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
+   index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
+  Self::palette_output_choices().map(|color|[color;3])
+   .find(|&v|!index.inventory_palette_copies.iter().any(|&p|Self::palette_equal(p,v)))
+   .map(|v|(item,v))
+ }
+ fn absent_palette_context(&self,id:u32)->Option<(PaletteVariant,Vec<PaletteVariant>)>{
+  let (item,default)=self.inventory_absent_palette_default()?;
+  if id!=PENDING_ITEM|item as u32||self.pending_palettes.contains_key(&id){return None}
+  Some((default,self.slot.index.inventory_palette_copies.clone()))
+ }
+ fn absent_palette_target(reserved:&[PaletteVariant],next:PaletteVariant)->bool{
+  !reserved.iter().any(|&p|Self::palette_equal(p,next))&&
+   next.iter().all(|&c|Self::palette_output_choices().any(|x|x==c))
+ }
  pub fn inventory_palette_creation_variants(&self,id:u32)->Vec<PaletteVariant>{
+  if let Some((default,reserved))=self.absent_palette_context(id){
+   return Self::palette_choices(default,default,&reserved)
+  }
   let Some((original,current,_))=self.palette_creation_context(id)else{return Vec::new()};
   self.inventory_palette_variants(id).into_iter().filter(|v|
    !Self::palette_equal(*v,original)&&!Self::palette_equal(*v,current)&&
@@ -1597,14 +1655,23 @@ impl Editor {
  }
  /// Read-only native draft planning; identical final eligibility to creation CAS.
  pub fn inventory_palette_preview(&self,id:u32,expected:PaletteVariant,draft:PaletteVariant)->Result<(Vec<PaletteVariant>,bool),Error>{
+  if let Some((default,reserved))=self.absent_palette_context(id){
+   if expected!=default||!Self::absent_palette_target(&reserved,draft){return Err(Error::Schema)}
+   return Ok((Self::palette_choices(default,draft,&reserved),true))
+  }
   let (original,current,reserved)=self.palette_context(id).ok_or(Error::Schema)?;
   if expected!=current||!Self::valid_palette_target(original,draft)||reserved.iter().any(|&p|Self::palette_equal(p,draft)){return Err(Error::Schema)}
   let creatable=self.palette_creation_context(id).is_some()&&Self::palette_creation_target(original,current,&reserved,draft);
   Ok((Self::palette_choices(original,draft,&reserved),creatable))
  }
  pub fn create_inventory_palette_variant(&mut self,source_id:u32,expected:PaletteVariant,next:PaletteVariant,quantity:i32)->Result<u32,Error>{
-  let (original,current,reserved)=self.palette_creation_context(source_id).ok_or(Error::Schema)?;
-  if quantity<=0||expected!=current||!Self::palette_creation_target(original,current,&reserved,next){return Err(Error::Schema)}
+  if quantity<=0{return Err(Error::Schema)}
+  if let Some((default,reserved))=self.absent_palette_context(source_id){
+   if expected!=default||!Self::absent_palette_target(&reserved,next){return Err(Error::Schema)}
+  }else{
+   let (original,current,reserved)=self.palette_creation_context(source_id).ok_or(Error::Schema)?;
+   if expected!=current||!Self::palette_creation_target(original,current,&reserved,next){return Err(Error::Schema)}
+  }
   let document_id=self.allocate_staged_unique_handle()?;
   let revision=self.next_edit_revision()?;
   let change=Change::PaletteCreated{document_id,source_id,expected,variant:next,quantity};
@@ -1728,6 +1795,15 @@ impl Editor {
   let Some(default)=furniture_key(source,[0;3])else{return false};
   [row.unique_data,self.effective_unique(row)].into_iter().all(|value|
    value.and_then(furniture_variant).and_then(|v|furniture_key(source,v)).is_some_and(|key|key!=default))
+ }
+ // A single UID-zero nil base can coexist with distinct verified tag-8 peers.
+ // Require the stricter complete item-wide reference gate for this extension.
+ fn ordinary_furniture_base_zero_with_peers(&self,row:&crate::native::InventoryRow,item:i32)->bool{
+  self.ordinary_tradeable_nonclothing_zero_reference_safe(item)&&
+   crate::inventory_source::ordinary_quantity_limit(item)==Some(i32::MAX)&&
+   furniture_source::item(item).is_some_and(|s|!s.is_home_layout)&&
+   self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)&&r.id!=row.id)
+    .all(|r|self.permits_separate_ordinary_base(r))
  }
  fn can_create_inventory_item(&self,item_id:i32)->bool{
   self.inventory_creation_source_valid()&&crate::inventory_source::ordinary_creation_item(item_id)&&
