@@ -953,7 +953,8 @@ impl Editor {
    (Some(item),Some(InventoryUniqueData::BobaAppearance{..}))=>item==BOBA_ID,
    (Some(_),Some(InventoryUniqueData::WandAppearance{..}))=>self.wand_zero_reference_safe(r),
    (Some(item),Some(InventoryUniqueData::Furniture{..}))=>self.furniture_zero_reference_safe(item)||
-    (furniture_source::item(item).is_some_and(|s|!s.is_home_layout)&&self.ordinary_tradeable_nonclothing_zero_reference_safe(item)),
+    (furniture_source::item(item).is_some_and(|s|!s.is_home_layout)&&self.ordinary_tradeable_nonclothing_zero_reference_safe(item))||
+    self.extra_custom_furniture_zero_reference_safe(item),
    (Some(item),Some(InventoryUniqueData::Flower{grow_state:6,..}))=>crate::inventory_source::flower_clothing_reference_keys(item).is_some_and(|keys|self.clothing_zero_reference_safe(item,keys.iter()))||flower_candle_source(item).is_some_and(|r|self.flower_candle_zero_reference_safe(item,r.2)),
    _=>false
   }
@@ -968,6 +969,17 @@ impl Editor {
  // never an identity or permission to change a referenced object.
  fn ordinary_tradeable_nonclothing_zero_reference_safe(&self,item:i32)->bool{
   let Some(key)=crate::inventory_source::ordinary_tradeable_nonclothing_reference(item)else{return false};
+  let index=&self.slot.index;
+  !index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
+   !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_refs_incomplete&&
+   !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
+   !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)&&
+   !index.inventory_item_refs.iter().any(|&(i,_)|i==item)
+ }
+ // Saved typed customized furniture outside the ordinary creation slice.
+ // The exact original GUID is used only to reject referenced rows.
+ fn extra_custom_furniture_zero_reference_safe(&self,item:i32)->bool{
+  let Some(key)=crate::inventory_source::custom_furniture_extra_reference(item)else{return false};
   let index=&self.slot.index;
   !index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
    !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_refs_incomplete&&

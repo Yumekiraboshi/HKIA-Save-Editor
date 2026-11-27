@@ -2,6 +2,7 @@
 use crate::inventory_source_data::{RULES,CUSTOM_CAPS};
 use crate::inventory_tradeable_data::TRADEABLE_CREATION_BITS;
 use crate::inventory_tradeable_reference_data::TRADEABLE_NONCLOTHING_REFERENCE_KEYS;
+use crate::inventory_custom_furniture_reference_data::CUSTOM_FURNITURE_EXTRA_REFERENCE_KEYS;
 use crate::inventory_furniture_reference_data::FURNITURE_REFERENCE_KEYS;
 use crate::inventory_clothing_reference_data::{CLOTHING_REFERENCE_ROWS,CLOTHING_REFERENCE_GROUPS,FLOWER_CLOTHING_REFERENCE_KEYS};
 use crate::inventory_gathered_data::{GATHERED_IDS,FOOD_BAIT_IDS};
@@ -99,6 +100,11 @@ pub(crate) fn ordinary_tradeable_nonclothing_reference(item_id:i32)->Option<u32>
  TRADEABLE_NONCLOTHING_REFERENCE_KEYS.binary_search_by_key(&item_id,|row|row.0).ok()
   .map(|i|TRADEABLE_NONCLOTHING_REFERENCE_KEYS[i].1)
   .filter(|_|ordinary_creation_item(item_id))
+}
+/// Existing tag-8 rows only; never authorizes a new ordinary item or entitlement.
+pub(crate) fn custom_furniture_extra_reference(item:i32)->Option<u32>{
+ if ordinary_quantity_limit(item)!=Some(i32::MAX)||!crate::furniture_source::item(item).is_some_and(|s|!s.is_home_layout){return None}
+ CUSTOM_FURNITURE_EXTRA_REFERENCE_KEYS.binary_search_by_key(&item,|r|r.0).ok().map(|i|CUSTOM_FURNITURE_EXTRA_REFERENCE_KEYS[i].1)
 }
 pub(crate) fn ordinary_creation_ids()->impl Iterator<Item=i32>{
  ordinary_membership_ids().chain(RULES.iter().enumerate().filter_map(|(i,&(id,_))|(ordinary_tradeable_creation_index(i)&&!ordinary_membership_item(id)).then_some(id)))
@@ -394,5 +400,20 @@ mod clothing_reference_tests{
   let (own,keys)=ordinary_clothing_reference_keys(315822).unwrap();
   assert_eq!(own,1481090328);assert!(keys.contains(&furniture_guid_fingerprint([0xc0fb08c4,0x4a3b1847,0x87dc1dad,0x177dbe7e])));
   assert!(keys.contains(&furniture_guid_fingerprint([0x6ae79913,0x4dfd99ac,0xe020e4be,0x0f6869ef])));
+ }
+}
+
+#[cfg(test)]mod custom_furniture_reference_tests{
+ use super::*;
+ #[test]fn complete_existing_custom_furniture_reference_coverage(){
+  let rows=CUSTOM_FURNITURE_EXTRA_REFERENCE_KEYS;
+  assert_eq!(rows.len(),165);
+  assert!(rows.windows(2).all(|w|w[0].0<w[1].0));
+  assert_eq!(rows.iter().map(|r|r.1).collect::<std::collections::HashSet<_>>().len(),165);
+  assert!(rows.iter().all(|&(id,key)|custom_furniture_extra_reference(id)==Some(key)&&ordinary_tradeable_nonclothing_reference(id).is_none()));
+  assert_eq!(crate::furniture_source::ITEMS.iter().filter(|s|!s.is_home_layout&&ordinary_quantity_limit(s.item_id)==Some(i32::MAX)&&
+   (ordinary_tradeable_nonclothing_reference(s.item_id).is_some()||custom_furniture_extra_reference(s.item_id).is_some())).count(),621);
+  assert_eq!(custom_furniture_extra_reference(102286319),Some(furniture_guid_fingerprint([0xc2961421,0x4fdf4f88,0x988e1cb7,0x7f57b563])));
+  assert_eq!(custom_furniture_extra_reference(1900000001),None);
  }
 }
