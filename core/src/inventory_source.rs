@@ -373,7 +373,7 @@ pub(crate) fn flower_clothing_reference_keys(item:i32)->Option<&'static [u32]>{
 mod clothing_reference_tests{
  use super::*;
  #[test]fn exact_source_clothing_crosswalk(){
-  assert_eq!(CLOTHING_REFERENCE_ROWS.len(),2435);
+  assert_eq!(CLOTHING_REFERENCE_ROWS.len(),3946);
   assert_eq!(FLOWER_CLOTHING_REFERENCE_KEYS.len(),27);
   assert!(FLOWER_CLOTHING_REFERENCE_KEYS.windows(2).all(|w|w[0].0<w[1].0));
   let mut flower=Vec::new();
@@ -386,7 +386,7 @@ mod clothing_reference_tests{
   }
   let flower_hash=crate::digest::sha256(&flower).iter().map(|x|format!("{x:02x}")).collect::<String>();
   assert_eq!(flower_hash,"80aa4103198c492cb9e670b21c397e7f94dba77730b99cdf257d8bf46abfc16a");
-  assert_eq!(CLOTHING_REFERENCE_GROUPS.len(),225);
+  assert_eq!(CLOTHING_REFERENCE_GROUPS.len(),329);
   assert!(CLOTHING_REFERENCE_ROWS.windows(2).all(|w|w[0].0<w[1].0));
   assert!(CLOTHING_REFERENCE_GROUPS.windows(2).all(|w|w[0].0<w[1].0));
   let mut rows=Vec::new();let mut groups=Vec::new();
@@ -399,8 +399,11 @@ mod clothing_reference_tests{
    groups.extend(p.to_le_bytes());groups.push(keys.len() as u8);for k in keys{groups.extend(k.to_le_bytes());}
   }
   let hex=|b:&[u8]|crate::digest::sha256(b).iter().map(|x|format!("{x:02x}")).collect::<String>();
-  assert_eq!(hex(&rows),"0fc9bc9ac3d87997801ac7e62127d30a32aebd64843338d7022458c42fa091e6");
-  assert_eq!(hex(&groups),"024dc49b7b93e3187e28e25bcee72d510274f0c712625681a055d6a86b062ce5");
+  assert_eq!(hex(&rows),"967dd2e4572790714b6668528c733ee04ae5b01f9255a4f73e4de6c7c2cef103");
+  assert_eq!(hex(&groups),"8df56f2c0f6e6f3bf91b1af9f11c29dc145a636658f94901d73bec0835e4d38b");
+  let (event_own,event_keys)=ordinary_clothing_reference_keys(517031).unwrap();
+  assert_eq!(event_own,2305082351);assert!(event_keys.contains(&furniture_guid_fingerprint([0xf19cbde5,0x482caed7,0x2797ac8b,0xe22f46e9])));
+  assert_eq!(CLOTHING_REFERENCE_ROWS.len()+TRADEABLE_NONCLOTHING_REFERENCE_KEYS.len(),ordinary_creation_ids().count());
   let (own,keys)=ordinary_clothing_reference_keys(315822).unwrap();
   assert_eq!(own,1481090328);assert!(keys.contains(&furniture_guid_fingerprint([0xc0fb08c4,0x4a3b1847,0x87dc1dad,0x177dbe7e])));
   assert!(keys.contains(&furniture_guid_fingerprint([0x6ae79913,0x4dfd99ac,0xe020e4be,0x0f6869ef])));

@@ -9,8 +9,8 @@ from collections import defaultdict
 
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE='ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0'
-ROW_HASH='0fc9bc9ac3d87997801ac7e62127d30a32aebd64843338d7022458c42fa091e6'
-GROUP_HASH='024dc49b7b93e3187e28e25bcee72d510274f0c712625681a055d6a86b062ce5'
+ROW_HASH='967dd2e4572790714b6668528c733ee04ae5b01f9255a4f73e4de6c7c2cef103'
+GROUP_HASH='8df56f2c0f6e6f3bf91b1af9f11c29dc145a636658f94901d73bec0835e4d38b'
 FLOWER_HASH='80aa4103198c492cb9e670b21c397e7f94dba77730b99cdf257d8bf46abfc16a'
 FLOWER_IDS={105502901,108363489,475585922,638410399,644209106,790136191,810330134,833950358,881399767,894396852,897617923,1001954252,1021906725,1048380205,1101281143,1110255162,1120342995,1177909060,1227385139,1423101683,1482119840,1560032168,1607110454,1693955310,1783185900,1861587997,1876646873}
 
@@ -103,9 +103,9 @@ def extract(source):
         cat=d['ItemCategory']
         if id in FLOWER_IDS:
             require(d['RequiresUniqueData'] and not d['HasCustomMaxCount'] and d['ItemProperties']&2 and cat&256 and not cat&64,'invalid flower clothing definition')
-        elif not(d['ItemOwnership']==18 and d['ItemProperties']&2 and not d['RequiresUniqueData'] and not d['HasCustomMaxCount']
-               and not d['ReleaseVersion'] and d['RequiredDlcContent']=='0'*32 and d['CollectionEventYear']=='0'*32
-               and d['Rarity'] in (2,3,4) and not cat&1 and cat&256):continue
+        elif not(d['ItemOwnership'] in (2,18) and d['ItemProperties']&2 and not d['RequiresUniqueData'] and not d['HasCustomMaxCount']
+               and not d['ReleaseVersion'] and d['RequiredDlcContent']=='0'*32
+               and d['Rarity'] in (2,3,4) and cat>=0 and not cat&(1|2|134217728) and cat&256):continue
         require(not cat&64,'ambiguous clothing category')
         while j<246:_,pos=parse(raw,j,pos);j=end[j]
         ver,count=s.unpack_from('<II',raw,pos);pos+=8
@@ -121,7 +121,7 @@ def extract(source):
         file,ptr=s.unpack_from('<iq',raw,pos)
         require(file==0 and objects[ptr][0]==5,'invalid outfit PPtr')
         (flower if id in FLOWER_IDS else selected).append((id,d['SerializedGuid'],path,ptr))
-    require(len(by_path)==12163 and len(selected)==2435,'item coverage')
+    require(len(by_path)==12163 and len(selected)==3946,'item coverage')
     def model(path):
         i,raw=objects[path];tt=types[i][1];end,parse=decoder(tt);d={};pos=0;j=1
         while j<len(tt):
@@ -132,8 +132,8 @@ def extract(source):
         _,(file,parent)=by_path[path];require(file==0,'external parent')
         parent_id=by_path[parent][0] if parent else id
         parent_groups[parent_id].add(ptr);rows.append((id,parent_id,fingerprint(guid)))
-    require(len(parent_groups)==225 and all(len(v)==1 for v in parent_groups.values())
-            and len(set(x[3] for x in selected))==225,'ambiguous outfit parent group')
+    require(len(parent_groups)==329 and all(len(v)==1 for v in parent_groups.values())
+            and len(set(x[3] for x in selected))==329,'ambiguous outfit parent group')
     groups=[];all_pieces=set();piece_links=0
     for parent,paths in sorted(parent_groups.items()):
         d=model(next(iter(paths)));pieces=set()
@@ -145,9 +145,9 @@ def extract(source):
         keys=sorted(set(map(fingerprint,[d['SerializedGuid'],*pieces])))
         require(len(keys)==1+len(pieces),'intragroup collision')
         groups.append((parent,keys))
-    require(piece_links==456 and len(all_pieces)==455,'piece coverage')
+    require(piece_links==688 and len(all_pieces)==687,'piece coverage')
     rows.sort()
-    require(len({x[0] for x in rows})==2435,'duplicate item ID')
+    require(len({x[0] for x in rows})==3946,'duplicate item ID')
     require(hashlib.sha256(b''.join(s.pack('<iiI',*r) for r in rows)).hexdigest()==ROW_HASH,'row fingerprint')
     require(hashlib.sha256(b''.join(s.pack('<iB',p,len(ks))+s.pack('<'+'I'*len(ks),*ks) for p,ks in groups)).hexdigest()==GROUP_HASH,'group fingerprint')
     flower_rows=[]
@@ -186,4 +186,4 @@ if __name__=='__main__':
     generated=render(*extract(args.source))
     if args.check:require(target.read_text()==generated,'checked-in clothing source differs')
     else:target.write_text(generated)
-    print('Verified 2435 ordinary clothing IDs, 225 outfits and 455 distinct avatar pieces')
+    print('Verified 3946 ordinary clothing IDs, 329 outfits and 687 distinct avatar pieces')
