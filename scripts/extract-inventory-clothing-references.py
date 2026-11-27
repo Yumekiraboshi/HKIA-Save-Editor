@@ -9,8 +9,8 @@ from collections import defaultdict
 
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE='ba9f3f97d1598a6923d2f804a704ab356c33866aa2d5f03bf11003735419e9e0'
-ROW_HASH='eb520a17a147ac80b03800c9009f87e066e8828321f2f2e759288fc27b28fd40'
-GROUP_HASH='d61d637c0f495da7f0c98ce3c49b461c1fd23353405990dc947b1bf1abb80df6'
+ROW_HASH='688eb46fc205fc9d47678a78b4d0786ca5b4f2690dfb7be173b6964832edd2de'
+GROUP_HASH='ca67710930262c2fdeb745a64034add939e17d0571140355487e51c1ada47a84'
 FLOWER_HASH='80aa4103198c492cb9e670b21c397e7f94dba77730b99cdf257d8bf46abfc16a'
 FLOWER_IDS={105502901,108363489,475585922,638410399,644209106,790136191,810330134,833950358,881399767,894396852,897617923,1001954252,1021906725,1048380205,1101281143,1110255162,1120342995,1177909060,1227385139,1423101683,1482119840,1560032168,1607110454,1693955310,1783185900,1861587997,1876646873}
 
@@ -105,10 +105,12 @@ def extract(source):
         quest_cosmetic=(d['Rarity']==5 and d['ItemOwnership'] in (2,18) and d['ItemProperties']&2)
         ordinary_stack=(d['ItemOwnership'] in (2,18,16) and d['ItemProperties']&2
                         and d['UseEffect']==0 and d['GiftEffect']==0)
+        effective=d['UiOverridenItemCategory'] if d['HasUiOverridenItemCategory'] else cat
+        visible=effective>=0 and not effective&(1|2|134217728) and d['UseEffect']==0 and d['GiftEffect']==0
         if id in FLOWER_IDS:
             require(d['RequiresUniqueData'] and not d['HasCustomMaxCount'] and d['ItemProperties']&2 and cat&256 and not cat&64,'invalid flower clothing definition')
         elif not(not d['RequiresUniqueData'] and not d['ReleaseVersion']
-               and (regular or quest_cosmetic or ordinary_stack)
+               and (regular or quest_cosmetic or ordinary_stack or visible)
                and cat>=0 and not cat&(1|2|134217728) and cat&256):continue
         require(not cat&64,'ambiguous clothing category')
         while j<246:_,pos=parse(raw,j,pos);j=end[j]
@@ -126,7 +128,7 @@ def extract(source):
         require(file==0 and objects[ptr][0]==5,'invalid outfit PPtr')
         if id in FLOWER_IDS:flower.append((id,d['SerializedGuid'],path,ptr))
         else:selected.append((id,d['SerializedGuid'],path,ptr,regular))
-    require(len(by_path)==12163 and len(selected)==6020,'item coverage')
+    require(len(by_path)==12163 and len(selected)==6057,'item coverage')
     def model(path):
         i,raw=objects[path];tt=types[i][1];end,parse=decoder(tt);d={};pos=0;j=1
         while j<len(tt):
@@ -149,7 +151,7 @@ def extract(source):
         require(key not in group_paths,'duplicate exact-outfit group key')
         group_paths[key]=ptr
         rows.extend((id,key,fingerprint(guid)) for id,guid,_,_ in members)
-    require(len(group_paths)==1006,'exact outfit coverage')
+    require(len(group_paths)==1043,'exact outfit coverage')
     groups=[];all_pieces=set();piece_links=0
     for parent,ptr in sorted(group_paths.items()):
         d=model(ptr);pieces=set()
@@ -161,9 +163,9 @@ def extract(source):
         keys=sorted(set(map(fingerprint,[d['SerializedGuid'],*pieces])))
         require(len(keys)==1+len(pieces),'intragroup collision')
         groups.append((parent,keys))
-    require(piece_links==2162,'piece coverage')
+    require(piece_links==2199,'piece coverage')
     rows.sort()
-    require(len({x[0] for x in rows})==6020,'duplicate item ID')
+    require(len({x[0] for x in rows})==6057,'duplicate item ID')
     require(hashlib.sha256(b''.join(s.pack('<iiI',*r) for r in rows)).hexdigest()==ROW_HASH,'row fingerprint')
     require(hashlib.sha256(b''.join(s.pack('<iB',p,len(ks))+s.pack('<'+'I'*len(ks),*ks) for p,ks in groups)).hexdigest()==GROUP_HASH,'group fingerprint')
     flower_rows=[]
@@ -202,4 +204,4 @@ if __name__=='__main__':
     generated=render(*extract(args.source))
     if args.check:require(target.read_text()==generated,'checked-in clothing source differs')
     else:target.write_text(generated)
-    print('Verified 6020 ordinary clothing IDs, 1006 exact outfits and 2162 outfit/piece links')
+    print('Verified 6057 ordinary clothing IDs, 1043 exact outfits and 2199 outfit/piece links')

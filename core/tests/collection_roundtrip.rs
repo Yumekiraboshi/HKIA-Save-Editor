@@ -1916,7 +1916,7 @@ fn create_absent_material_stacks_uses_native_ids_and_scoped_history(){
  for zipped in [false,true]{
   let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();
-  let candidates=e.inventory_creatable();assert_eq!(candidates.len(),7213);
+  let candidates=e.inventory_creatable();assert_eq!(candidates.len(),7400);
   assert!(candidates.iter().any(|r|r.item_id==460708033));
   let apple=candidates.iter().find(|r|r.item_id==1877756618).unwrap().document_id;
   let flour=candidates.iter().find(|r|r.item_id==627013240).unwrap().document_id;
@@ -2008,8 +2008,8 @@ fn native_food_and_bait_membership_preserves_celebrations_and_quest_exclusion(){
   let candidates=editor.inventory_creatable();
   let food=candidates.iter().find(|r|r.item_id==567052).unwrap();
   let bait=candidates.iter().find(|r|r.item_id==30258712).unwrap();
-  assert!(!candidates.iter().any(|r|r.item_id==1455056332));
-  assert!(editor.change_inventory_quantities(&[(food.document_id,0,12),(2147483648u32+1455056332,0,1)]).is_err());
+  assert!(candidates.iter().any(|r|r.item_id==1455056332));
+  assert!(editor.change_inventory_quantities(&[(food.document_id,0,12),(2147483648u32+1205887707,0,1)]).is_err());
   assert!(!editor.dirty());
   editor.change_inventory_quantities(&[(food.document_id,0,12),(bait.document_id,0,17)]).unwrap();
   let cp=editor.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();
@@ -2032,7 +2032,7 @@ fn ordinary_furniture_and_clothing_creation_preserves_other_data_and_gates_last_
   let raw=slot("3.0.1");let input=if zipped{zip(&raw)}else{raw.clone()};
   let mut editor=Editor::open(input.clone()).unwrap();
   let candidates=editor.inventory_creatable();
-  assert_eq!(candidates.len(),7213);
+  assert_eq!(candidates.len(),7400);
   let furniture=candidates.iter().find(|r|r.item_id==286009791).unwrap().document_id;
   let clothing=candidates.iter().find(|r|r.item_id==315822).unwrap().document_id;
   assert!(candidates.iter().any(|r|r.item_id==517031));
@@ -4233,7 +4233,7 @@ fn first_unowned_currency_creation_roundtrip_and_atomic_rejection(){
   let mut e=Editor::open(input.clone()).unwrap();
   let candidates=e.inventory_creatable();
   let changes:Vec<_>=ids.iter().map(|id|(candidates.iter().find(|r|r.item_id==*id).unwrap().document_id,0,15)).collect();
-  for denied in [1205887707u32,484139114,2092387705,615026760]{
+  for denied in [1205887707u32,709633628,413462588]{
    let mut bad=changes.clone();bad.push((0x80000000|denied,0,1));
    assert!(e.change_inventory_quantities(&bad).is_err());assert!(!e.dirty());
   }
@@ -5369,7 +5369,7 @@ fn ordinary_cosmetic_quest_rarity_and_capped_effect_items_share_native_bag_rules
  assert_eq!(e.inventory()[0].quantity_minimum,1);
  assert!(e.change_inventory_quantity(4,3,0).is_err());assert!(!e.dirty());
  let mut empty=Editor::open(slot("3.0.1")).unwrap();
- for item in [restricted,quest_food,413462588]{
+ for item in [restricted,413462588]{
   assert!(empty.change_inventory_quantity((1u32<<31)|item,0,1).is_err())
  }
  // New unrestricted cosmetic rows follow the same common membership path.
@@ -5381,7 +5381,7 @@ fn ordinary_cosmetic_quest_rarity_and_capped_effect_items_share_native_bag_rules
 }
 
 #[test]
-fn distributable_native_stack_classes_edit_atomically_without_absent_acquisition(){
+fn distributable_native_stack_classes_edit_and_create_atomically(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let ids=[484139114u32,1455056332,22088469,197197205,8914355];
  let mut p=synthetic_payload("3.0.1");p[2]=10;p[3]=0x9c;
@@ -5400,7 +5400,8 @@ fn distributable_native_stack_classes_edit_atomically_without_absent_acquisition
   let saved=Editor::open(reopened.export().unwrap()).unwrap();assert!(saved.inventory().iter().all(|r|r.quantity==8));
   assert_eq!(saved.entries(),e.entries());assert_eq!(saved.achievements(),e.achievements());
  }
- let mut empty=Editor::open(slot("3.0.1")).unwrap();for id in ids{assert!(empty.change_inventory_quantity((1u32<<31)|id,0,1).is_err());}
+ let mut empty=Editor::open(slot("3.0.1")).unwrap();for id in ids{empty.change_inventory_quantity((1u32<<31)|id,0,1).unwrap();}
+ assert_eq!(Editor::open(empty.export().unwrap()).unwrap().inventory().len(),ids.len());
 }
 
 #[test]
@@ -5537,8 +5538,8 @@ fn all_source_ordinary_bag_definitions_share_native_zero_refill_and_reference_sc
  use hkia_save_core::collection::HistoryScope::Inventory;
  let defs:Vec<_>=complete_quantity_source::RULES.iter().zip(complete_bag_source::BAG_FLAGS)
   .filter_map(|(&(item,_),&flags)|(flags&1!=0).then_some((item,flags&2!=0))).collect();
- assert_eq!(defs.len(),9835);
- assert_eq!(defs.iter().filter(|(_,outfit)|*outfit).count(),6020);
+ assert_eq!(defs.len(),9880);
+ assert_eq!(defs.iter().filter(|(_,outfit)|*outfit).count(),6057);
  let make=|batch:&[(i32,bool)],context:u8|{
   let n=(7+batch.len()) as u16;
   let mut p=vec![0x93,0];p.extend(u(7+batch.len() as u32));p.push(0xdc);p.extend(n.to_be_bytes());
@@ -5570,5 +5571,37 @@ fn all_source_ordinary_bag_definitions_share_native_zero_refill_and_reference_sc
   }
   let unknown=Editor::open(make(batch,2)).unwrap();
   assert!(unknown.inventory().iter().all(|row|row.quantity_minimum==1));
+ }
+}
+
+#[test]
+fn complete_nil_definition_catalog_positive_bounds_and_all_ordinary_additions(){
+ let defs:Vec<_>=complete_quantity_source::RULES.iter().zip(complete_bag_source::BAG_FLAGS)
+  .filter_map(|(&(id,rule),&flags)|(rule&2==0).then_some((id,rule,flags))).collect();
+ assert_eq!(defs.len(),12025);
+ for chunk in defs.chunks(200){
+  let mut p=vec![0x93,0];p.extend(u(4+chunk.len() as u32));p.push(0xdc);p.extend(((5+chunk.len()) as u16).to_be_bytes());p.extend_from_slice(&synthetic_payload("3.0.1")[4..]);
+  for (i,&(id,_,_)) in chunk.iter().enumerate(){p.extend(doc(1,arr(vec![u(4+i as u32),u(id as u32),u(0),u(1),vec![0xc0]])));}
+  let mut e=Editor::open(slot_from_payload("3.0.1",p)).unwrap();
+  let rows=e.inventory();assert_eq!(rows.len(),chunk.len());
+  let mut edits=Vec::new();
+  for (row,&(id,rule,_)) in rows.iter().zip(chunk){
+   let cap=if rule&1==0{1}else if rule&4==0{i32::MAX}else{complete_quantity_source::CUSTOM_CAPS.iter().find(|r|r.0==id).unwrap().1};
+   assert!(row.editable);assert_eq!(row.quantity_limit,Some(cap));
+   if cap>1{edits.push((row.document_id,1,2));}
+  }
+  if !edits.is_empty(){e.change_inventory_quantities(&edits).unwrap();assert_eq!(Editor::open(e.export().unwrap()).unwrap().inventory(),e.inventory());}
+ }
+ let raw=slot("3.0.1");let e=Editor::open(raw.clone()).unwrap();
+ let all=e.inventory_creatable();assert_eq!(all.len(),7400);
+ let expected:std::collections::HashSet<_>=defs.iter().filter(|r|r.2&4!=0).map(|r|r.0).collect();
+ assert_eq!(all.iter().map(|r|r.item_id).collect::<std::collections::HashSet<_>>(),expected);
+ for chunk in all.chunks(200){
+  let mut e=Editor::open(raw.clone()).unwrap();
+  let edits:Vec<_>=chunk.iter().map(|r|(r.document_id,0,1)).collect();
+  e.change_inventory_quantities(&edits).unwrap();
+  let saved=Editor::open(e.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory().iter().map(|r|r.item_id).collect::<std::collections::HashSet<_>>(),chunk.iter().map(|r|r.item_id).collect());
+  assert!(saved.inventory_unique_rows().all(|(_,uid,nil,_,_)|uid==Some(0)&&nil==Some(true)));
  }
 }
