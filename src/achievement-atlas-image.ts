@@ -33,3 +33,21 @@ export async function loadVerifiedAchievementImage(
  let disposed=false;
  return {url,dispose(){if(!disposed){disposed=true;URL.revokeObjectURL(url)}}};
 }
+
+/** Verify the actual identity-to-cell mapping bytes before decoding them. */
+export async function loadVerifiedAchievementManifest(
+ base:string,filename:'achievement-category-atlas.json'|'achievement-individual-atlas.json',
+ expectedSha256:string
+):Promise<unknown>{
+ if(!SHA256.test(expectedSha256))throw Error('ACH_ATLAS_SHA_INVALID');
+ const response=await fetch(base+filename,{cache:'no-cache'});
+ if(!response.ok)throw Error('ACH_ATLAS_MANIFEST_FETCH_FAILED');
+ const data=await response.arrayBuffer();
+ if(data.byteLength<2||data.byteLength>128*1024)throw Error('ACH_ATLAS_MANIFEST_SIZE_INVALID');
+ const subtle=globalThis.crypto?.subtle;
+ if(!subtle)throw Error('ACH_ATLAS_CRYPTO_UNAVAILABLE');
+ const digest=new Uint8Array(await subtle.digest('SHA-256',data));
+ const actual=Array.from(digest,b=>b.toString(16).padStart(2,'0')).join('');
+ if(actual!==expectedSha256)throw Error('ACH_ATLAS_MANIFEST_HASH_MISMATCH');
+ return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(data));
+}
