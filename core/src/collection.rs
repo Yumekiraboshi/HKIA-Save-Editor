@@ -515,7 +515,10 @@ impl Editor {
  /// independently validated complete tuple for atomic draft replay.
  pub fn inventory_furniture_variants(&self,id:u32)->Vec<FurnitureVariant>{
   let Some((source,original,current,reserved))=self.furniture_context(id)else{return Vec::new()};
-  let current_key=furniture_key(source,current).unwrap();
+  Self::furniture_choices(source,original,current,&reserved,self.pending_furniture.contains_key(&id))
+ }
+ fn furniture_choices(source:&FurnitureItemSource,original:FurnitureVariant,current:FurnitureVariant,reserved:&HashSet<FurnitureVariant>,forbid_default:bool)->Vec<FurnitureVariant>{
+  let Some(current_key)=furniture_key(source,current)else{return Vec::new()};
   let mut out=Vec::new();
   for slot in source.slots{
    let i=slot.slot as usize;
@@ -524,7 +527,7 @@ impl Editor {
     if v==current||!Self::valid_furniture_target(source,original,v){continue}
     let key=furniture_key(source,v).unwrap();
     if key!=current_key&&!reserved.contains(&key)&&!out.contains(&v)&&
-     (!self.pending_furniture.contains_key(&id)||Some(key)!=furniture_key(source,[0;3])){out.push(v)}
+     (!forbid_default||Some(key)!=furniture_key(source,[0;3])){out.push(v)}
    }
   }
   out
@@ -628,35 +631,54 @@ impl Editor {
    key!=default&&key!=old&&key!=now&&Self::valid_furniture_target(source,[0;3],v)
   }).collect()
  }
- pub fn create_inventory_furniture_variant(&mut self,source_id:u32,expected:FurnitureVariant,next:FurnitureVariant,quantity:i32)->Result<u32,Error>{
-  let options=self.inventory_furniture_creation_variants(source_id);
-  // Compose only source-issued slot choices. Final identity checks below
-  // are against the complete tuple, not the individual one-slot examples.
-  if quantity<=0||options.is_empty()||expected==next||
-   next.iter().enumerate().any(|(i,&n)|n!=expected[i]&&!options.iter().any(|v|v[i]==n)){return Err(Error::Schema)}
+ // Keep the source eligibility gate; independently validate the complete
+ // target instead of composing stale one-slot authorization examples.
+ fn furniture_creation_item(&self,source_id:u32,expected:FurnitureVariant,next:FurnitureVariant)->Option<i32>{
+  if expected==next||self.inventory_furniture_creation_variants(source_id).is_empty(){return None}
   let item_id=if self.pending_furniture.contains_key(&source_id){
-   let (source,_,current,_)=self.furniture_context(source_id).ok_or(Error::Schema)?;
-   if current!=expected{return Err(Error::Schema)}
+   let (source,_,current,_)=self.furniture_context(source_id)?;
+   if current!=expected{return None}
    source.item_id
   }else if source_id&PENDING_ITEM!=0{
-   if expected!=[0;3]{return Err(Error::Schema)}
+   if expected!=[0;3]{return None}
    (source_id&!PENDING_ITEM) as i32
   }else if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==source_id).and_then(|r|self.saved_default_furniture_source(r)){
-   if expected!=[0;3]{return Err(Error::Schema)}
+   if expected!=[0;3]{return None}
    item
   }else{
-   let (source,_,current,_)=self.furniture_context(source_id).ok_or(Error::Schema)?;
-   if current!=expected{return Err(Error::Schema)}
+   let (source,_,current,_)=self.furniture_context(source_id)?;
+   if current!=expected{return None}
    source.item_id
   };
-  let source=furniture_source::item(item_id).ok_or(Error::Schema)?;
-  let key=furniture_key(source,next).ok_or(Error::Schema)?;
-  if !Self::valid_furniture_target(source,[0;3],next)||Some(key)==furniture_key(source,[0;3]){return Err(Error::Schema)}
+  let source=furniture_source::item(item_id)?;
+  let key=furniture_key(source,next)?;
+  if !Self::valid_furniture_target(source,[0;3],next)||Some(key)==furniture_key(source,[0;3]){return None}
   if let Some((_,original,current,reserved))=self.furniture_context(source_id){
-   if Some(key)==furniture_key(source,original)||Some(key)==furniture_key(source,current)||reserved.contains(&key){return Err(Error::Schema)}
-  }else{
-   if self.default_furniture_reserved(source).ok_or(Error::Schema)?.contains(&key){return Err(Error::Schema)}
+   if Some(key)==furniture_key(source,original)||Some(key)==furniture_key(source,current)||reserved.contains(&key){return None}
+  }else if self.default_furniture_reserved(source)?.contains(&key){return None}
+  Some(item_id)
+ }
+ /// Read-only complete draft planning for both ordinary and custom sources.
+ pub fn inventory_furniture_preview(&self,id:u32,expected:FurnitureVariant,draft:FurnitureVariant)->Result<(Vec<FurnitureVariant>,bool),Error>{
+  let creatable=self.furniture_creation_item(id,expected,draft).is_some();
+  if let Some((source,original,current,reserved))=self.furniture_context(id){
+   if current!=expected||!Self::valid_furniture_target(source,original,draft)||
+    reserved.contains(&furniture_key(source,draft).ok_or(Error::Schema)?)||
+    (self.pending_furniture.contains_key(&id)&&furniture_key(source,draft)==furniture_key(source,[0;3])){return Err(Error::Schema)}
+   return Ok((Self::furniture_choices(source,original,draft,&reserved,self.pending_furniture.contains_key(&id)),creatable))
   }
+  if expected!=[0;3]||self.inventory_furniture_creation_variants(id).is_empty()||
+   (draft!=expected&&!creatable){return Err(Error::Schema)}
+  let item=if id&PENDING_ITEM!=0{(id&!PENDING_ITEM) as i32}else{
+   self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|self.saved_default_furniture_source(r)).ok_or(Error::Schema)?
+  };
+  let source=furniture_source::item(item).ok_or(Error::Schema)?;
+  let reserved=self.default_furniture_reserved(source).ok_or(Error::Schema)?;
+  Ok((Self::furniture_choices(source,[0;3],draft,&reserved,true),creatable))
+ }
+ pub fn create_inventory_furniture_variant(&mut self,source_id:u32,expected:FurnitureVariant,next:FurnitureVariant,quantity:i32)->Result<u32,Error>{
+  if quantity<=0{return Err(Error::Schema)}
+  let item_id=self.furniture_creation_item(source_id,expected,next).ok_or(Error::Schema)?;
   let document_id=self.allocate_staged_unique_handle()?;
   let revision=self.next_edit_revision()?;
   let change=Change::FurnitureCreated{document_id,source_id,expected,furniture:PendingFurniture{item_id,variant:next},quantity};

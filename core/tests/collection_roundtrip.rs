@@ -2422,6 +2422,9 @@ fn ordinary_furniture_source_creates_distinct_customized_stack_without_consuming
    let choices=e.inventory_furniture_creation_variants(source);
    assert!(choices.contains(&[0,2,0]));
    assert!(!choices.contains(&[0,1,0]));
+   assert!(!e.inventory_furniture_preview(source,[0;3],[0;3]).unwrap().1);
+   assert!(e.inventory_furniture_preview(source,[0;3],[0,2,0]).unwrap().1);
+   assert!(e.inventory_furniture_preview(source,[1,0,0],[0,2,0]).is_err());
    assert!(e.create_inventory_furniture_variant(source,[1,0,0],[0,2,0],1).is_err());
    let handle=e.create_inventory_furniture_variant(source,[0;3],[0,2,0],4).unwrap();
    assert_ne!(handle,source);
@@ -3403,6 +3406,14 @@ fn furniture_multislot_creation_and_edit_are_atomic(){
   let mut e=Editor::open(input.clone()).unwrap();
   let options=e.inventory_furniture_creation_variants(4);
   assert!(options.contains(&[502,2,0])&&options.contains(&[13,3,0])&&!options.contains(&target));
+  let (choices,creatable)=e.inventory_furniture_preview(4,before,before).unwrap();
+  assert!(!creatable&&choices.contains(&[502,2,0]));
+  let (choices,creatable)=e.inventory_furniture_preview(4,before,[502,2,0]).unwrap();
+  assert!(creatable&&choices.contains(&target));
+  assert!(e.inventory_furniture_preview(4,before,target).unwrap().1);
+  assert!(e.inventory_furniture_preview(4,[502,2,0],target).is_err());
+  assert!(e.inventory_furniture_preview(4,before,[502,3,3]).is_err());
+  assert!(!e.dirty());assert!(e.history().is_empty());
   assert!(e.create_inventory_furniture_variant(4,before,[502,3,3],2).is_err());assert!(!e.dirty());
   let id=e.create_inventory_furniture_variant(4,before,target,2).unwrap();
   assert_eq!(e.history().len(),1);assert_eq!(e.inventory_unique_data(id),Some(U::Furniture{materials:target}));
@@ -3414,6 +3425,8 @@ fn furniture_multislot_creation_and_edit_are_atomic(){
   let added=&saved.inventory()[1];assert_eq!(added.quantity,2);assert_eq!(saved.inventory_unique_data(added.document_id),Some(U::Furniture{materials:target}));
  }
  let mut collision=Editor::open(furniture_edit_slot(Some(furniture_payload([502,3,0])))).unwrap();
+ assert!(!collision.inventory_furniture_preview(4,before,[502,2,0]).unwrap().0.contains(&target));
+ assert!(collision.inventory_furniture_preview(4,before,target).is_err());
  assert!(collision.create_inventory_furniture_variant(4,before,target,2).is_err());assert!(!collision.dirty());
 }
 
