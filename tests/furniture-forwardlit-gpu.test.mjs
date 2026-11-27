@@ -15,7 +15,7 @@ test('requires explicit camera, lighting, transform, and source material inputs'
  for(const bad of [{...m,baseST:[1,1,0]},{...m,rotationTurns:Infinity},{...m,worldUV:1}])assert.throws(()=>validateFurnitureForwardInputs(s,bad),/FURNITURE_FORWARD_INPUT/);
 });
 function fake({missing='',compile=true,link=true,drawError=false}={}){
- const calls=[],deleted=[],program={},gl={VERTEX_SHADER:1,FRAGMENT_SHADER:2,COMPILE_STATUS:3,LINK_STATUS:4,NO_ERROR:0,TEXTURE0:10,TEXTURE_2D:20,TEXTURE_CUBE_MAP:21,TRIANGLES:30,UNSIGNED_SHORT:31,
+ const calls=[],deleted=[],program={},gl={VERTEX_SHADER:1,FRAGMENT_SHADER:2,COMPILE_STATUS:3,LINK_STATUS:4,NO_ERROR:0,TEXTURE0:10,TEXTURE_2D:20,TEXTURE_CUBE_MAP:21,TRIANGLES:30,UNSIGNED_SHORT:31,UNSIGNED_INT:32,
  createProgram:()=>program,createShader:type=>({type}),shaderSource:(...a)=>calls.push(['source',...a]),compileShader(){},getShaderParameter:()=>compile,getShaderInfoLog:()=>'',attachShader(){},linkProgram(){},getProgramParameter:()=>link,getProgramInfoLog:()=>'',getUniformLocation:(_p,n)=>n===missing?null:n,deleteShader:s=>deleted.push(s),deleteProgram:p=>deleted.push(p),
  isVertexArray:v=>v===mesh.vao,isTexture:t=>Object.values(textures).includes(t),getError:()=>drawError&&calls.some(c=>c[0]==='draw')?1:0,useProgram(){},bindVertexArray(){},uniformMatrix4fv(){},uniformMatrix3fv(){},uniform1f:(...a)=>calls.push(['float',...a]),uniform3fv(){},uniform4fv(){},uniform2fv(){},uniform1i:(...a)=>calls.push(['int',...a]),activeTexture:i=>calls.push(['active',i]),bindTexture:(...a)=>calls.push(['bind',...a]),drawElements:(...a)=>calls.push(['draw',...a])};
  return {gl,calls,deleted,program};
@@ -91,4 +91,11 @@ test('CustomLit transparent tint alpha is bounded; opaque source still requires 
  for(const alpha of [0,.38,1])assert.doesNotThrow(()=>validateFurnitureForwardInputs(s,{...material,baseColor:[1,1,1,alpha]}));
  for(const alpha of [-.1,1.1,NaN])assert.throws(()=>validateFurnitureForwardInputs(s,{...material,baseColor:[1,1,1,alpha]}),/FURNITURE_FORWARD_INPUT/);
  assert.throws(()=>validateFurnitureForwardInputs(s,{...material,customLit:{materialAlpha:0},baseColor:[1,1,1,.38]}),/FURNITURE_FORWARD_INPUT/);
+});
+
+test('UInt32 draw uses original four-byte submesh offsets and unsigned-int type',()=>{
+ const a=fake(),r=createFurnitureForwardRenderer(a.gl),sub={...mesh,indexFormat:1,submeshes:[{firstByte:0,indexCount:300},{firstByte:1200,indexCount:240}]};
+ r.draw(sub,textures,s,m,0);r.draw(sub,textures,s,m,1);r.draw({...mesh,indexFormat:1},textures,s,m);r.draw(mesh,textures,s,m);
+ assert.deepEqual(a.calls.filter(x=>x[0]==='draw'),[['draw',30,300,32,0],['draw',30,240,32,1200],['draw',30,540,32,0],['draw',30,540,31,0]]);
+ r.dispose();
 });
