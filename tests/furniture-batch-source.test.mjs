@@ -102,3 +102,34 @@ except ValueError:pass
 `;
  execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
 });
+
+test('UInt32 source extractor and assembler preserve exact index width and reject invalid native ranges',()=>{
+ const py=String.raw`
+import struct,importlib.util,hashlib
+def load(name):
+    spec=importlib.util.spec_from_file_location(name,'scripts/'+name+'.py')
+    m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
+m=load('extract-furniture-mesh-source');p=load('assemble-furniture-source-pack')
+def row(off,count,fv,vc,base=0):
+    return struct.pack('<6I6f',off,count,0,base,fv,vc,0,0,0,1,1,1)
+nv=65538;sm=struct.pack('<I',2)+row(0,3,0,3)+row(12,3,65535,3)
+ib=struct.pack('<6I',0,1,2,65535,65536,65537)
+subs=m.native_submeshes(sm,1,nv,ib)
+assert [s['firstByte'] for s in subs]==[0,12]
+def sha(b):return hashlib.sha256(b).hexdigest()
+vb=bytes(nv*12);b=vb+ib
+mesh={'indexFormat':1,'vertexCount':nv,'indexCount':6,'stride':12,'vertexBytes':[0,len(vb),sha(vb)],'indexBytes':[len(vb),len(ib),sha(ib)],'submeshes':subs}
+g={'schema':'HKIA.FurnitureStaticMeshSource.1','version':'3.0.1','meshes':{'1':mesh}}
+p.validate_geometry(g,b)
+for bad in (struct.pack('<6I',0,1,2,0,65536,65537),struct.pack('<6I',0,1,2,65538,65536,65537),struct.pack('<6I',0,1,2,4294967295,65536,65537)):
+    try:m.native_submeshes(sm,1,nv,bad);raise AssertionError('invalid original index')
+    except ValueError:pass
+    mesh['indexBytes'][2]=sha(bad)
+    try:p.validate_geometry(g,vb+bad);raise AssertionError('invalid pack index')
+    except ValueError:pass
+for s in (struct.pack('<I',2)+row(0,3,0,3)+row(6,3,65535,3),struct.pack('<I',2)+row(0,3,0,3)+row(12,3,65535,3,1)):
+    try:m.native_submeshes(s,1,nv,ib);raise AssertionError('invalid range or base vertex')
+    except ValueError:pass
+`;
+ execFileSync(process.env.PYTHON_BIN||'python3',['-c',py],{cwd:repo});
+});

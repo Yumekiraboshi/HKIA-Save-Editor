@@ -2,24 +2,27 @@
  * No save rules, synthetic vertex data, or inferred geometry. */
 export type MeshRange=readonly [offset:number,bytes:number,sha256:string];
 export type NativeSubmesh={firstByte:number;indexCount:number;firstVertex:number;vertexCount:number;bounds:readonly number[]};
-export type NativeMeshSource={submeshes?:readonly NativeSubmesh[];vertexCount:number;indexCount:number;stride:number;channels:readonly (readonly number[])[];vertexBytes:MeshRange;indexBytes:MeshRange;bounds:readonly (readonly number[])[]};
+export type NativeMeshSource={indexFormat?:0|1;submeshes?:readonly NativeSubmesh[];vertexCount:number;indexCount:number;stride:number;channels:readonly (readonly number[])[];vertexBytes:MeshRange;indexBytes:MeshRange;bounds:readonly (readonly number[])[]};
 export type NativeGeometrySource={geometryBytes:number;geometrySha256:string;meshes:Readonly<Record<string,NativeMeshSource>>};
 const int=(v:number,a:number,b:number)=>Number.isInteger(v)&&v>=a&&v<=b;
 const hex=/^[a-f0-9]{64}$/;
 const fail=(message:string):never=>{throw Error('NATIVE_MESH_'+message);};
 const hash=async(b:ArrayBuffer)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b)),n=>n.toString(16).padStart(2,'0')).join('');
+/** Original Unity IndexFormat: absent/0 = UInt16, 1 = UInt32. */
+function nativeIndexWidth(m:{indexFormat?:0|1}){if(m.indexFormat===undefined||m.indexFormat===0)return 2;if(m.indexFormat===1)return 4;return fail('INDEX_FORMAT');}
 /** Source index ranges are ordered, nonoverlapping and cover the full original buffer. */
 export function validateNativeSubmeshes(m:NativeMeshSource){
+ const width=nativeIndexWidth(m);
  if(m.submeshes===undefined)return;
  if(!Array.isArray(m.submeshes)||!int(m.submeshes.length,2,64))fail('SUBMESH_COUNT');
  let end=0;
  for(const s of m.submeshes){
-  if(!s||!int(s.firstByte,0,m.indexCount*2)||s.firstByte!==end||!int(s.indexCount,3,m.indexCount)||s.indexCount%3||
+  if(!s||!int(s.firstByte,0,m.indexCount*width)||s.firstByte!==end||!int(s.indexCount,3,m.indexCount)||s.indexCount%3||
    !int(s.firstVertex,0,m.vertexCount-1)||!int(s.vertexCount,1,m.vertexCount-s.firstVertex)||
    !Array.isArray(s.bounds)||s.bounds.length!==6||!s.bounds.every(Number.isFinite)||s.bounds.slice(3).some((x:number)=>x<0))fail('SUBMESH_RANGE');
-  end+=s.indexCount*2;if(end>m.indexCount*2)fail('SUBMESH_RANGE');
+  end+=s.indexCount*width;if(end>m.indexCount*width)fail('SUBMESH_RANGE');
  }
- if(end!==m.indexCount*2)fail('SUBMESH_COVERAGE');
+ if(end!==m.indexCount*width)fail('SUBMESH_COVERAGE');
 }
 export function validateNativeGeometryLayout(source:NativeGeometrySource,allowSubmeshes=false){
  if(!int(source.geometryBytes,1,64*1024*1024)||!hex.test(source.geometrySha256))fail('HEADER');
@@ -29,7 +32,8 @@ export function validateNativeGeometryLayout(source:NativeGeometrySource,allowSu
   // The offline extractor preserves ordered submeshes. Until the shader/material
   // renderer supports them, reject rather than flattening all triangles.
   if(Object.prototype.hasOwnProperty.call(m,'submeshes')&&!allowSubmeshes)fail('SUBMESH_UNSUPPORTED');
-  if(!/^-?[0-9]+$/.test(pid)||!int(m.vertexCount,1,65536)||!int(m.indexCount,3,6*1024*1024)||m.indexCount%3||!int(m.stride,12,64)||m.stride%4||m.channels.length!==14)fail('LAYOUT');
+  const width=nativeIndexWidth(m);
+  if(!/^-?[0-9]+$/.test(pid)||!int(m.vertexCount,1,width===2?65536:Math.floor(64*1024*1024/12))||!int(m.indexCount,3,6*1024*1024)||m.indexCount%3||!int(m.stride,12,64)||m.stride%4||m.channels.length!==14)fail('LAYOUT');
   if(m.bounds.length!==1||m.bounds[0].length!==6||!m.bounds[0].every(Number.isFinite)||m.bounds[0].slice(3).some(x=>x<0))fail('BOUNDS');
   validateNativeSubmeshes(m);
   const active:Array<[number,number]>=[];
@@ -43,7 +47,7 @@ export function validateNativeGeometryLayout(source:NativeGeometrySource,allowSu
   }
   if(m.channels[0].join(',')!=='0,0,0,3'||!active.length||Math.max(...active.map(x=>x[1]))!==m.stride)fail('POSITION');
   active.sort((a,b)=>a[0]-b[0]);for(let i=1;i<active.length;i++)if(active[i-1][1]>active[i][0])fail('CHANNEL_OVERLAP');
-  for(const [r,expected] of [[m.vertexBytes,m.vertexCount*m.stride],[m.indexBytes,m.indexCount*2]] as const){
+  for(const [r,expected] of [[m.vertexBytes,m.vertexCount*m.stride],[m.indexBytes,m.indexCount*width]] as const){
    if(r.length!==3||!int(r[0],0,source.geometryBytes)||r[0]%4||r[1]!==expected||r[0]+r[1]>source.geometryBytes||!hex.test(r[2]))fail('RANGE');ranges.push(r);
   }
  }
@@ -57,9 +61,10 @@ export async function verifyNativeGeometry(source:NativeGeometrySource,bytes:Arr
  const view=new DataView(bytes);
  for(const m of Object.values(source.meshes)){
   for(const [off,len,digest] of [m.vertexBytes,m.indexBytes])if(await hash(bytes.slice(off,off+len))!==digest)fail('STREAM_HASH');
-  for(let i=0;i<m.indexCount;i++)if(view.getUint16(m.indexBytes[0]+2*i,true)>=m.vertexCount)fail('INDEX');
+  const width=nativeIndexWidth(m),indexAt=(p:number)=>width===2?view.getUint16(p,true):view.getUint32(p,true);
+  for(let i=0;i<m.indexCount;i++){const index=indexAt(m.indexBytes[0]+width*i);if(index>=m.vertexCount||index===(width===2?65535:4294967295))fail('INDEX');}
   for(const s of m.submeshes??[])for(let i=0;i<s.indexCount;i++){
-   const index=view.getUint16(m.indexBytes[0]+s.firstByte+2*i,true);
+   const index=indexAt(m.indexBytes[0]+s.firstByte+width*i);
    if(index<s.firstVertex||index>=s.firstVertex+s.vertexCount)fail('SUBMESH_INDEX');
   }
   for(let i=0;i<m.vertexCount;i++)for(const [,off,fmt,rawDim] of m.channels){
@@ -71,18 +76,19 @@ export async function verifyNativeGeometry(source:NativeGeometrySource,bytes:Arr
  }
 }
 export type MeshAttributeLocations=Readonly<Record<number,number>>;
-export type UploadedNativeMesh={vao:WebGLVertexArrayObject;indexCount:number;submeshes?:readonly Readonly<{firstByte:number;indexCount:number}>[]};
+export type UploadedNativeMesh={indexFormat?:0|1;vao:WebGLVertexArrayObject;indexCount:number;submeshes?:readonly Readonly<{firstByte:number;indexCount:number}>[]};
 /** A multi-material mesh is never implicitly drawn as one material. */
 export function nativeMeshDrawRange(mesh:UploadedNativeMesh,submeshIndex?:number){
+ const width=nativeIndexWidth(mesh);
  if(!int(mesh.indexCount,3,6*1024*1024)||mesh.indexCount%3)fail('DRAW_RANGE');
  if(mesh.submeshes===undefined){if(submeshIndex!==undefined)fail('DRAW_RANGE');return {firstByte:0,indexCount:mesh.indexCount};}
  if(submeshIndex===undefined||!int(submeshIndex,0,mesh.submeshes.length-1)||!int(mesh.submeshes.length,2,64))throw Error('NATIVE_MESH_DRAW_SUBMESH');
  let end=0;
  for(const s of mesh.submeshes){
   if(!s||s.firstByte!==end||!int(s.indexCount,3,mesh.indexCount)||s.indexCount%3)fail('DRAW_RANGE');
-  end+=s.indexCount*2;
+  end+=s.indexCount*width;
  }
- if(end!==mesh.indexCount*2)fail('DRAW_RANGE');
+ if(end!==mesh.indexCount*width)fail('DRAW_RANGE');
  return mesh.submeshes[submeshIndex];
 }
 /** Steam 3.0.1 UnityPlayer RVA 0x4a6f10: the layout builder retains the
@@ -112,7 +118,7 @@ export async function uploadNativeGeometry(gl:WebGL2RenderingContext,source:Nati
     const b=gl.createBuffer();if(!b)throw Error('NATIVE_MESH_GPU_CREATE');buffers.push(b);gl.bindBuffer(target,b);gl.bufferData(target,new Uint8Array(bytes,r[0],r[1]),gl.STATIC_DRAW);
    }
    for(const [channel,location] of Object.entries(locations[pid])){const i=Number(channel);const [,off,fmt,rawDim]=m.channels[i===5&&allowNativeUv1Alias&&nativeMissingUv1AliasesUv0(m)?4:i];gl.enableVertexAttribArray(location);gl.vertexAttribPointer(location,rawDim&15,[gl.FLOAT,gl.HALF_FLOAT,gl.UNSIGNED_BYTE][fmt],fmt===2,m.stride,off);}
-   if(gl.getError()!==gl.NO_ERROR)fail('GPU_UPLOAD');uploaded.set(pid,{vao,indexCount:m.indexCount,...(m.submeshes?{submeshes:Object.freeze(m.submeshes.map(s=>Object.freeze({firstByte:s.firstByte,indexCount:s.indexCount})))}:{})});
+   if(gl.getError()!==gl.NO_ERROR)fail('GPU_UPLOAD');uploaded.set(pid,{vao,indexCount:m.indexCount,...(m.indexFormat===1?{indexFormat:1 as const}:{}),...(m.submeshes?{submeshes:Object.freeze(m.submeshes.map(s=>Object.freeze({firstByte:s.firstByte,indexCount:s.indexCount})))}:{})});
   }
   return {meshes:uploaded,dispose};
  }catch(e){dispose();throw e;}
