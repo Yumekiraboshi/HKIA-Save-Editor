@@ -86,5 +86,44 @@ export async function flowerRuntimeCoverage(browser,origin,base){
   // effect sprites can also intentionally share the same image.
   assert.deepEqual(out.originalFailures,[]);assert.ok(out.unknownOriginal);
   assert.ok(out.stateResults.every(r=>r.states.every(s=>!s.generated&&!s.original)),'non-plucked states use the documented native fallback');
+  // An unavailable mask index or texture must not suppress the separately
+  // verified original base for any of the 25 species.
+  for(const pattern of ['**/inventory-flower-art/index.json','**/inventory-flower-art/flower-mask-rgb-v3.0.1.webp']){
+   const failure=await context.newPage();
+   try{
+    await failure.route(root+'__flower_coverage__.html',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html><body></body></html>'}));
+    await failure.route(root+'__flower_coverage__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
+    await failure.route(pattern,r=>r.fulfill({status:503,body:'unavailable'}));
+    await failure.goto(root+'__flower_coverage__.html');
+    const result=await failure.evaluate(async base=>{
+     const {renderFlowerArt,renderFlowerOriginalBaseArt,renderFlowerDefinitionBaseArt}=await import(base+'__flower_coverage__.mjs');
+     const manifest=await (await fetch(base+'inventory-flower-art/flower-runtime-source-v3.0.1.json')).json();
+     const defs=await (await fetch(base+'inventory-ui/flowers.json')).json();
+     const rows=[];
+     for(const {itemId} of manifest.rows){
+      const fields={growState:6,baseColor:1,pattern:0,patternColor:0};
+      const complete=await renderFlowerArt(itemId,fields,defs);
+      const original=await renderFlowerOriginalBaseArt(itemId,fields);
+      let visible=false;
+      if(original){
+       const im=await createImageBitmap(original);
+       try{
+        const c=document.createElement('canvas');c.width=96;c.height=96;
+        const ctx=c.getContext('2d');ctx.drawImage(im,0,0);
+        const rgba=ctx.getImageData(0,0,96,96).data;
+        visible=im.width===96&&im.height===96&&rgba.some((v,i)=>i%4===3&&v>200);
+       }finally{im.close();}
+      }
+      rows.push({complete:complete===null,visible,cached:!!original&&original===await renderFlowerDefinitionBaseArt(itemId),
+       seed:await renderFlowerOriginalBaseArt(itemId,{...fields,growState:0})===null,
+       uprooted:await renderFlowerOriginalBaseArt(itemId,{...fields,growState:7})===null});
+     }
+     return rows;
+    },base);
+    assert.equal(result.length,25);
+    assert.ok(result.every(r=>r.complete&&r.visible&&r.cached&&r.seed&&r.uprooted),pattern);
+   }finally{await failure.close();}
+  }
+
  }finally{await context.close();}
 }
