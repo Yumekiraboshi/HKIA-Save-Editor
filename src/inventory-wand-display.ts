@@ -2,6 +2,7 @@ import type {InventoryUniqueInfo} from './inventory-unique';
 import type {WandBaseAppearance} from './wand-appearance';
 // Exact native v3.0.1 definition bindings from the pinned wand manifest.
 const WAND_IDS=new Set([39246601,384749651,671373939,1020402601,1233735197,1304219546,1429161083,1853305820,2096979038]);
+export function hasNativeWandArt(itemId:number):boolean{return WAND_IDS.has(itemId);}
 export type WandInventoryAppearance=WandBaseAppearance&{
  sourceItemId:number;styleCharacteristicId:number;
  sourceUnique:{tag:number;words:readonly number[]}|null;
