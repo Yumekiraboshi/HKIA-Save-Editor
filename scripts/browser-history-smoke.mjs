@@ -262,7 +262,7 @@ async function inventoryPaletteCreationSmoke(){
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();
   await dialog.waitFor();await dialog.locator('.inventory-palette-option').first().click();
   await dialog.locator('[data-palette-slot="1"]').click();await dialog.locator('.inventory-palette-option').first().click();
-  await dialog.locator('[data-palette-slot="0"]').click();assert.equal(await dialog.locator('.inventory-palette-option[aria-pressed="true"]').count(),1);
+  await dialog.locator('[data-palette-slot="0"]').click();await dialog.locator('.inventory-palette-reset').waitFor();
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-palette:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);

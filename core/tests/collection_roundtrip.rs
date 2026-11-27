@@ -3256,6 +3256,35 @@ fn unowned_flower_customized_first_stack_uses_verified_default_witness(){
 }
 
 #[test]
+fn palette_preview_composes_source_colors_before_one_atomic_add(){
+ use hkia_save_core::{collection::{HistoryScope::Inventory,PaletteVariant},inventory_palette_source::palette_output_color as color,native::InventoryUniqueData};
+ let original=[[0,0,0,0x3f800000];3];
+ let target=[color(4,3).unwrap(),color(5,4).unwrap(),color(6,0).unwrap()];
+ let encode=|v:PaletteVariant|arr(vec![vec![6],arr(v.into_iter().map(|c|arr(c.into_iter().map(|w|f(f32::from_bits(w))).collect())).collect())]);
+ for zipped in [false,true]{
+  let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=0x96;
+  p.extend(doc(1,arr(vec![u(4),u(1835273963),u(21),u(2),encode(original)])));
+  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory_palette_creation_variants(4).is_empty());
+  let one=[target[0],original[1],original[2]];let two=[target[0],target[1],original[2]];
+  let (options,can)=e.inventory_palette_preview(4,original,original).unwrap();assert!(!can&&options.contains(&one));
+  let (options,can)=e.inventory_palette_preview(4,original,one).unwrap();assert!(!can&&options.contains(&two));
+  let (options,can)=e.inventory_palette_preview(4,original,two).unwrap();assert!(!can&&options.contains(&target));
+  assert!(e.inventory_palette_preview(4,original,target).unwrap().1);
+  assert!(e.inventory_palette_preview(4,one,target).is_err());
+  assert!(!e.dirty());assert!(!e.can_undo());
+  let id=e.create_inventory_palette_variant(4,original,target,3).unwrap();
+  assert_eq!(e.history().len(),1);assert!(e.inventory_palette_preview(4,original,target).is_err());
+  assert_eq!(e.inventory_unique_data(id),Some(InventoryUniqueData::Palette{rgba_bits:target}));
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert!(!restored.dirty());assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory_original_unique_payload(4),Some(encode(original).as_slice()));
+  assert_eq!(saved.inventory_unique_data(saved.inventory()[1].document_id),e.inventory_unique_data(id));
+ }
+}
+
+#[test]
 fn new_flower_variants_refuse_unresolved_copied_payloads(){
  let mut p=synthetic_payload("3.0.1");p[3]=0x97;
  p.extend(doc(1,arr(vec![u(4),u(1331175279),u(11),u(93),plain_flower(6)])));
