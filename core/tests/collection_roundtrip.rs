@@ -2480,7 +2480,7 @@ fn cafe_existing_pairs_and_complete_unsupported_peers_are_independent(){
   p.extend(doc(1,arr(vec![u(5),u(item),u(22),u(2),unsupported.clone()])));
   let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();
-  assert!(e.inventory().iter().all(|r|r.editable));assert!(!e.inventory_cafe_rows().iter().any(|(id,_,editable)|*id==5&&*editable));
+  assert!(e.inventory().iter().all(|r|r.editable));assert!(!e.inventory_cafe_rows().any(|(id,_,editable)|id==5&&editable));
   assert!(e.inventory_cafe_rows().any(|(id,v,edit)|id==4&&v==original&&edit));
   let (options,creatable)=e.inventory_cafe_preview(4,original,original).unwrap();
   assert!(!creatable&&options.iter().any(|r|r.0==intermediate));
