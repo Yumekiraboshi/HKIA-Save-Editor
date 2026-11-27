@@ -3188,6 +3188,39 @@ fn ordinary_clothing_zero_requires_complete_avatar_models_and_no_known_or_unreso
 }
 
 #[test]
+fn event_tradeable_clothing_zero_refill_uses_exact_outfit_and_piece_references(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=517031u32;
+ let outfit=[0xf19cbde5,0x482caed7,0x2797ac8b,0xe22f46e9];
+ let piece=[0xb2cb0da6,0x436a94b5,0x2ff5088b,0x58380995];
+ let make=|pieces:Vec<Vec<u8>>,outfits:Vec<Vec<u8>>|{
+  let mut p=synthetic_payload("3.0.1");p[3]=0x98;
+  p.extend(doc(1,arr(vec![u(4),u(item),u(0),u(6),vec![0xc0]])));
+  p.extend(doc(10,arr(vec![u(6),guid([1,2,3,4]),arr(pieces),arr(vec![]),arr(outfits),guid([1,2,3,4]),vec![0xc3],vec![0xc0]])));
+  p.extend(doc(22,arr(vec![u(7),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(vec![],vec![]);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let before=e.inventory();
+  assert_eq!(before[0].quantity_minimum,0);
+  e.change_inventory_quantity(4,6,0).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity_minimum,0);
+  assert_eq!(saved.inventory_original_unique_payload(4),Some([0xc0].as_slice()));
+  saved.change_inventory_quantity(4,0,6).unwrap();
+  assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),before);
+ }
+ for raw in [make(vec![],vec![guid(outfit)]),make(vec![guid(piece)],vec![])]{
+  let mut e=Editor::open(raw).unwrap();
+  assert_eq!(e.inventory()[0].quantity_minimum,1);
+  assert!(e.change_inventory_quantity(4,6,0).is_err());assert!(!e.dirty());
+ }
+}
+
+#[test]
 fn saved_flower_clothing_zero_refill_preserves_native_variant_and_protects_equipment(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let crown=897617923u32;let ribbon=105502901u32;
