@@ -1,5 +1,5 @@
 import type {AchievementIndex} from './achievement-index';
-import {loadVerifiedAchievementImage} from './achievement-atlas-image';
+import {loadVerifiedAchievementImage,loadVerifiedAchievementManifest} from './achievement-atlas-image';
 import type {AchievementHierarchy} from './achievement-groups';
 
 export type CategorySprite={
@@ -15,6 +15,7 @@ export type CategoryIconAtlas={
  readonly bySaveGuid:ReadonlyMap<string,CategorySprite>;
  dispose?():void;
 };
+const MANIFEST_SHA='b8a264ddde3cdb34b80d3b47816961d9b5534fd8c791f0286881740b1c091415';
 const HEX64=/^[0-9a-f]{64}$/;
 const SOURCE_GUID=/^[0-9a-f]{32}$/;
 const PATH_ID=/^-?\d{1,20}$/;
@@ -52,9 +53,8 @@ export function decodeAchievementCategoryAtlas(
 export async function loadAchievementCategoryAtlas(
  base:string,index:AchievementIndex,hierarchy:AchievementHierarchy
 ):Promise<CategoryIconAtlas>{
- const response=await fetch(base+'achievement-category-atlas.json');
- if(!response.ok)throw Error('ACH_CATEGORY_ICONS_UNAVAILABLE');
- const atlas=decodeAchievementCategoryAtlas(await response.json(),index,hierarchy,base);
+ const manifest=await loadVerifiedAchievementManifest(base,'achievement-category-atlas.json',MANIFEST_SHA);
+ const atlas=decodeAchievementCategoryAtlas(manifest,index,hierarchy,base);
  const image=await loadVerifiedAchievementImage(base,'achievement-category-atlas.webp',EXPECTED_ATLAS_SHA);
  return {...atlas,...image};
 }

@@ -1,5 +1,5 @@
 import type {AchievementIndex} from './achievement-index';
-import {loadVerifiedAchievementImage} from './achievement-atlas-image';
+import {loadVerifiedAchievementImage,loadVerifiedAchievementManifest} from './achievement-atlas-image';
 
 export type IndividualAchievementSprite={
  readonly index:number;
@@ -14,6 +14,7 @@ export type IndividualAchievementAtlas={
  readonly bySaveGuid:ReadonlyMap<string,IndividualAchievementSprite>;
  dispose?():void;
 };
+const MANIFEST_SHA='e168c1ca10fe7a0d7cb4107cdb6454ddd73c5d94e3b36bfb2be2802b4e487e9a';
 const HEX64=/^[0-9a-f]{64}$/;
 const SOURCE_GUID=/^[0-9a-f]{32}$/;
 const SPRITE_ID=/^-?\d{1,20}$/;
@@ -76,9 +77,8 @@ export function decodeAchievementIndividualAtlas(
 export async function loadAchievementIndividualAtlas(
  base:string,index:AchievementIndex
 ):Promise<IndividualAchievementAtlas>{
- const r=await fetch(base+'achievement-individual-atlas.json');
- if(!r.ok)throw Error('ACH_INDIVIDUAL_ICONS_UNAVAILABLE');
- const atlas=decodeAchievementIndividualAtlas(await r.json(),index,base);
+ const manifest=await loadVerifiedAchievementManifest(base,'achievement-individual-atlas.json',MANIFEST_SHA);
+ const atlas=decodeAchievementIndividualAtlas(manifest,index,base);
  const image=await loadVerifiedAchievementImage(base,'achievement-individual-atlas.webp',ATLAS_SHA);
  return {...atlas,...image};
 }
