@@ -2923,6 +2923,52 @@ fn native_magic_wand_variant_creation_reuses_allocator_and_replays_cancelled_par
 }
 
 #[test]
+fn empty_shaped_wand_and_furniture_families_allow_new_distinct_native_variants(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let wand=1429161083i32;let furniture=61381969i32;
+ let wc=0x80000000|wand as u32;let fc=0x80000000|furniture as u32;
+ for base in [false,true]{for zipped in [false,true]{
+  let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=if base{0x98}else{0x97};
+  let wp=arr(vec![vec![9],arr(vec![u(0),vec![0xc0],u(104),u(125),u(118)])]);
+  let fp=furniture_payload([13,2,0]);
+  p.extend(doc(1,arr(vec![u(4),u(wand as u32),u(21),u(2),wp.clone()])));
+  p.extend(doc(1,arr(vec![u(5),u(furniture as u32),u(22),u(3),fp.clone()])));
+  if base{p.extend(doc(1,arr(vec![u(6),u(furniture as u32),u(0),u(4),vec![0xc0]])));}
+  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(!e.inventory_absent_wand_ids().contains(&(wand,118)));
+  assert!(!e.inventory_absent_furniture_ids().contains(&furniture));
+  e.change_inventory_quantities(&[(4,2,0),(5,3,0)]).unwrap();
+  if base{e.change_inventory_quantity(6,4,0).unwrap();}
+  assert!(e.inventory_absent_wand_ids().contains(&(wand,118)));
+  assert_eq!(e.inventory_wand_creation_variants(wc).len(),35);
+  assert!(!e.inventory_wand_creation_variants(wc).contains(&[104,125]));
+  assert!(e.create_inventory_wand_variant(wc,[0;2],[104,125],1).is_err());
+  let wh=e.create_inventory_wand_variant(wc,[0;2],[106,127],7).unwrap();
+  let source=if base{
+   assert!(e.inventory_default_furniture_ids().contains(&6));6
+  }else{
+   assert!(e.inventory_absent_furniture_ids().contains(&furniture));
+   assert!(e.inventory_creatable().iter().any(|r|r.item_id==furniture));fc
+  };
+  assert!(e.create_inventory_furniture_variant(source,[0;3],[13,2,0],1).is_err());
+  let fh=e.create_inventory_furniture_variant(source,[0;3],[0,3,0],8).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory_original_unique_payload(4),Some(wp.as_slice()));
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(fp.as_slice()));
+  for (handle,qty) in [(wh,7),(fh,8)]{
+   let row=saved.inventory().into_iter().find(|r|r.quantity==qty).unwrap();
+   assert_eq!(saved.inventory_unique_data(row.document_id),e.inventory_unique_data(handle));
+  }
+  saved.change_inventory_quantities(&[(4,0,2),(5,0,3)]).unwrap();
+  assert!(!saved.inventory_absent_wand_ids().contains(&(wand,118)));
+ }}
+}
+
+#[test]
 fn first_shaped_wands_use_native_candidates_and_shared_history(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let item=1429161083i32;let candidate=0x80000000u32|item as u32;

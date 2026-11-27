@@ -669,8 +669,14 @@ impl Editor {
  }
  // Only the intersection of verified ordinary acquisition definitions and
  // original non-layout customizable furniture. No inferred ownership.
+ // An empty verified saved family does not need to supply a positive
+ // ownership witness when the definition independently allows acquisition.
+ fn saved_item_family_empty(&self,item:i32)->bool{
+  !self.inventory_item_rows.contains_key(&item)||self.slot.index.inventory.iter().filter(|r|r.item_id==Some(item)).all(|r|
+   self.inventory_can_empty(r)&&self.inventory_changes.get(&r.id).copied().or(r.quantity)==Some(0))
+ }
  fn absent_furniture_choices(&self,item_id:i32)->Vec<FurnitureVariant>{
-  if self.inventory_item_rows.contains_key(&item_id)||!self.can_create_inventory_item(item_id){return Vec::new()}
+  if !self.can_create_inventory_item(item_id)||!self.saved_item_family_empty(item_id){return Vec::new()}
   self.default_furniture_choices(item_id)
  }
  // A single source-verified ordinary saved stack is sufficient evidence
@@ -678,7 +684,8 @@ impl Editor {
  fn saved_default_furniture_source(&self,row:&crate::native::InventoryRow)->Option<i32>{
   let item=row.item_id?;
   if row.id==0||row.id>=PENDING_ITEM||row.unique_id!=Some(0)||row.unique_is_nil!=Some(true)||
-   self.inventory_changes.get(&row.id).copied().or(row.quantity)?<=0||
+   !self.inventory_changes.get(&row.id).copied().or(row.quantity).is_some_and(|q|
+    q>0||(q==0&&crate::inventory_source::ordinary_bag_creation_item(item)&&self.saved_item_family_empty(item)))||
    !row.fields.iter().all(Option::is_some)||
    !(crate::inventory_source::ordinary_creation_item(item)||self.extra_custom_furniture_zero_reference_safe(item))||
    !self.inventory_creation_payload_safe(item)||
@@ -754,10 +761,12 @@ impl Editor {
    if self.inventory_changes.get(&id).is_some_and(|&q|q>0)&&self.can_create_inventory_item(item){return self.default_furniture_choices(item)}
    return self.absent_furniture_choices(item)
   }
-  else if !self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|
-   self.inventory_changes.get(&id).copied().or(r.quantity).is_some_and(|q|q>0)){return Vec::new()}
-  if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|self.saved_default_furniture_source(r)){
-   return self.default_furniture_choices(item)
+  else{
+   if let Some(item)=self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|self.saved_default_furniture_source(r)){
+    return self.default_furniture_choices(item)
+   }
+   if !self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|
+    self.inventory_changes.get(&id).copied().or(r.quantity).is_some_and(|q|q>0)){return Vec::new()}
   }
   if !self.pending_furniture.contains_key(&id)&&!self.unique_quantity_ids.contains(&id){return Vec::new()}
   let Some((source,original,current,_))=self.furniture_context(id)else{return Vec::new()};
@@ -1453,7 +1462,7 @@ impl Editor {
   item!=crate::inventory_source::GENERIC_MAGIC_WAND_ID&&crate::inventory_source::wand_output_item(item)&&
    crate::inventory_source::is_uncapped_required_unique_stack(item)&&
    (if crate::inventory_source::magic_wand_style(item).is_some(){
-    !self.inventory_item_rows.contains_key(&item)&&
+    self.saved_item_family_empty(item)&&self.wand_family_count(item)<256&&self.wand_source_reservations(item).is_some()&&
     !self.pending_wands.iter().any(|(&id,&(i,_))|i==item&&self.inventory_changes.contains_key(&id))
    }else{self.wand_family_count(item)<256&&self.wand_source_reservations(item).is_some()})&&
    !self.slot.index.inventory_wand_copies&&self.inventory_creation_payload_safe(item)&&
@@ -1587,8 +1596,13 @@ impl Editor {
   if crate::inventory_source::magic_wand_style(item).is_none()&&
    self.inventory_absent_wand_sources(PENDING_ITEM|item as u32).is_empty()&&
    self.inventory_owned_furniture_wand_sources(PENDING_ITEM|item as u32).is_empty(){return Vec::new()}
+  let reserved=if crate::inventory_source::magic_wand_style(item).is_some(){
+   let Some(mut keys)=self.wand_source_reservations(item)else{return Vec::new()};
+   keys.remove(&0).unwrap_or_default()
+  }else{HashSet::new()};
   crate::inventory_source::WAND_MAGIC.iter().flat_map(|&(magic,_)|
-   crate::inventory_source::WAND_FLECK.iter().map(move |&(fleck,_)|[magic,fleck])).collect()
+   crate::inventory_source::WAND_FLECK.iter().map(move |&(fleck,_)|[magic,fleck]))
+   .filter(|pair|!reserved.contains(pair)).collect()
  }
  pub fn inventory_absent_wand_ids(&self)->Vec<(i32,i32)>{
   crate::inventory_source::MAGIC_WAND_STYLES.iter().copied().chain([
