@@ -86,6 +86,10 @@ export function unpackDynamicColorways(root){
  const index=read(join(dir,'index.json')),native=read(join(root,'public/native-dye-palettes.json'));
  const originals=read(join(root,'public/source-colorways/index.json'));
  const catalog=read(join(root,'public/catalog.json'));
+ const overrideSource=read(join(root,'data/native-icon-override-source-v3.0.1.json'));
+ if(overrideSource.schema!=='HKIA.NativeIconOverrideSource.1'||overrideSource.version!=='3.0.1'||overrideSource.steamDefinitionsSha256!==index.definitionsSha256||overrideSource.dynamicRoutesVerifiedByContainer!==true||overrideSource.directDefinitionRoutesVerifiedByContainer!==false||overrideSource.rows.length!==5384)throw Error('NATIVE_OVERRIDE_SOURCE');
+ const overrides=new Map(overrideSource.rows.map(row=>[String(row[0]),row]));
+ if(overrides.size!==5384)throw Error('NATIVE_OVERRIDE_DUPLICATE');
  const itemKeys=new Map(catalog.items.map(r=>[String(r[0]),r[1]]));
  const sourceBundles=Array.from({length:11},(_,i)=>'dynamicinventory_icons_'+String(i+1).padStart(2,'0'));
  const shards=Array.from({length:11},(_,i)=>'index-'+String(i+1).padStart(2,'0')+'.json');
@@ -115,6 +119,8 @@ export function unpackDynamicColorways(root){
   if(!data||typeof data!=='object'||Array.isArray(data)||Object.keys(data).length>500)throw Error('DYNAMIC_SOURCE_SHARD');
   for(const [id,r] of Object.entries(data)){
    const b=sources.get(r.sourceSpriteBundle);
+   const override=overrides.get(id);
+   if(!override||override[2]!==i+1||override[3]!==r.sourceSpritePathId||override[4]!==r.texturePathId)throw Error('NATIVE_OVERRIDE_PPTR '+id);
    if(!Object.hasOwn(native.records,id)||Object.hasOwn(originals.records,id)||records.has(id)||
       !ID.test(r.file)||r.file!==id+'.webp'||Number(id)>0x7fffffff||!HASH.test(r.sha256)||
       !HASH.test(r.textureSha256)||r.sourceKind!=='dynamic'||r.sourceSpriteBundle!==sourceBundles[i]||
