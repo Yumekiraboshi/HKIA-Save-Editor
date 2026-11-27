@@ -2755,6 +2755,37 @@ fn cafe_source_ingredient_pairs_keep_order_and_native_identity(){
 }
 
 #[test]
+fn cafe_uses_common_unrestricted_ingredient_acquisition_without_creating_materials(){
+ use hkia_save_core::collection::{HistoryScope::Inventory,CafeVariant};
+ let item=203331651u32;let before=[44,49,48,6,46,9];let target=[55,39,48,25,46,9];
+ let encode=|v:CafeVariant|arr(vec![vec![3],arr(vec![arr(v[..3].iter().map(|&w|u(w as u32)).collect()),arr(v[3..].iter().map(|&w|u(w as u32)).collect())])]);
+ for zipped in [false,true]{
+  let mut p=synthetic_payload("3.0.1");p[2]=6;p[3]=0x96;
+  p.extend(doc(1,arr(vec![u(4),u(item),u(11),u(2),encode(before)])));
+  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let choices=e.inventory_cafe_variants(4);
+  assert!(choices.iter().any(|&(v,id,slot)|v==[55,49,48,25,46,9]&&id==89022446&&slot==0));
+  assert!(choices.iter().any(|&(v,_,slot)|v==[65,49,48,25,46,9]&&slot==0));
+  assert!(choices.iter().any(|&(v,id,slot)|v==[44,39,48,6,46,9]&&id==1344087400&&slot==1));
+  assert!(!choices.iter().any(|&(_,id,_)|id==1141761080));
+  assert!(e.create_inventory_cafe_variant(4,before,[60,49,48,13,46,9],1).is_err());
+  assert!(!e.dirty());
+  let added=e.create_inventory_cafe_variant(4,before,target,5).unwrap();
+  assert!(e.change_inventory_cafe_variant(4,before,target).is_err());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory().len(),2);
+  assert!(saved.inventory().iter().all(|r|r.item_id==item as i32));
+  assert_eq!(saved.inventory_original_unique_payload(4),Some(encode(before).as_slice()));
+  let row=saved.inventory().into_iter().find(|r|r.quantity==5).unwrap();
+  assert_eq!(saved.inventory_unique_data(row.document_id),e.inventory_unique_data(added));
+  assert_eq!(saved.inventory_original_unique_payload(row.document_id),Some(encode(target).as_slice()));
+ }
+}
+
+#[test]
 fn dango_nigiri_and_new_cafe_stacks_roundtrip(){
  use hkia_save_core::collection::{HistoryScope::Inventory,CafeVariant};
  let dango=[44,49,48,6,46,9];let added=[62,49,48,6,46,9];let child=[62,50,48,6,46,9];
