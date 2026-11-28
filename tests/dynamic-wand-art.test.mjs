@@ -94,10 +94,11 @@ test('item-derived overlays bind exact source definition and Sprite identities, 
  assert.deepEqual([p.width,p.height],[84,168]);
  assert.deepEqual([...p.rgba.slice(0,4)],[23,45,67,255]);
  assert.deepEqual([...p.rgba.slice(84*84*4,84*84*4+4)],[89,89,89,255]);
- const nativeCell={url:'/HKIA-Save-Editor/inventory-art/sheet-003.webp',x:96,y:384,sheet:3,cell:49};
+ const nativeCell={url:'/HKIA-Save-Editor/inventory-art/sheet-003.webp',x:96,y:384,sheet:3,cell:49,nativeSheet:{root:'/HKIA-Save-Editor/inventory-art/',file:'sheet-003.webp',sha256:'a'.repeat(64),bytes:100}};
  assert.deepEqual(selectInventoryWandOriginalCell(15761463,new Map([[15761463,nativeCell]])),{itemId:15761463,cell:nativeCell,kind:'inventory'});
  assert.equal(selectInventoryWandOriginalCell(15761463,new Map([[15761463,{...nativeCell,url:'/dynamic-colorways/15761463.webp'}]])),undefined);
  assert.equal(selectInventoryWandOriginalCell(803563219,new Map([[803563219,nativeCell]])),undefined);
+ assert.equal(selectInventoryWandOriginalCell(15761463,new Map([[15761463,{...nativeCell,nativeSheet:undefined}]])),undefined);
  const full=new Uint8ClampedArray(96*96*4);full.set([3,4,5,6],(96*96-1)*4);
  const fullPlanes=normalizedWandOverlayPixels(full,96);
  assert.deepEqual([fullPlanes.width,fullPlanes.height],[96,192]);

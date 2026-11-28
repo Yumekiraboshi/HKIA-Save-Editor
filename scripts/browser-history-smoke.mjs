@@ -186,12 +186,15 @@ async function inventoryDynamicPaletteArtSmoke(){
   })));
   for(const im of images){assert.equal(im.width,96);assert.equal(im.height,96);assert.ok(im.alpha.some(a=>a>200));}
   assert.deepEqual(images[0].alpha,images[1].alpha);assert.notDeepEqual(images[0].rgb,images[1].rgb);
+  const originalUrls=await sprites.evaluateAll(els=>els.map(e=>getComputedStyle(e).backgroundImage).sort());
   const inputs=page.locator('.inventory-card input[name="quantity"]');
   assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.min)),['1','1']);
   await inputs.first().fill('4');await page.locator('.inventory-card button[type="submit"]').first().click();
   await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
   await inputs.nth(1).fill('7');await page.locator('.inventory-card button[type="submit"]').nth(1).click();
   await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await sprites.nth(1).waitFor({timeout:30_000});
+  assert.deepEqual(await sprites.evaluateAll(els=>els.map(e=>getComputedStyle(e).backgroundImage).sort()),originalUrls,'quantity-only snapshot refresh retains dynamic artwork URLs');
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();
   const editor=page.locator('dialog[aria-labelledby="palette-editor-title"]');
   await editor.waitFor();await editor.locator('.inventory-palette-option').first().click();

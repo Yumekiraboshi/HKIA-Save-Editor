@@ -1,14 +1,22 @@
 <script lang="ts">
+ import {untrack} from 'svelte';
  import type {SpriteCell} from './icon-packs';
  import {watchDynamicArtVisibility,startDynamicArtRequest} from './dynamic-art-view';
- let {render,source,fallback,renderPartial,renderIntermediate}:{render:()=>Promise<Blob|null>;renderPartial?:()=>Promise<Blob|null>;renderIntermediate?:()=>Promise<Blob|null>;source:'native-flower'|'native-palette'|'native-chef'|'native-wand'|'native-placeholder';fallback?:SpriteCell}=$props();
+ let {render,source,fallback,renderPartial,renderIntermediate,renderKey}:{renderKey?:string;render:()=>Promise<Blob|null>;renderPartial?:()=>Promise<Blob|null>;renderIntermediate?:()=>Promise<Blob|null>;source:'native-flower'|'native-palette'|'native-chef'|'native-wand'|'native-placeholder';fallback?:SpriteCell}=$props();
  let near=$state(false);
- let url=$state<string|null>(null);
- let partial=$state(false);
+ // Primitive appearance keys survive snapshot recreation and quantity-only
+ // edits. A changed appearance hides the preceding URL before an effect runs.
+ const identity=$derived(renderKey??render);
+ let displayed=$state.raw<{identity:string|(()=>Promise<Blob|null>);url:string;partial:boolean}|null>(null);
+ const current=$derived(near&&displayed?.identity===identity?displayed:null);
+ const url=$derived(current?.url??null);
+ const partial=$derived(current?.partial??false);
  const setNear=(value:boolean)=>{near=value;};
  $effect(()=>{
-  if(!near){url=null;partial=false;return;}
-  return startDynamicArtRequest(render,(value,isPartial)=>{url=value;partial=!!isPartial;},renderPartial,renderIntermediate);
+  const key=identity;
+  if(!near){displayed=null;return;}
+  const [full,base,intermediate]=untrack(()=>[render,renderPartial,renderIntermediate] as const);
+  return startDynamicArtRequest(full,(value,isPartial)=>{displayed=value?{identity:key,url:value,partial:!!isPartial}:null;},base,intermediate);
  });
 </script>
 <span use:watchDynamicArtVisibility={setNear}
