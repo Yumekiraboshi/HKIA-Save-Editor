@@ -36,7 +36,9 @@ export async function chefRuntimeSmoke(browser,origin,base){
     const b=row.kind==='boba'?appearance(14):{kind:'cafe',colors:[14,14,14]};
     const first=await renderChefArt(row.itemId,a),second=await renderChefArt(row.itemId,b);
     const original=await renderChefBaseArt(row.itemId);
-    rows.push({id:row.itemId,a:await pixels(first),b:await pixels(second),original:await pixels(original),originalCache:original===await renderChefBaseArt(row.itemId),cache:first===await renderChefArt(row.itemId,a)});
+    const neutral=id=>row.kind==='boba'?{kind:'boba',colorId:id}:{kind:'cafe',colors:[id,id,id]};
+    const unmapped=await renderChefArt(row.itemId,neutral(1));
+    rows.push({id:row.itemId,a:await pixels(first),b:await pixels(second),original:await pixels(original),originalCache:original===await renderChefBaseArt(row.itemId),cache:first===await renderChefArt(row.itemId,a),neutral:await pixels(unmapped),neutralCache:unmapped!==null&&unmapped===await renderChefArt(row.itemId,neutral(2))});
    }
    return {rows,unknown:await renderChefArt(1798633565,{kind:'boba',colorId:999999})===null,unknownBase:await renderChefBaseArt(0)===null};
   },base);
@@ -46,6 +48,7 @@ export async function chefRuntimeSmoke(browser,origin,base){
    assert.equal(row.a.alpha,row.b.alpha);assert.notEqual(row.a.rgba,row.b.rgba,'same item must render different original color inputs: '+row.id);
    assert.ok(row.cache&&row.originalCache&&row.original.visible);
    assert.equal(row.original.alpha,row.a.alpha);
+   assert.equal(row.neutral.rgba,row.original.rgba);assert.ok(row.neutralCache);
    assert.equal(row.original.width,96);assert.equal(row.original.height,96);
   }
   console.log('CHROMIUM DYNAMIC CHEF PASS: 10 native source icons, color variants, alpha, shared cache and unknown-ID refusal');
