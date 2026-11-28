@@ -89,7 +89,7 @@ pub extern "C" fn hkia_inventory_batch_change()->u32{
   match a.editor.as_mut().map(|e|e.change_inventory_quantities(&requests)){Some(Ok(()))=>0,_=>1}
  })
 }
-/// Physically remove persisted inventory records. Separate from quantity CAS.
+/// Remove persisted inventory records and cancel staged additions atomically. Separate from quantity CAS.
 #[no_mangle]
 pub extern "C" fn hkia_inventory_remove_entries()->u32{
  STATE.with(|s|{

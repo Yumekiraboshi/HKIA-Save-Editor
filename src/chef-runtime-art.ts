@@ -1,5 +1,6 @@
+import {nativeChefInstructionBase} from './native-icon-route';
 import {resolveChefTints,type ChefAppearance,type ChefArtBinding,type ChefColor} from './chef-appearance';
-import type {Rgba} from './dynamic-sprite-color';
+import {isNeutralTintSet,type Rgba} from './dynamic-sprite-color';
 import type {PixelBuffer,Rect,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
 const ROOT=import.meta.env.BASE_URL+'dynamic-chef-art/';
@@ -36,9 +37,12 @@ function sources():Promise<Source>{
  * No generated variant is published. No save payload or identity leaves the browser. */
 export async function renderChefArt(itemId:number,appearance:ChefAppearance):Promise<Blob|null>{
  try{
-  const s=await sources(),row=s.rows.get(itemId);
+  const binding=await sourceBinding(),row=binding.rows.get(itemId);
   if(!row)return null;
-  const tints=resolveChefTints(row,appearance,s.colors);if(!tints)return null;
+  const tints=resolveChefTints(row,appearance,binding.colors);if(!tints)return null;
+  // A validated neutral appearance is complete, not an untinted fallback.
+  if(isNeutralTintSet(tints))return renderChefBaseArt(itemId);
+  const s=await sources();
   return await renderCachedDynamicArt(JSON.stringify(['3.0.1','chef-dynamic-1',CHEF_MANIFEST_SHA,itemId,tints]),{
    base:s.base,mask:s.mask,baseRect:row.base.sampleRect,maskRect:row.mask.sampleRect,trim:row.base.trimTopLeft,
    alphaOffsetY:s.manifest.alphaOffsetY,logicalSize:row.base.logicalSize,tints
@@ -48,9 +52,9 @@ export async function renderChefArt(itemId:number,appearance:ChefAppearance):Pro
 
 export async function renderChefBaseArt(itemId:number):Promise<Blob|null>{
  try{
-  const s=await sourceBinding(),row=s.rows.get(itemId);if(!row)return null;
+  const s=await sourceBinding(),sourceId=nativeChefInstructionBase(itemId)??itemId,row=s.rows.get(sourceId);if(!row)return null;
   const base=await loadOpaqueArtTexture(ROOT,s.manifest.base);
-  return await renderCachedOriginalBase(JSON.stringify([CHEF_MANIFEST_SHA,itemId]),{base,baseRect:row.base.sampleRect,trim:row.base.trimTopLeft,alphaOffsetY:s.manifest.alphaOffsetY,logicalSize:row.base.logicalSize});
+  return await renderCachedOriginalBase(JSON.stringify([CHEF_MANIFEST_SHA,sourceId]),{base,baseRect:row.base.sampleRect,trim:row.base.trimTopLeft,alphaOffsetY:s.manifest.alphaOffsetY,logicalSize:row.base.logicalSize});
  }catch{return null;}
 }
 

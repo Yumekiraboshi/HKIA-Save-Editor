@@ -4,8 +4,8 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/chef-appearance.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {resolveChefTints}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {outputFiles}=await build({stdin:{contents:"export * from './chef-appearance'; export * from './native-characteristic-tint'; export * from './native-icon-route';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+const {resolveChefTints,NATIVE_CHARACTERISTIC_IDS,CHEF_MAPPED_IDS,nativeChefInstructionBase,nativeIconRoute}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const dir=new URL('../public/dynamic-chef-art/',import.meta.url),read=n=>readFileSync(new URL(n,dir)),sha=b=>createHash('sha256').update(b).digest('hex');
 const raw=read('chef-runtime-source-v3.0.1.json'),m=JSON.parse(raw);
 const colors=new Map(m.colors.map(r=>[r.characteristicId,r.rgba]));
@@ -47,4 +47,36 @@ test('all ten original chef icon bindings use exact source crops and the existin
  const b=read(m.base.file);assert.equal(b.length,m.base.bytes);assert.equal(sha(b),m.base.sha256);
  const mask=readFileSync(new URL('../public/inventory-flower-art/'+m.mask.file,import.meta.url));
  assert.equal(mask.length,m.mask.bytes);assert.equal(sha(mask),m.mask.sha256);
+});
+
+test('all 132 original characteristics use their mapped swatch or native white fallback',()=>{
+ assert.equal(NATIVE_CHARACTERISTIC_IDS.length,132);
+ assert.equal(new Set(NATIVE_CHARACTERISTIC_IDS).size,132);
+ assert.deepEqual(new Set(colors.keys()),CHEF_MAPPED_IDS);
+ for(const id of NATIVE_CHARACTERISTIC_IDS){
+  const color=colors.get(id)??white;
+  assert.deepEqual(resolveChefTints(boba,{kind:'boba',colorId:id},colors),[color,white,white]);
+  assert.deepEqual(resolveChefTints(cafe,{kind:'cafe',colors:[6,id,14]},colors),[colors.get(6),color,colors.get(14)]);
+ }
+ for(const id of [0,40,45,51,70,83,155,9999,-1,1.5])assert.equal(resolveChefTints(boba,{kind:'boba',colorId:id},colors),null);
+ const broken=new Map(colors);broken.delete(6);
+ assert.equal(resolveChefTints(boba,{kind:'boba',colorId:6},broken),null);
+});
+
+test('all five native chef instructions share exact original base and mask identities without becoming individual color routes',()=>{
+ const audit=JSON.parse(readFileSync(new URL('../data/unityfs-audit/dynamic-uiicons.v3.0.1.json',import.meta.url),'utf8'));
+ const instructions=audit.rows.filter(r=>r.key.startsWith('item_instruction_chefcreation_'));
+ assert.equal(instructions.length,5);
+ const pairs=[];
+ for(const row of instructions){
+  const id=nativeChefInstructionBase(row.itemId),base=m.rows.find(r=>r.itemId===id);
+  assert.ok(base);assert.equal(nativeIconRoute(row.itemId),'instruction');
+  assert.equal(base.base.spritePathId,row.baseSpritePathId);
+  assert.equal(base.mask.spritePathId,row.maskSpritePathId);
+  assert.equal(base.maskGuid,row.maskGuid);
+  pairs.push([row.itemId,id]);
+ }
+ assert.deepEqual(pairs.sort((a,b)=>a[0]-b[0]),[[664242277,406277059],[697059779,1237708874],[906644716,1798633565],[1711005390,1338995084],[1946811711,1053426049]]);
+ for(const row of audit.rows.filter(r=>!r.key.startsWith('item_instruction_chefcreation_')))assert.equal(nativeChefInstructionBase(row.itemId),undefined);
+ assert.equal(nativeChefInstructionBase(0),undefined);
 });

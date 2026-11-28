@@ -109,21 +109,26 @@ test('Collection and Inventory select original images without inferred recolorin
  assert.match(app,/exactArtUrl=\{exactVariantArt\[String\(representative\)\]\}/);
  assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,7);
  assert.match(app,/originalArtUrl=\{originalVariantArt\[String\(representative\)\]\}/);
- assert.match(sprite,/if\(original\)showExact\(original,showOriginalFallback\)/);
- assert.match(sprite,/if\(url\)showExact\(url,showReconstruction\)/);
- assert.match(sprite,/showExact\(exact,showSharedReference\)/);
+ const view=read('../src/original-art-view.ts');
+ assert.match(sprite,/return startOriginalArtRequest\(original,exact,/);
+ assert.match(view,/const primary=original\?\?exact/);
+ assert.match(view,/await attempt\(primary,0\)/);
+ assert.match(view,/await registered\(original,base\)/);
+ assert.match(view,/await attempt\(fallback,1\)/);
+ assert.match(view,/if\(original&&exact!==primary\)await attempt\(exact,2\)/);
  assert.match(sprite,/sprite\?:SpriteCell;palette\?:NativeDyePalette/);
- assert.match(sprite,/if\(canceled\)return/);
+ assert.match(view,/if\(canceled\)return false/);
  assert.match(app,/exactVariantArt\[String\(item\.itemId\)\]/);
  assert.match(app,/exactVariantArt\[String\(sub\.previewId\)\]/);
  assert.match(app,/exactVariantArt\[String\(item\[0\]\)\]/);
  assert.match(app,/exactVariantArt\[String\(dateDialogItem\[0\]\)\]/);
- assert.match(sprite,/picture\.decode\(\)\.then/);
+ assert.match(view,/await picture\.decode\(\)/);
  assert.doesNotMatch(sprite,/renderApproximation|renderDyeSprite|source-fit|native-icon/);
  assert.match(sprite,/data-dye-source=\{imageSource\}/);
  assert.match(sprite,/imageSource='game-render'/);
  assert.match(sprite,/background-size=\{imageSource==='game-render'\?'contain'/);
- assert.match(sprite,/return \(\)=>\{canceled=true;\}/);
+ assert.match(view,/return \(\)=>\{canceled=true;untrackUnavailableArt\(retry\);\}/);
+ assert.doesNotMatch(view,/renderApproximation|renderDyeSprite|source-fit|createObjectURL/);
  for(const prohibited of [/native-dye-ring/,/native-dye-swatch/,/native-dye-preview/]){
   assert.doesNotMatch(app,prohibited);
  }

@@ -42,16 +42,16 @@ const recoverable=new Set<()=>void>();
 function retryUnavailableArt(){
  for(const retry of [...recoverable])retry();
 }
-function trackUnavailableArt(retry:()=>void){
+export function trackUnavailableArt(retry:()=>void){
  if(recoverable.size===0&&typeof window!=='undefined')window.addEventListener('online',retryUnavailableArt);
  recoverable.add(retry);
 }
-function untrackUnavailableArt(retry:()=>void){
+export function untrackUnavailableArt(retry:()=>void){
  recoverable.delete(retry);
  if(recoverable.size===0&&typeof window!=='undefined')window.removeEventListener('online',retryUnavailableArt);
 }
-export function startDynamicArtRequest(render:()=>Promise<Blob|null>,show:(url:string|null,partial?:boolean)=>void,renderPartial?:()=>Promise<Blob|null>):()=>void{
- let canceled=false,created:string|null=null,scheduled=false;
+export function startDynamicArtRequest(render:()=>Promise<Blob|null>,show:(url:string|null,partial?:boolean)=>void,renderPartial?:()=>Promise<Blob|null>,renderIntermediate?:()=>Promise<Blob|null>):()=>void{
+ let canceled=false,created:string|null=null,scheduled=false,best=Infinity;
  show(null);
  function retry(){
   if(canceled||scheduled)return;
@@ -61,17 +61,20 @@ export function startDynamicArtRequest(render:()=>Promise<Blob|null>,show:(url:s
  const job=async()=>{
   try{
    if(canceled)return;
-   let blob:Blob|null=null,partial=false;
-   try{blob=await render();}catch{/* The independently verified base may remain available. */}
-   if(canceled)return;
-   // Keep an already visible, verified base while attempting the full image.
-   if(!blob&&created===null&&renderPartial){blob=await renderPartial();partial=true;}
-   if(canceled)return;
-   if(blob){
+   // Full image, verified tinted base, original untinted base. A successful
+   // lower tier stays visible until a strictly better tier is available.
+   const tiers=[render,renderIntermediate,renderPartial];
+   for(let rank=0;rank<best&&rank<tiers.length;rank++){
+    const load=tiers[rank];if(!load)continue;
+    let blob:Blob|null=null;
+    try{blob=await load();}catch{/* Independent lower tiers remain available. */}
+    if(canceled)return;
+    if(!blob)continue;
     const next=URL.createObjectURL(blob),previous=created;
-    created=next;show(next,partial);
+    created=next;best=rank;show(next,rank!==0);
     if(previous!==null)URL.revokeObjectURL(previous);
-    if(!partial)return;
+    if(rank===0)return;
+    break;
    }
    trackUnavailableArt(retry);
   }catch{

@@ -140,18 +140,22 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
  /// that item alone; unique operations still use the full incomplete flag.
  pub inventory_partial_item_refs:HashSet<i32>,
  pub inventory_item_refs_unscoped:bool,
- /// Complete positive-UID references resolved to one complete saved row.
- pub inventory_resolved_positive_item_refs:HashSet<(i32,i32)>,
  /// ItemId-based references with a copied unique payload (outfits, stands,
  /// presets, placed items, mail and wand sources), separate from UID refs.
  pub inventory_payload_item_refs:HashSet<i32>,
+ /// References that may depend on ordinary bag membership. Complete independent stores and verified nil wand copies do not name a bag document or UID.
+ pub inventory_ordinary_payload_item_refs:HashSet<i32>,
  pub inventory_payload_refs_incomplete:bool,
+ /// Unresolved references which can also conceal an ordinary bag identity.
+ pub inventory_ordinary_payload_refs_incomplete:bool,
+ /// Exact positive UID references resolved to one complete saved record.
+ pub inventory_resolved_positive_item_refs:HashSet<(i32,i32)>,
+ /// Bare furniture IDs, excluding exact UniqueItemIdModel pairs.
+ pub inventory_furniture_bare_item_refs:HashSet<i32>,
  /// Additional original furniture ID/GUID references in layouts and legacy models.
  pub inventory_furniture_item_refs:HashSet<i32>,
- /// Bare ItemId references have no variant identity. Keep separate from
- /// complete UniqueItemIdModel pairs for physical membership validation.
- pub inventory_furniture_bare_item_refs:HashSet<i32>,
  pub inventory_furniture_guid_refs:HashSet<u32>,
+ pub inventory_ordinary_furniture_guid_refs:HashSet<u32>,
  pub inventory_furniture_refs_incomplete:bool,
  /// Extra clothing reference keys from actual saved avatar/outfit models.
  pub inventory_clothing_guid_refs:HashSet<u32>,
@@ -200,6 +204,18 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
  pub visitor_manager_scoped_links:Vec<VisitorManagerScopedSourceLink>,
  pub visitor_manager_scoped_unresolved:usize,
  pub visitor_manager_scoped_suppressed:bool,
+}
+impl NativeIndex{
+ fn note_incomplete_payload_reference(&mut self,ordinary_unscoped:bool){
+  self.inventory_payload_refs_incomplete=true;
+  if ordinary_unscoped{self.inventory_ordinary_payload_refs_incomplete=true;}
+ }
+ fn note_payload_reference(&mut self,item:i32,independent:bool){
+  if item>0{self.inventory_payload_item_refs.insert(item);if !independent{self.inventory_ordinary_payload_item_refs.insert(item);}}
+ }
+ fn note_guid_reference(&mut self,key:u32,independent:bool){
+  self.inventory_furniture_guid_refs.insert(key);if !independent{self.inventory_ordinary_furniture_guid_refs.insert(key);}
+ }
 }
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 enum Key<'a>{Int(i128),Str(&'a str),Guid([u32;4]),Shop([u32;4],[u32;4],i128)}
@@ -390,7 +406,7 @@ impl<'a> Walk<'a>{
         if self.version==Version::V301{
          if let Some(InventoryUniqueData::WandAppearance{source_item_id,..})=row.unique_data{
           if source_item_id>0&&!crate::collection::Editor::verified_bag_furniture_wand_copy(&row){
-           self.index.inventory_payload_item_refs.insert(source_item_id);
+           self.index.note_payload_reference(source_item_id,crate::collection::Editor::verified_bag_ordinary_wand_copy(&row));
           }
          }
         }
@@ -419,7 +435,7 @@ impl<'a> Walk<'a>{
        "Sunblink.Game.OwnedRemoteCabinHomeObjectClientModelDeprecatedV71"=>&[1,2,3],
        _=>&[],
       };
-      if payload_ref_keys.iter().any(|&key|key>=n){self.index.inventory_payload_refs_incomplete=true;}
+      if payload_ref_keys.iter().any(|&key|key>=n){self.index.note_incomplete_payload_reference(true);}
       // Native metadata v3.0.1: HomeModel WallpaperId/FloorId/FloorPlanId,
       // PocketHomeModel FloorPlanId, remote home equivalents, layout defaults,
       // and the stand's worn item ID. Keep this extra guard separate from
@@ -520,23 +536,23 @@ impl<'a> Walk<'a>{
        "Sunblink.Game.WandUniqueDataDeprecatedV75"=>Some(1),
        _=>None,
       };
-      if opaque_flower_ref.is_some_and(|key|key>=n){self.index.inventory_payload_refs_incomplete=true;}
+      if opaque_flower_ref.is_some_and(|key|key>=n){self.index.note_incomplete_payload_reference(true);}
       let mut fields=Vec::new();let mut document_id=None;
       let mut legacy_wand_source=None;
       let mut mermaidifier_source=None;
       let mut legacy_wand_source_guid_present=false;
       let mut mermaidifier_source_guid_present=false;
+      let standalone_mailbox=self.version==Version::V301&&name=="Sunblink.UserData.Types.CharacterMailboxSlotModel"&&n==3;
+      let standalone_box=self.version==Version::V301&&name=="Sunblink.UserData.Types.CollectionBoxItemModel"&&n==3;
+      let mut stored_mail_item=None;let mut stored_box_key=None;let mut standalone_quantity_valid=false;let mut stored_mail_nil=false;
       for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if clothing_guid_lists.contains(&i){Some(("clothing-guid-list",0))}else if clothing_preset_list==Some(i){Some(("clothing-preset-list",0))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else if short=="CafeCreationUniqueData"&&matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,3))|Some((WAND_SOURCE_CAPTURE,3)))&&i==1{Some(("chef-colors",0))}else if short=="WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&i==1{Some((WAND_SOURCE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
        if payload_ref_keys.contains(&i)&&!(self.version==Version::V301&&name=="Sunblink.Game.WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&n==5){
         let item=i32::try_from(value.int()?).map_err(|_|Error::Schema)?;
-        if item>0{self.index.inventory_payload_item_refs.insert(item);}
+        if standalone_mailbox{stored_mail_item=Some(item)}else{self.index.note_payload_reference(item,false);}
        }
        if furniture_ref_keys.contains(&i){
         let item=i32::try_from(value.int()?).map_err(|_|Error::Schema)?;
-        if item>0{
-         self.index.inventory_furniture_item_refs.insert(item);
-         self.index.inventory_furniture_bare_item_refs.insert(item);
-        }
+        if item>0{self.index.inventory_furniture_item_refs.insert(item);self.index.inventory_furniture_bare_item_refs.insert(item);}
        }
        if clothing_guid_key==Some(i){
         let words=value.guid()?;
@@ -544,7 +560,7 @@ impl<'a> Walk<'a>{
        }
        if furniture_guid_key==Some(i){
         let words=value.guid()?;
-        if words!=[0;4]{self.index.inventory_furniture_guid_refs.insert(crate::inventory_source::furniture_guid_fingerprint(words));}
+        if words!=[0;4]{let key=crate::inventory_source::furniture_guid_fingerprint(words);if standalone_box{stored_box_key=Some(key)}else{self.index.note_guid_reference(key,false);}}
         if self.version==Version::V301&&name=="Sunblink.Game.WandUniqueDataDeprecatedV75"&&i==0{
          legacy_wand_source_guid_present=words!=[0;4];
          legacy_wand_source=crate::inventory_source::native_item_reference_id(words);
@@ -564,23 +580,25 @@ impl<'a> Walk<'a>{
          // even when its copied nested payload is not editable. Deny that
          // item rather than every unrelated inventory record.
          if name=="Sunblink.Game.WandUniqueDataDeprecatedV75"&&n==5{
-          if let Some(item)=legacy_wand_source{self.index.inventory_payload_item_refs.insert(item);}
-          else if !legacy_wand_source_guid_present{self.index.inventory_payload_refs_incomplete=true;}
-          // A complete nonzero GUID is still an exact denial key even if
-          // it is absent from the full pinned definition crosswalk. It
-          // cannot denote an unrelated known ItemId: the fingerprint was
-          // already inserted above. Never infer a source or create it.
+          if let Some(item)=legacy_wand_source{self.index.note_payload_reference(item,false);}
+          else{self.index.note_incomplete_payload_reference(self.version!=Version::V301||!legacy_wand_source_guid_present);}
          }else if name=="Sunblink.UserData.MermaidifierOutfitModel"&&n==3&&matches!(tag,2|7){
           // A complete flower outfit copy has an exact source item GUID.
           // Keep unknown GUIDs and nested wand payloads conservative.
-          if let Some(item)=mermaidifier_source{self.index.inventory_payload_item_refs.insert(item);}
-          else if !mermaidifier_source_guid_present{self.index.inventory_payload_refs_incomplete=true;}
-         }else{self.index.inventory_payload_refs_incomplete=true;}
+          if let Some(item)=mermaidifier_source{self.index.note_payload_reference(item,false);}
+          else{self.index.note_incomplete_payload_reference(self.version!=Version::V301||!mermaidifier_source_guid_present);}
+         }else{self.index.note_incomplete_payload_reference(true);}
         }
        }
+       if (standalone_mailbox||standalone_box)&&i==1{standalone_quantity_valid=value.int().is_ok_and(|q|q>=0);}
+       if standalone_mailbox&&i==2{stored_mail_nil=matches!(&value,Value::Nil);}
        if capture_all{fields.push((value,at..self.c.pos));}
        else if is_doc&&i==0{document_id=Some(value);}
       }
+      // Both v3.0.1 models own their quantities; no InventoryItem document ID/UID.
+      // Preserve the conservative unique-payload indexes while separating ordinary bag membership.
+      if let Some(item)=stored_mail_item{self.index.note_payload_reference(item,standalone_quantity_valid&&stored_mail_nil);}
+      if let Some(key)=stored_box_key{self.index.note_guid_reference(key,standalone_quantity_valid);}
       if name=="Sunblink.Game.OwnedRemoteCabinHomeObjectClientModelDeprecatedV71" {
        if let (Some((item,_)),Some((uid,_)))=(fields.get(1),fields.get(4)){
         let item=i32::try_from(item.int()?).map_err(|_|Error::Schema)?;
@@ -782,19 +800,16 @@ pub fn index_native(bytes:&[u8],version:Version)->Result<NativeIndex,Error>{
  w.read(schema::ROOT,0,None,false)?;
  if w.c.pos!=bytes.len(){return Err(Error::Trailing)}
  if !w.version_seen||!w.collection_seen||w.index.achievements.is_empty()||w.index.counters.is_empty(){return Err(Error::Schema)}
- // Resolve full reference pairs once, on every fresh schema walk (also
- // the independent export reparse). Duplicate or malformed UID records
- // never count as resolved, even when one candidate looks complete.
+ // Only complete, unambiguous positive UID targets can scope a reference
+ // away from an independent UID-zero bag row. Preserve all original pairs.
  if version==Version::V301&&!w.index.inventory_item_refs.is_empty(){
   let mut targets=HashMap::<i32,Option<i32>>::new();
   for row in &w.index.inventory{
    let Some(uid)=row.unique_id.filter(|&uid|uid>0)else{continue};
-   let item=row.item_id.filter(|&id|id>0&&row.id>0&&row.id<=i32::MAX as u32&&
-    row.unique_is_nil==Some(false)&&row.quantity.is_some_and(|q|q>=0)&&row.fields.iter().all(Option::is_some));
+   let item=row.item_id.filter(|&id|id>0&&row.id>0&&row.id<=i32::MAX as u32&&row.unique_is_nil==Some(false)&&row.quantity.is_some_and(|q|q>=0)&&row.fields.iter().all(Option::is_some));
    targets.entry(uid).and_modify(|target|*target=None).or_insert(item);
   }
-  w.index.inventory_resolved_positive_item_refs=w.index.inventory_item_refs.iter().copied().filter(|&(item,uid)|
-   uid>0&&targets.get(&uid)==Some(&Some(item))).collect();
+  w.index.inventory_resolved_positive_item_refs=w.index.inventory_item_refs.iter().copied().filter(|&(item,uid)|uid>0&&targets.get(&uid)==Some(&Some(item))).collect();
  }
  correlate_source_only(&mut w.index);
  correlate_visitor_manager_source_only(&mut w.index);

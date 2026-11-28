@@ -190,3 +190,31 @@ test('network recovery also restores a missing image with no partial source',asy
   if(previous===undefined)delete globalThis.window;else globalThis.window=previous;
  }
 });
+
+test('three-stage artwork recovery upgrades an original base to tinted base and complete image without downgrades',async()=>{
+ const previous=globalThis.window,events=new EventTarget();globalThis.window=events;
+ const create=URL.createObjectURL,revoke=URL.revokeObjectURL,blobs=[],revoked=[],seen=[];
+ URL.createObjectURL=blob=>{blobs.push(blob);return 'blob:tier-'+blobs.length;};
+ URL.revokeObjectURL=url=>revoked.push(url);
+ const original=new Blob(['original']),tinted=new Blob(['tinted']),complete=new Blob(['complete']);
+ let stage=0,fullCalls=0,intermediateCalls=0,partialCalls=0;
+ const stop=startDynamicArtRequest(async()=>{fullCalls++;return stage===3?complete:null;},(url,partial)=>seen.push([url,partial]),
+  async()=>{partialCalls++;return original;},async()=>{intermediateCalls++;if(stage===0)throw Error('mask missing');return stage===1?tinted:null;});
+ const recover=async()=>{events.dispatchEvent(new Event('online'));events.dispatchEvent(new Event('online'));await new Promise(setImmediate);};
+ try{
+  await new Promise(setImmediate);
+  assert.deepEqual(blobs,[original]);assert.deepEqual(seen,[[null,undefined],['blob:tier-1',true]]);
+  stage=1;await recover();
+  assert.deepEqual(blobs,[original,tinted]);assert.deepEqual(revoked,['blob:tier-1']);
+  stage=2;await recover();
+  assert.deepEqual(blobs,[original,tinted]);assert.equal(partialCalls,1);assert.equal(intermediateCalls,2);
+  stage=3;await recover();
+  assert.deepEqual(blobs,[original,tinted,complete]);assert.deepEqual(seen.at(-1),['blob:tier-3',false]);
+  assert.deepEqual(revoked,['blob:tier-1','blob:tier-2']);
+  await recover();assert.equal(fullCalls,4);
+  stop();assert.deepEqual(revoked,['blob:tier-1','blob:tier-2','blob:tier-3']);
+ }finally{
+  stop();URL.createObjectURL=create;URL.revokeObjectURL=revoke;
+  if(previous===undefined)delete globalThis.window;else globalThis.window=previous;
+ }
+});

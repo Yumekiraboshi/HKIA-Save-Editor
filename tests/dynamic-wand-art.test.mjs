@@ -4,8 +4,8 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-const {outputFiles}=await build({stdin:{contents:"export * from './wand-appearance'; export * from './dynamic-sprite-raster';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {resolveWandBaseTints,rasterizeDynamicSprite,overlayPlacement,sourceOver}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {outputFiles}=await build({stdin:{contents:"export * from './wand-appearance'; export * from './dynamic-sprite-raster'; export * from './native-characteristic-tint';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+const {resolveWandBaseTints,rasterizeDynamicSprite,overlayPlacement,sourceOver,NATIVE_CHARACTERISTIC_IDS,MAGIC_MAPPED_IDS,FLECK_MAPPED_IDS}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const dir=new URL('../public/dynamic-wand-art/',import.meta.url),read=n=>readFileSync(new URL(n,dir)),sha=b=>createHash('sha256').update(b).digest('hex');
 const raw=read('wand-runtime-source-v3.0.1.json'),m=JSON.parse(raw);
 const magic=new Map(m.magic.map(r=>[r.characteristicId,r.rgba])),flecks=new Map(m.flecks.map(r=>[r.characteristicId,r.rgba]));
@@ -181,4 +181,15 @@ test('all 12163 native Item IDs resolve a source Sprite for all wand shapes, inc
  assert.deepEqual(covered,originalIds);
  const sprites=new Set([...candidate.sprites.map(r=>r[0]),...remaining.sprites.map(r=>r[0]),...mip.rows.map(r=>r.spritePathId),...nonSquare.rows.map(r=>r.spritePathId),ramen.base.spritePathId,palette.rows.find(r=>r.kind==='base').spritePathId]);
  assert.equal(sprites.size,5020);
+});
+
+test('wand tints use native white for every known unmapped characteristic while preserving mapped colors',()=>{
+ const white=[1,1,1,1];
+ assert.deepEqual(new Set(magic.keys()),MAGIC_MAPPED_IDS);assert.deepEqual(new Set(flecks.keys()),FLECK_MAPPED_IDS);
+ for(const id of NATIVE_CHARACTERISTIC_IDS){
+  assert.deepEqual(resolveWandBaseTints({magicCharacteristicId:id,fleckCharacteristicId:125},magic,flecks),[magic.get(id)??white,flecks.get(125),white]);
+  assert.deepEqual(resolveWandBaseTints({magicCharacteristicId:104,fleckCharacteristicId:id},magic,flecks),[magic.get(104),flecks.get(id)??white,white]);
+ }
+ const broken=new Map(flecks);broken.delete(125);
+ assert.equal(resolveWandBaseTints({magicCharacteristicId:104,fleckCharacteristicId:125},magic,broken),null);
 });
