@@ -102,7 +102,7 @@ def swatch_colors(bundle,layout,aux,atlas):
     field=layout['swatchMapField']
     nodes=[n for n in tree[-1] if n[2]==field]
     require(len(nodes)==1,'reviewed swatch map field missing')
-    values,node=native.map_rows(nodes[0],f[field])
+    values,node=native.map_rows(nodes[0],f[field],('m_Keys','m_Values'))
     colors={}
     for i,v in values:
         parts=atlas.helpers.fields(node,v,atlas.mesh)
