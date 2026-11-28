@@ -6963,9 +6963,9 @@ fn missing_required_unique_payload_can_only_be_physically_removed_with_complete_
  // Every source definition requiring a unique payload, not handpicked examples.
  let ids:Vec<u32>=complete_quantity_source::RULES.iter().filter_map(|&(id,flags)|(flags&2!=0).then_some(id as u32)).collect();
  assert_eq!(ids.len(),138);
- // Five owned DLC flower definitions lack the verified removal crosswalk;
- // two finite-cap Home service definitions are not bag cleanup candidates.
- let protected=[401804031,1095918548,1716283922,1776250358,1797473773,1900000001,1900000002];
+ // The source-backed DLC clothing crosswalk is already present.
+ // Only two finite-cap Home service definitions are outside bag cleanup.
+ let protected=[1900000001,1900000002];
  let make=|reference:Option<u32>|{
   let n=7+2*ids.len()+usize::from(reference.is_some());
   let mut p=vec![0x93,0];p.extend(u(n as u32+1));p.push(0xdc);p.extend((n as u16).to_be_bytes());
@@ -6993,9 +6993,9 @@ fn missing_required_unique_payload_can_only_be_physically_removed_with_complete_
    assert_eq!(e.inventory_entry_removable(row.document_id),!protected.contains(&row.item_id),"item {}, quantity {}",row.item_id,row.quantity);
   }
   let repair:Vec<_>=original.iter().filter(|r|!protected.contains(&r.item_id)).map(|r|(r.document_id,r.quantity)).collect();
-  assert_eq!(repair.len(),262);
+  assert_eq!(repair.len(),272);
   let retained:Vec<_>=original.iter().filter(|r|protected.contains(&r.item_id)).cloned().collect();
-  assert_eq!(retained.len(),14);
+  assert_eq!(retained.len(),4);
   let mut bad=repair.clone();bad.push((retained[0].document_id,retained[0].quantity));
   assert!(e.remove_inventory_entries(&bad).is_err());assert!(!e.dirty());
   assert!(e.change_inventory_quantity(4,2,0).is_err());
