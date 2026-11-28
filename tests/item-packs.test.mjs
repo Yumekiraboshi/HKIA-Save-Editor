@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,existsSync} from 'node:fs';
+import {readFileSync,existsSync,readdirSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {build} from 'esbuild';
+import {fileURLToPath} from 'node:url';
 const root=new URL('../public/item-packs/',import.meta.url);
 const catalog=JSON.parse(readFileSync(new URL('../public/catalog.json',import.meta.url),'utf8'));
 function parseStoredZip(buffer){
@@ -62,4 +65,40 @@ test('all item icons are local assets; no external requests',()=>{
  assert.ok(c.includes("fetch(base+'item-packs/'"));
  assert.match(c,/URL\.revokeObjectURL/);
  assert.doesNotMatch(c,/raw\.githubusercontent\.com/);
+});
+
+const pinned=JSON.parse(readFileSync(new URL('../data/collection-icon-pack-digests-v3.0.1.json',import.meta.url),'utf8'));
+test('all thirty deployed original image archives match the pinned Git blob bytes',()=>{
+ assert.equal(pinned.schema,'HKIA.CollectionIconPackGitBlob.1');
+ assert.equal(pinned.rows.length,30);
+ assert.deepEqual(pinned.rows.map(r=>r[0]).sort(),readdirSync(root).filter(n=>n.endsWith('.zip')).sort());
+ for(const [name,size,sha] of pinned.rows){
+  const data=readFileSync(new URL(name,root));
+  assert.equal(data.length,size,name);
+  assert.equal(createHash('sha1').update('blob '+size+'\0').update(data).digest('hex'),sha,name);
+ }
+});
+test('browser pack verification rejects modified, truncated and unregistered ZIP bytes before parsing',async()=>{
+ const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/icon-packs.ts',import.meta.url))],bundle:true,write:false,format:'esm',platform:'node',logLevel:'silent'});
+ const {verifyIconPackBytes,loadIconPack}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+ const name='collection_group_fishalmanacs.zip',data=readFileSync(new URL(name,root));
+ const bytes=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength);
+ await verifyIconPackBytes(name,bytes);
+ const broken=bytes.slice(0);new Uint8Array(broken)[100]^=1;
+ await assert.rejects(verifyIconPackBytes(name,broken),/ICON_PACK_SOURCE_HASH/);
+ await assert.rejects(verifyIconPackBytes(name,bytes.slice(0,-1)),/ICON_PACK_SOURCE_SIZE/);
+ await assert.rejects(verifyIconPackBytes('other.zip',bytes),/ICON_PACK_SOURCE_SIZE/);
+ const fetchBefore=globalThis.fetch,create=URL.createObjectURL,revoke=URL.revokeObjectURL;
+ let requested=[],created=[],revoked=[],valid=false;
+ globalThis.fetch=async url=>{requested.push(url);return new Response(valid?bytes:broken);};
+ URL.createObjectURL=blob=>{created.push(blob);return 'blob:verified-'+created.length;};
+ URL.revokeObjectURL=url=>revoked.push(url);
+ try{
+  await assert.rejects(loadIconPack('collection_group_fishalmanacs','/'),/ICON_PACK_SOURCE_HASH/);
+  assert.equal(created.length,0);
+  valid=true;const pack=await loadIconPack('collection_group_fishalmanacs','/');
+  assert.ok(Object.keys(pack.entries).length>0);assert.ok(created.length>0);
+  pack.dispose();assert.equal(revoked.length,created.length);
+  assert.equal(requested.length,2);
+ }finally{globalThis.fetch=fetchBefore;URL.createObjectURL=create;URL.revokeObjectURL=revoke;}
 });

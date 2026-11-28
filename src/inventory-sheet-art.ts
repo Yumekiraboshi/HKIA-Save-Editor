@@ -26,21 +26,26 @@ async function decodeSheet(asset:NativeSheetAsset):Promise<DecodedSheet>{
  }finally{image.close();}
 }
 const loadSheet=createInventorySheetLoader();
+/** Shared verification for both CSS display and canvas consumers. */
+export async function resolveVerifiedInventorySprite(sprite:SpriteCell,load=loadSheet):Promise<SpriteCell>{
+ if(!sprite.nativeSheet)throw Error('INVENTORY_SHEET_DESCRIPTOR');
+ const image=await load(sprite.nativeSheet);
+ if(!Number.isInteger(sprite.x)||!Number.isInteger(sprite.y)||sprite.x<0||sprite.x+96>1152||sprite.y<0||sprite.y+96>image.height)throw Error('INVENTORY_SHEET_CELL');
+ return {...sprite,url:image.url};
+}
 /** Collection ZIP cells are already local object URLs. Inventory atlas cells
  * wait for verified sheet bytes; shared recovery is canceled on unmount. */
 export function startInventorySpriteRequest(sprite:SpriteCell,show:(value:SpriteCell|undefined)=>void,load=loadSheet):()=>void{
  if(!sprite.nativeSheet){show(sprite);return ()=>{};}
- const asset=sprite.nativeSheet;
  let canceled=false,pending=false;
  show(undefined);
  async function retry(){
   if(canceled||pending)return;
   untrackUnavailableArt(retry);pending=true;
   try{
-   const sheet=await load(asset);
+   const verified=await resolveVerifiedInventorySprite(sprite,load);
    if(canceled)return;
-   if(sprite.x<0||sprite.x+96>1152||sprite.y<0||sprite.y+96>sheet.height)throw Error('INVENTORY_SHEET_CELL');
-   show({...sprite,url:sheet.url});
+   show(verified);
   }catch{if(!canceled)trackUnavailableArt(retry);}
   finally{pending=false;}
  }
