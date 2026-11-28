@@ -6537,6 +6537,18 @@ fn all_ordinary_duplicate_families_recompute_membership_after_exact_deletion(){
   for (pair,&(_,cap)) in original.chunks_exact(2).zip(batch){
    assert!(pair.iter().all(|r|r.quantity_minimum==1&&r.editable==(cap==i32::MAX)));
   }
+  let zero=e.inventory_batch_zero_only_ids();assert_eq!(zero.len(),original.len());
+  assert!(e.change_inventory_quantity(original[0].document_id,1,0).is_err());
+  assert!(e.change_inventory_quantities(&[(original[0].document_id,1,0)]).is_err());
+  assert!(!e.dirty());
+  let requests:Vec<_>=original.iter().map(|r|(r.document_id,1,0)).collect();
+  e.change_inventory_quantities(&requests).unwrap();
+  let saved=Editor::open(e.export().unwrap()).unwrap();
+  assert!(saved.inventory().iter().all(|r|r.quantity==0));assert_eq!(saved.inventory().len(),original.len());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input.clone()).unwrap();
+  restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);
+  assert!(restored.redo_scope(Inventory));assert_eq!(restored.inventory(),e.inventory());
+  assert!(e.undo_scope(Inventory));assert_eq!(e.inventory(),original);
   let remove:Vec<_>=batch.iter().enumerate().map(|(i,_)|(5+2*i as u32,1)).collect();
   e.remove_inventory_entries(&remove).unwrap();
   let survivors=e.inventory();

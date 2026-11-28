@@ -13,7 +13,7 @@
  import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,furnitureHasCustomizedAppearance,furnitureChoiceLabel,type FurnitureDisplay} from './inventory-furniture-display';
  import InventoryDecorator from './InventoryDecorator.svelte';
  import {flowerDecorators} from './inventory-flower-display';
- import {nativeInventoryGroups,inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {nativeInventoryGroups,inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryCustomizationSource,inventoryBatchZeroRows,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {createFlowerDisplayLoader,flowerDisplay,flowerGrowthKind,hasNativeFlowerArt,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {initialInventoryNativeArt,createInventoryNativeArtLoader,type InventoryNativeArt} from './inventory-native-art';
@@ -178,7 +178,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  });
  const selectedInventoryRows=$derived.by(()=>inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId)));
  const inventoryBatchCanQuantity=$derived(selectedInventoryRows.length>0&&selectedInventoryRows.every(row=>row.editable));
- const inventoryBatchCanDelete=$derived(!inventoryAddMode&&selectedInventoryRows.length>0&&selectedInventoryRows.length===inventoryBatchSelected.size&&((selectedInventoryRows.every(row=>row.editable&&row.quantityMinimum===0)&&selectedInventoryRows.some(row=>row.quantity>0))||selectedInventoryRows.every(row=>row.removable)));
+ const inventoryBatchCanDelete=$derived(!inventoryAddMode&&selectedInventoryRows.length>0&&selectedInventoryRows.length===inventoryBatchSelected.size&&(
+  (selectedInventoryRows.some(row=>row.quantity>0)&&inventoryBatchZeroRows((snapshot as SaveSnapshot|null)?.inventory??[],selectedInventoryRows,isInventoryLocked).length===selectedInventoryRows.filter(row=>row.quantity>0).length)||selectedInventoryRows.every(row=>row.removable)));
  const inventoryBatchMaximum=$derived.by(()=>{
   let cap=2147483647;
   if(snapshot)for(const row of inventoryBrowseRows){
@@ -349,7 +350,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
  const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
  const inventoryCategoryRows=$derived(nativeInventoryIndex.size?((snapshot as SaveSnapshot|null)?.inventory??[]).filter(row=>nativeInventoryGroups(row.itemId,nativeInventoryIndex).includes(activeInventoryGroup)):[]);
- const categoryZeroRows=$derived(inventoryCategoryRows.filter(row=>!isInventoryLocked(row.documentId)&&row.editable&&row.quantityMinimum===0&&row.quantity>0));
+ const categoryZeroRows=$derived(inventoryBatchZeroRows((snapshot as SaveSnapshot|null)?.inventory??[],inventoryCategoryRows,isInventoryLocked));
  const categoryRemoveRows=$derived(inventoryCategoryRows.filter(row=>!isInventoryLocked(row.documentId)&&row.removable));
  const categoryLockedCount=$derived(inventoryCategoryRows.filter(row=>isInventoryLocked(row.documentId)).length);
  const inventoryRows=$derived(browseInventory(
@@ -1334,7 +1335,9 @@ import {verifiedFloorplanName} from './floorplan-names';
  function requestInventoryDelete(rows:InventoryEntry[],batch:boolean,opener:HTMLElement,allowPhysical=true){
   if(!snapshot||busy||inventoryAddMode||!rows.length||rows.some(row=>isInventoryLocked(row.documentId))||rows.length>snapshot.inventoryBatchLimit)return;
   const physical=allowPhysical&&rows.every(row=>row.removable);
-  const zero=rows.every(row=>row.editable&&row.quantityMinimum===0)&&rows.some(row=>row.quantity>0);
+  const zero=batch
+   ?inventoryBatchZeroRows(snapshot.inventory,rows,isInventoryLocked).length===rows.filter(row=>row.quantity>0).length&&rows.some(row=>row.quantity>0)
+   :rows.every(row=>row.editable&&row.quantityMinimum===0)&&rows.some(row=>row.quantity>0);
   if(!physical&&!zero)return;
   const targets=physical?rows:rows.filter(row=>row.quantity>0);
   const requests:InventoryQuantityRequest[]=targets.map(row=>[row.documentId,row.quantity,0]);
@@ -1422,6 +1425,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   const target=pendingRemoval;
   if(!target||!snapshot||busy)return;
   const liveInventory=target.kind==='inventory'?new Map(snapshot.inventory.map(row=>[row.documentId,row])):null;
+  const zeroRows=target.kind==='inventory'&&target.batch&&!physical?new Set(inventoryBatchZeroRows(snapshot.inventory,
+   target.requests.flatMap(([id])=>{const row=liveInventory?.get(id);return row?[row]:[]}),isInventoryLocked).map(row=>row.documentId)):null;
   if(snapshot.revision!==target.revision||original!==removalOriginal||
    (target.kind==='collections'
     ?recorded[String(target.id)]!==target.before
@@ -1429,7 +1434,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      ?snapshot.achievements.find(row=>achievementGuid(row.guid)===target.item.guid)?.value.complete!==true
      :((physical?!target.physical:!target.zero)||target.requests.some(([id,before])=>{
       const row=liveInventory?.get(id);
-      return isInventoryLocked(id)||!row||row.quantity!==before||!(physical?row.removable:row.editable&&row.quantityMinimum===0)
+      return isInventoryLocked(id)||!row||row.quantity!==before||!(physical?row.removable:zeroRows?(before===0||zeroRows.has(id)):row.editable&&row.quantityMinimum===0)
      })))){
    closeRemovalConfirmation();error=removalCopy.stale;return;
   }

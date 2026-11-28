@@ -63,7 +63,7 @@ test('confirmation checks save identity, revision and current recorded/completed
  assert.match(app,/else if\(target\.kind==='achievements'\)await quickToggleAchievement\(target\.item,undefined,undefined,true\)/);
  assert.match(app,/target\.requests\.some\(\(\[id,before\]\)=>\{/);
  assert.match(app,/const row=liveInventory\?\.get\(id\)/);
- assert.match(app,/return isInventoryLocked\(id\)\|\|!row\|\|row\.quantity!==before\|\|!\(physical\?row\.removable:row\.editable&&row\.quantityMinimum===0\)/);
+ assert.match(app,/return isInventoryLocked\(id\)\|\|!row\|\|row\.quantity!==before\|\|!\(physical\?row\.removable:zeroRows\?\(before===0\|\|zeroRows\.has\(id\)\):row\.editable&&row\.quantityMinimum===0\)/);
  assert.match(app,/if\(target\.batch\)\{update\(await changeInventoryQuantities\(target\.requests\.filter\(\(\[,before\]\)=>before!==0\)\)\)/);
  assert.match(app,/requestRemoval\(\{kind:'inventory',requests,physical,zero,batch,name,targets:details,revision:snapshot\.revision\},opener\)/);
  assert.match(app,/if\(next===0\)\{requestInventoryDelete\(rows,true,/);
