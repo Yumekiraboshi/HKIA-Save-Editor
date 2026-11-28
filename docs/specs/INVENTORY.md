@@ -650,3 +650,7 @@ All retained zero flower records reserve original and effective native keys. A v
 #### Exhausted flower default identities
 
 The shared tag-7 Add path prefers the original source defaults. When all verified default starters are reserved by saved or staged identities, it may offer one deterministic free tuple from the same finite native preview policy (including the verified growth states only for species). This covers flowers and supported flower-crafted outputs, including patterned candles. The original default witness, source/entitlement gates, reservation of original/effective identities, UID allocation and atomic history remain mandatory. Existing zero rows are preserved. Synthetic raw/ZIP regression is required; real-game acceptance remains unverified.
+
+#### Reachable free palette combinations
+
+Use the verified native three-color output domain when all individual slot neighbors or equal-color starters are reserved. Rust searches complete source-valid tuples with native approximate equality and a bounded comparison budget. Retain all original/effective saved and staged reservations, original color preservation, copied-avatar/wand guards, source eligibility, CAS, history, and export reparse. When more than one color changes, the UI shows the full three-color choice and submits it as a single draft. No new color source or acquisition authority. Synthetic raw/ZIP regression added; CI and real-game validation pending.
