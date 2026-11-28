@@ -1293,8 +1293,10 @@ impl Editor {
  fn inventory_can_empty(&self,r:&crate::native::InventoryRow)->bool{
   if self.structural_zero_ids.contains(&r.id){return true}
   if (self.is_emptyable_unique_family(r)||self.palette_zero_reference_safe(r))&&self.unique_quantity_ids.contains(&r.id){return true}
+  let Some(item)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.unique_is_nil==Some(true)&&
-   Self::physical_inventory_reference_safe(&self.slot.index,r,false)
+   Self::physical_inventory_reference_safe(&self.slot.index,r,false)&&
+   (self.inventory_item_rows.get(&item)==Some(&1)||self.ordinary_furniture_base_distinct(r,item))
  }
  // Index the original unique identities once, rather than scanning all
  // peers per visible row or per complete Worker snapshot. Variant changes
@@ -2593,6 +2595,13 @@ impl Editor {
   let Some(original)=self.original_furniture_variant(row.id)else{return false};
   let effective=self.furniture_variant_changes.get(&row.id).copied().unwrap_or(original);
   [original,effective].into_iter().all(|value|furniture_key(source,value).is_some_and(|key|key!=default))
+ }
+ // Quantity-zero retains the identity; ambiguous same-ID peers must first be resolved by exact document removal.
+ fn ordinary_furniture_base_distinct(&self,row:&crate::native::InventoryRow,item:i32)->bool{
+  crate::inventory_source::ordinary_quantity_limit(item)==Some(i32::MAX)&&
+   furniture_source::item(item).is_some_and(|s|!s.is_home_layout)&&
+   self.active_saved_inventory().filter(|r|r.item_id==Some(item)&&r.id!=row.id)
+    .all(|r|self.permits_separate_ordinary_base(r))
  }
  fn can_create_inventory_item(&self,item_id:i32)->bool{
   self.ordinary_inventory_creation_source_valid()&&self.ordinary_item_reference_scope_safe(item_id)&&crate::inventory_source::ordinary_bag_creation_item(item_id)&&
