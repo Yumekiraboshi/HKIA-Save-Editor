@@ -44,7 +44,7 @@ export type SaveSnapshot={
  inventoryCreatable:InventoryEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'inventory-remove-entries'|'flower-variant-change'|'flower-species-options'|'flower-species-replace'|'flower-variants'|'flower-preview'|'flower-create'|'flower-create-variants'|'furniture-preview'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-preview'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'boba-variants'|'boba-variant-change'|'boba-create-variants'|'boba-create'|'cafe-variants'|'cafe-preview'|'cafe-variant-change'|'cafe-create-variants'|'cafe-create'|'wand-variants'|'wand-variant-change'|'wand-identity-change'|'wand-nested-materials'|'wand-nested-pairs'|'wand-nested-change'|'wand-nested-create'|'wand-create-variants'|'wand-absent-sources'|'wand-create'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action='layout-source-catalog'|'layout-source-capture'|'open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'inventory-remove-entries'|'flower-variant-change'|'flower-species-options'|'flower-species-replace'|'flower-variants'|'flower-preview'|'flower-create'|'flower-create-variants'|'furniture-preview'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-preview'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'boba-variants'|'boba-variant-change'|'boba-create-variants'|'boba-create'|'cafe-variants'|'cafe-preview'|'cafe-variant-change'|'cafe-create-variants'|'cafe-create'|'wand-variants'|'wand-variant-change'|'wand-identity-change'|'wand-nested-materials'|'wand-nested-pairs'|'wand-nested-change'|'wand-nested-create'|'wand-create-variants'|'wand-absent-sources'|'wand-create'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -288,4 +288,16 @@ export function requestWandCreationVariants(documentId:number,sourceItemId?:numb
 }
 export function createInventoryWandVariant(documentId:number,beforeWandVariant:WandVariant,nextWandVariant:WandVariant,nextQuantity:number):Promise<SaveSnapshot>{
  return rpc('wand-create',{documentId,beforeWandVariant:[...beforeWandVariant],nextWandVariant:[...nextWandVariant],nextQuantity}) as Promise<SaveSnapshot>;
+}
+
+/** Read-only source catalog; source correlation is not ownership or restore authority. */
+export type LayoutGuid=[number,number,number,number];
+export type LayoutSourceRoom={cabin:LayoutGuid;home:LayoutGuid;apartment:number};
+export type LayoutSourceCatalog={identity:Uint8Array;rooms:LayoutSourceRoom[]};
+export type LayoutSourceScope={kind:'room'|'cabin';id:LayoutGuid}|{kind:'all-cabin-sources'};
+export function requestLayoutSourceCatalog():Promise<LayoutSourceCatalog>{
+ return rpc('layout-source-catalog') as Promise<LayoutSourceCatalog>;
+}
+export function captureLayoutSource(identity:Uint8Array,scope:LayoutSourceScope,name:string,createdMs:number):Promise<Uint8Array>{
+ return rpc('layout-source-capture',{layoutIdentity:identity.slice(),layoutScope:scope,layoutName:name,nowMs:createdMs}) as Promise<Uint8Array>;
 }

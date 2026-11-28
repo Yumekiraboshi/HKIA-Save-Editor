@@ -464,7 +464,11 @@ impl Editor {
  pub fn layout_source_catalog(&self)->Result<Vec<crate::layouts::LayoutRoom>,Error>{
   crate::layouts::catalog(&self.slot)
  }
- pub fn capture_layout_source(&self,scope:crate::layouts::Scope,name:&str,created_ms:i64)->Result<Vec<u8>,Error>{
+ pub fn layout_source_identity(&self)->[u8;32]{
+  crate::digest::sha256(&self.slot.envelope.decoded)
+ }
+ pub fn capture_layout_source(&self,expected:[u8;32],scope:crate::layouts::Scope,name:&str,created_ms:i64)->Result<Vec<u8>,Error>{
+  if self.layout_source_identity()!=expected{return Err(Error::Schema)}
   crate::layouts::capture(&self.slot,scope,name,created_ms)
  }
  fn saved_inventory_row(&self,id:u32)->Option<&crate::native::InventoryRow>{
