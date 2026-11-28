@@ -39,9 +39,22 @@ const materialIds=new Map<number,number>([
  [112,1864047568],[113,1334678426],[114,558340471],[115,392876538],
  [125,494126928],[126,119953162],[127,1435772717],
 ]);
-export function wandVariantLabel(v:WandVariant,name:(item:number)=>string):string{
- return v.map(n=>materialIds.has(n)?name(materialIds.get(n)!):'—').join(' · ');
+export function wandMaterialLabel(id:number,name:(item:number)=>string):string{
+ return materialIds.has(id)?name(materialIds.get(id)!):'—';
 }
+export function wandVariantLabel(v:WandVariant,name:(item:number)=>string):string{
+ return v.map(n=>wandMaterialLabel(n,name)).join(' · ');
+}
+/** Project only complete Rust-authorized pairs. Prefer changing just the
+ * requested field; explicitly offer coupled pairs only if that is impossible. */
+export function wandFieldOptions(options:readonly WandVariant[],current:WandVariant,field:0|1):{index:number;pair:WandVariant}[]{
+ const other=field===0?1:0;
+ const groups=new Map<number,{index:number;pair:WandVariant}[]>();
+ options.forEach((pair,index)=>{if(pair[field]!==current[field]){const group=groups.get(pair[field])??[];group.push({index,pair});groups.set(pair[field],group)}});
+ return [...groups.values()].flatMap(group=>{const direct=group.find(v=>v.pair[other]===current[other]);return direct?[direct]:group;});
+}
+const wandFields:Record<string,readonly [string,string]>={ja:['魔力素材','粒子素材'],ar:['مادة السحر','مادة اللمعان'],de:['Magiematerial','Glitzermaterial'],es:['Material mágico','Material de destellos'],fr:['Matériau magique','Matériau scintillant'],'fr-CA':['Matériau magique','Matériau scintillant'],it:['Materiale magico','Materiale scintillante'],ko:['마법 재료','반짝이 재료'],nl:['Magisch materiaal','Glittermateriaal'],'pt-BR':['Material mágico','Material cintilante'],ru:['Магический материал','Мерцающий материал'],tr:['Büyü malzemesi','Parıltı malzemesi'],'zh-Hans':['魔法材料','闪光材料'],'zh-Hant':['魔法材料','閃光材料']};
+export function wandFieldLabels(locale:string):readonly [string,string]{return wandFields[locale]??['Magic material','Fleck material'];}
 
 export type WandIdentity=[number,number,number];
 export function isWandIdentityWire(v:unknown):v is WandIdentity{

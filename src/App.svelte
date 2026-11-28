@@ -49,7 +49,7 @@ import {searchAchievementRows} from './achievement-search';
  import {renderNativePlaceholderArt} from './native-placeholder-art';
  import {nativeResultIconTarget} from './native-result-icon';
  import {selectWandOriginalCell,selectInventoryWandOriginalCell} from './wand-original-subicon';
- import {inventoryWandAppearance,hasNativeWandArt,wandVariantOf,wandVariantLabel,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
+ import {inventoryWandAppearance,hasNativeWandArt,wandVariantOf,wandVariantLabel,wandMaterialLabel,wandFieldOptions,wandFieldLabels,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
  import {nativeChefInstructionBase} from './native-icon-route';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
@@ -1807,7 +1807,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          <button type="button" class="inventory-stack-delete" disabled={busy||!item.removable&&(!item.editable||item.quantityMinimum!==0||item.quantity<=0)} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)+': '+inventoryName(item.itemId)} onclick={e=>requestInventoryDelete([item],false,e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
         {/if}
       <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
-       <span class="inventory-item-art" class:inventory-blueprint={resultId!==undefined} class:flower-variant={flowerBadges.length>0||!!dyeBadge} style:position="relative" style:--inventory-icon-scale={nativeInventoryIconScale(item.itemId,snapshot.version)} aria-hidden="true">
+       <span class="inventory-item-art" class:inventory-blueprint={resultId!==undefined} class:flower-variant={flowerBadges.length>0||!!dyeBadge||resultId!==undefined} style:position="relative" style:--inventory-icon-scale={nativeInventoryIconScale(item.itemId,snapshot.version)} aria-hidden="true">
         {#if resultId!==undefined}
          <span class="inventory-blueprint-pattern" data-native-blueprint-pattern="bp_grid" style:background-image={'url("'+INVENTORY_UI+'bp-grid.webp")'}></span>
         {/if}
@@ -1842,9 +1842,10 @@ import {verifiedFloorplanName} from './floorplan-names';
         {:else}
          <span class="item-art-empty">✧</span>
         {/if}
-        {#if customized||flowerBadges.length||dyeBadge}
+        {#if customized||flowerBadges.length||dyeBadge||resultId!==undefined}
          <span class="inventory-native-decorators">
-          {#if customized}<InventoryDecorator type={9}/>{/if}
+          {#if resultId!==undefined}<InventoryDecorator type={8}/>
+          {:else if customized}<InventoryDecorator type={9}/>{/if}
           {#if dyeBadge}<InventoryDecorator type={14} primaryColor={dyeBadge.primaryColor} iconColor={dyeBadge.iconColor}/>{/if}
           {#each flowerBadges as badge (badge.type)}
            {#if badge.type===12}<InventoryDecorator type={12} primaryColor={badge.primaryColor}/>
@@ -2154,13 +2155,24 @@ import {verifiedFloorplanName} from './floorplan-names';
       </select>
      </label>
     {/if}
-    <label class="date-dialog-field">
-     <span>{edit.absent?inventoryName(edit.itemId):wandName(edit.before)}</span>
-     <select name="wand-variant" aria-label={inventoryName(edit.itemId)} bind:value={wandSelection} onchange={e=>void chooseWandPair(e.currentTarget.value)} disabled={busy||Boolean(edit.sourceChoices&&!edit.appearance.sourceItemId)}>
-      {#if !edit.absent&&edit.appearance.sourceItemId===edit.beforeSource}<option value={-1}>{wandName(edit.before)}</option>{/if}
-      {#each edit.options as option,i}<option value={i} data-wand-variant={option.join(':')}>{wandName(option)}</option>{/each}
-     </select>
-    </label>
+    <div class="date-dialog-field" data-wand-option-count={edit.options.length} data-wand-selected={selected.join(':')} data-wand-selection={wandSelection} data-wand-busy={busy}>
+     {#each wandFieldLabels(locale) as label, i}
+      {@const field=i===0?0:1}
+      {@const other=field===0?1:0}
+      {@const allowReset=!edit.absent&&edit.appearance.sourceItemId===edit.beforeSource}
+      {@const pairs=allowReset?[...edit.options,edit.before]:edit.options}
+      {@const choices=wandFieldOptions(pairs,selected,field)}
+      <label class="date-dialog-field">
+       <span>{label}</span>
+       <select name={field===0?'wand-magic':'wand-fleck'} value={''} onchange={e=>{const value=e.currentTarget.value;e.currentTarget.value='';wandSelection=Number(value);void chooseWandPair(value)}} disabled={busy||!choices.length||Boolean(edit.sourceChoices&&!edit.appearance.sourceItemId)}>
+        <option value={''} disabled>{wandMaterialLabel(selected[field],id=>sourceNames[String(id)]??'—')}</option>
+        {#each choices as choice (choice.index)}
+         <option value={choice.index===edit.options.length?-1:choice.index} data-wand-variant={choice.pair.join(':')} data-wand-field-value={choice.pair[field]}>{wandMaterialLabel(choice.pair[field],id=>sourceNames[String(id)]??'—')}{choice.pair[other]!==selected[other]?' · '+wandFieldLabels(locale)[other]+': '+wandMaterialLabel(choice.pair[other],id=>sourceNames[String(id)]??'—'):''}</option>
+        {/each}
+       </select>
+      </label>
+     {/each}
+    </div>
     {#if !edit.options.length&&!edit.nestedOptions?.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
     {#if canAddWandVariant()}
      <label class="date-dialog-field">
