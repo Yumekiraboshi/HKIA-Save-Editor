@@ -11,6 +11,7 @@ from pathlib import Path
 
 POLICY='native-resolution-lossless-webp-v1'
 MAX_DIMENSION=16383
+ENCODING_METHOD=3
 def sha(data):return hashlib.sha256(data).hexdigest()
 def require(ok,msg):
     if not ok:raise ValueError(msg)
@@ -39,10 +40,10 @@ def verify(raw,meta,expected=None):
 def encode(image):
     require(image.mode in ('RGBA','RGB') and 0<min(image.size)<=max(image.size)<=MAX_DIMENSION,'unsupported original image geometry/mode')
     out=io.BytesIO()
-    image.save(out,format='WEBP',lossless=True,method=6,exact=True)
+    image.save(out,format='WEBP',lossless=True,method=ENCODING_METHOD,exact=True)
     raw=out.getvalue();digest=sha(raw)
     meta={'file':digest+'.webp','sha256':digest,'bytes':len(raw),'width':image.width,'height':image.height,
-          'mode':image.mode,'pixelSha256':sha(image.tobytes()),'conversion':POLICY}
+          'mode':image.mode,'pixelSha256':sha(image.tobytes()),'conversion':POLICY,'encodingMethod':ENCODING_METHOD}
     verify(raw,meta,image)
     return raw,meta
 def store(folder,image):
