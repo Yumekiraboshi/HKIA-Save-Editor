@@ -1044,13 +1044,24 @@ impl Editor {
  fn absent_flower_preview_context(&self,item:i32,witness:FlowerVariant)->Option<(FlowerPolicy,HashSet<FlowerVariant>)>{
   if !self.absent_flower_options(item).contains(&witness){return None}
   let patterns=flower_item_patterns(item,6)?;
+  Some((patterns,self.absent_flower_reservations(item)?))
+ }
+ // A zero row retains its native key. Reserve original and effective
+ // identities of all surviving verified rows, never reuse them on Add.
+ fn absent_flower_reservations(&self,item:i32)->Option<HashSet<FlowerVariant>>{
+  if !self.saved_item_family_empty(item){return None}
   let mut reserved=HashSet::new();
+  for row in self.active_saved_inventory().filter(|r|r.item_id==Some(item)){
+   if !self.unique_quantity_ids.contains(&row.id){return None}
+   let original=self.original_flower_variant(row.id)?;
+   reserved.insert(original);reserved.insert(self.flower_variant_changes.get(&row.id).copied().unwrap_or(original));
+  }
   for (&id,f) in &self.pending_flowers{
    if f.item_id!=item||!self.inventory_changes.contains_key(&id){continue}
    reserved.insert(f.variant);
    reserved.insert(self.flower_variant_changes.get(&id).copied().unwrap_or(f.variant));
   }
-  Some((patterns,reserved))
+  Some(reserved)
  }
  fn absent_flower_budget_available(&self)->bool{
   self.inventory_creation_source_valid()&&self.undo.len()+self.redo.len()<MAX_UNDO&&
@@ -1067,10 +1078,11 @@ impl Editor {
   matches!(grow,0|7)&&ABSENT_FLOWER_DEFAULTS.iter().any(|&(id,_)|id==item)
  }
  fn absent_flower_choices(&self,item_id:i32)->Vec<FlowerVariant>{
-  if owned_dlc_flower_output(item_id)||self.active_saved_item_count(item_id)>0||
+  if owned_dlc_flower_output(item_id)||
    !self.inventory_creation_payload_safe(item_id)||
    self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item_id){return Vec::new()}
   if !crate::inventory_source::is_uncapped_required_unique_stack(item_id){return Vec::new()}
+  let Some(reserved)=self.absent_flower_reservations(item_id)else{return Vec::new()};
   // Missing crowns use only their exact source species' original default
   // colors. Generic processors can use any of the unrestricted source
   // species; only their actual default colors are offered here.
@@ -1080,7 +1092,7 @@ impl Editor {
     let eligible=FLOWER_SPECIES.iter().any(|&(id,p)|id==species&&p.contains(&10));
     colors.iter().copied().filter(move |_|eligible).map(|color|[6,color,10,default_flower_accent(color)])
    }).collect::<std::collections::BTreeSet<_>>().into_iter().filter(|v|valid_flower_variant(policy,*v)&&
-    !self.pending_flowers.iter().any(|(&id,f)|self.inventory_changes.contains_key(&id)&&f.item_id==item_id&&(f.variant==*v||self.flower_variant_changes.get(&id)==Some(v)))).collect()
+    !reserved.contains(v)).collect()
   }
   let species=flower_candle_source(item_id).map(|r|r.1).or_else(||FLOWER_CROWN_SPECIES.iter().find(|&&(id,_)|id==item_id).map(|&(_,species)|species)).unwrap_or(item_id);
   let colors:Vec<i32>=if let Some((_,colors))=ABSENT_FLOWER_DEFAULTS.iter().find(|&&(id,_)|id==species){
@@ -1090,7 +1102,7 @@ impl Editor {
    colors.sort_unstable();colors.dedup();colors
   }else{return Vec::new()};
   let Some(patterns)=flower_item_patterns(item_id,6)else{return Vec::new()};
-  colors.into_iter().map(|color|[6,color,0,0]).filter(|v|valid_flower_variant(patterns,*v)&&!self.pending_flowers.iter().any(|(&id,f)|self.inventory_changes.contains_key(&id)&&f.item_id==item_id&&(f.variant==*v||self.flower_variant_changes.get(&id)==Some(v)))).collect()
+  colors.into_iter().map(|color|[6,color,0,0]).filter(|v|valid_flower_variant(patterns,*v)&&!reserved.contains(v)).collect()
  }
  pub fn inventory_absent_flower_ids(&self)->Vec<i32>{
   if !self.absent_flower_budget_available(){return Vec::new()}
@@ -1863,23 +1875,18 @@ impl Editor {
  pub fn inventory_boba_witnesses(&self)->&'static [(i32,i32,i32)]{
   if self.slot.envelope.version==Version::V301{crate::inventory_source::BOBA_WITNESSES}else{&[]}
  }
- fn boba_family_count(&self)->usize{
-  self.active_saved_item_count(crate::inventory_source::BOBA_ID)+self.pending_bobas.len()
- }
  pub fn inventory_boba_rows(&self)->impl Iterator<Item=(u32,BobaVariant,bool)>+'_{
-  let family_count=self.boba_family_count();
   self.slot.index.inventory.iter().filter_map(move |r|{
    if self.inventory_removed.contains(&r.id){return None}
    if self.slot.envelope.version!=Version::V301{return None}
    let original=Self::boba_words(&self.slot.envelope.decoded,r)?;
-   let editable=family_count<=256&&self.unique_quantity_ids.contains(&r.id)&&crate::inventory_source::supported_boba_base(original);
+   let editable=self.unique_quantity_ids.contains(&r.id)&&crate::inventory_source::supported_boba_base(original);
    Some((r.id,self.boba_variant_changes.get(&r.id).copied().unwrap_or(original),editable))
   }).chain(self.pending_bobas.iter().filter(|(id,_)|self.inventory_changes.contains_key(*id)).map(|(&id,&v)|
    (id,self.boba_variant_changes.get(&id).copied().unwrap_or(v),true)))
  }
  fn boba_context(&self,id:u32)->Option<(BobaVariant,BobaVariant,HashSet<BobaVariant>)>{
   if self.inventory_removed.contains(&id){return None}
-  if self.boba_family_count()>256{return None}
   if self.pending_bobas.contains_key(&id){
    if !self.inventory_changes.contains_key(&id){return None}
   }else if !self.unique_quantity_ids.contains(&id){return None}
@@ -1919,7 +1926,6 @@ impl Editor {
  // variants, but have no existing player payload to copy.
  fn absent_chef_allowed(&self,item:i32)->bool{
   crate::inventory_source::is_uncapped_required_unique_stack(item)&&
-   (item!=crate::inventory_source::BOBA_ID||self.active_saved_item_count(item)<256)&&
    self.active_saved_inventory().filter(|r|r.item_id==Some(item)).all(|r|
     self.unique_quantity_ids.contains(&r.id)&&self.inventory_can_empty(r)&&
     self.inventory_changes.get(&r.id).copied().or(r.quantity)==Some(0))&&
@@ -1928,7 +1934,7 @@ impl Editor {
  }
  fn boba_starter_choices(&self)->Vec<BobaVariant>{
   use crate::inventory_source as src;
-  if !self.absent_chef_allowed(src::BOBA_ID)||self.boba_family_count()>=256||
+  if !self.absent_chef_allowed(src::BOBA_ID)||
    self.pending_bobas.keys().any(|id|self.inventory_changes.contains_key(id)){return Vec::new()}
   let mut reserved=HashSet::new();
   for row in self.active_saved_inventory().filter(|r|r.item_id==Some(src::BOBA_ID)){
@@ -1961,7 +1967,7 @@ impl Editor {
   let Some((original,_,_))=self.boba_context(id)else{return Vec::new()};
   let item=crate::inventory_source::BOBA_ID;
   let quantity=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
-  if !quantity.is_some_and(|q|q>0)||self.boba_family_count()>=256||!self.absent_flower_budget_available()||
+  if !quantity.is_some_and(|q|q>0)||!self.absent_flower_budget_available()||
    !self.inventory_creation_payload_safe(item)||self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item){return Vec::new()}
   self.inventory_boba_variants(id).into_iter().filter(|&v|v!=original).collect()
  }
@@ -2241,6 +2247,32 @@ impl Editor {
    ((square(0)+square(1))+square(2))+square(3)<f32::from_bits(0x2edbe6fe)
   })
  }
+ // Approximate equality is not transitive. Sweep the coordinate with
+ // greatest spread; an individual squared difference at or above the
+ // native threshold proves the full tuple unequal. Bound actual pair
+ // comparisons instead of rejecting all large, distinct families.
+ fn palette_peer_conflicts(peers:&mut [(u32,PaletteVariant)])->Option<HashSet<u32>>{
+  const MAX_COMPARISONS:usize=2_000_000;
+  if peers.len()<2{return Some(HashSet::new())}
+  let coordinate=|p:&PaletteVariant,i:usize|f32::from_bits(p[i/4][i%4]);
+  let mut low=[f32::INFINITY;12];let mut high=[f32::NEG_INFINITY;12];
+  for (_,p) in peers.iter(){for i in 0..12{
+   let v=coordinate(p,i);low[i]=low[i].min(v);high[i]=high[i].max(v);
+  }}
+  let axis=(0..12).max_by(|&a,&b|(high[a]-low[a]).total_cmp(&(high[b]-low[b])))?;
+  peers.sort_unstable_by(|a,b|coordinate(&a.1,axis).total_cmp(&coordinate(&b.1,axis)));
+  let mut conflicts=HashSet::new();let mut comparisons=0;
+  for i in 0..peers.len(){
+   let (id,p)=peers[i];
+   for &(other,q) in &peers[i+1..]{
+    let d=coordinate(&q,axis)-coordinate(&p,axis);
+    if d*d>=f32::from_bits(0x2edbe6fe){break}
+    comparisons+=1;if comparisons>MAX_COMPARISONS{return None}
+    if Self::palette_equal(p,q){conflicts.insert(id);conflicts.insert(other);}
+   }
+  }
+  Some(conflicts)
+ }
  // Source-limited initial endpoint: ordinary base flower colors and white
  // additives only. Black/Gray are event-restricted in FlowerSettings.
  fn palette_output_choices()->impl Iterator<Item=[u32;4]>{
@@ -2308,8 +2340,7 @@ impl Editor {
   if !quantity.is_some_and(|q|q>0){return None}
   let item=crate::inventory_source::CUSTOM_PALETTE_ID;
   if !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
-   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||
-   self.active_saved_item_count(item)+self.pending_palettes.len()>=256{return None}
+   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
   self.palette_context(id)
  }
  // A native source-defined starter is independent of a positive saved
@@ -2318,7 +2349,6 @@ impl Editor {
   let item=crate::inventory_source::CUSTOM_PALETTE_ID;
   let index=&self.slot.index;
   if !crate::inventory_source::is_uncapped_required_unique_stack(item)||
-   self.active_saved_item_count(item)+self.pending_palettes.len()>=256||
    self.pending_palettes.keys().any(|id|self.inventory_changes.contains_key(id))||
    index.inventory_palette_context_incomplete||index.inventory_palette_copies_incomplete||
    !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
@@ -2410,7 +2440,6 @@ impl Editor {
   let mut chef_counts=HashMap::<(i32,Vec<i32>,Vec<i32>),usize>::new();
   let mut wand_counts=HashMap::<(i32,WandData),usize>::new();
   let mut palette_peers=Vec::new();
-  let mut palette_conflicts=HashSet::new();
   let mut ambiguous=HashSet::new();
   for row in &self.slot.index.inventory{
    if let Some(uid)=row.unique_id{*uid_counts.entry(uid).or_default()+=1}
@@ -2422,13 +2451,8 @@ impl Editor {
     match key{Some(v)=>{*furniture_counts.entry((item,v)).or_default()+=1;},None=>{ambiguous.insert(item);}}
    }
    if item==crate::inventory_source::CUSTOM_PALETTE_ID{
-    // Approximate equality is not transitive and cannot use a hash key.
-    // Bound pairwise work even for hostile or unusually large save files.
-    if palette_peers.len()>=256{ambiguous.insert(item);}
-    else if let Some(key)=Self::palette_identity(row){
-     for &(other,peer) in &palette_peers{if Self::palette_equal(key,peer){palette_conflicts.insert(other);palette_conflicts.insert(row.id);}}
-     palette_peers.push((row.id,key));
-    }else{ambiguous.insert(item);}
+    if let Some(key)=Self::palette_identity(row){palette_peers.push((row.id,key));}
+    else{ambiguous.insert(item);}
    }
    if crate::inventory_source::CAFE_IDS.binary_search(&item).is_ok()||item==crate::inventory_source::BOBA_ID{
     match self.chef_identity(row){Some((a,b))=>{*chef_counts.entry((item,a,b)).or_default()+=1;},None=>{ambiguous.insert(item);}}
@@ -2444,6 +2468,9 @@ impl Editor {
    }
    *variant_counts.entry((item,v)).or_default()+=1;
   }
+  let palette_conflicts=Self::palette_peer_conflicts(&mut palette_peers).unwrap_or_else(||{
+   ambiguous.insert(crate::inventory_source::CUSTOM_PALETTE_ID);HashSet::new()
+  });
   self.slot.index.inventory.iter().filter_map(|row|{
    let item=row.item_id?;let uid=row.unique_id?;
    if uid_counts.get(&uid)!=Some(&1)||self.slot.index.inventory_payload_item_refs.contains(&item)||
