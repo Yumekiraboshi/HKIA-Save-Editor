@@ -6635,13 +6635,18 @@ fn physical_removal_protects_exact_referenced_uid_not_independent_ordinary_base(
  for zipped in [false,true]{
   let raw=make(21,false,false);let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
-  assert!(e.inventory_entry_removable(4));assert!(!e.inventory_entry_removable(5));assert!(!e.inventory_entry_removable(6));
+  assert!(e.inventory_entry_removable(4));assert!(!e.inventory_entry_removable(5));assert!(e.inventory_entry_removable(6));
+  assert_eq!(original[2].quantity_minimum,0);
+  assert!(e.change_inventory_quantity(5,2,0).is_err());
+  e.change_inventory_quantity(6,3,0).unwrap();
+  assert_eq!(e.inventory()[2].quantity,0);
+  assert!(e.undo_scope(Inventory));assert_eq!(e.inventory(),original);
   assert!(e.remove_inventory_entries(&[(4,5),(5,2)]).is_err());assert!(!e.dirty());
-  e.remove_inventory_entries(&[(4,5)]).unwrap();
+  e.remove_inventory_entries(&[(4,5),(6,3)]).unwrap();
   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
   assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);assert!(restored.redo_scope(Inventory));
   let saved=Editor::open(restored.export().unwrap()).unwrap();
-  assert_eq!(saved.inventory().len(),2);assert_eq!(saved.inventory()[0].document_id,5);
+  assert_eq!(saved.inventory().len(),1);assert_eq!(saved.inventory()[0].document_id,5);
   assert_eq!(saved.inventory_original_unique_payload(5),e.inventory_original_unique_payload(5));
   assert!(!saved.inventory_entry_removable(5));
  }
