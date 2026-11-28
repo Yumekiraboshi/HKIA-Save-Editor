@@ -9,7 +9,7 @@
  import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy,inventoryDeselectVisibleCopy,inventoryDeleteCopy,inventoryShowZeroCopy,inventoryZeroStackCopy,inventoryRemoveEntryCopy,inventoryRemoveEntryWarning} from './inventory-copy';
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
- import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,furnitureHasCustomizedAppearance,type FurnitureDisplay} from './inventory-furniture-display';
+ import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,furnitureHasCustomizedAppearance,furnitureChoiceLabel,type FurnitureDisplay} from './inventory-furniture-display';
  import InventoryDecorator from './InventoryDecorator.svelte';
  import {flowerDecorators} from './inventory-flower-display';
  import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
@@ -2325,7 +2325,7 @@ import {verifiedFloorplanName} from './floorplan-names';
         <select name={'furniture-part-'+slot} value={-1} disabled={busy||!choices.length} onchange={e=>{const index=Number(e.currentTarget.value);e.currentTarget.value='-1';void selectFurniturePart(index)}}>
          <option value={-1} disabled>{materialLabel(furnitureDisplay,selected[slot],furnitureCopy.defaultMaterial)}</option>
          {#each choices as choice (choice.index)}
-          <option value={choice.index} data-material-index={choice.variant[slot]}>{materialLabel(furnitureDisplay,choice.variant[slot],furnitureCopy.defaultMaterial)}</option>
+          <option value={choice.index} data-material-index={choice.variant[slot]}>{furnitureChoiceLabel(furnitureDisplay,selected,choice.variant,slot,furnitureCopy.defaultMaterial,furnitureCopy.part)}</option>
          {/each}
         </select>
        </label>
