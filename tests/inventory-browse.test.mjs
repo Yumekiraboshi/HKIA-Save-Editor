@@ -163,7 +163,7 @@ test('compact inventory keeps quantity controls accessible and locks unsupported
  assert.doesNotMatch(app,/inventory-quantity-delta|originalInventoryQuantities/);
  assert.doesNotMatch(css,/inventory-quantity-delta/);
  assert.match(app,/disabled=\{busy\|\|inventoryBatchMode\|\|locked\|\|!pending\|\|!quantityInputValid\(item\)\}/);
- assert.match(css,/\.inventory-quantity-form[^{}]*\.quantity-unchanged\{[^}]*visibility:hidden/);
+ assert.match(css,/\.inventory-quantity-form[^{}]*\.quantity-unchanged\{[^}]*display:none/);
  assert.match(app,/aria-label=\{iCopy\.apply\}/);
  assert.match(app,/class="inventory-readonly-quantity" title=\{iCopy\.readonly\}/);
  assert.match(app,/title=\{inventoryName\(item\.itemId\)\}/);
