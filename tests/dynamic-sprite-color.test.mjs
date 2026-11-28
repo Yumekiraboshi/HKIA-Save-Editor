@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-const {outputFiles}=await build({stdin:{contents:"export * from './dynamic-sprite-color'; export * from './flower-appearance';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {dynamicSpritePixel,adjustMaskOuterUV,composeDynamicSpriteSamples,resolveFlowerAppearance}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {outputFiles}=await build({stdin:{contents:"export * from './dynamic-sprite-color'; export * from './flower-appearance'; export * from './chef-appearance'; export * from './wand-appearance'; export * from './native-characteristic-tint'; export * from './inventory-palette-display';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+const {dynamicSpritePixel,adjustMaskOuterUV,composeDynamicSpriteSamples,resolveFlowerAppearance,resolveChefTints,resolveWandBaseTints,NATIVE_CHARACTERISTIC_IDS,resolvePaletteTints,paletteArtKey,paletteAppearanceSwatches,CUSTOM_PALETTE_ITEM_ID}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const json=p=>JSON.parse(readFileSync(new URL(p,import.meta.url),'utf8'));
 const evidence=json('../data/unityfs-audit/dynamic-sprite-color.v3.0.1.json');
 const index=json('../public/inventory-flower-art/index.json');
@@ -98,4 +98,67 @@ test('all source-known flower tint inputs resolve every base/accent/pattern comb
  assert.deepEqual(missing,[]);assert.deepEqual(wrong,[]);
  // This is the display input domain, not a claim that all combinations can
  // occur in the game, or that the full cartesian product was rasterized.
+});
+
+test('all native chef tint classes and ordered slots resolve; all known wand tint pairs resolve',()=>{
+ const chef=json('../public/dynamic-chef-art/chef-runtime-source-v3.0.1.json');
+ const wand=json('../public/dynamic-wand-art/wand-runtime-source-v3.0.1.json');
+ const white=[1,1,1,1],same=(a,b)=>!!a&&a.length===b.length&&a.every((v,i)=>v.length===b[i].length&&v.every((n,j)=>n===b[i][j]));
+ const map=rows=>new Map(rows.map(row=>[row.characteristicId,row.rgba]));
+ const colors=map(chef.colors),magic=map(wand.magic),flecks=map(wand.flecks);
+ const known=NATIVE_CHARACTERISTIC_IDS;
+ const neutral=known.find(id=>!colors.has(id));
+ const classes=[...colors.keys(),neutral];
+ assert.equal(classes.length,35);assert.equal(chef.rows.filter(r=>r.kind==='cafe').length,9);
+ assert.equal(wand.rows.length,9);assert.equal(magic.size,13);assert.equal(flecks.size,3);
+ let chefCases=0,wandCases=0;const bad=[];
+ const checkChef=(row,ids)=>{
+  const appearance=row.kind==='boba'?{kind:'boba',colorId:ids[0]}:{kind:'cafe',colors:ids};
+  const expected=[0,1,2].map(i=>colors.get(ids[i])??white);
+  chefCases++;
+  if(!same(resolveChefTints(row,appearance,colors),expected))bad.push([row.itemId,...ids]);
+ };
+ for(const row of chef.rows){
+  if(row.kind==='boba'){for(const id of known)checkChef(row,[id]);continue;}
+  checkChef(row,[]);
+  for(const a of classes){checkChef(row,[a]);for(const b of classes){checkChef(row,[a,b]);for(const c of classes)checkChef(row,[a,b,c]);}}
+  // All original IDs, including the equivalent unmapped white IDs,
+  // are also checked independently in every position.
+  for(const id of known)for(let slot=0;slot<3;slot++){
+   const ids=Array(3).fill(neutral);ids[slot]=id;checkChef(row,ids);
+  }
+  for(let slot=0;slot<3;slot++){
+   const ids=Array(3).fill(neutral);ids[slot]=999999;
+   assert.equal(resolveChefTints(row,{kind:'cafe',colors:ids},colors),null);
+  }
+ }
+ for(const row of wand.rows)for(const a of known)for(const b of known){
+  wandCases++;
+  if(!same(resolveWandBaseTints({magicCharacteristicId:a,fleckCharacteristicId:b},magic,flecks),[magic.get(a)??white,flecks.get(b)??white,white]))bad.push([row.itemId,a,b]);
+ }
+ assert.equal(chefCases,9*(1+35+35**2+35**3+3*known.length)+known.length);
+ assert.equal(wandCases,9*known.length**2);
+ assert.deepEqual(bad,[]);
+ assert.equal(resolveWandBaseTints({magicCharacteristicId:999999,fleckCharacteristicId:125},magic,flecks),null);
+ assert.equal(resolveWandBaseTints({magicCharacteristicId:104,fleckCharacteristicId:999999},magic,flecks),null);
+ console.log('NATIVE_CHEF_WAND_TINT_DOMAIN',JSON.stringify({characteristics:known.length,chefCases,wandCases}));
+});
+test('palette RGB order and display key are independent of saved alpha across source-known colors',()=>{
+ const colors=Object.values(defs.colors).map(c=>c.rgba);
+ let cases=0;const bad=[];
+ const id=CUSTOM_PALETTE_ITEM_ID;
+ for(const a of colors)for(const b of colors)for(const c of colors){
+  const palette=[a,b,c],rgb=palette.map(v=>[...v.slice(0,3),1]);
+  const otherAlpha=palette.map((v,i)=>[...v.slice(0,3),[0,.5,2][i]]);
+  const swatches=rgb.map(v=>'#'+v.slice(0,3).map(n=>Math.round(n*255).toString(16).padStart(2,'0')).join(''));
+  const result=resolvePaletteTints(id,otherAlpha);
+  cases++;
+  if(JSON.stringify(result)!==JSON.stringify(rgb)||paletteArtKey(id,palette)!==paletteArtKey(id,otherAlpha)||JSON.stringify(paletteAppearanceSwatches(otherAlpha))!==JSON.stringify(swatches))bad.push([a,b,c]);
+ }
+ assert.equal(cases,30**3);assert.deepEqual(bad,[]);
+ for(let slot=0;slot<3;slot++)for(let component=0;component<4;component++)for(const value of [NaN,Infinity,-Infinity,...(component<3?[-.001,1.001]:[])]){
+  const invalid=Array.from({length:3},()=>[.25,.5,.75,1]);invalid[slot][component]=value;
+  assert.equal(resolvePaletteTints(id,invalid),null);
+ }
+ assert.equal(resolvePaletteTints(0,[colors[0],colors[1],colors[2]]),null);
 });

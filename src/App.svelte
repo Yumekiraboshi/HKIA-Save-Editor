@@ -620,7 +620,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   }
   if(row.boba)return bobaName(row.boba.variant);
   if(row.cafe)return cafeName(row.cafe.variant);
-  if(row.palette)return paletteAppearanceSwatches(row.palette).join(' / ');
+  const palette=inventoryPaletteCardAppearance(row.palette,row.paletteCreationDefault);
+  if(palette)return paletteAppearanceSwatches(palette).join(' / ');
   const furniture=furnitureVariantOf(row.unique);
   if(furniture)return furnitureVariantTitle(furnitureDisplay,row.itemId,furniture,furnitureCopy.defaultMaterial);
   return [flowerGrowthLabel(locale,flowerGrowthKind(row.itemId,row.flower)),flowerDisplay(row.flower,flowerDefinitions,flowerLabels[locale]??{})?.title].filter(Boolean).join(' · ');
@@ -1956,7 +1957,8 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const chef=inventoryChefAppearance(item.itemId,item.unique,item.cafe,item.boba)}
      {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
      {@const nestedWand=wandNestedOf(item.unique)}
-     {@const uniqueSwatches=item.palette?paletteAppearanceSwatches(item.palette):nestedWand?furnitureAppearanceSwatches(furnitureDisplay,nestedWand[0],nestedWand.slice(3)):furnitureAppearanceSwatches(furnitureDisplay,item.itemId,furnitureVariantOf(item.unique))}
+     {@const paletteAppearance=inventoryPaletteCardAppearance(item.palette,item.paletteCreationDefault)}
+     {@const uniqueSwatches=paletteAppearance?paletteAppearanceSwatches(paletteAppearance):nestedWand?furnitureAppearanceSwatches(furnitureDisplay,nestedWand[0],nestedWand.slice(3)):furnitureAppearanceSwatches(furnitureDisplay,item.itemId,furnitureVariantOf(item.unique))}
      {@const canFlower=!!item.flower&&!!item.unique?.flowerEditable&&!!flowerDefinitions&&!!flowerLabels[locale]}
      {@const canFurniture=!!item.unique?.furnitureEditable||!!item.furnitureCreatable}
      {@const canPalette=!!item.paletteCreationDefault||!!item.unique?.paletteEditable&&!!item.palette}
@@ -1986,7 +1988,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          {:else if hasNativeChefArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicChefSprite itemId={item.itemId} appearance={chef} fallback={nativeSprite??sprite}/>
          {:else if item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
-         <DynamicPaletteSprite itemId={item.itemId} palette={inventoryPaletteCardAppearance(item.palette,item.paletteCreationDefault)} fallback={nativeSprite??sprite}/>
+         <DynamicPaletteSprite itemId={item.itemId} palette={paletteAppearance} fallback={nativeSprite??sprite}/>
         {:else if hasNativeFlowerArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicFlowerSprite itemId={item.itemId} flower={item.flower} definitions={flowerDefinitions} fallback={nativeSprite??sprite}/>
         {:else if resultId!==undefined&&resultOriginal}
