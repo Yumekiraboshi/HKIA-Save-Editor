@@ -130,3 +130,8 @@ export function inventoryAddRows(owned:readonly InventoryEntry[],creatable:reado
 export function inventoryDisplayRows(rows:readonly InventoryEntry[],addMode:boolean,showZero:boolean):readonly InventoryEntry[]{
  return addMode||showZero?rows:rows.filter(row=>row.quantity!==0);
 }
+
+/** Locked-only management includes zero and read-only rows; no save mutation. */
+export function inventoryLockedRows(rows:readonly InventoryEntry[],locks:ReadonlySet<number>):InventoryEntry[]{
+ return rows.filter(row=>locks.has(row.documentId));
+}

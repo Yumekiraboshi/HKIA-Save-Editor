@@ -13,7 +13,7 @@
  import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,furnitureHasCustomizedAppearance,furnitureChoiceLabel,type FurnitureDisplay} from './inventory-furniture-display';
  import InventoryDecorator from './InventoryDecorator.svelte';
  import {flowerDecorators} from './inventory-flower-display';
- import {nativeInventoryGroups,inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {nativeInventoryGroups,inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryLockedRows,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {createFlowerDisplayLoader,flowerDisplay,flowerGrowthKind,hasNativeFlowerArt,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {initialInventoryNativeArt,createInventoryNativeArtLoader,type InventoryNativeArt} from './inventory-native-art';
@@ -138,6 +138,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  });
  let inventoryEditableOnly=$state(false);
  let inventoryShowZero=$state(false);
+ let inventoryLockedOnly=$state(false);
  let inventoryAddMode=$state(false);
  let inventoryBatchMode=$state(false);
  let inventoryLocks=$state<Set<number>>(new Set());
@@ -343,9 +344,11 @@ import {verifiedFloorplanName} from './floorplan-names';
   sourceOrderedAchievementRows);
  const inventoryAvailableToAdd=$derived(inventoryAddRows((snapshot as SaveSnapshot|null)?.inventory??[],(snapshot as SaveSnapshot|null)?.inventoryCreatable??[]));
  const inventoryBrowseRows:InventoryEntry[]=$derived(inventoryAddMode?inventoryAvailableToAdd:(snapshot as SaveSnapshot|null)?.inventory??[]);
- const inventoryDisplayedRows=$derived(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,inventoryShowZero));
+ const inventoryDisplayedRows=$derived(inventoryLockedOnly&&!inventoryAddMode
+  ?inventoryLockedRows(inventoryBrowseRows,inventoryLocks):inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,inventoryShowZero));
+ const inventoryEffectiveEditableOnly=$derived(inventoryEditableOnly&&!inventoryLockedOnly);
  const inventoryGroupTotals=$derived(inventoryGroupCounts(inventoryDisplayedRows,nativeInventoryIndex));
- const inventoryMatchTotals=$derived(inventorySearchGroupCounts(inventoryDisplayedRows,inventoryQuery,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName));
+ const inventoryMatchTotals=$derived(inventorySearchGroupCounts(inventoryDisplayedRows,inventoryQuery,inventoryEffectiveEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName));
  const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
  const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
  const inventoryCategoryRows=$derived(nativeInventoryIndex.size?((snapshot as SaveSnapshot|null)?.inventory??[]).filter(row=>nativeInventoryGroups(row.itemId,nativeInventoryIndex).includes(activeInventoryGroup)):[]);
@@ -354,7 +357,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const categoryLockedCount=$derived(inventoryCategoryRows.filter(row=>isInventoryLocked(row.documentId)).length);
  const inventoryRows=$derived(browseInventory(
   inventoryDisplayedRows,inventoryQuery,activeInventoryGroup,
-  inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale,inventoryVariantSearchName));
+  inventoryEffectiveEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale,inventoryVariantSearchName));
  const achievementRows=$derived(searchAchievementRows(achievementQuery,sourceOrderedAchievementRows,
   groupScopedAchievementRows,achievementName,guid=>achievementIndex.get(guid)?.key??''));
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
@@ -691,7 +694,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function openInventoryTab(){
   refreshVariantArtwork();
   clearInventoryBatch();inventoryAddMode=false;
-  activeTool='inventory';inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;inventoryShowZero=false;
+  activeTool='inventory';inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;inventoryShowZero=false;inventoryLockedOnly=false;
   inventoryLimit=BATCH_SIZE;editingAchievement=null;error='';
   refreshInventoryNativeArt();
   refreshFlowerDisplay();
@@ -1296,8 +1299,16 @@ import {verifiedFloorplanName} from './floorplan-names';
   const next=(event.currentTarget as HTMLInputElement).value;
   inventoryLimit=BATCH_SIZE;
   if(!next.trim())return;
-  const counts=inventorySearchGroupCounts(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,inventoryShowZero),next,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
+  const counts=inventorySearchGroupCounts(inventoryDisplayedRows,next,inventoryEffectiveEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
   inventoryGroup=inventorySearchTarget(activeInventoryGroup,counts);
+ }
+ function toggleInventoryLockedOnly(){
+  if(busy||inventoryAddMode)return;
+  const previous=activeInventoryGroup;
+  clearInventoryBatch();inventoryLockedOnly=!inventoryLockedOnly;inventoryLimit=BATCH_SIZE;
+  const rows=inventoryLockedOnly?inventoryLockedRows(inventoryBrowseRows,inventoryLocks):inventoryDisplayRows(inventoryBrowseRows,false,inventoryShowZero);
+  const counts=inventorySearchGroupCounts(rows,inventoryQuery,inventoryEditableOnly&&!inventoryLockedOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
+  inventoryGroup=inventorySearchTarget(previous,counts);
  }
  function toggleInventoryShowZero(){
   const previous=activeInventoryGroup;
@@ -1828,22 +1839,32 @@ import {verifiedFloorplanName} from './floorplan-names';
      <svg class="search-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.75" cy="10.75" r="6.75"/><path d="m16 16 5 5"/></svg>
      <input type="search" bind:value={inventoryQuery} oninput={onInventorySearch} placeholder={iCopy.search} aria-label={iCopy.search}/>
     </label>
-    <button type="button" class="inventory-editable-filter" class:active={inventoryEditableOnly}
-     aria-pressed={inventoryEditableOnly}
-     onclick={()=>{inventoryEditableOnly=!inventoryEditableOnly;inventoryLimit=BATCH_SIZE}}>
-     {iCopy.editableOnly}
-    </button>
+    {#if !inventoryLockedOnly}
+     <button type="button" class="inventory-editable-filter" class:active={inventoryEditableOnly}
+      aria-pressed={inventoryEditableOnly}
+      onclick={()=>{inventoryEditableOnly=!inventoryEditableOnly;inventoryLimit=BATCH_SIZE}}>
+      {iCopy.editableOnly}
+     </button>
+     {#if !inventoryAddMode}
+      <button type="button" class="inventory-editable-filter inventory-show-zero-toggle" class:active={inventoryShowZero}
+       aria-pressed={inventoryShowZero} onclick={toggleInventoryShowZero}>{inventoryShowZeroCopy(locale)}</button>
+     {/if}
+    {/if}
     {#if !inventoryAddMode}
-     <button type="button" class="inventory-editable-filter inventory-show-zero-toggle" class:active={inventoryShowZero}
-      aria-pressed={inventoryShowZero} onclick={toggleInventoryShowZero}>{inventoryShowZeroCopy(locale)}</button>
+     <button type="button" class="inventory-editable-filter inventory-locked-only-toggle" class:active={inventoryLockedOnly}
+      aria-pressed={inventoryLockedOnly} disabled={busy} onclick={toggleInventoryLockedOnly}>{inventoryLockCopy.lockedOnly}</button>
+     {#if inventoryLockedOnly&&categoryLockedCount>0}
+      <button type="button" class="inventory-editable-filter inventory-category-unlock" disabled={busy}
+       onclick={()=>setInventoryLocks(inventoryCategoryRows,false)}>{inventoryLockCopy.unlockAll} ({categoryLockedCount.toLocaleString(locale)})</button>
+     {/if}
     {/if}
     <button type="button" class="inventory-editable-filter inventory-add-toggle" class:active={inventoryAddMode}
      aria-pressed={inventoryAddMode} disabled={busy||(!inventoryAddMode&&inventoryAvailableToAdd.length===0)}
-     onclick={()=>{clearInventoryBatch();inventoryQuantityDrafts={};inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;inventoryLimit=BATCH_SIZE}}>
+     onclick={()=>{clearInventoryBatch();inventoryQuantityDrafts={};inventoryLockedOnly=false;inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;inventoryLimit=BATCH_SIZE}}>
      {inventoryAddMode?iCopy.tab:'+ '+inventoryAddCopy(locale)}
     </button>
     <button type="button" class="inventory-editable-filter inventory-batch-toggle" class:active={inventoryBatchMode}
-     aria-pressed={inventoryBatchMode} disabled={busy||snapshot.inventoryBatchLimit<1}
+     aria-pressed={inventoryBatchMode} disabled={busy||inventoryLockedOnly||snapshot.inventoryBatchLimit<1}
      onclick={()=>{if(inventoryBatchMode)clearInventoryBatch();else inventoryBatchMode=true}}>
      {iBatchCopy}
     </button>
@@ -1864,13 +1885,10 @@ import {verifiedFloorplanName} from './floorplan-names';
     {:else}
      <span class="inventory-total">{inventoryAddMode?inventoryAddCopy(locale):iCopy.count}: {inventoryRows.length.toLocaleString(locale)}</span>
     {/if}
-   {#if !inventoryAddMode&&inventoryCategoryRows.length}
+   {#if !inventoryAddMode&&!inventoryLockedOnly&&inventoryCategoryRows.length}
     <div class="inventory-category-actions">
      <button type="button" class="inventory-editable-filter inventory-category-zero" disabled={busy||!categoryZeroRows.length||categoryZeroRows.length>snapshot.inventoryBatchLimit} onclick={e=>requestInventoryCategoryDelete(false,e.currentTarget)}>{inventoryLockCopy.categoryZero} ({categoryZeroRows.length.toLocaleString(locale)})</button>
      <button type="button" class="inventory-editable-filter inventory-category-remove" disabled={busy||!categoryRemoveRows.length||categoryRemoveRows.length>snapshot.inventoryBatchLimit} onclick={e=>requestInventoryCategoryDelete(true,e.currentTarget)}>{inventoryLockCopy.categoryRemove} ({categoryRemoveRows.length.toLocaleString(locale)})</button>
-     <button type="button" class="inventory-editable-filter" disabled={busy||categoryLockedCount===inventoryCategoryRows.length} onclick={()=>setInventoryLocks(inventoryCategoryRows,true)}>{inventoryLockCopy.lockAll}</button>
-     <button type="button" class="inventory-editable-filter" disabled={busy||!categoryLockedCount} onclick={()=>setInventoryLocks(inventoryCategoryRows,false)}>{inventoryLockCopy.unlockAll}</button>
-     <span class="inventory-total">{inventoryLockCopy.locked}: {categoryLockedCount.toLocaleString(locale)}</span>
      {#if categoryZeroRows.length>snapshot.inventoryBatchLimit||categoryRemoveRows.length>snapshot.inventoryBatchLimit}<span role="status" class="inventory-total">{inventoryLockCopy.limit}: {snapshot.inventoryBatchLimit.toLocaleString(locale)}</span>{/if}
     </div>
    {/if}

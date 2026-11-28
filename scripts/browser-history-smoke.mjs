@@ -1166,7 +1166,23 @@ async function inventoryCategoryProtectionSmoke(){
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'0');
   await search.fill('1877756618');await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
-  console.log('CHROMIUM CATEGORY PROTECTION PASS: persisted lock, filtered category zero, hidden physical deletion, protected history');
+  await search.fill('627013240');await card.locator('.inventory-lock-button').click();
+  await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
+  await page.locator('.inventory-show-zero-toggle').click();
+  await search.fill('');
+  await page.locator('.inventory-locked-only-toggle').click();
+  assert.equal(await page.locator('.inventory-card').count(),2,'locked zero rows must remain reachable');
+  assert.equal(await page.locator('.inventory-card:not(.inventory-locked)').count(),0);
+  assert.equal(await page.locator('.inventory-category-zero').count(),0);
+  assert.equal(await page.locator('.inventory-category-remove').count(),0);
+  await search.fill('1877756618');
+  await page.locator('.inventory-category-unlock').click();
+  await card.waitFor({state:'hidden'});
+  await search.fill('627013240');assert.equal(await card.count(),0,'category unlock ignores search');
+  await page.locator('.inventory-locked-only-toggle').click();
+  await search.fill('1877756618');
+  await card.locator('.inventory-lock-button[aria-pressed="false"]').waitFor();
+  console.log('CHROMIUM CATEGORY PROTECTION PASS: persisted lock, filtered category zero, hidden physical deletion, protected history and locked-only management');
  }finally{await context.close()}
 }
 async function inventoryBatchQuantitySmoke(){

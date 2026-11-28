@@ -13,7 +13,7 @@ const buildSource=async file=>{
 };
 const {decodeNativeInventoryIndex}=await buildSource('../src/inventory-native-data.ts');
 const {FLOWER_CREATION_SOURCE_IDS}=await buildSource('../src/inventory-native-crafting.ts');
-const {inventoryAddRows,inventoryDisplayRows,inventoryRefillable,nativeInventoryGroups,inventoryGroupCounts,browseInventory,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,NATIVE_INVENTORY_TABS,inventoryCategoryRepresentative,INVENTORY_CATEGORY_REPRESENTATIVES}=await buildSource('../src/inventory-browse.ts');
+const {inventoryAddRows,inventoryDisplayRows,inventoryLockedRows,inventoryRefillable,nativeInventoryGroups,inventoryGroupCounts,browseInventory,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,NATIVE_INVENTORY_TABS,inventoryCategoryRepresentative,INVENTORY_CATEGORY_REPRESENTATIVES}=await buildSource('../src/inventory-browse.ts');
 const catalog=JSON.parse(readFileSync(new URL('../public/catalog.json',import.meta.url)));
 const items=new Map(catalog.items.map(x=>[x[0],x]));
 const packed=JSON.parse(readFileSync(new URL('../public/inventory-native-categories.json',import.meta.url)));
@@ -287,4 +287,11 @@ test('native positive-only ordinary zero rows remain refillable without enabling
  assert.equal(inventoryRefillable({...row,editable:false}),false);
  assert.deepEqual(inventoryAddRows([row],[]),[row]);
  assert.deepEqual(inventoryDisplayRows([row],false,false),[]);
+});
+
+
+test('locked-only management includes zero and read-only rows',()=>{
+ const rows=[{documentId:1,quantity:0,editable:false},{documentId:2,quantity:5,editable:true},{documentId:3,quantity:1,editable:true}];
+ assert.deepEqual(inventoryLockedRows(rows,new Set([1,2])),rows.slice(0,2));
+ assert.deepEqual(inventoryLockedRows(rows,new Set()),[]);
 });
