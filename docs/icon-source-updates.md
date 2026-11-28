@@ -44,3 +44,7 @@ Use [native icon atlas staging](native-icon-atlas-staging.md) for the normal ori
 Use [icon release pack assembly](icon-release-pack.md) after the base/override/dynamic stages. Keep the output outside the repository until every required source route and native runtime dependency is verified; the candidate receipt never activates a release.
 
 The [version-bound browser adapter](versioned-dynamic-source.md) consumes the candidate dynamic page transport with an explicit reviewed version/index digest pin. It is not an automatic release activation.
+
+## Run all reviewed extraction and candidate assembly stages
+
+Use the [one-command icon update pipeline](icon-update-pipeline.md) for a reviewed game release. It verifies original bundle identities, supports exact checkpoint resume and prior-run asset reuse, and emits candidate source blockers without altering current public assets or activating a release.

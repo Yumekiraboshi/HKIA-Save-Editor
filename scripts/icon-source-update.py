@@ -92,6 +92,20 @@ def scan_rows(objects, externals, helpers, mesh, outfit_layout=None):
         # A recognized definition type with a changed field layout is an
         # explicit schema failure, not a silently skipped new item.
         if not {'Id', 'UiIcon', 'SerializedGuid'} <= names_in_tree:
+            # Detect a renamed/removed required field on a native item
+            # rather than silently omitting it from the candidate census.
+            # Only read the typed prefix through m_Name, not unrelated
+            # managed-reference data on every other MonoBehaviour.
+            if 'm_Name' in names_in_tree:
+                at = 0
+                for node in tree[-1]:
+                    end = helpers.walk(node, raw, at, mesh)
+                    if node[2] == 'm_Name':
+                        name, _ = mesh.string(raw[at:end])
+                        require(not name.endswith('.InventoryItemDefinitionAsset'),
+                                'item schema changed: ' + pid)
+                        break
+                    at = end
             continue
         require(REQUIRED_FIELDS <= names_in_tree, 'item schema changed: ' + pid)
         f = helpers.fields(tree, raw, mesh)

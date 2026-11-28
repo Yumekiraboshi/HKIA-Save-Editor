@@ -68,7 +68,7 @@ def group_catalog(catalog,rows,version):
     for row in catalog['items']:
         i,key,_,group=row[:4]
         require(type(i) is int and i in rows and i not in result and group in groups and
-                rows[i]['key']==key+SUFFIX,'collection item/source identity mismatch')
+                rows[i]['key'] in (key,key+SUFFIX),'collection item/source identity mismatch')
         result[i]=group
     return result
 
@@ -185,7 +185,7 @@ def override_partition(stage,snapshot,rows):
         b=record['binding']
         require(b['assetGuid']==expected[i] and b['itemId']==i and
                 b['serializedGuidBytes']==rows[i]['serializedGuidBytes'] and
-                b['itemKey']+SUFFIX==rows[i]['key'],'override source binding')
+                rows[i]['key'] in (b['itemKey'],b['itemKey']+SUFFIX),'override source binding')
         records[i]=record
     missing=stage['unresolvedItemIds']
     require(stage['expectedCount']==len(expected) and len(set(missing))==len(missing) and
@@ -540,6 +540,11 @@ def assemble(args):
     return report
 
 def self_test():
+    # The original 3.0.1 Moon and Star Octocat has no definition suffix.
+    catalog={'schema':'HKIA.CollectionDisplayCatalog.2','version':'3.0.1',
+             'groups':[['collections_group_events']],
+             'items':[[1316820274,'item_clothing_creator_moonstar_octocat',0,'collections_group_events']]}
+    assert group_catalog(catalog,{1316820274:{'key':'item_clothing_creator_moonstar_octocat'}},'3.0.1')=={1316820274:'collections_group_events'}
     rows={i:{} for i in range(1,8)}
     dynamic={3:{'family':'flower','directMask':{'guid':None},'flowerMasks':[{'guid':'a'*32}]},
              4:{'family':'unknown','directMask':{'guid':'b'*32},'flowerMasks':[]}}
