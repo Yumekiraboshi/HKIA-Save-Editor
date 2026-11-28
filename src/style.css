@@ -337,6 +337,9 @@
 .inventory-blueprint.flower-variant>.inventory-blueprint-pattern{top:22px}
 .inventory-native-decorators{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;gap:2px;z-index:1;pointer-events:none}
 .inventory-flower-variant-name{font-size:10px;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inventory-appearance-swatches{display:flex;align-items:center;justify-content:center;gap:2px;max-width:100%}
+.inventory-appearance-swatches>span{width:12px;height:12px;border:1px solid currentColor;border-radius:3px;box-sizing:border-box;flex:none}
+.inventory-recipe-variant{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;text-align:center;overflow-wrap:anywhere}
 
 .inventory-unique-edit-button{appearance:none;display:flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box;width:100%;min-width:0;height:var(--inventory-control-size);min-height:0;margin:0;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--accent-soft);color:var(--accent);cursor:pointer;font-size:13px;line-height:1;font-variant-numeric:tabular-nums;white-space:nowrap}
 .inventory-unique-edit-button:has(>span){justify-content:space-between}
