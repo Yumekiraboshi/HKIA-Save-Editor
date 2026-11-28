@@ -48,3 +48,16 @@ The [version-bound browser adapter](versioned-dynamic-source.md) consumes the ca
 ## Run all reviewed extraction and candidate assembly stages
 
 Use the [one-command icon update pipeline](icon-update-pipeline.md) for a reviewed game release. It verifies original bundle identities, supports exact checkpoint resume and prior-run asset reuse, and emits candidate source blockers without altering current public assets or activating a release.
+
+
+### Steam 3.0.1 original-resolution execution evidence (2026-11-28)
+
+Executed against the original definitions, atlas_global and all 11 dynamicinventory_icons bundles, fingerprinted against the existing source evidence. No raw bundles were committed. Native source snapshot: `4a648fd546d4538eb37e1b719003e768cb2d9d71a0c3e858e92322619aac6eee`.
+
+- Base UiIcon: 12,163/12,163 item references, 5,020 unique WebPs, 135,168,196 bytes; receipt `0f5267c517e4770548e5d23252e5486e2d27fb9c48f53ea25e50a36dc230cc62`. Initial 47 failures were all 512×512 BC1 textures with ten mip levels; validated whole-chain length and decoded level zero, reusing 4,973 already verified images. No unresolved base references.
+- Original override: 5,384/5,384 Steam references, 5,384 unique WebPs, 153,498,222 bytes; receipt `facb49a7c47092f5fac6b68e15b40528bf7ba4d74ecbd83d0c4b6d4ea5ec472f`. Steam count must not be replaced by earlier Switch count.
+- Combined item stages: 10,404 distinct content-addressed images, 288,666,418 bytes, excluding indexes and other artwork. Not the final served distribution size.
+- Achievement: actual typed LocalAchievementData extraction matched all 820 catalog identities; 559 native nulls, 261 non-null references. Native conversion resolved 254 references (226 unique files, 10,763,774 bytes); 7 references to 3 distinct Sprites unresolved. Receipt `f2f3c9dcc0222e18c6ebe6d3920dae867a05aac60274245c7aa19a8f6e3ea5b8`. Reviewed hierarchy remains required; no inferred fallback for unresolved images.
+- Method 3 selected provisionally after a 24-image native sample: 571,608 bytes / 0.629 s vs method 6 549,076 bytes / 2.531 s; exact decoded pixels in both. Not a browser performance measurement.
+
+These are local source-stage results, not a deployed release. Dynamic materials, category/auxiliary coverage, final distribution size, browser memory/performance and Pages still require verification. Existing served artwork remains unchanged.
