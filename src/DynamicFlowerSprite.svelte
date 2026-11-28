@@ -17,13 +17,25 @@
  $effect(()=>{
   if(!flower||!near||spriteState===undefined)return;
   const id=itemId,fields={...flower};
-  let active=true;
-  void loadFlowerGrowthCell(id,fields).then(cell=>{if(active&&cell)resolved={id,state:fields.growState,cell};});
-  return ()=>{active=false;};
+  let active=true,pending=false,loaded=false;
+  const load=()=>{
+   if(!active||pending||loaded)return;
+   pending=true;
+   void loadFlowerGrowthCell(id,fields).then(cell=>{
+    if(active&&cell){loaded=true;resolved={id,state:fields.growState,cell};}
+   }).finally(()=>{pending=false;});
+  };
+  window.addEventListener('online',load);
+  load();
+  return ()=>{active=false;window.removeEventListener('online',load);};
  });
  let render=$derived.by(()=>{
   const id=itemId,defs=definitions,fields=flower?{...flower}:undefined;
-  return ()=>fields&&defs?renderFlowerArt(id,fields,defs):Promise.resolve(null);
+  // Native states 1, 2, 4 and 5 select the unmodified definition icon.
+  // This is the intended main image, not a failed dynamic-color render.
+  return ()=>fields&&fields.growState!==6&&flowerUsesDefinitionIcon(id,fields)
+   ?renderFlowerOriginalBaseArt(id,fields)
+   :fields&&defs?renderFlowerArt(id,fields,defs):Promise.resolve(null);
  });
  let renderPartial=$derived.by(()=>{const id=itemId,fields=flower?{...flower}:undefined;return ()=>fields?renderFlowerOriginalBaseArt(id,fields):renderFlowerDefinitionBaseArt(id);});
 </script>
