@@ -86,7 +86,7 @@ function snapshot(e:Engine){
  const iv=new DataView(bytesInv.buffer,bytesInv.byteOffset,bytesInv.byteLength);
  const countInv=iv.getUint32(0,true);
  if(countInv>1_000_000||bytesInv.length!==4+countInv*16)throw Error('INVENTORY_SNAPSHOT_INVALID');
- const inventory:Array<{documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;quantityMinimum:number;removable?:boolean;nativePinOrder?:number;flowerCreatable?:boolean;furnitureCreatable?:boolean;wandCreatableStyle?:number;flower?:InventoryFlower;palette?:InventoryPalette;paletteCreationDefault?:PaletteVariant;boba?:InventoryBoba;cafe?:CafeRow;unique?:InventoryUniqueInfo}>=[];
+ const inventory:Array<{documentId:number;itemId:number;quantity:number;editable:boolean;quantityLimit:number|null;quantityMinimum:number;removable?:boolean;nativePinProjectionKnown?:true;nativePinOrder?:number;flowerCreatable?:boolean;furnitureCreatable?:boolean;wandCreatableStyle?:number;flower?:InventoryFlower;palette?:InventoryPalette;paletteCreationDefault?:PaletteVariant;boba?:InventoryBoba;cafe?:CafeRow;unique?:InventoryUniqueInfo}>=[];
  const docIds=new Set<number>();
  for(let i=0;i<countInv;i++){
   const at=4+i*16,documentId=iv.getUint32(at,true),itemId=iv.getInt32(at+4,true),
@@ -103,8 +103,9 @@ function snapshot(e:Engine){
  const pinRows=new Map(inventory.map(row=>[row.documentId,row]));
  for(let i=0;i<pn;i++){
   const id=pv.getUint32(4+8*i,true),order=pv.getInt32(8+8*i,true),row=pinRows.get(id);
-  if(!row||order<0||order>=200||row.nativePinOrder!==undefined)throw Error('INVENTORY_SNAPSHOT_INVALID');
-  row.nativePinOrder=order;
+  if(!row||order< -1||order>=200||row.nativePinProjectionKnown)throw Error('INVENTORY_SNAPSHOT_INVALID');
+  row.nativePinProjectionKnown=true;
+  if(order>=0)row.nativePinOrder=order;
  }
  if(e.hkia_inventory_quantity_bounds()!==0)throw Error('INVENTORY_SNAPSHOT_FAILED');
  const boundsBytes=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
