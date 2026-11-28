@@ -533,10 +533,21 @@ impl<'a> Walk<'a>{
       let standalone_mailbox=self.version==Version::V301&&name=="Sunblink.UserData.Types.CharacterMailboxSlotModel"&&n==3;
       let standalone_box=self.version==Version::V301&&name=="Sunblink.UserData.Types.CollectionBoxItemModel"&&n==3;
       let mut stored_mail_item=None;let mut stored_box_key=None;let mut standalone_quantity_valid=false;let mut stored_mail_nil=false;
+      // Complete modern placements store their own item definitions and
+      // payloads, not a bag document/UID. Keep both references conservative
+      // unless both independently saved payloads are exactly nil.
+      let placement_payload_start=if self.version==Version::V301{
+       match (name,n){
+        ("Sunblink.UserData.HomeObjectModel",13)=>Some(6),
+        ("Sunblink.Game.OwnedRemoteCabinHomeObjectClientModel",8)=>Some(2),
+        _=>None,
+       }
+      }else{None};
+      let mut placement_ids=[None;2];let mut placement_nil_count=0;
       for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if clothing_guid_lists.contains(&i){Some(("clothing-guid-list",0))}else if clothing_preset_list==Some(i){Some(("clothing-preset-list",0))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else if short=="CafeCreationUniqueData"&&matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,3))|Some((WAND_SOURCE_CAPTURE,3)))&&i==1{Some(("chef-colors",0))}else if short=="WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&i==1{Some((WAND_SOURCE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
        if payload_ref_keys.contains(&i)&&!(self.version==Version::V301&&name=="Sunblink.Game.WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&n==5){
         let item=i32::try_from(value.int()?).map_err(|_|Error::Schema)?;
-        if standalone_mailbox{stored_mail_item=Some(item)}else{self.index.note_payload_reference(item,false);}
+        if standalone_mailbox{stored_mail_item=Some(item)}else if placement_payload_start.is_some()&&i<2{placement_ids[i]=Some(item)}else{self.index.note_payload_reference(item,false);}
        }
        if furniture_ref_keys.contains(&i){
         let item=i32::try_from(value.int()?).map_err(|_|Error::Schema)?;
@@ -578,6 +589,7 @@ impl<'a> Walk<'a>{
        }
        if (standalone_mailbox||standalone_box)&&i==1{standalone_quantity_valid=value.int().is_ok_and(|q|q>=0);}
        if standalone_mailbox&&i==2{stored_mail_nil=matches!(&value,Value::Nil);}
+       if placement_payload_start.is_some_and(|k|i==k||i==k+1)&&matches!(&value,Value::Nil){placement_nil_count+=1;}
        if capture_all{fields.push((value,at..self.c.pos));}
        else if is_doc&&i==0{document_id=Some(value);}
       }
@@ -585,6 +597,7 @@ impl<'a> Walk<'a>{
       // Preserve the conservative unique-payload indexes while separating ordinary bag membership.
       if let Some(item)=stored_mail_item{self.index.note_payload_reference(item,standalone_quantity_valid&&stored_mail_nil);}
       if let Some(key)=stored_box_key{self.index.note_guid_reference(key,standalone_quantity_valid);}
+      for item in placement_ids.into_iter().flatten(){self.index.note_payload_reference(item,placement_nil_count==2);}
       if name=="Sunblink.Game.OwnedRemoteCabinHomeObjectClientModelDeprecatedV71" {
        if let (Some((item,_)),Some((uid,_)))=(fields.get(1),fields.get(4)){
         let item=i32::try_from(item.int()?).map_err(|_|Error::Schema)?;

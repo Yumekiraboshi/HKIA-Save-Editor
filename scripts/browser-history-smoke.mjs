@@ -1313,7 +1313,7 @@ async function ordinaryFurnitureRemovalSmoke(){
   const input=page.locator('.inventory-card input[name="quantity"]');
   const remove=page.locator('.inventory-card .inventory-stack-delete');
   await search.fill('3202680');await input.waitFor();
-  assert.equal(await input.getAttribute('min'),'1');assert.equal(await remove.isDisabled(),true);
+  assert.equal(await input.getAttribute('min'),'0');assert.equal(await remove.isEnabled(),true);
   await search.fill('427689');await input.waitFor();
   assert.equal(await input.getAttribute('min'),'0');assert.equal(await remove.isEnabled(),true);
   await remove.click();
@@ -1368,9 +1368,13 @@ async function ordinaryFurnitureRemovalSmoke(){
   await chooseTab(page,'inventory');await search.fill('427689');await page.locator('.inventory-card').waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await input.waitFor();assert.equal(await input.inputValue(),'3');
-  await search.fill('3202680');await input.waitFor();assert.equal(await remove.isDisabled(),true);
+  await search.fill('3202680');await input.waitFor();assert.equal(await remove.isEnabled(),true);
+  await remove.click();await modal.waitFor({state:'visible'});await modal.locator('.inventory-remove-entry-action').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await input.waitFor();assert.equal(await input.inputValue(),'6');
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: zero, physical removal, re-add, draft reload, undo/redo and placed stack protection');
+  console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: zero, physical removal, re-add, draft reload, undo/redo and independent nil placement');
  }finally{await context.close()}
 }
 async function inventoryEmptyBrowseSmoke(){
