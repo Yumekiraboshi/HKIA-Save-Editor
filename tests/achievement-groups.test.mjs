@@ -90,7 +90,7 @@ test('group category navigation retains name search, omits redundant achievement
   'if(item.row)void openAchievement(item.row'
  ])assert.ok(app.includes(token),token);
  assert.doesNotMatch(app,/achievementFilter|showEveryAchievement/);
- assert.match(app,/bind:this=\{achievementLoadMoreSentinel\}/);
+ assert.match(app,/bind:this=\{editorGridEl\}/);
  const all=['ar','de','en','en-GB','es','fr','fr-CA','it','ja','ko','nl','pt-BR','ru','tr','zh-Hans','zh-Hant'];
  for(const locale of all){
   const copy=labels.achievementGroupCopy(locale);

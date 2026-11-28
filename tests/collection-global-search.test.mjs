@@ -66,28 +66,30 @@ test('collection global search is visible on root, subcategory, and item pages a
 });
 
 test('global search renders exact item artwork from the bounded shared pack cache',()=>{
- const section=app.slice(app.indexOf('<div class="collection-search-results">'),app.indexOf('{:else if !selectedGroup}'));
+ const section=app.slice(app.indexOf('<div class="collection-search-results editor-virtual-grid"'),app.indexOf('{:else if !selectedGroup}'));
  assert.ok(section.includes('inventoryIconPacks[item[3]]?.entries'));
  assert.ok(section.includes('originalArtUrl={originalVariantArt[String(item[0])]}'));
  assert.ok(section.includes('class="collection-search-art"'));
  assert.ok(section.includes('<DyeSprite'));
  assert.ok(section.includes('class="item-sprite"'));
- assert.match(app,/const groups=new Set\(collectionSearchResults\.slice\(0,visibleLimit\)\.map\(item=>item\[3\]\)\)/);
+ assert.match(app,/const groups=new Set\(renderedCollectionSearch\.map\(item=>item\[3\]\)\)/);
  assert.match(app,/if\(inventoryIconPending\.size>=3\)break/);
 });
 
-test('achievement filter and manual show-all control are gone; infinite scroll loads both kinds of results',()=>{
+test('achievement and collection lists use a shared full-range virtual window without manual paging',()=>{
  const achievements=app.slice(app.indexOf("{:else if activeTool==='achievements'}"),app.indexOf('<dialog class="achievement-dialog"'));
  assert.match(achievements,/bind:value=\{achievementQuery\}/);
  assert.doesNotMatch(achievements,/class="status-filter"/);
  assert.doesNotMatch(achievements,/showEveryAchievement|achievementFilter|class="variation-button"/);
- assert.match(achievements,/bind:this=\{achievementLoadMoreSentinel\}/);
- assert.match(app,/if\(entries\.some\(x=>x\.isIntersecting\)\)\s*achievementLimit=Math\.min\(achievementLimit\+BATCH_SIZE,achievementRows\.length\)/);
- assert.match(app,/visibleLimit=Math\.min\(visibleLimit\+BATCH_SIZE,count\)/);
- assert.match(app,/showingGlobalCollectionSearch\?collectionSearchResults\.length:matching\.length/);
- assert.match(app,/bind:this=\{loadMoreSentinel\}/);
- // The button is an accessibility/fallback path only for browsers lacking the observer.
- assert.match(app,/\{#if typeof IntersectionObserver==='undefined'\}/);
+ assert.match(achievements,/bind:this=\{editorGridEl\}/);
+ assert.match(achievements,/data-total=\{achievementRows.length\}/);
+ assert.match(achievements,/\{#each renderedAchievements as item \(item.guid\)\}/);
+ for(const [window,rows] of [['collectionWindow','matching'],['searchWindow','collectionSearchResults'],['achievementWindow','achievementRows']]){
+  assert.ok(app.includes('const '+window+'=$derived(inventoryVirtualWindow('+rows+'.length,editorViewport))'));
+  assert.ok(app.includes('style:padding-block-start={'+window+".before+'px'}"));
+  assert.ok(app.includes('style:padding-block-end={'+window+".after+'px'}"));
+ }
+ assert.doesNotMatch(app,/achievementLoadMoreSentinel|loadMoreSentinel|visibleLimit|achievementLimit|inventoryLimit/);
  assert.doesNotMatch(app,/achievementShowAll/);
 });
 
