@@ -213,11 +213,14 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryBatchSelected=$state<Set<number>>(new Set());
  let inventoryBatchQuantity=$state<number|undefined>(undefined);
  // Presentation only: the tightest bound returned by Rust for selected rows.
- const inventoryBatchMinimum=$derived.by(()=>{
-  if(inventoryAddMode||!snapshot||inventoryBatchSelected.size===0)return 1;
-  return inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantityMinimum!==0)?1:0;
- });
  const selectedInventoryRows=$derived.by(()=>inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId)));
+ // Reuse the same Rust-issued eligibility projection as the confirmation
+ // dialog, including complete duplicate families. Zero rows are not targets.
+ const inventoryBatchMinimum=$derived.by(()=>{
+  if(inventoryAddMode||!snapshot||selectedInventoryRows.length===0||selectedInventoryRows.length!==inventoryBatchSelected.size)return 1;
+  const positive=selectedInventoryRows.filter(row=>row.quantity>0);
+  return positive.length>0&&inventoryBatchZeroRows(snapshot.inventory,selectedInventoryRows,isInventoryLocked).length===positive.length?0:1;
+ });
  const inventoryBatchCanQuantity=$derived(selectedInventoryRows.length>0&&selectedInventoryRows.every(row=>row.editable));
  const inventoryBatchCanDelete=$derived.by(()=>!inventoryAddMode&&selectedInventoryRows.length>0&&selectedInventoryRows.length===inventoryBatchSelected.size&&(
   (selectedInventoryRows.some(row=>row.quantity>0)&&inventoryBatchZeroRows(snapshot?.inventory??[],selectedInventoryRows,isInventoryLocked).length===selectedInventoryRows.filter(row=>row.quantity>0).length)||selectedInventoryRows.every(row=>row.removable)));
