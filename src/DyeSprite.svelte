@@ -3,6 +3,7 @@
  import type {NativeDyePalette} from './native-dye-palettes';
  import {displayedDyeIconFidelity,isSourceColorwayUrl,isNamedOriginalItemUrl} from './item-icon-art';
  import {startOriginalArtRequest} from './original-art-view';
+ import {createVerifiedSpriteView} from './verified-sprite-view.svelte';
 
  let {sprite,exactArtUrl,originalArtUrl}:{
   sprite?:SpriteCell;palette?:NativeDyePalette;sourceKey?:string;
@@ -10,6 +11,8 @@
  }=$props();
  let displayedUrl=$state<string|null>(null);
  let imageSource=$state<'original'|'game-render'|'game-source-sprite'>('original');
+ const fallbackView=createVerifiedSpriteView(()=>sprite,()=>!displayedUrl);
+ const visible=$derived(fallbackView.cell);
 
  $effect(()=>{
   const exact=exactArtUrl,original=originalArtUrl;
@@ -23,13 +26,13 @@
  });
 </script>
 
-{#if displayedUrl||sprite}
+{#if displayedUrl||visible}
 <span class="item-sprite"
  data-dye-rendered={displayedUrl!==null?'true':'false'}
  data-dye-source={imageSource}
  data-icon-fidelity={displayedDyeIconFidelity(imageSource)}
- style:background-image={'url("'+(displayedUrl??sprite?.url??'')+'")'}
- style:background-position={displayedUrl?'center':sprite?'-'+sprite.x+'px -'+sprite.y+'px':undefined}
+ style:background-image={'url("'+(displayedUrl??visible?.url??'')+'")'}
+ style:background-position={displayedUrl?'center':visible?'-'+visible.x+'px -'+visible.y+'px':undefined}
  style:background-size={imageSource==='game-render'?'contain':displayedUrl?(isNamedOriginalItemUrl(displayedUrl)?'84px 84px':'96px 96px'):undefined}
  style:background-repeat={displayedUrl?'no-repeat':undefined}></span>
 {:else}
