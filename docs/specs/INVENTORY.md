@@ -689,3 +689,8 @@ The missing-required-payload regression now enumerates all 138 source definition
 #### Indexed reference authority
 
 Build exact Item ID/UID pair, referenced Item ID and unresolved-reference Item ID lookup sets during the shared native schema walk and rebuild them on independent export reparse. All inventory permissions consume those sets rather than rescanning all saved pairs per row; exact resolved positive UID references protect their own row and unresolved/zero UID references protect the entire Item ID. Existing incomplete-context, GUID, payload, source and entitlement gates remain unchanged. Regression tests preserve exact and unresolved denial behavior. No expansion of editing authority.
+
+
+### Full-range inventory scrolling
+
+The filtered, ordered inventory rows determine the full grid height immediately; the scrollbar must reach the final row without incremental 40-card paging. Use fixed row geometry, responsive column measurement and a viewport/overscan window to mount only nearby cards and request their artwork. Existing category counts, search, batch selection, quantity draft state and Rust-issued edit permissions use the complete row set, not the mounted window. Category/search/filter changes reset scroll position; scrolling itself does not clear drafts or selection. This is a presentation-only change, without native save mutations.

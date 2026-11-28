@@ -6,6 +6,7 @@
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
  import {selectMatchingInventoryRows,deselectMatchingInventoryRows} from './inventory-selection';
+ import {inventoryVirtualWindow,type InventoryViewport} from './inventory-viewport';
  import {inventoryProtectionCopy} from './inventory-protection-copy';
  import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy,inventoryDeselectVisibleCopy,inventoryDeleteCopy,inventoryShowZeroCopy,inventoryZeroStackCopy,inventoryRemoveEntryCopy,inventoryRemoveEntryWarning} from './inventory-copy';
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant,inventorySavedHomeName} from './inventory-unique';
@@ -195,8 +196,13 @@ import {verifiedFloorplanName} from './floorplan-names';
  function resetInventoryBatchSelection(){inventoryBatchSelected=new Set();inventoryBatchQuantity=undefined}
  function clearInventoryBatch(){inventoryBatchMode=false;resetInventoryBatchSelection()}
  $effect(()=>{if(activeTool!=='inventory'){clearInventoryBatch();inventoryAddMode=false}});
- let inventoryLimit=$state(BATCH_SIZE);
- let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
+ let inventoryGridEl=$state<HTMLDivElement|undefined>(undefined);
+ let inventoryStickyEl=$state<HTMLDivElement|undefined>(undefined);
+ let inventoryViewport=$state<InventoryViewport>({columns:8,rowHeight:204,gap:6,top:0,bottom:900});
+ function resetInventoryViewport(){
+  inventoryViewport={...inventoryViewport,top:0,bottom:window.innerHeight};
+  window.scrollTo({top:0,behavior:'instant'});
+ }
  let inventoryBaseline:InventoryEntry[]=$state.raw([]);
  const originalInventoryQuantities=$derived(new Map(inventoryBaseline.map(row=>[row.documentId,row.quantity])));
  // Source-verified game UiIcon ZIP packs are shared by Collection/Inventory.
@@ -363,6 +369,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  const inventoryRows=$derived(browseInventory(
   inventoryDisplayedRows,inventoryQuery,activeInventoryGroup,
   inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale,inventoryVariantSearchName));
+ const inventoryWindow=$derived(inventoryVirtualWindow(inventoryRows.length,inventoryViewport));
+ const inventoryRenderedRows=$derived(inventoryRows.slice(inventoryWindow.start,inventoryWindow.end));
  const achievementRows=$derived(searchAchievementRows(achievementQuery,sourceOrderedAchievementRows,
   groupScopedAchievementRows,achievementName,guid=>achievementIndex.get(guid)?.key??''));
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
@@ -526,14 +534,29 @@ import {verifiedFloorplanName} from './floorplan-names';
   return ()=>observer.disconnect();
  });
  $effect(()=>{
-  const el=inventoryLoadMoreSentinel;
-  if(!el||typeof IntersectionObserver==='undefined')return;
-  const observer=new IntersectionObserver(entries=>{
-   if(entries.some(x=>x.isIntersecting))
-    inventoryLimit=Math.min(inventoryLimit+BATCH_SIZE,inventoryRows.length);
-  },{rootMargin:'720px 0px'});
-  observer.observe(el);
-  return ()=>observer.disconnect();
+  const el=inventoryGridEl,sticky=inventoryStickyEl;
+  if(!el||!sticky)return;
+  let frame=0;
+  function measure(){
+   frame=0;
+   if(!el||!sticky)return;
+   const style=getComputedStyle(el),rect=el.getBoundingClientRect();
+   const columns=Math.max(1,style.gridTemplateColumns.split(/\s+/).filter(x=>x.endsWith('px')).length);
+   const rowHeight=parseFloat(style.gridAutoRows)||204,gap=parseFloat(style.rowGap)||0;
+   const top=Math.max(0,sticky.getBoundingClientRect().bottom-rect.top);
+   const bottom=Math.max(top,window.innerHeight-rect.top);
+   inventoryViewport={columns,rowHeight,gap,top,bottom};
+  }
+  function schedule(){if(!frame)frame=requestAnimationFrame(measure)}
+  measure();
+  const observer=typeof ResizeObserver==='undefined'?null:new ResizeObserver(schedule);
+  observer?.observe(el);observer?.observe(sticky);
+  window.addEventListener('scroll',schedule,{passive:true});
+  window.addEventListener('resize',schedule);
+  return ()=>{
+   observer?.disconnect();window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);
+   if(frame)cancelAnimationFrame(frame);
+  };
  });
  /* No extra image service, no speculative item artwork: load the exact
     original game UiIcon atlas group for each visible inventory Item ID.
@@ -549,7 +572,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
   function addIngredientSources(badges:IngredientBadge[]){for(const badge of badges)for(const id of badge.itemIds)addWandSource(id);}
-  for(const row of inventoryRows.slice(0,inventoryLimit)){
+  for(const row of inventoryRenderedRows){
    addIngredientSources(inventoryIngredientBadges(row));
    // Native TryGetSubIcon returns the source item's normal UiIcon, even
    // when the wand itself has a native inventory-art entry.
@@ -708,7 +731,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   refreshVariantArtwork();
   clearInventoryBatch();inventoryAddMode=false;
   activeTool='inventory';inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;inventoryShowZero=false;
-  inventoryLimit=BATCH_SIZE;editingAchievement=null;error='';
+  resetInventoryViewport();editingAchievement=null;error='';
   refreshInventoryNativeArt();
   refreshFlowerDisplay();
   // Retry transient failures only when the user reopens Inventory.
@@ -825,7 +848,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   // different category. Keep the current category whenever it still matches.
   if(activeTool==='inventory'&&inventoryQuery.trim()){
    const target=inventorySearchTarget(previousGroup,inventoryMatchTotals);
-   if(target!==previousGroup){inventoryGroup=target;inventoryLimit=BATCH_SIZE}
+   if(target!==previousGroup){inventoryGroup=target;resetInventoryViewport()}
   }
  }
  /** Verify a restored native journal reproduces the locally persisted net edits.
@@ -1321,14 +1344,14 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function onInventorySearch(event:Event){
   const next=(event.currentTarget as HTMLInputElement).value;
-  inventoryLimit=BATCH_SIZE;
+  resetInventoryViewport();
   if(!next.trim())return;
   const counts=inventorySearchGroupCounts(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,inventoryShowZero),next,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
   inventoryGroup=inventorySearchTarget(activeInventoryGroup,counts);
  }
  function toggleInventoryShowZero(){
   const previous=activeInventoryGroup;
-  inventoryShowZero=!inventoryShowZero;inventoryLimit=BATCH_SIZE;
+  inventoryShowZero=!inventoryShowZero;resetInventoryViewport();
   if(!inventoryShowZero){
    const visible=new Set(inventoryDisplayRows(inventoryBrowseRows,false,false).map(row=>row.documentId));
    inventoryBatchSelected=new Set([...inventoryBatchSelected].filter(id=>visible.has(id)));
@@ -1849,7 +1872,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {/if}
    </dialog>
   {:else if activeTool==='inventory'}
-   <div class="inventory-sticky-tools" style:--inventory-sticky-top={topbarHeight+'px'}>
+   <div class="inventory-sticky-tools" bind:this={inventoryStickyEl} style:--inventory-sticky-top={topbarHeight+'px'}>
    <div class="collection-controls inventory-controls">
     <label class="search-field">
      <svg class="search-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.75" cy="10.75" r="6.75"/><path d="m16 16 5 5"/></svg>
@@ -1857,7 +1880,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     </label>
     <button type="button" class="inventory-editable-filter" class:active={inventoryEditableOnly}
      aria-pressed={inventoryEditableOnly}
-     onclick={()=>{inventoryEditableOnly=!inventoryEditableOnly;inventoryLimit=BATCH_SIZE}}>
+     onclick={()=>{inventoryEditableOnly=!inventoryEditableOnly;resetInventoryViewport()}}>
      {iCopy.editableOnly}
     </button>
     {#if !inventoryAddMode}
@@ -1866,7 +1889,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {/if}
     <button type="button" class="inventory-editable-filter inventory-add-toggle" class:active={inventoryAddMode}
      aria-pressed={inventoryAddMode} disabled={busy||(!inventoryAddMode&&inventoryAvailableToAdd.length===0)}
-     onclick={()=>{clearInventoryBatch();inventoryQuantityDrafts={};inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;inventoryLimit=BATCH_SIZE}}>
+     onclick={()=>{clearInventoryBatch();inventoryQuantityDrafts={};inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;resetInventoryViewport()}}>
      {inventoryAddMode?iCopy.tab:'+ '+inventoryAddCopy(locale)}
     </button>
     <button type="button" class="inventory-editable-filter inventory-batch-toggle" class:active={inventoryBatchMode}
@@ -1911,7 +1934,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       {@const representativeNative=representative===undefined?undefined:inventoryNativeArt?.entries.get(representative)}
       {@const representativeSprite=representativeNative??(representativeSource&&representative!==undefined?inventoryIconPacks[representativeSource[3]]?.entries[String(representative)]:undefined)}
       <button type="button" class="inventory-group-option" data-inventory-group={t.key} class:active={activeInventoryGroup===t.key}
-       aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;inventoryLimit=BATCH_SIZE}}>
+       aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;resetInventoryViewport()}}>
        <span class="inventory-category-representative" aria-hidden="true">
         <img class="inventory-category-fallback" src={t.art?ICONS+t.art:INVENTORY_UI+'category-'+t.key+'.webp'} alt="" loading="lazy"
          onerror={e=>{const image=e.currentTarget as HTMLImageElement,native=INVENTORY_UI+'category-'+t.key+'.webp';if(image.getAttribute('src')!==native)image.src=native;else image.style.visibility='hidden';}}/>
@@ -1930,15 +1953,17 @@ import {verifiedFloorplanName} from './floorplan-names';
      {#if inventoryOtherCount>0}
       <button type="button" class="inventory-group-option" class:active={activeInventoryGroup===OTHER_INVENTORY_GROUP}
        aria-pressed={activeInventoryGroup===OTHER_INVENTORY_GROUP}
-       onclick={()=>{inventoryGroup=OTHER_INVENTORY_GROUP;inventoryLimit=BATCH_SIZE}}>
+       onclick={()=>{inventoryGroup=OTHER_INVENTORY_GROUP;resetInventoryViewport()}}>
        <span>{iCopy.other}</span><small>{(inventoryMatchTotals.get(OTHER_INVENTORY_GROUP)??0).toLocaleString(locale)}</small>
       </button>
      {/if}
     </nav>
    {/if}
    </div>
-   <div class="inventory-grid">
-    {#each inventoryRows.slice(0,inventoryLimit) as item (item.documentId)}
+   <div class="inventory-grid" bind:this={inventoryGridEl}
+    data-total={inventoryRows.length} data-window-start={inventoryWindow.start} data-window-end={inventoryWindow.end}
+    style:padding-block-start={inventoryWindow.before+'px'} style:padding-block-end={inventoryWindow.after+'px'}>
+    {#each inventoryRenderedRows as item (item.documentId)}
      {@const locked=isInventoryLocked(item.documentId)}
      {@const definition=inventorySourceItems.get(item.itemId)}
      {@const nativeSprite=inventoryNativeArt?.entries.get(item.itemId)}
@@ -2086,13 +2111,6 @@ import {verifiedFloorplanName} from './floorplan-names';
     {/each}
    </div>
    {#if inventoryRows.length===0}<p class="empty-result">{iCopy.empty}</p>{/if}
-   {#if inventoryRows.length>inventoryLimit}
-    <div class="load-marker" bind:this={inventoryLoadMoreSentinel}>
-     {#if typeof IntersectionObserver==='undefined'}
-      <button type="button" onclick={()=>inventoryLimit=Math.min(inventoryLimit+BATCH_SIZE,inventoryRows.length)}>{copy.moreItems}</button>
-     {/if}
-    </div>
-   {/if}
   {:else}
    <div class="collection-controls collection-search-controls">
     <label class="search-field">
