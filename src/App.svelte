@@ -7,7 +7,7 @@
  import {historyCopy,historyDetailCopy} from './history-copy';
  import {selectMatchingInventoryRows,deselectMatchingInventoryRows} from './inventory-selection';
  import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy,inventoryDeselectVisibleCopy,inventoryDeleteCopy,inventoryShowZeroCopy,inventoryZeroStackCopy,inventoryRemoveEntryCopy,inventoryRemoveEntryWarning} from './inventory-copy';
- import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
+ import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant,inventorySavedHomeName} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,furnitureHasCustomizedAppearance,type FurnitureDisplay} from './inventory-furniture-display';
  import InventoryDecorator from './InventoryDecorator.svelte';
@@ -545,6 +545,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function cafeName(v:CafeVariant):string{return cafeVariantLabel(v,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}
  function wandName(v:WandVariant):string{return wandVariantLabel(v,id=>sourceNames[String(id)]??'—')}
  function inventoryVariantSearchName(row:InventoryEntry):string{
+  const savedHomeName=inventorySavedHomeName(row.unique);if(savedHomeName!==null)return savedHomeName;
   const w=wandVariantOf(row.unique);if(w){
    const nested=wandNestedOf(row.unique);
    return nested?[inventoryName(nested[0]),wandName(w),furnitureVariantTitle(furnitureDisplay,nested[0],nested.slice(3),furnitureCopy.defaultMaterial)].filter(Boolean).join(' · '):wandName(w)
