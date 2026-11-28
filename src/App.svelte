@@ -323,6 +323,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   void loadFurnitureDisplay().then(data=>furnitureDisplay=data).catch(()=>{});
   refreshInventoryNativeArt();
   window.addEventListener('online',refreshInventoryNativeArt);
+  window.addEventListener('online',recoverSharedItemArtwork);
   window.addEventListener('online',refreshAchievementImages);
   // Exact game dye palettes, used exclusively for recoloring item image pixels.
   void loadNativeDyePalettes(import.meta.env.BASE_URL)
@@ -360,6 +361,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    media.removeEventListener?.('change',listener);
    window.removeEventListener('beforeunload',beforeUnload);
    window.removeEventListener('online',refreshInventoryNativeArt);
+   window.removeEventListener('online',recoverSharedItemArtwork);
    window.removeEventListener('online',refreshFlowerDisplay);
    flowerDisplayDisposed=true;
    inventoryNativeArtDisposed=true;
@@ -618,6 +620,15 @@ import {verifiedFloorplanName} from './floorplan-names';
   })();
   inventoryIconRequests.set(group,task);
   return task;
+ }
+ // Reconnection restores the current view without resetting its search,
+ // selection, dialog or already verified image packs.
+ function recoverSharedItemArtwork(){
+  refreshVariantArtwork();
+  if(inventoryIconFailed.size){
+   inventoryIconFailed.clear();inventoryIconPulse++;
+  }
+  if(activeTool==='collections'&&selectedGroup&&iconError)void fetchImages(selectedGroup);
  }
  function openInventoryTab(){
   refreshVariantArtwork();
