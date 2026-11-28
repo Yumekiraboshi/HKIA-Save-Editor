@@ -70,7 +70,9 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
   ...(wandEditInventory?[chef(8,1429161083,arr([9],arr([0],[0xc0],u32(104),u32(125),u32(118))))]:[]),
   ...(nestedWandInventory?[chef(8,384749651,arr([9],arr(u32(61381969),arr([8],arr(u32(13),u32(2),u32(0))),u32(104),u32(125),u32(0))))]:[]),
   ...(editableFlower?[flower(8,1,ownedRestrictedFlower?6:0,0)]:[]),
-  ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14))]:[]),
+  ...(chefInventory?[chef(8,203331651,cafe([6,14,11])),chef(9,203331651,cafe([14,6,11])),chef(10,1798633565,boba(6)),chef(11,1798633565,boba(14)),
+   ...[664242277,697059779,906644716,1711005390,1946811711,964128772].map((id,i)=>doc(1,arr([12+i],u32(id),[0],u32(1),[0xc0]))),
+   flower(18,1,0,0,8)]:[]),
   ...(cafeCreateInventory?[chef(8,1338995084,arr([3],arr(arr(u32(44),u32(49),u32(48)),arr(u32(6),u32(46),u32(9))))),chef(9,1932639321,arr([3],arr(arr(u32(44),u32(137)),arr(u32(6),u32(10))))),doc(1,arr([10],u32(1643431747),[0],u32(1),[0xc0]))]:[]),
   ...(cafeEditInventory?[chef(8,203331651,arr([3],arr(arr(u32(44),u32(49),u32(48)),arr(u32(6),u32(46),u32(9)))))]:[]),
   ...(bobaCreateInventory?[chef(8,1798633565,arr([4],arr(u32(6),u32(44),u32(76),u32(75),u32(73))))]:[]),
@@ -940,6 +942,8 @@ async function inventoryChefArtSmoke(){
  try{
   const page=await context.newPage(),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
+  await page.route('**/item-packs/*.zip',r=>r.fulfill({status:503,body:'unavailable'}));
+  await page.route('**/inventory-art/**',r=>r.fulfill({status:503,body:'unavailable'}));
   await page.goto(origin+base,{waitUntil:'networkidle'});
   await page.locator('input[type="file"]').setInputFiles({name:'synthetic-chef.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({chefInventory:true}))});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
@@ -959,6 +963,17 @@ async function inventoryChefArtSmoke(){
    })));
    assert.notDeepEqual(images[0],images[1]);
   }
+  for(const id of [664242277,697059779,906644716,1711005390,1946811711,964128772]){
+   await page.locator('.inventory-controls input[type="search"]').fill(String(id));
+   const art=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-chef"]');
+   await art.waitFor({timeout:30_000});
+   assert.equal(await art.getAttribute('data-icon-fidelity'),'source-derived-runtime');
+   assert.match(await art.evaluate(e=>getComputedStyle(e).backgroundImage),/blob:/);
+  }
+  await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  const flower=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"]');
+  await flower.waitFor({timeout:30_000});
+  assert.equal(await flower.getAttribute('data-icon-fidelity'),'source-derived-base-only');
   assert.deepEqual(errors,[]);
  }finally{await context.close();}
 }

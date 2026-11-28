@@ -18,7 +18,8 @@ export function nativeIconRoute(itemId:number):NativeIconRoute|undefined{return 
 /** Original instruction and creation definitions point to the same local
  * UiIcon and mask Sprite. This aliases only the uncolored original image;
  * the instruction is never a chef appearance or a save-edit target. */
-const chefInstructionBases=new Map<number,number>();
+// Ramen Recipe has no dynamic flag; the original Sprite PPtr matches Ramen (#418).
+const chefInstructionBases=new Map<number,number>([[964128772,1061947263]]);
 for(const row of source.rows){
  if(routes.get(row.itemId)!=='instruction')continue;
  const matches=source.rows.filter(candidate=>{
@@ -28,3 +29,8 @@ for(const row of source.rows){
  if(matches.length===1)chefInstructionBases.set(row.itemId,matches[0]!.itemId);
 }
 export function nativeChefInstructionBase(itemId:number):number|undefined{return chefInstructionBases.get(itemId);}
+
+/** Native nil is -1; tag 0 is a schematic. Unknown payloads are not inferred. */
+export function nativeChefInstructionUsesOriginal(itemId:number,uniqueTag:number|undefined):boolean{
+ return nativeChefInstructionBase(itemId)!==undefined&&(uniqueTag===undefined||uniqueTag===-1||uniqueTag===0);
+}
