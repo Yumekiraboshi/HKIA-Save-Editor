@@ -986,15 +986,31 @@ import {verifiedFloorplanName} from './floorplan-names';
   const edit=wandEdit;if(!edit?.nestedBefore){wandMaterialSelection=-1;return}
   if(busy||!snapshot||snapshot.revision!==edit.revision)return;
   const pair=edit.options[Number(value)]??edit.before;
-  const previous=edit.nestedOptions?.[wandMaterialSelection]??edit.nestedBefore.slice(3);
+  const previous: FurnitureVariant=edit.nestedOptions?.[wandMaterialSelection]??[edit.nestedBefore[3],edit.nestedBefore[4],edit.nestedBefore[5]];
   busy=true;error='';
   try{
-   const [options,creation]=await Promise.all([inventoryAddMode?Promise.resolve([]):requestWandNestedMaterials(edit.documentId,false,pair),requestWandNestedMaterials(edit.documentId,true,pair)]);
+   let [options,creation]=await Promise.all([inventoryAddMode?Promise.resolve([]):requestWandNestedMaterials(edit.documentId,false,pair,previous),requestWandNestedMaterials(edit.documentId,true,pair,previous)]);
+   if(!(inventoryAddMode?creation:options).length){[options,creation]=await Promise.all([inventoryAddMode?Promise.resolve([]):requestWandNestedMaterials(edit.documentId,false,pair),requestWandNestedMaterials(edit.documentId,true,pair)]);}
    if(wandEdit!==edit||snapshot?.revision!==edit.revision)return;
    const available=inventoryAddMode?creation:options;
    wandEdit={...edit,nestedOptions:available,nestedCreationOptions:creation};
    wandMaterialSelection=available.findIndex(v=>v.every((n,i)=>n===previous[i]));
   }catch(e){error=describeError(e);if(wandEdit===edit){wandEdit={...edit,nestedOptions:[],nestedCreationOptions:[]};wandMaterialSelection=-1}}finally{busy=false}
+ }
+ async function chooseWandNestedMaterial(index:number){
+  const edit=wandEdit;
+  if(busy||!snapshot||!edit?.nestedBefore||snapshot.revision!==edit.revision)return;
+  const draft=edit.nestedOptions?.[index];if(!draft)return;
+  const pair=edit.options[wandSelection]??edit.before;
+  busy=true;error='';
+  try{
+   const [options,creation]=await Promise.all([inventoryAddMode?Promise.resolve([]):requestWandNestedMaterials(edit.documentId,false,pair,draft),requestWandNestedMaterials(edit.documentId,true,pair,draft)]);
+   if(wandEdit!==edit||snapshot?.revision!==edit.revision)return;
+   const available=inventoryAddMode?creation:options;
+   const selection=available.findIndex(v=>v.every((n,i)=>n===draft[i]));
+   if(selection<0)throw Error('INVENTORY_CONFLICT');
+   wandEdit={...edit,nestedOptions:available,nestedCreationOptions:creation};wandMaterialSelection=selection;
+  }catch(e){error=describeError(e)}finally{busy=false}
  }
  function canAddWandVariant():boolean{
   const edit=wandEdit;if(!edit)return false;
@@ -2106,18 +2122,24 @@ import {verifiedFloorplanName} from './floorplan-names';
     </div>
     <div style="display:flex;justify-content:center"><DynamicWandSprite itemId={edit.itemId} appearance={{...edit.appearance,magicCharacteristicId:selected[0],fleckCharacteristicId:selected[1]}} originalCell={wandOriginalCell(edit.appearance.sourceItemId)} fallback={inventoryOriginalSprite(edit.itemId)}/></div>
     {#if edit.nestedBefore}
-     <div class="compact-hint">{inventoryName(edit.nestedBefore[0])} · {furnitureVariantTitle(furnitureDisplay,edit.nestedBefore[0],edit.nestedBefore.slice(3),furnitureCopy.defaultMaterial)}</div>
-     {#if edit.nestedOptions?.length}
-      <label class="date-dialog-field">
-       <span>{furnitureCopy.material}</span>
-       <select name="wand-nested-material" bind:value={wandMaterialSelection} disabled={busy}>
-        <option value={-1}>{wandSelection<0?furnitureVariantTitle(furnitureDisplay,edit.nestedBefore[0],edit.nestedBefore.slice(3),furnitureCopy.defaultMaterial):'—'}</option>
-        {#each edit.nestedOptions as variant,i}
-         <option value={i} data-wand-material={variant.join(':')}>{furnitureVariantTitle(furnitureDisplay,edit.nestedBefore[0],variant,furnitureCopy.defaultMaterial)}</option>
-        {/each}
-       </select>
-      </label>
-     {/if}
+     {@const materials=edit.nestedOptions?.[wandMaterialSelection]??edit.nestedBefore.slice(3)}
+     <div class="compact-hint">{inventoryName(edit.nestedBefore[0])}</div>
+     <div data-wand-material-selected={materials.join(':')} data-wand-material-busy={busy}>
+      {#each [0,1,2] as slot}
+       {@const choices=(edit.nestedOptions??[]).map((variant,index)=>({variant,index})).filter(({variant})=>variant[slot]!==materials[slot])}
+       {#if materials[slot]!==0||choices.length}
+        <label class="date-dialog-field">
+         <span>{furnitureCopy.part} {String.fromCharCode(65+slot)}</span>
+         <select name={'wand-nested-part-'+slot} value={-1} disabled={busy||!choices.length} onchange={e=>{const index=Number(e.currentTarget.value);e.currentTarget.value='-1';void chooseWandNestedMaterial(index)}}>
+          <option value={-1} disabled>{materialLabel(furnitureDisplay,materials[slot],furnitureCopy.defaultMaterial)}</option>
+          {#each choices as choice (choice.index)}
+           <option value={choice.index} data-wand-material={choice.variant.join(':')} data-material-index={choice.variant[slot]}>{materialLabel(furnitureDisplay,choice.variant[slot],furnitureCopy.defaultMaterial)}</option>
+          {/each}
+         </select>
+        </label>
+       {/if}
+      {/each}
+     </div>
     {/if}
     {#if edit.sourceChoices}
      <label class="date-dialog-field">
