@@ -47,7 +47,8 @@ test('header commands, local recovery, image tiles and continuous listing have r
  assert.ok(component.includes('const BATCH_SIZE=40'));
  assert.match(component,/category-grid/);
  assert.doesNotMatch(component,/raw\.githubusercontent\.com/);
- assert.match(component,/loadMoreSentinel/);
+ assert.match(component,/bind:this=\{editorGridEl\}/);
+ assert.match(component,/inventoryVirtualWindow\(matching.length,editorViewport\)/);
  assert.match(component,/aria-pressed=\{has\}/);
  assert.match(component,/\{#if snapshot\}<nav/);
  assert.match(component,/cat\.count\.toLocaleString/);

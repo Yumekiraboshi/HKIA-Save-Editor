@@ -17,7 +17,7 @@ test('achievement landing view contains only search and native category cards, n
  assert.match(section,/\{#if achievementGroupHierarchy && achievementGroupSelection!==null && !achievementQuery\.trim\(\)\}\s*<div class="section-heading">/);
  assert.match(section,/placeholder=\{achCopy\.search\}/);
  assert.match(section,/class="category-grid achievement-category-grid"/);
- assert.match(section,/class="item-grid achievement-grid achievement-item-grid"/);
+ assert.match(section,/class="item-grid achievement-grid achievement-item-grid editor-virtual-grid"/);
 });
 
 test('topbar and HTML identity refer to HKIA Save Editor, never the parent project name',()=>{
