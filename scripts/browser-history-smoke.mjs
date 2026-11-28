@@ -1556,9 +1556,9 @@ async function assertNativeFlowerPatternClip(badge){
   if(!primary||!clip||!img)return null;
   const a=getComputedStyle(primary),b=getComputedStyle(clip);
   const bounds=e=>{const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height];};
-  return {mask:a.maskImage===b.maskImage&&a.maskImage.includes('plate.webp'),sameGeometry:JSON.stringify(bounds(primary))===JSON.stringify(bounds(clip))&&img.offsetWidth===clip.offsetWidth&&img.offsetHeight===clip.offsetHeight,alpha:b.maskMode==='alpha',size:b.width+' '+b.height};
+  return {circle:getComputedStyle(el).clipPath.startsWith('circle(50%'),noInset:JSON.stringify(bounds(el))===JSON.stringify(bounds(primary))&&JSON.stringify(bounds(el))===JSON.stringify(bounds(clip))&&img.offsetWidth===el.offsetWidth&&img.offsetHeight===el.offsetHeight,noRim:getComputedStyle(el,'::before').display==='none',noInnerMask:a.maskImage==='none'&&b.maskImage==='none',size:b.width+' '+b.height};
  });
- assert.deepEqual(geometry,{mask:true,sameGeometry:true,alpha:true,size:'18px 18px'});
+ assert.deepEqual(geometry,{circle:true,noInset:true,noRim:true,noInnerMask:true,size:'22px 22px'});
  const saved=await badge.evaluate(el=>{
   const img=el.querySelector('img'),saved=[el.getAttribute('style'),img.getAttribute('style')];
   // A black outside region and a green inner plate make leakage observable.
@@ -1603,7 +1603,7 @@ async function assertNativeFlowerPatternClip(badge){
     }
     return {outside,inside};
    },[baseline.toString('base64'),actual.toString('base64')]);
-   assert.equal(result.outside,0,'pattern '+id+' escapes the inner plate');
+   assert.equal(result.outside,0,'pattern '+id+' escapes the circular crop');
    assert.ok(result.inside>0,'pattern '+id+' must remain visible');
   }
  }finally{
