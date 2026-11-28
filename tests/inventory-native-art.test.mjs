@@ -67,27 +67,33 @@ test('all 152 original placeholder routes work before or without the additional 
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  assert.ok(app.includes('$state(initialInventoryNativeArt())'));
  assert.ok(app.includes('if(!inventoryNativeArtDisposed)inventoryNativeArt=art'));
- assert.ok(app.includes("window.addEventListener('online',refreshInventoryNativeArtwork)"));
- assert.ok(app.includes("window.removeEventListener('online',refreshInventoryNativeArtwork)"));
- assert.ok(app.includes('inventoryIconFailed.clear();inventoryIconPulse++;\n  refreshInventoryNativeArtwork();'));
+ assert.ok(app.includes("window.addEventListener('online',refreshInventoryNativeArt)"));
+ assert.ok(app.includes("window.removeEventListener('online',refreshInventoryNativeArt)"));
 });
 
-test('the additional 1747 original routes recover after a transient failure without duplicate downloads',async()=>{
- let attempts=0,online=false;
- const expected=decodeInventoryNativeArt(manifest,'/editor/');
- const request=createInventoryNativeArtLoader('/editor/',async base=>{
-  assert.equal(base,'/editor/');attempts++;
-  if(!online)throw Error('temporarily unavailable');
-  return expected;
- });
- const first=request();assert.equal(request(),first);
- await assert.rejects(first,/temporarily unavailable/);
- assert.equal(attempts,1);
- online=true;
- const second=request();assert.equal(request(),second);
- const recovered=await second;
- assert.equal(recovered.entries.size,1747);
- assert.deepEqual(recovered.placeholders,initialInventoryNativeArt().placeholders);
- assert.deepEqual(recovered.withheld,initialInventoryNativeArt().withheld);
- assert.equal(request(),second);assert.equal(await request(),expected);assert.equal(attempts,2);
+test('native inventory index can recover from network and integrity failures without changing withheld policy',async()=>{
+ const prev=globalThis.fetch;
+ let attempt=0;
+ try{
+  globalThis.fetch=async url=>{
+   assert.equal(url,'/editor/inventory-art/index.json');
+   attempt++;
+   if(attempt===1)return {ok:false};
+   const bytes=attempt===2?Buffer.from(raw.toString('utf8').replace('1747','1748')):raw;
+   return {ok:true,arrayBuffer:async()=>bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)};
+  };
+  const initial=initialInventoryNativeArt();
+  const request=createInventoryNativeArtLoader('/editor/');
+  const first=request();assert.equal(request(),first);
+  await assert.rejects(first,/INVENTORY_ART_UNAVAILABLE/);
+  await assert.rejects(request(),/INVENTORY_ART_INVALID/);
+  assert.equal(initial.entries.size,0);
+  const third=request();assert.equal(request(),third);
+  const recovered=await third;
+  assert.equal(recovered.entries.size,1747);
+  assert.deepEqual(recovered.withheld,initial.withheld);
+  assert.deepEqual(recovered.placeholders,initial.placeholders);
+  assert.equal(await request(),recovered);
+  assert.equal(attempt,3);
+ }finally{globalThis.fetch=prev;}
 });

@@ -149,24 +149,40 @@ export function parseNamedOriginalItemSprites(value:unknown,base:string):Record<
  }
  return urls;
 }
-export async function loadVariantArtSources(base:string):Promise<{primary:Record<string,string>;originals:Record<string,string>;reconstructions:Record<string,string>}>{
- const [original,dynamic,verified]=await Promise.allSettled([
-  loadSourceColorwayIndex(base),
-  loadDynamicColorwayIndex(base),
-  (async()=>{
-   const response=await fetch(base+'variant-art/index.json',{cache:'no-cache'});
-   if(!response.ok)throw Error('VARIANT_ART_INDEX_FETCH');
-   return parseVariantArtIndex(await response.json(),base);
-  })()
- ]);
+type VariantArtSources={primary:Record<string,string>;originals:Record<string,string>;reconstructions:Record<string,string>};
+/** Each immutable source index is cached independently for this editor
+ * session. A transient failure can be retried without refetching or
+ * discarding already validated art from another source. */
+export function createVariantArtSourceLoader(base:string):()=>Promise<VariantArtSources>{
  const named=parseNamedOriginalItemSprites(namedItemSprites,base);
- if(original.status==='rejected'&&dynamic.status==='rejected'&&verified.status==='rejected'&&!Object.keys(named).length)throw verified.reason;
- // A finished original source sprite outranks a reconstruction. A failed
- // optional index must not hide valid artwork from the other index.
- const originals={...named,...(original.status==='fulfilled'?original.value:{}),
-  ...(dynamic.status==='fulfilled'?dynamic.value:{})};
- const reconstructions=verified.status==='fulfilled'?verified.value:{};
- return {originals,reconstructions,primary:{...reconstructions,...originals}};
+ function once(load:()=>Promise<Record<string,string>>){
+  let pending:Promise<Record<string,string>>|undefined;
+  return ()=>{
+   if(!pending)pending=Promise.resolve().then(load).catch(e=>{pending=undefined;throw e});
+   return pending;
+  };
+ }
+ const original=once(()=>loadSourceColorwayIndex(base));
+ const dynamic=once(()=>loadDynamicColorwayIndex(base));
+ const verified=once(async()=>{
+  const response=await fetch(base+'variant-art/index.json',{cache:'no-cache'});
+  if(!response.ok)throw Error('VARIANT_ART_INDEX_FETCH');
+  return parseVariantArtIndex(await response.json(),base);
+ });
+ let running:Promise<VariantArtSources>|undefined;
+ return ()=>{
+  if(!running)running=(async()=>{
+   const [a,b,c]=await Promise.allSettled([original(),dynamic(),verified()]);
+   if(a.status==='rejected'&&b.status==='rejected'&&c.status==='rejected'&&!Object.keys(named).length)throw c.reason;
+   const originals={...named,...(a.status==='fulfilled'?a.value:{}),...(b.status==='fulfilled'?b.value:{})};
+   const reconstructions=c.status==='fulfilled'?c.value:{};
+   return {originals,reconstructions,primary:{...reconstructions,...originals}};
+  })().finally(()=>{running=undefined});
+  return running;
+ };
+}
+export async function loadVariantArtSources(base:string):Promise<VariantArtSources>{
+ return createVariantArtSourceLoader(base)();
 }
 export async function loadVariantArtIndex(base:string):Promise<Record<string,string>>{
  return (await loadVariantArtSources(base)).primary;

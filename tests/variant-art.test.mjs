@@ -9,7 +9,7 @@ const {outputFiles}=await build({
  entryPoints:[fileURLToPath(new URL('../src/variant-art.ts',import.meta.url))],
  bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'
 });
-const {parseVariantArtIndex,parseSourceColorwayIndex,parseDynamicColorwayIndex,parseNamedOriginalItemSprites,loadVariantArtIndex,loadVariantArtSources}=await import(
+const {parseVariantArtIndex,parseSourceColorwayIndex,parseDynamicColorwayIndex,parseNamedOriginalItemSprites,loadVariantArtIndex,loadVariantArtSources,createVariantArtSourceLoader}=await import(
  'data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64')
 );
 const read=(name)=>readFileSync(new URL(name,import.meta.url),'utf8');
@@ -100,7 +100,10 @@ test('every registered exact image is an audited, local, unmodified PNG or WebP'
 
 test('Collection and Inventory select original images without inferred recoloring',()=>{
  const app=read('../src/App.svelte'),sprite=read('../src/DyeSprite.svelte');
- assert.match(app,/loadVariantArtSources\(import\.meta\.env\.BASE_URL\)/);
+ assert.match(app,/createVariantArtSourceLoader\(import\.meta\.env\.BASE_URL\)/);
+ assert.match(app,/function openInventoryTab\(\)\{\s*refreshVariantArtwork\(\)/);
+ assert.match(app,/function selectCategory\(key:string\)\{\s*refreshVariantArtwork\(\)/);
+ assert.match(app,/function goHome\(\)\{\s*refreshVariantArtwork\(\)/);
  assert.match(app,/<DyeSprite sprite=\{resultSprite\}[^>]*originalArtUrl=\{resultOriginal\}/);
  assert.equal((app.match(/exactArtUrl=\{/g)||[]).length,6);
  assert.match(app,/exactArtUrl=\{exactVariantArt\[String\(representative\)\]\}/);
@@ -244,4 +247,31 @@ test('named non-dye original item uses exact source identity, validated local im
  assert.equal(visible,r.visiblePixels);assert.equal(65536-visible,r.transparentPixels);
  for(const changes of [{file:'../1393962785.png'},{sourceSpriteName:'icon_unrelated'},{itemKey:'item_c_dyeable_unrelated'},{textureSha256:'bad'},{width:128}])assert.throws(()=>parseNamedOriginalItemSprites({...namedItemSprites,records:{[id]:{...r,...changes}}},'/'),/NAMED_ITEM_SPRITE_RECORD_INVALID/);
  assert.throws(()=>parseNamedOriginalItemSprites({...namedItemSprites,runtimeUiIconReferenceMatches:true},'/'),/NAMED_ITEM_SPRITE_INDEX_INVALID/);
+});
+
+test('a transient index failure never loses already loaded originals and retries only that source',async()=>{
+ const prev=globalThis.fetch;
+ const calls={source:0,dynamic:0,verified:0};
+ let online=false;
+ try{
+  globalThis.fetch=async url=>{
+   if(url.includes('/source-colorways/')){calls.source++;return {ok:true,json:async()=>sources};}
+   if(url.includes('/dynamic-colorways/')){calls.dynamic++;return online?{ok:true,json:async()=>dynamic}:{ok:false};}
+   calls.verified++;return {ok:true,json:async()=>wrap({})};
+  };
+  const load=createVariantArtSourceLoader('/');
+  const first=load();assert.equal(load(),first);
+  const partial=await first;
+  assert.equal(Object.keys(partial.originals).length,363);
+  assert.equal(partial.originals['315822'],'/source-colorways/315822.webp');
+  assert.equal(calls.dynamic,1);
+  online=true;
+  const retry=load();assert.equal(load(),retry);
+  const full=await retry;
+  assert.equal(Object.keys(full.originals).length,5384);
+  assert.equal(full.originals['315822'],'/dynamic-colorways/315822.webp?v='+dynamic.records['315822']);
+  assert.equal(full.originals['1393962785'],partial.originals['1393962785']);
+  await load();
+  assert.deepEqual(calls,{source:1,dynamic:2,verified:1});
+ }finally{globalThis.fetch=prev;}
 });

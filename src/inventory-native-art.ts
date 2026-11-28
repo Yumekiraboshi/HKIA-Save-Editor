@@ -71,12 +71,12 @@ export async function loadInventoryNativeArt(base:string):Promise<NativeArt>{
  return decodeInventoryNativeArt(JSON.parse(new TextDecoder().decode(data)),base);
 }
 
-/** Session-local successful index cache. Rejected requests are never cached;
- * a repeated tab visit can recover all additional original image routes. */
-export function createInventoryNativeArtLoader(base:string,load=loadInventoryNativeArt):()=>Promise<InventoryNativeArt>{
- let pending:Promise<InventoryNativeArt>|undefined;
+/** Preserve the original withheld-route policy during transient failures.
+ * Successful immutable indices remain shared for the editor session. */
+export function createInventoryNativeArtLoader(base:string):()=>Promise<NativeArt>{
+ let pending:Promise<NativeArt>|undefined;
  return ()=>{
-  if(!pending)pending=Promise.resolve().then(()=>load(base)).catch(error=>{pending=undefined;throw error;});
+  if(!pending)pending=loadInventoryNativeArt(base).catch(error=>{pending=undefined;throw error});
   return pending;
  };
 }
