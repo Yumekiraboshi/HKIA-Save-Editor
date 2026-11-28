@@ -66,7 +66,9 @@ test('all 152 original placeholder routes work before or without the additional 
  assert.throws(()=>decodeInventoryNativeArt(wrong,'/'));
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  assert.ok(app.includes('$state(initialInventoryNativeArt())'));
- assert.ok(app.includes('then(art=>inventoryNativeArt=art).catch(()=>{})'));
+ assert.ok(app.includes('if(!inventoryNativeArtDisposed)inventoryNativeArt=art'));
+ assert.ok(app.includes("window.addEventListener('online',refreshInventoryNativeArt)"));
+ assert.ok(app.includes("window.removeEventListener('online',refreshInventoryNativeArt)"));
 });
 
 test('native inventory index can recover from network and integrity failures without changing withheld policy',async()=>{

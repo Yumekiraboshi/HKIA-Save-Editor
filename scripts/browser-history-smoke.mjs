@@ -2227,6 +2227,7 @@ async function inventoryIconScaleSmoke(){
  }finally{await context.close();}
 }
 async function inventoryNativeArtRetrySmoke(){
+ for(const mode of ['tab','online']){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
   const page=await context.newPage();let online=false,requests=0;
@@ -2243,8 +2244,10 @@ async function inventoryNativeArtRetrySmoke(){
   await page.waitForLoadState('networkidle');
   const failures=requests;assert.ok(failures>=1);
   online=true;
-  await chooseTab(page,'collections');
-  await chooseTab(page,'inventory');
+  if(mode==='tab'){
+   await chooseTab(page,'collections');
+   await chooseTab(page,'inventory');
+  }else await page.evaluate(()=>window.dispatchEvent(new Event('online')));
   await search.fill('10455890');
   const result=page.locator('.inventory-card [data-result-icon-target="357184380"][data-inventory-art="native-result"]');
   await result.waitFor({timeout:30_000});
@@ -2258,7 +2261,8 @@ async function inventoryNativeArtRetrySmoke(){
   await page.waitForLoadState('networkidle');
   assert.equal(requests,failures+1);
  }finally{await context.close();}
- console.log('CHROMIUM NATIVE INVENTORY ART RETRY PASS: exact target recovered without page reload, withheld route retained');
+ }
+ console.log('CHROMIUM NATIVE INVENTORY ART RETRY PASS: exact target recovered by tab or online event without page reload, withheld route retained');
 }
 async function inventoryNativeResultArtSmoke(){
  // The first recipe/schematic result is in the original inventory atlas,

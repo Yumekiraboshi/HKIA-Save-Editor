@@ -114,8 +114,11 @@ import {verifiedFloorplanName} from './floorplan-names';
  let paletteDraftCreatable=$state(false);
  let inventoryNativeArt:InventoryNativeArt=$state(initialInventoryNativeArt());
  const requestInventoryNativeArt=createInventoryNativeArtLoader(import.meta.env.BASE_URL);
+ let inventoryNativeArtDisposed=false;
  function refreshInventoryNativeArt(){
-  void requestInventoryNativeArt().then(art=>inventoryNativeArt=art).catch(()=>{});
+  void requestInventoryNativeArt().then(art=>{
+   if(!inventoryNativeArtDisposed)inventoryNativeArt=art;
+  }).catch(()=>{});
  }
  let inventoryEditableOnly=$state(false);
  let inventoryShowZero=$state(false);
@@ -294,6 +297,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   void loadFlowerLabels(import.meta.env.BASE_URL).then(data=>flowerLabels=data).catch(()=>{});
   void loadFurnitureDisplay().then(data=>furnitureDisplay=data).catch(()=>{});
   refreshInventoryNativeArt();
+  window.addEventListener('online',refreshInventoryNativeArt);
   // Exact game dye palettes, used exclusively for recoloring item image pixels.
   void loadNativeDyePalettes(import.meta.env.BASE_URL)
    .then(palettes=>nativeDyePalettes=palettes).catch(()=>{});
@@ -329,6 +333,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   return ()=>{
    media.removeEventListener?.('change',listener);
    window.removeEventListener('beforeunload',beforeUnload);
+   window.removeEventListener('online',refreshInventoryNativeArt);
+   inventoryNativeArtDisposed=true;
    iconEpoch++;iconLoadingGroup=null;iconPack=null;
    variantArtEpoch++;
    inventoryIconEpoch++;
