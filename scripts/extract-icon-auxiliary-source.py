@@ -65,6 +65,16 @@ def sprite_binding(ref,objects,externals):
     return {'fileId':f,'pathId':pid,'external':externals[f-1] if f else None,
             'objectSha256':sha(objects[pid][2]) if not f else None}
 
+def traversal_end(raw,start):
+    n=mesh.u(raw,start);end=start+4
+    require(n<=1024,'traversal count')
+    for _ in range(n):
+        count=mesh.u(raw,end);end+=4
+        require(count<=1024 and end+12*count+12<=len(raw),'traversal entry bounds')
+        end+=12*count+12
+    require(end==len(raw),'wand traversal boundary')
+    return end
+
 def extract(snapshot,path,reviewed):
     rows=source.validate_snapshot(snapshot)
     baseline=snapshot['version']=='3.0.1' and snapshot['platform']=='switch'
@@ -151,13 +161,7 @@ def extract(snapshot,path,reviewed):
             scale,x,y,rotation=struct.unpack_from('<4f',ref,p+112)
             require(all(math.isfinite(v) for v in (scale,x,y,rotation)) and scale>=0,
                     'invalid native overlay transform')
-            n=mesh.u(ref,p+128);end=p+132
-            require(n<=1024,'traversal count')
-            for _ in range(n):
-                count=mesh.u(ref,end);end+=4
-                require(count<=1024 and end+12*count+16<=len(ref),'traversal entry bounds')
-                end+=12*count+16
-            require(end==len(ref),'wand traversal boundary')
+            traversal_end(ref,p+128)
             wands.append({'itemId':i,'wandType':wand_type,'scale':scale,'offsetPercent':[x,y],'rotation':rotation})
     if baseline:
         # Compare projections to the existing verified production manifests.
@@ -212,6 +216,12 @@ def self_test():
     try:rgba(struct.pack('<4f',float('nan'),0,0,1))
     except ValueError:pass
     else:raise AssertionError('accepted nonfinite color')
+    # Actual 3.0.1 wand traversal list lengths: 4, 5 and 3 PPtrs.
+    traversal=struct.pack('<I',3)+b''.join(struct.pack('<I',n)+bytes(12*n+12) for n in (4,5,3))
+    assert len(traversal)==196 and traversal_end(traversal,0)==196
+    try:traversal_end(traversal[:-4],0)
+    except ValueError:pass
+    else:raise AssertionError('accepted truncated traversal list')
     print('HKIA_ICON_AUXILIARY_SOURCE_SELF_TEST_OK')
 
 if __name__=='__main__':
