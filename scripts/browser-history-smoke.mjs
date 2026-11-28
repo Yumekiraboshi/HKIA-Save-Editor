@@ -1074,7 +1074,7 @@ async function activeToolReloadSmoke(){
     await page.locator('.achievement-category-card').first().click();
     heading=await page.locator('.section-heading h1').innerText();
    }else{
-    await page.locator('[data-collection-group="collection_group_furniture"]').click();
+    await page.locator('[data-collection-group="collections_group_furniture"]').click();
     await page.locator('[data-collection-subgroup]').first().click();
     heading=await page.locator('.section-heading h1').innerText();
    }
