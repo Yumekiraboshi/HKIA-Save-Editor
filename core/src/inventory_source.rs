@@ -480,6 +480,9 @@ pub(crate) fn magic_wand_choices(v:[i32;2])->bool{
   assert_eq!(wand_source_style(GENERIC_MAGIC_WAND_ID,315822),None);
   assert_eq!(WAND_ITEM_SOURCE_BITS.len(),1521);
   assert_eq!(WAND_ITEM_SOURCE_BITS.iter().map(|b|b.count_ones()).sum::<u32>(),8601);
+  assert!(RULES.iter().filter(|&&(id,_)|wand_source_style(ITEM_WAND_ID,id)==Some(0)).all(|&(_,flags)|flags&2==0));
+  assert!(CRITTER_WAND_SOURCES.iter().all(|&id|definition_requires_unique(id)==Some(false)));
+  assert_eq!(crate::furniture_source::ITEMS.iter().filter(|s|!s.is_home_layout&&wand_source_style(ITEM_WAND_ID,s.item_id)==Some(0)).count(),546);
   let hash=crate::digest::sha256(WAND_ITEM_SOURCE_BITS).iter().map(|b|format!("{b:02x}")).collect::<String>();
   assert_eq!(hash,"433ec9faa61477cfc61bb069222522f2daa82f3c89d9c9474223a59e6e5afcca");
   assert!(CRITTER_WAND_SOURCES.windows(2).all(|w|w[0]<w[1]));
