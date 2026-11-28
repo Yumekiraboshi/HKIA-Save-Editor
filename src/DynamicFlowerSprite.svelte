@@ -6,6 +6,7 @@
  import {loadFlowerGrowthCell} from './flower-growth-art';
  import {watchDynamicArtVisibility} from './dynamic-art-view';
  import DynamicArtSprite from './DynamicArtSprite.svelte';
+ import {createVerifiedSpriteView} from './verified-sprite-view.svelte';
  let {itemId,flower,definitions,fallback}:{itemId:number;flower?:InventoryFlower;definitions:FlowerDisplayDefinitions|null;fallback?:SpriteCell}=$props();
  const growth=$derived(flowerGrowthKind(itemId,flower));
  const spriteState=$derived(flowerGrowthSpriteState(itemId,flower));
@@ -13,7 +14,11 @@
  let resolved=$state<{id:number;state:number;cell:SpriteCell}|undefined>();
  const setNear=(value:boolean)=>{near=value;};
  const growthCell=$derived(resolved?.id===itemId&&resolved.state===flower?.growState?resolved.cell:undefined);
- const displayed=$derived(growthCell??fallback);
+ const staticRoute=$derived(isStaticFlowerCreationIcon(itemId));
+ const unknownRoute=$derived(growth==='unknown'&&!flowerUsesDefinitionIcon(itemId,flower));
+ const fallbackView=createVerifiedSpriteView(()=>fallback,()=>staticRoute||unknownRoute||near&&spriteState!==undefined&&!growthCell);
+ const visible=$derived(fallbackView.cell);
+ const displayed=$derived(growthCell??visible);
  $effect(()=>{
   if(!flower||!near||spriteState===undefined)return;
   const id=itemId,fields={...flower};
@@ -42,16 +47,16 @@
 </script>
 {#if spriteState!==undefined}
  <span use:watchDynamicArtVisibility={setNear} class:item-sprite={!!displayed} class:item-art-empty={!displayed}
-  data-flower-state-art={growthCell?'native-state-sprite':fallback?'species-reference':undefined}
+  data-flower-state-art={growthCell?'native-state-sprite':visible?'species-reference':undefined}
   data-inventory-art={growthCell?'native-growth-state':undefined}
   style:background-image={displayed?'url("'+displayed.url+'")':undefined}
   style:background-position={displayed?'-'+displayed.x+'px -'+displayed.y+'px':undefined}>{#if !displayed}✧{/if}</span>
-{:else if isStaticFlowerCreationIcon(itemId)}
- <span class:item-sprite={!!fallback} class:item-art-empty={!fallback} data-inventory-art="native-static-route" style:background-image={fallback?'url("'+fallback.url+'")':undefined} style:background-position={fallback?'-'+fallback.x+'px -'+fallback.y+'px':undefined}>{#if !fallback}✧{/if}</span>
-{:else if growth==='unknown'&&!flowerUsesDefinitionIcon(itemId,flower)}
- <span class:item-sprite={!!fallback} class:item-art-empty={!fallback} data-flower-state-art={fallback?'species-reference':undefined}
-  style:background-image={fallback?'url("'+fallback.url+'")':undefined}
-  style:background-position={fallback?'-'+fallback.x+'px -'+fallback.y+'px':undefined}>{#if !fallback}✧{/if}</span>
+{:else if staticRoute}
+ <span class:item-sprite={!!visible} class:item-art-empty={!visible} data-inventory-art="native-static-route" style:background-image={visible?'url("'+visible.url+'")':undefined} style:background-position={visible?'-'+visible.x+'px -'+visible.y+'px':undefined}>{#if !visible}✧{/if}</span>
+{:else if unknownRoute}
+ <span class:item-sprite={!!visible} class:item-art-empty={!visible} data-flower-state-art={visible?'species-reference':undefined}
+  style:background-image={visible?'url("'+visible.url+'")':undefined}
+  style:background-position={visible?'-'+visible.x+'px -'+visible.y+'px':undefined}>{#if !visible}✧{/if}</span>
 {:else}
  <DynamicArtSprite {renderKey} {render} {renderPartial} source="native-flower" {fallback}/>
 {/if}

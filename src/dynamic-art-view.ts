@@ -50,8 +50,27 @@ export function untrackUnavailableArt(retry:()=>void){
  recoverable.delete(retry);
  if(recoverable.size===0&&typeof window!=='undefined')window.removeEventListener('online',retryUnavailableArt);
 }
+// Render caches already return the same Blob for the same verified
+// appearance. Share its live URL too, without conflating different Blobs
+// or retaining object URLs after the last visible consumer releases them.
+type ArtUrlLease={url:string;release:()=>void};
+const liveArtUrls=new WeakMap<Blob,{url:string;refs:number}>();
+function acquireArtUrl(blob:Blob):ArtUrlLease{
+ let entry=liveArtUrls.get(blob);
+ if(!entry){entry={url:URL.createObjectURL(blob),refs:0};liveArtUrls.set(blob,entry);}
+ const current=entry;current.refs++;
+ let released=false;
+ return {url:current.url,release:()=>{
+  if(released)return;
+  released=true;
+  if(--current.refs===0){
+   liveArtUrls.delete(blob);
+   URL.revokeObjectURL(current.url);
+  }
+ }};
+}
 export function startDynamicArtRequest(render:()=>Promise<Blob|null>,show:(url:string|null,partial?:boolean)=>void,renderPartial?:()=>Promise<Blob|null>,renderIntermediate?:()=>Promise<Blob|null>):()=>void{
- let canceled=false,created:string|null=null,scheduled=false,best=Infinity;
+ let canceled=false,created:ArtUrlLease|null=null,scheduled=false,best=Infinity;
  show(null);
  function retry(){
   if(canceled||scheduled)return;
@@ -70,9 +89,9 @@ export function startDynamicArtRequest(render:()=>Promise<Blob|null>,show:(url:s
     try{blob=await load();}catch{/* Independent lower tiers remain available. */}
     if(canceled)return;
     if(!blob)continue;
-    const next=URL.createObjectURL(blob),previous=created;
-    created=next;best=rank;show(next,rank!==0);
-    if(previous!==null)URL.revokeObjectURL(previous);
+    const next=acquireArtUrl(blob),previous=created;
+    created=next;best=rank;
+    try{show(next.url,rank!==0);}finally{previous?.release();}
     if(rank===0)return;
     break;
    }
@@ -86,6 +105,6 @@ export function startDynamicArtRequest(render:()=>Promise<Blob|null>,show:(url:s
   canceled=true;
   untrackUnavailableArt(retry);
   pending.delete(job);
-  if(created!==null){URL.revokeObjectURL(created);created=null;}
+  if(created!==null){created.release();created=null;}
  };
 }

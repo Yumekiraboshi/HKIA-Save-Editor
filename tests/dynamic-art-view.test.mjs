@@ -218,3 +218,41 @@ test('three-stage artwork recovery upgrades an original base to tinted base and 
   if(previous===undefined)delete globalThis.window;else globalThis.window=previous;
  }
 });
+
+test('same cached appearance shares the live object URL until the last consumer releases it',async()=>{
+ const create=URL.createObjectURL,revoke=URL.revokeObjectURL,created=[],revoked=[];
+ URL.createObjectURL=blob=>{created.push(blob);return 'blob:shared-'+created.length;};
+ URL.revokeObjectURL=url=>revoked.push(url);
+ const shared=new Blob(['appearance']),other=new Blob(['appearance']);
+ const seen=[[],[],[],[]],stops=[];
+ const start=(blob,i)=>startDynamicArtRequest(async()=>blob,url=>seen[i].push(url));
+ try{
+  stops.push(start(shared,0),start(shared,1),start(other,2));
+  await new Promise(setImmediate);
+  assert.deepEqual(created,[shared,other]);assert.equal(seen[0][1],seen[1][1]);
+  assert.notEqual(seen[0][1],seen[2][1]);
+  stops[0]();stops[0]();assert.deepEqual(revoked,[]);
+  stops[1]();assert.deepEqual(revoked,['blob:shared-1']);
+  stops.push(start(shared,3));await new Promise(setImmediate);
+  assert.equal(seen[3][1],'blob:shared-3');
+  stops[2]();stops[3]();assert.deepEqual(revoked,['blob:shared-1','blob:shared-2','blob:shared-3']);
+ }finally{stops.forEach(stop=>stop());URL.createObjectURL=create;URL.revokeObjectURL=revoke;}
+});
+test('recovering one dynamic card does not revoke a shared base used by another card',async()=>{
+ const previous=globalThis.window,events=new EventTarget();globalThis.window=events;
+ const create=URL.createObjectURL,revoke=URL.revokeObjectURL,created=[],revoked=[];
+ URL.createObjectURL=blob=>{created.push(blob);return 'blob:upgrade-'+created.length;};
+ URL.revokeObjectURL=url=>revoked.push(url);
+ const base=new Blob(['base']),full=new Blob(['full']);let ready=false;
+ const a=[],b=[];
+ const stopA=startDynamicArtRequest(async()=>ready?full:null,url=>a.push(url),async()=>base);
+ const stopB=startDynamicArtRequest(async()=>base,url=>b.push(url));
+ try{
+  await new Promise(setImmediate);
+  assert.equal(a[1],b[1]);assert.deepEqual(created,[base]);
+  ready=true;events.dispatchEvent(new Event('online'));await new Promise(setImmediate);
+  assert.equal(a.at(-1),'blob:upgrade-2');assert.deepEqual(revoked,[]);
+  stopA();assert.deepEqual(revoked,['blob:upgrade-2']);
+  stopB();assert.deepEqual(revoked,['blob:upgrade-2','blob:upgrade-1']);
+ }finally{stopA();stopB();URL.createObjectURL=create;URL.revokeObjectURL=revoke;if(previous===undefined)delete globalThis.window;else globalThis.window=previous;}
+});
