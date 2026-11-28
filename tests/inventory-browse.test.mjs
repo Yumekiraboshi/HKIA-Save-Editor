@@ -13,7 +13,7 @@ const buildSource=async file=>{
 };
 const {decodeNativeInventoryIndex}=await buildSource('../src/inventory-native-data.ts');
 const {FLOWER_CREATION_SOURCE_IDS}=await buildSource('../src/inventory-native-crafting.ts');
-const {inventoryAddRows,inventoryDisplayRows,inventoryRefillable,nativeInventoryGroups,inventoryGroupCounts,browseInventory,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,NATIVE_INVENTORY_TABS,inventoryCategoryRepresentative,INVENTORY_CATEGORY_REPRESENTATIVES}=await buildSource('../src/inventory-browse.ts');
+const {inventoryAddRows,inventoryDisplayRows,inventoryBatchZeroRows,inventoryRefillable,nativeInventoryGroups,inventoryGroupCounts,browseInventory,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,NATIVE_INVENTORY_TABS,inventoryCategoryRepresentative,INVENTORY_CATEGORY_REPRESENTATIVES}=await buildSource('../src/inventory-browse.ts');
 const catalog=JSON.parse(readFileSync(new URL('../public/catalog.json',import.meta.url)));
 const items=new Map(catalog.items.map(x=>[x[0],x]));
 const packed=JSON.parse(readFileSync(new URL('../public/inventory-native-categories.json',import.meta.url)));
@@ -292,4 +292,20 @@ test('native positive-only ordinary zero rows remain refillable without enabling
  assert.equal(inventoryRefillable({...row,editable:false}),false);
  assert.deepEqual(inventoryAddRows([row],[]),[row]);
  assert.deepEqual(inventoryDisplayRows([row],false,false),[]);
+});
+
+
+test('batch-only duplicate zero requires every positive peer and respects lock scope',()=>{
+ const a={documentId:1,itemId:315822,quantity:2,editable:false,quantityMinimum:1,batchZeroOnly:true};
+ const b={...a,documentId:2,quantity:3};
+ const zero={...a,documentId:3,quantity:0};
+ const ordinary={documentId:4,itemId:567052,quantity:1,editable:true,quantityMinimum:0};
+ const all=[a,b,zero,ordinary];
+ assert.deepEqual(inventoryBatchZeroRows(all,[a,ordinary],()=>false),[ordinary]);
+ assert.deepEqual(inventoryBatchZeroRows(all,all,id=>id===2),[ordinary]);
+ assert.deepEqual(inventoryBatchZeroRows(all,[a,b,ordinary],id=>id===3),[a,b,ordinary]);
+ // A singleton request is a complete positive family when its peers are already zero.
+ assert.deepEqual(inventoryBatchZeroRows([a,zero],[a],()=>false),[a]);
+ assert.deepEqual(inventoryBatchZeroRows([a,zero],[a],id=>id===1),[]);
+ assert.deepEqual(inventoryBatchZeroRows([a,zero],[a],id=>id===3),[a]);
 });

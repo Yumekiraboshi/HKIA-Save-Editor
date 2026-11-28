@@ -2896,6 +2896,7 @@ impl Editor {
  }
  fn preflight_inventory_membership(&self,deltas:&[InventoryQuantityDelta])->Result<(),Error>{
   self.validate_structural_quantity_totals(deltas)?;
+  self.validate_duplicate_nil_zero_state(deltas)?;
   if !deltas.iter().any(|d|d.document_id&PENDING_ITEM!=0){return Ok(())}
   let mut handles:HashSet<u32>=self.inventory_changes.keys().filter(|&&id|id&PENDING_ITEM!=0).copied().collect();
   for d in deltas{
@@ -2921,7 +2922,46 @@ impl Editor {
    Some(InventoryEntry{document_id,item_id,quantity:0,editable:true,quantity_limit:Some(crate::inventory_source::ordinary_quantity_limit(item_id)?),quantity_minimum:1})
   }).collect()
  }
- fn plan_inventory_quantity(&self,id:u32,expected:i32,next:i32)->Result<InventoryQuantityDelta,Error>{
+ // Whole-family zero is a batch-only repair for existing duplicated
+ // ordinary nil records. Do not treat duplicate IDs as distinct game items.
+ fn duplicate_nil_zero_groups(&self)->HashSet<i32>{
+  if self.slot.envelope.version!=Version::V301{return HashSet::new()}
+  self.inventory_item_documents.iter().filter_map(|(&item,ids)|{
+   if ids.len()<2||crate::inventory_source::definition_requires_unique(item)!=Some(false){return None}
+   let mut count=0;
+   for &id in ids{
+    if self.inventory_removed.contains(&id){continue}
+    let row=self.saved_inventory_row(id)?;
+    if row.unique_is_nil!=Some(true)||row.unique_id!=Some(0)||!self.structural_quantity_caps.contains_key(&id)||
+     !Self::physical_inventory_reference_safe(&self.slot.index,row,false){return None}
+    count+=1;
+   }
+   (count>1).then_some(item)
+  }).collect()
+ }
+ /// Batch-only candidates; every positive active peer must reach zero.
+ pub fn inventory_batch_zero_only_ids(&self)->Vec<u32>{
+  let groups=self.duplicate_nil_zero_groups();
+  self.active_saved_inventory().filter_map(|row|groups.contains(&row.item_id?).then_some(row.id)).collect()
+ }
+ fn validate_duplicate_nil_zero_state(&self,deltas:&[InventoryQuantityDelta])->Result<(),Error>{
+  let groups=self.duplicate_nil_zero_groups();
+  if groups.is_empty(){return Ok(())}
+  let staged:HashMap<_,_>=deltas.iter().map(|d|(d.document_id,d.after)).collect();
+  for item in groups{
+   let mut patched_zero=false;let mut positive=false;
+   for &id in self.inventory_item_documents.get(&item).ok_or(Error::Schema)?{
+    if self.inventory_removed.contains(&id){continue}
+    let row=self.saved_inventory_row(id).ok_or(Error::Schema)?;
+    let patch=staged.get(&id).copied().unwrap_or_else(||self.inventory_changes.get(&id).copied());
+    let qty=patch.or(row.quantity).ok_or(Error::Schema)?;
+    patched_zero|=patch==Some(0);positive|=qty>0;
+   }
+   if patched_zero&&positive{return Err(Error::Schema)}
+  }
+  Ok(())
+ }
+ fn plan_inventory_quantity(&self,id:u32,expected:i32,next:i32,batch_zero_groups:Option<&HashSet<i32>>)->Result<InventoryQuantityDelta,Error>{
   if self.inventory_removed.contains(&id){return Err(Error::Schema)}
   if id&PENDING_ITEM!=0{
    if self.pending_flowers.contains_key(&id)||self.pending_furniture.contains_key(&id)||self.pending_palettes.contains_key(&id)||self.pending_bobas.contains_key(&id)||self.pending_cafes.contains_key(&id)||self.pending_wands.contains_key(&id){
@@ -2936,8 +2976,9 @@ impl Editor {
    return Ok(InventoryQuantityDelta{document_id:id,before,after:(next>0).then_some(next)})
   }
   let row=self.saved_inventory_row(id).ok_or(Error::Schema)?;
-  let cap=self.inventory_quantity_limit(row).ok_or(Error::Schema)?;
-  let minimum=if self.inventory_can_empty(row){0}else{1};
+  let group_zero=next==0&&batch_zero_groups.is_some_and(|groups|row.item_id.is_some_and(|item|groups.contains(&item)));
+  let cap=if group_zero{self.structural_quantity_caps.get(&id).copied()}else{self.inventory_quantity_limit(row)}.ok_or(Error::Schema)?;
+  let minimum=if group_zero||self.inventory_can_empty(row){0}else{1};
   if next<minimum||next>cap||
    self.inventory_changes.get(&id).copied().or(row.quantity)!=Some(expected){return Err(Error::Schema)}
   let before=self.inventory_changes.get(&id).copied();
@@ -3044,7 +3085,7 @@ impl Editor {
  /// Persisted document IDs are assigned only by the shared export allocator.
  pub fn change_inventory_quantity(&mut self,id:u32,expected:i32,next:i32)->Result<(),Error>{
   if expected==next{return Err(Error::Schema)}
-  let delta=self.plan_inventory_quantity(id,expected,next)?;
+  let delta=self.plan_inventory_quantity(id,expected,next,None)?;
   self.preflight_inventory_membership(&[delta])?;
   let InventoryQuantityDelta{document_id,before,after}=delta;
   let revision=self.next_edit_revision()?;
@@ -3063,9 +3104,10 @@ impl Editor {
   let revision=self.next_edit_revision_with_cost(5usize.saturating_add(requests.len().saturating_mul(12)))?;
   let mut seen=HashSet::new();
   let mut deltas=Vec::with_capacity(requests.len());
+  let zero_groups=if requests.iter().any(|&(_,_,next)|next==0){self.duplicate_nil_zero_groups()}else{HashSet::new()};
   for &(id,expected,next) in requests{
    if !seen.insert(id){return Err(Error::Duplicate)}
-   let delta=self.plan_inventory_quantity(id,expected,next)?;
+   let delta=self.plan_inventory_quantity(id,expected,next,Some(&zero_groups))?;
    if expected!=next{deltas.push(delta);}
   }
   if deltas.is_empty(){return Err(Error::Schema)}
@@ -3551,6 +3593,8 @@ impl Editor {
  pub fn export(&self)->Result<Vec<u8>,Error>{
   if !self.dirty(){return Err(Error::Schema)}
   self.validate_structural_quantity_totals(&[])?;
+  self.validate_duplicate_nil_zero_state(&[])?;
+  let zero_groups=self.duplicate_nil_zero_groups();
   let original_payload=&self.slot.envelope.decoded;
   let mut patches:Vec<achievement::Replacement>=Vec::new();
   if !self.changes.is_empty(){
@@ -3563,8 +3607,10 @@ impl Editor {
   for row in &self.slot.index.inventory {
    if self.inventory_removed.contains(&row.id){continue}
    if let Some(v)=self.inventory_changes.get(&row.id){
-    let minimum=if self.inventory_can_empty(row){0}else{1};
-    if self.inventory_quantity_limit(row).is_none_or(|cap|*v<minimum||*v>cap){return Err(Error::Schema)}
+    let group_zero=*v==0&&row.item_id.is_some_and(|item|zero_groups.contains(&item));
+    let minimum=if group_zero||self.inventory_can_empty(row){0}else{1};
+    let cap=if group_zero{self.structural_quantity_caps.get(&row.id).copied()}else{self.inventory_quantity_limit(row)};
+    if cap.is_none_or(|cap|*v<minimum||*v>cap){return Err(Error::Schema)}
     let span=row.fields[2].clone().ok_or(Error::Schema)?;
     let mut encoded=vec![0xd2];encoded.extend(v.to_be_bytes());
     patches.push((span,encoded));
