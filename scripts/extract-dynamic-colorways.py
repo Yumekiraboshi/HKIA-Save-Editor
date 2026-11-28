@@ -52,7 +52,7 @@ def definitions(objs):
 def named(objs,c):
     pairs=[(name(b)[0],(pid,b)) for pid,(cls,b) in objs.items() if c==cls];r=dict(pairs)
     require(len(r)==len(pairs),'duplicate name');return r
-def decode(data,res,cab,nm):
+def decode(data,res,cab,nm,native_resolution=False):
     from PIL import Image
     n,at=name(data);require(n==nm,'texture name')
     require(struct.unpack_from('<3i',data,at+4)==(256,256,65536) and struct.unpack_from('<i',data,at+20)[0]==12,'BC3 texture format')
@@ -64,6 +64,8 @@ def decode(data,res,cab,nm):
     header=b'DDS '+struct.pack('<7I',124,0x81007,256,256,size,0,1)+bytes(44)+struct.pack('<II4s5I',32,4,b'DXT5',0,0,0,0,0)+struct.pack('<5I',0x1000,0,0,0,0)
     image=Image.open(io.BytesIO(header+raw)).convert('RGBA').transpose(Image.Transpose.FLIP_TOP_BOTTOM)
     require(image.getchannel('A').getextrema()[0]==0 and image.getchannel('A').getextrema()[1]>0,'transparent original')
+    if native_resolution:
+        return image,sha(raw)
     canvas=Image.new('RGBA',(96,96));canvas.paste(image.resize((84,84),Image.Resampling.LANCZOS),(6,6))
     out=io.BytesIO();canvas.save(out,format='WEBP',lossless=True,method=0,exact=True);encoded=out.getvalue()
     check=Image.open(io.BytesIO(encoded)).convert('RGBA');require(check.size==(96,96) and check.tobytes()==canvas.tobytes(),'lossless WebP')
