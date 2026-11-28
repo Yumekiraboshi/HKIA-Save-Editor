@@ -374,3 +374,9 @@
 .inventory-sticky-tools{position:sticky;top:var(--inventory-sticky-top,64px);z-index:10;background:var(--bg);padding:8px 0 6px;margin:-8px 0 12px;box-shadow:0 5px 0 var(--bg);max-height:max(100px,calc((100dvh - var(--inventory-sticky-top,64px)) * .55));overflow-y:auto;scrollbar-width:thin}
 .inventory-sticky-tools .inventory-controls{margin-bottom:8px}
 .inventory-sticky-tools .inventory-group-strip{margin-bottom:0}
+
+/* Keep the control lane stable while hiding the apply action for an unchanged owned quantity. */
+.inventory-quantity-form .primary.quantity-unchanged{visibility:hidden;pointer-events:none}
+.inventory-quantity-form.quantity-pending input{border-color:var(--accent)}
+.inventory-quantity-delta{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:10px;line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}
+.inventory-quantity-delta.unapplied{color:var(--accent)}
