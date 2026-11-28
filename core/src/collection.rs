@@ -527,6 +527,46 @@ impl Editor {
   }).collect();
   rows.extend(self.pending_inventory_rows());rows
  }
+ /// Native default inventory-screen favorites, projected onto current row identities.
+ /// Absence of a rank is not proof that an unresolved/context-specific row is unpinned.
+ /// This projection is display-only; it is not destructive-operation authorization.
+ pub fn inventory_pin_orders(&self)->Vec<(u32,i16)>{
+  use crate::inventory_pin as pin;
+  let Some(source)=self.slot.index.pinned_items_source.as_ref()else{return Vec::new()};
+  let orders:HashMap<_,_>=source.for_screen(crate::native::INVENTORY_PIN_SCREEN).map(|p|(p.item_guid,p.order)).collect();
+  if orders.is_empty(){return Vec::new()}
+  self.inventory().into_iter().filter_map(|r|{
+   let id=r.document_id;
+   let key=self.effective_inventory_pin_guid(id,r.item_id)?;
+   Some((id,*orders.get(&key)?))
+  }).collect()
+ }
+ fn effective_inventory_pin_guid(&self,id:u32,item:i32)->Option<crate::inventory_pin::Guid>{
+  use crate::inventory_pin as pin;
+  let definition=*pin::definitions().get(&item)?;
+  let unique=if let Some(v)=self.flower_variant_changes.get(&id).copied().or_else(||self.pending_flowers.get(&id).map(|f|f.variant)){
+   pin::flower_guid(v)?
+  }else if let Some(v)=self.furniture_variant_changes.get(&id).copied().or_else(||self.pending_furniture.get(&id).map(|f|f.variant)){
+   pin::furniture_guid(v)?
+  }else if let Some(v)=self.palette_variant_changes.get(&id).copied().or_else(||self.pending_palettes.get(&id).copied()){
+   pin::palette_guid(v)
+  }else if let Some(v)=self.boba_variant_changes.get(&id).copied().or_else(||self.pending_bobas.get(&id).copied()){
+   pin::int_guid(v)
+  }else if let Some(v)=self.cafe_variant_changes.get(&id).copied().or_else(||self.pending_cafes.get(&id).map(|&(_,v)|v)){
+   let n=Self::cafe_count(v);pin::int_guid(v[..n].iter().chain(&v[3..3+n]).copied())
+  }else if let Some(v)=self.wand_variant_changes.get(&id).copied().or_else(||self.pending_wands.get(&id).map(|&(_,v)|v)){
+   // A legacy tag-5 source must use its original Hash128 source field.
+   // Do not guess its changed serialization in the display projection.
+   if self.saved_inventory_row(id).is_some_and(|r|matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))){return None}
+   let InventoryUniqueData::WandAppearance{source_item_id,magic,fleck,style,..}=Self::wand_appearance(item,v)? else{return None};
+   pin::int_guid([source_item_id,magic,fleck,style])
+  }else if id&PENDING_ITEM!=0{
+   return Some(definition)
+  }else{
+   return self.slot.index.inventory_pin_guids.get(&id).copied()
+  };
+  Some(pin::append_guid(definition,unique))
+ }
  /// Read-only lookup by document identity, never by Item ID alone.
  pub fn inventory_unique_data(&self,id:u32)->Option<crate::native::InventoryUniqueData>{
   if self.inventory_removed.contains(&id){return None}

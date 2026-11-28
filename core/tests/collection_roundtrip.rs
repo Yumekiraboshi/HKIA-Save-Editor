@@ -7102,3 +7102,26 @@ fn native_pin_source_joins_exact_screen_and_preserves_other_settings(){
   assert_eq!(reopened.envelope.decoded[next.whole],original);
  }
 }
+
+#[test]
+fn native_inventory_pin_rank_survives_quantity_history_and_export(){
+ use hkia_save_core::{native::INVENTORY_PIN_SCREEN,collection::HistoryScope::Inventory};
+ let mut payload=synthetic_payload("3.0.1");payload[2]=9;payload[3]=0x99;
+ let material=[0x7539b33a,0x40c88e66,0xff582cb7,0x469faae7];
+ let clothing=[0xcee4c4b9,0x4e24e182,0xace9279e,0x455eeb37];
+ payload.extend(doc(1,arr(vec![u(4),u(1877756618),u(0),u(6),vec![0xc0]])));
+ payload.extend(doc(1,arr(vec![u(5),u(315822),u(0),u(1),vec![0xc0]])));
+ payload.extend(doc(1,arr(vec![u(6),u(1877756618),u(0),u(0),vec![0xc0]])));
+ let sets=arr(vec![arr(vec![u(0),guid(INVENTORY_PIN_SCREEN)]),arr(vec![u(1),guid([4,5,6,7])])]);
+ let items=arr(vec![arr(vec![u(1),guid(clothing),u(0)]),arr(vec![u(0),guid(material),u(1)])]);
+ payload.extend(doc(23,arr(vec![u(7),vec![0xc0],vec![0xc0],arr(vec![sets,items])])));
+ let input=slot_from_payload("3.0.1",payload);
+ let mut e=Editor::open(input).unwrap();
+ assert_eq!(e.inventory_pin_orders(),vec![(4,1),(6,1)]);
+ e.change_inventory_quantity(5,1,2).unwrap();
+ assert_eq!(e.inventory_pin_orders(),vec![(4,1),(6,1)]);
+ assert!(e.undo_scope(Inventory));assert_eq!(e.inventory_pin_orders(),vec![(4,1),(6,1)]);
+ assert!(e.redo_scope(Inventory));assert_eq!(e.inventory_pin_orders(),vec![(4,1),(6,1)]);
+ let reopened=Editor::open(e.export().unwrap()).unwrap();
+ assert_eq!(reopened.inventory_pin_orders(),vec![(4,1),(6,1)]);
+}

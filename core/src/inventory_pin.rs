@@ -3,7 +3,7 @@
 //! 0x7595EA0. Explicit little-endian word order; no platform-dependent hash.
 use crate::{native::{InventoryRow,InventoryUniqueData},wire::{Cursor,Token}};
 use std::collections::HashMap;
-type Guid=[u32;4];
+pub(crate) type Guid=[u32;4];
 const C:u64=0xdeadbeefdeadbeef;
 fn words(g:Guid)->[u64;2]{[u64::from(g[0])|(u64::from(g[1])<<32),u64::from(g[2])|(u64::from(g[3])<<32)]}
 fn guid(v:[u64;2])->Guid{[v[0] as u32,(v[0]>>32) as u32,v[1] as u32,(v[1]>>32) as u32]}
@@ -13,13 +13,13 @@ fn short_end(mut v:[u64;4])->Guid{
  }
  guid([v[0],v[1]])
 }
-fn append_int(h:Guid,n:i32)->Guid{
+pub(crate) fn append_int(h:Guid,n:i32)->Guid{
  let [a,b]=words(h);short_end([a,b,C.wrapping_add(u64::from(n as u32)),C.wrapping_add(4u64<<56)])
 }
 fn append_long(h:Guid,n:i64)->Guid{
  let [a,b]=words(h);short_end([a,b,C.wrapping_add(n as u64),C.wrapping_add(8u64<<56)])
 }
-fn append_guid(h:Guid,g:Guid)->Guid{
+pub(crate) fn append_guid(h:Guid,g:Guid)->Guid{
  if g==[0;4]{return h}
  let [a,b]=words(h);let [c,d]=words(g);
  let mut v=[a,b,C.wrapping_add(c),C.wrapping_add(d)];
@@ -45,27 +45,40 @@ fn read_int_list(b:&[u8],mut h:Guid)->Option<Guid>{
  for _ in 0..n{h=append_int(h,c.int(i32::MIN as i128,i32::MAX as i128).ok()? as i32);}
  (c.pos==b.len()).then_some(h)
 }
-fn color_code(bits:[u32;4])->i32{
+pub(crate) fn color_code(bits:[u32;4])->i32{
  let [r,g,b,a]=bits.map(|w|if w&0x7fffffff==0{0}else{w as i32});
  r^g.wrapping_shl(2)^(b>>2)^(a>>1)
 }
+pub(crate) fn flower_guid(v:[i32;4])->Option<Guid>{
+ use crate::collection::{LEGACY_FLOWER_COLOR_GUIDS as C,LEGACY_FLOWER_PATTERN_GUIDS as P};
+ let [grow,base,pattern,accent]=v;let mut h=[0;4];
+ for key in [*C.get(usize::try_from(base).ok()?)?,*P.get(usize::try_from(pattern).ok()?)?,*C.get(usize::try_from(accent).ok()?)?]{h=append_guid(h,key);}
+ Some(append_int(h,grow))
+}
+pub(crate) fn furniture_guid(materials:[i32;3])->Option<Guid>{
+ let mut h=[0;4];
+ for index in materials{
+  let key=if index==0{[0;4]}else{crate::furniture_source::MATERIAL_GUID_INDEX.iter().find(|r|r.1==index)?.0};
+  h=append_guid(h,key);
+ }
+ Some(h)
+}
+pub(crate) fn int_guid(values:impl IntoIterator<Item=i32>)->Guid{
+ values.into_iter().fold([0;4],append_int)
+}
+pub(crate) fn palette_guid(values:[[u32;4];3])->Guid{int_guid(values.map(color_code))}
 fn unique_guid(row:&InventoryRow,raw:&[u8])->Option<Guid>{
  let data=row.unique_data?;let field=|i:usize|raw.get(row.unique_fields.get(i)?.clone());
  let int=|i|read_int(field(i)?);let g=|i|read_guid(field(i)?);
  let mut h=[0;4];
  match data{
   InventoryUniqueData::Flower{grow_state,base_color,pattern,pattern_color} if row.unique_fields.len()==4=>{
-   use crate::collection::{LEGACY_FLOWER_COLOR_GUIDS as C,LEGACY_FLOWER_PATTERN_GUIDS as P};
-   for key in [*C.get(usize::try_from(base_color).ok()?)?,*P.get(usize::try_from(pattern).ok()?)?,*C.get(usize::try_from(pattern_color).ok()?)?]{h=append_guid(h,key);}
-   h=append_int(h,i32::from(grow_state));
+   h=flower_guid([i32::from(grow_state),base_color,pattern,pattern_color])?;
   }
   InventoryUniqueData::Furniture{materials} if row.unique_fields.len()==3=>{
-   for index in materials{
-    let key=if index==0{[0;4]}else{crate::furniture_source::MATERIAL_GUID_INDEX.iter().find(|r|r.1==index)?.0};
-    h=append_guid(h,key);
-   }
+   h=furniture_guid(materials)?;
   }
-  InventoryUniqueData::Palette{rgba_bits} if row.unique_fields.len()==3=>{for bits in rgba_bits{h=append_int(h,color_code(bits));}}
+  InventoryUniqueData::Palette{rgba_bits} if row.unique_fields.len()==3=>{h=palette_guid(rgba_bits);}
   InventoryUniqueData::CafeAppearance{..} if row.unique_fields.len()==2=>{
    // Native Guid hashes both full lists in serialized order, not just the display colors.
    h=read_int_list(field(0)?,h)?;h=read_int_list(field(1)?,h)?;
@@ -96,11 +109,15 @@ fn unique_guid(row:&InventoryRow,raw:&[u8])->Option<Guid>{
  }
  Some(h)
 }
-/// Build a single exact definition crosswalk per opened source, never a
-/// per-item allowlist. Missing/unsupported identities stay absent.
-pub(crate) fn source_identities(rows:&[InventoryRow],raw:&[u8])->HashMap<u32,Guid>{
+/// One exact source definition crosswalk, shared by original and edited identities.
+pub(crate) fn definitions()->&'static HashMap<i32,Guid>{
  use crate::inventory_legacy_wand_guid_data::{LEGACY_WAND_SOURCE_GUIDS,OTHER_NATIVE_ITEM_GUIDS};
- let definitions:HashMap<i32,Guid>=LEGACY_WAND_SOURCE_GUIDS.iter().chain(OTHER_NATIVE_ITEM_GUIDS).map(|&(g,id)|(id,g)).collect();
+ static DEFINITIONS:std::sync::OnceLock<HashMap<i32,Guid>>=std::sync::OnceLock::new();
+ DEFINITIONS.get_or_init(||LEGACY_WAND_SOURCE_GUIDS.iter().chain(OTHER_NATIVE_ITEM_GUIDS).map(|&(g,id)|(id,g)).collect())
+}
+/// Build source identities once per opened save. Missing identities stay absent.
+pub(crate) fn source_identities(rows:&[InventoryRow],raw:&[u8])->HashMap<u32,Guid>{
+ let definitions=definitions();
  rows.iter().filter_map(|r|{
   if r.id==0||r.fields.iter().any(Option::is_none){return None}
   let definition=*definitions.get(&r.item_id?)?;
