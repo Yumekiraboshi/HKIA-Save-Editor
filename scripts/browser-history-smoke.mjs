@@ -27,7 +27,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,ordinaryRecipeInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -53,6 +53,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(scaleInventory?[2064380032,1806222956,142358610].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
   ...(resultArtInventory?[10455890,1217231008].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
+  ...(ordinaryRecipeInventory?[1878551760,167310698,1882318300].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
   ...(paletteRemovalInventory?[doc(10,arr([8],hash(1,2,3,4),arr(),arr(),arr(),hash(1,2,3,4),[0xc3],
    paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
    doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
@@ -2750,6 +2751,44 @@ async function inventoryNativeSheetRetrySmoke(){
  }finally{await context.close();}
  console.log('CHROMIUM NATIVE INVENTORY SHEET RETRY PASS: verified independent sheet recovery and reuse');
 }
+async function inventoryOrdinaryRecipeBadgeSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-ordinary-recipes.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({ordinaryRecipeInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  const card=page.locator('.inventory-card').first();
+  await search.fill('1878551760');
+  const egg=card.locator('[data-ingredient-key="recipe:0"]'),fruit=card.locator('[data-ingredient-key="recipe:1"]');
+  await egg.locator('.item-sprite').waitFor({timeout:30_000});
+  await fruit.locator('.ingredient-grid-cell .item-sprite').nth(4).waitFor({timeout:30_000});
+  assert.equal(await egg.getAttribute('data-ingredient-candidates'),'1090244985');
+  assert.equal(await fruit.getAttribute('data-ingredient-candidates'),'449040119,1877756618,1240730051,1622861092,518638500');
+  assert.equal(await card.locator('.ingredient-badge').count(),2);
+  assert.equal(await card.locator('.ingredient-count,.ingredient-unknown,.ingredient-ambiguity').count(),0);
+  for(const width of [1280,390]){
+   await page.setViewportSize({width,height:800});
+   await assertStableInventoryArtworkSlot(card.locator('.inventory-item-art'));
+   assert.ok(await fruit.evaluate(el=>{
+    const a=el.getBoundingClientRect();
+    const cells=[...el.querySelectorAll('.ingredient-grid-cell')];
+    return cells.length===5&&cells.every(c=>{const b=c.getBoundingClientRect();return b.width>0&&b.height>0&&b.left>=a.left-.5&&b.right<=a.right+.5&&b.top>=a.top-.5&&b.bottom<=a.bottom+.5;});
+   }));
+  }
+  await search.fill('167310698');
+  await card.locator('[data-result-icon-target="1878551760"]').waitFor({timeout:30_000});
+  assert.equal(await card.locator('.ingredient-badges').count(),0);
+  await search.fill('1882318300');
+  await card.locator('.inventory-item-art').waitFor();
+  assert.equal(await card.locator('.ingredient-badges').count(),0);
+  assert.deepEqual(errors,[]);
+ }finally{await context.close();}
+ console.log('CHROMIUM ORDINARY RECIPE BADGE PASS: five alternatives, fixed art geometry, non-food and recipe instruction excluded');
+}
 async function inventoryNativeResultArtSmoke(){
  // The first recipe/schematic result is in the original inventory atlas,
  // the second resolves to the original shared placeholder.
@@ -3758,6 +3797,7 @@ async function run(){
  await inventoryBobaFullCreationSmoke();
  await inventoryFirstChefSmoke();
  await inventoryCafeEditSmoke();
+ await inventoryOrdinaryRecipeBadgeSmoke();
  await inventoryCafeCreationAndOptionalSideSmoke();
  await inventoryChefQuantitySmoke();
  await wandRuntimeSmoke(browser,origin,base);
