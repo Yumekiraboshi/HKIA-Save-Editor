@@ -10,7 +10,7 @@ import {toDateTimeValue} from './collection-date';
 export type InventoryBatchDetail={documentId:number;before:number;after:number};
 export type HistoryDetail =
  | {scope:'inventory';documentId:number;batch:InventoryBatchDetail[];physical?:true}
- | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FlowerVariant;quantity:number;furnitureCreated?:false;paletteCreated?:false;bobaCreated?:false;cafeCreated?:false;wandCreated?:false}
+ | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FlowerVariant;quantity:number;replacedItemId?:number;furnitureCreated?:false;paletteCreated?:false;bobaCreated?:false;cafeCreated?:false;wandCreated?:false}
  | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FurnitureVariant;quantity:number;furnitureCreated:true;paletteCreated?:false;bobaCreated?:false;cafeCreated?:false;wandCreated?:false}
  | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:PaletteVariant;quantity:number;furnitureCreated?:false;paletteCreated:true;bobaCreated?:false;cafeCreated?:false;wandCreated?:false}
  | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:BobaVariant;quantity:number;furnitureCreated?:false;paletteCreated?:false;bobaCreated:true;cafeCreated?:false;wandCreated?:false}
@@ -105,6 +105,14 @@ export function decodeHistoryDetails(
      seen.add(documentId);batch.push({documentId,before,after:0});
     }
     result.push({scope:'inventory',documentId:batch[0].documentId,batch,physical:true});
+   }else if(kind===25){
+    const createdHandle=u32(),documentId=u32(),replacedItemId=i32(),itemId=i32();
+    const before:FlowerVariant=[i32(),i32(),i32(),i32()],variant:FlowerVariant=[i32(),i32(),i32(),i32()];
+    const quantity=i32();
+    const stagedSource=result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&!r.furnitureCreated&&!r.paletteCreated&&!r.bobaCreated&&!r.cafeCreated&&!r.wandCreated&&r.createdHandle===documentId&&r.itemId===replacedItemId);
+    if(createdHandle<=2147483647||createdHandle===documentId||documentId<=0||itemId<=0||replacedItemId<=0||itemId===replacedItemId||quantity<=0||
+     before.some(n=>n<0)||variant.some(n=>n<0)||(documentId>2147483647&&!stagedSource))return [];
+    result.push({scope:'inventory',documentId,createdHandle,itemId,variant,quantity,replacedItemId});
    }else if(kind===11){
     const createdHandle=u32(),documentId=u32(),itemId=i32();
     const before:FlowerVariant=[i32(),i32(),i32(),i32()],variant:FlowerVariant=[i32(),i32(),i32(),i32()];
@@ -249,6 +257,7 @@ export function formatHistoryChange(
   source?wandSourceName?.(source)??String(source):'',wandVariantName?.(pair)??'—',materials?furnitureVariantName?.(materials)??materials.join(' / '):''
  ].filter(Boolean).join(' · ');
  if(detail.scope==='inventory'&&'batch' in detail)return detail.batch.map(row=>(inventoryBatchName?.(row.documentId)??String(row.documentId))+': '+(detail.physical?row.before+' → '+copy.removed:row.before+' → '+row.after)).join(' · ');
+ if(detail.scope==='inventory'&&'createdHandle' in detail&&'replacedItemId' in detail&&detail.replacedItemId!==undefined)return (wandSourceName?.(detail.replacedItemId)??String(detail.replacedItemId))+' → '+(wandSourceName?.(detail.itemId)??String(detail.itemId))+' · '+(flowerVariantName?.(detail.variant)??String(detail.variant))+' · '+quantityLabel+': '+detail.quantity;
  if(detail.scope==='inventory'&&'createdHandle' in detail)return copy.added+' · '+(detail.wandCreated?wandLabel(detail.variant,detail.sourceItemId,detail.nestedMaterials):detail.cafeCreated?(cafeVariantName?.(detail.variant)??'—'):detail.bobaCreated?(bobaVariantName?.(detail.variant)??bobaVariantLabel(detail.variant,locale)):detail.paletteCreated?[0,1,2].map(i=>paletteColorHex(detail.variant,i)).join(' / '):detail.furnitureCreated?(furnitureVariantName?.(detail.variant)??String(detail.variant)):(flowerVariantName?.(detail.variant)??String(detail.variant)))+' · '+quantityLabel+': '+detail.quantity;
  if(detail.scope==='inventory'&&detail.cafeVariant)return (cafeVariantName?.(detail.before)??'—')+' → '+(cafeVariantName?.(detail.after)??'—');
  if(detail.scope==='inventory'&&detail.wandVariant)return wandLabel(detail.before,detail.beforeSource,detail.beforeMaterials)+' → '+wandLabel(detail.after,detail.afterSource,detail.afterMaterials);
