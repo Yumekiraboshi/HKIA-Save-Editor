@@ -53,7 +53,8 @@ test('shared original icons receive source-palette pixel rendering without rings
  assert.match(app,/class="item-art" aria-hidden="true"/);
  assert.match(app,/class="item-sprite" style:background-image=/);
  assert.match(app,/<DyeSprite sprite=\{resultSprite\}[^>]*originalArtUrl=\{resultOriginal\}/);
- assert.equal((app.match(/<DyeSprite /g)||[]).length,7);
+ assert.match(app,/<DyeSprite sprite=\{original\} originalArtUrl=\{originalVariantArt\[String\(edit.itemId\)\]\} exactArtUrl=\{exactVariantArt\[String\(edit.itemId\)\]\}/);
+ assert.equal((app.match(/<DyeSprite /g)||[]).length,8);
  assert.match(app,/<DyeSprite sprite=\{representativeSprite\} palette=\{nativeDyePalettes\[String\(representative\)\]\}/);
  assert.match(app,/inventorySourceItems\.get\(item\.itemId\)/);
  for(const prohibited of [/native-dye-ring/,/native-dye-preview/,/native-dye-swatch/,/hasSharedDyeableIcon/,/sharedDyeableIcon/]){

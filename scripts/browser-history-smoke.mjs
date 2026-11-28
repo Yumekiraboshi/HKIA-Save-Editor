@@ -2398,6 +2398,13 @@ async function inventoryFurnitureVariantEditSmoke(){
   await button.click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"][open]');
   await dialog.waitFor();
+  const preview=dialog.locator('[data-furniture-icon-preview] .item-sprite');
+  await preview.waitFor({timeout:30_000});
+  const mainIcon=page.locator('.inventory-card .inventory-item-art .item-sprite');
+  await mainIcon.waitFor({timeout:30_000});
+  const art=el=>{const c=getComputedStyle(el);return [c.backgroundImage,c.backgroundPosition];};
+  const source=await preview.evaluate(art);
+  assert.deepEqual(source,await mainIcon.evaluate(art),'furniture preview must retain the same original icon as the card');
   const select=dialog.locator('select[name="furniture-part-0"]');
   const value=await select.locator('option[data-material-index="502"]').getAttribute('value');
   assert.ok(value!==null);
@@ -2408,6 +2415,8 @@ async function inventoryFurnitureVariantEditSmoke(){
   await part1.selectOption(second);
   await dialog.locator('[data-furniture-reset="1"]:not([disabled])').waitFor();
   assert.equal(await dialog.locator('.inventory-furniture-reset').count(),2);
+  await dialog.locator('[data-furniture-icon-preview] [data-native-decorator="9"]').waitFor({timeout:30_000});
+  assert.deepEqual(await preview.evaluate(art),source,'material editing must not recolor the native main icon');
   await dialog.locator('button[type="submit"]').click();
   await dialog.waitFor({state:'hidden'});
   await page.locator('.state-dot.changed').waitFor();
