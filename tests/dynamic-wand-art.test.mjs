@@ -146,3 +146,39 @@ test('all native shared placeholder identities are reused by saved wand source s
  assert.ok(app.includes('if(hasNativeWandArt(row.itemId))addWandSource('));
  assert.ok(app.includes('if(wandEdit&&hasNativeWandArt(wandEdit.itemId))addWandSource('));
 });
+
+test('all 12163 native Item IDs resolve a source Sprite for all wand shapes, including the ramen recipe alias',async()=>{
+ const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/wand-runtime-art.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent',define:{'import.meta.env.BASE_URL':'"/"'}});
+ const {wandOriginalTemplate}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+ const {gunzipSync}=await import('node:zlib');
+ const envelope=JSON.parse(readFileSync(new URL('../public/inventory-native-categories.json',import.meta.url)));
+ const bytes=gunzipSync(Buffer.from(envelope.data,'base64'));
+ assert.equal(sha(bytes),envelope.rawSha256);
+ const originalIds=new Set();let offset=0,id=0;
+ while(offset<bytes.length){
+  let part,shift=0,delta=0;
+  do{part=bytes[offset++];delta+=(part&127)*2**shift;shift+=7;}while(part&128);
+  id+=delta;offset++;originalIds.add(id);
+ }
+ assert.equal(originalIds.size,12163);
+ const candidate=JSON.parse(read('candidate-source/index.json')),remaining=JSON.parse(read('remaining-source/index.json'));
+ const mip=JSON.parse(read('mip-source/wand-mip-source.json')),nonSquare=JSON.parse(read('candidate-source/wand-nonsquare.json'));
+ const aliases=JSON.parse(readFileSync(new URL('../data/wand-original-sprite-aliases-v3.0.1.json',import.meta.url)));
+ const placeholders=JSON.parse(readFileSync(new URL('../data/native-placeholder-main-routes-v3.0.1.json',import.meta.url)));
+ const atlas=JSON.parse(readFileSync(new URL('../public/inventory-art/index.json',import.meta.url)));
+ const chef=JSON.parse(readFileSync(new URL('../public/dynamic-chef-art/chef-runtime-source-v3.0.1.json',import.meta.url)));
+ const palette=JSON.parse(readFileSync(new URL('../public/dynamic-palette-art/palette-runtime-source-v3.0.1.json',import.meta.url)));
+ const ramen=chef.rows.find(r=>r.itemId===1061947263);
+ const recipe=atlas.records.find(r=>r[0]===964128772);
+ assert.equal(recipe[3],ramen.base.spritePathId);
+ assert.equal(recipe[3],atlas.withheld.find(r=>r[0]===1061947263)[1]);
+ assert.equal(palette.rows.find(r=>r.kind==='base').spritePathId,atlas.withheld.find(r=>r[0]===1835273963)[1]);
+ assert.deepEqual(wandOriginalTemplate(964128772),wandOriginalTemplate(1061947263));
+ assert.equal(wandOriginalTemplate(315823),undefined);
+ const templateIds=[...originalIds].filter(id=>wandOriginalTemplate(id));
+ assert.deepEqual(templateIds.sort((a,b)=>a-b),[964128772,1061947263,1835273963]);
+ const covered=new Set([...Object.keys(candidate.items).map(Number),...Object.keys(remaining.items).map(Number),...mip.rows.map(r=>r.itemId),...nonSquare.rows.map(r=>r.itemId),...aliases.rows.map(r=>r[0]),...placeholders.ids,...templateIds]);
+ assert.deepEqual(covered,originalIds);
+ const sprites=new Set([...candidate.sprites.map(r=>r[0]),...remaining.sprites.map(r=>r[0]),...mip.rows.map(r=>r.spritePathId),...nonSquare.rows.map(r=>r.spritePathId),ramen.base.spritePathId,palette.rows.find(r=>r.kind==='base').spritePathId]);
+ assert.equal(sprites.size,5020);
+});
