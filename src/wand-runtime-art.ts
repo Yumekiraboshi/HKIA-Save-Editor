@@ -9,6 +9,7 @@ import {hasNativePlaceholderArt,loadNativePlaceholderTexture,NATIVE_PLACEHOLDER_
 
 import {loadChefOriginalOverlay} from './chef-runtime-art';
 import {loadPaletteOriginalOverlay} from './palette-runtime-art';
+import {loadFlowerOriginalOverlay} from './flower-runtime-art';
 
 const ROOT=import.meta.env.BASE_URL+'dynamic-wand-art/';
 
@@ -161,7 +162,7 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
     const shared=template?.kind==='chef'
      ?await loadChefOriginalOverlay(template.itemId,transform)
      :template?.kind==='palette'
-      ?await loadPaletteOriginalOverlay(template.itemId,transform):null;
+      ?await loadPaletteOriginalOverlay(template.itemId,transform):await loadFlowerOriginalOverlay(appearance.sourceItemId,transform);
     if(shared){
      ({spritePathId,sourceHash,overlay}=shared);
     }else{
