@@ -142,3 +142,51 @@ test('rejected complete artwork still shows independent base and respects cancel
  await new Promise(setImmediate);
  assert.equal(partialCalls,2);
 });
+
+test('network recovery upgrades partial artwork without discarding it or retrying complete or canceled cards',async()=>{
+ const previous=globalThis.window;
+ const events=new EventTarget();
+ globalThis.window=events;
+ const full=new Blob(['full']),base=new Blob(['base']);
+ let online=false,calls=0,partialCalls=0,completeCalls=0,canceledCalls=0;
+ const seen=[];
+ const stop=startDynamicArtRequest(async()=>{calls++;return online?full:null;},(url,partial)=>seen.push([url,partial]),async()=>{partialCalls++;return base;});
+ const done=startDynamicArtRequest(async()=>{completeCalls++;return full;},()=>{});
+ const gone=startDynamicArtRequest(async()=>{canceledCalls++;return null;},()=>{});
+ try{
+  await new Promise(setImmediate);
+  assert.equal(calls,1);assert.equal(partialCalls,1);
+  assert.equal(seen.length,2);assert.equal(seen[1][1],true);
+  gone();
+  events.dispatchEvent(new Event('online'));
+  events.dispatchEvent(new Event('online'));
+  await new Promise(setImmediate);
+  assert.equal(calls,2);assert.equal(partialCalls,1);assert.equal(seen.length,2);
+  online=true;events.dispatchEvent(new Event('online'));
+  await new Promise(setImmediate);
+  assert.equal(calls,3);assert.equal(seen.length,3);assert.equal(seen[2][1],false);
+  assert.notEqual(seen[1][0],seen[2][0]);
+  events.dispatchEvent(new Event('online'));
+  await new Promise(setImmediate);
+  assert.equal(calls,3);assert.equal(completeCalls,1);assert.equal(canceledCalls,1);
+ }finally{
+  stop();done();gone();
+  if(previous===undefined)delete globalThis.window;else globalThis.window=previous;
+ }
+});
+test('network recovery also restores a missing image with no partial source',async()=>{
+ const previous=globalThis.window;
+ const events=new EventTarget();globalThis.window=events;
+ let online=false,calls=0;const seen=[];
+ const stop=startDynamicArtRequest(async()=>{calls++;if(!online)throw Error('offline');return new Blob(['restored']);},url=>seen.push(url));
+ try{
+  await new Promise(setImmediate);
+  assert.deepEqual(seen,[null]);
+  online=true;events.dispatchEvent(new Event('online'));
+  await new Promise(setImmediate);
+  assert.equal(calls,2);assert.equal(seen.length,2);assert.ok(seen[1].startsWith('blob:'));
+ }finally{
+  stop();
+  if(previous===undefined)delete globalThis.window;else globalThis.window=previous;
+ }
+});
