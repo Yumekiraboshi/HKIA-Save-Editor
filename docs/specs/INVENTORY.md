@@ -611,3 +611,7 @@ Every persisted InventoryItem has the same outer Quantity field regardless of th
 
 The complete 165-entry source-pinned extra non-layout customizable furniture crosswalk contains 42 definitions outside the ordinary bag projection. Their existing complete singleton UID-zero nil rows (or a nil base with independently verified distinct nondefault peers) use the same refill-only rule as ordinary bag rows when reference context prevents last-copy removal. Replenishment does not create a record, variant, entitlement, or reference; the quantity cap, identity and CAS checks remain mandatory. Last-copy removal and absent acquisition remain independently gated. Regression covers the entire 42-definition intersection with unresolved native reference context, raw/ZIP, batch CAS, history recovery and export/reparse. Actual game acceptance unverified.
 
+
+#### Scoped legacy copied-item reference protection
+
+Complete nonzero legacy wand-source and mermaidifier item GUIDs protect their exact native definition, not unrelated inventory entries. The verified 12,163-definition GUID crosswalk and denial fingerprints are complete for v3.0.1. If a nonzero source GUID is outside that crosswalk, retain its exact fingerprint for conservative matching; do not synthesize or resolve a new ItemId. A missing/zero identity, genuinely incomplete unscoped reference, or a known matching reference remains protected. The same native index is used for zeroing, physical removal, and independent export validation; the original copied payload is never modified by removing another row.
