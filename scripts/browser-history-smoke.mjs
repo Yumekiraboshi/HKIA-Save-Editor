@@ -27,7 +27,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,ordinaryRecipeInventory=false,ingredientResolutionInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false,categoryProtectionInventory=false,duplicateZeroInventory=false,duplicatePeerQuantity=0,missingUniqueZero=false,largeInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,ordinaryRecipeInventory=false,ingredientResolutionInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false,categoryProtectionInventory=false,duplicateZeroInventory=false,duplicatePeerQuantity=0,missingUniqueZero=false,duplicateMissingUnique=false,duplicateBaseFurniture=false,largeInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -62,6 +62,8 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
   ...(categoryProtectionInventory?[doc(1,arr([8],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([9],u32(627013240),[0],u32(9),[0xc0]))]:[]),
   ...(duplicateZeroInventory?[doc(1,arr([8],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([9],u32(1877756618),[0],u32(duplicatePeerQuantity),[0xc0]))]:[]),
   ...(missingUniqueZero?[doc(1,arr([10],u32(203331651),[0],u32(0),[0xc0]))]:[]),
+  ...(duplicateMissingUnique?[doc(1,arr([8],u32(203331651),[0],u32(3),[0xc0])),doc(1,arr([9],u32(203331651),[0],u32(2),[0xc0]))]:[]),
+  ...(duplicateBaseFurniture?[doc(1,arr([8],u32(61381969),[0],u32(3),[0xc0])),doc(1,arr([9],u32(61381969),[0],u32(2),[0xc0])),doc(1,arr([10],u32(61381969),u32(11),u32(7),arr([8],arr(u32(0),u32(2),u32(0)))))]:[]),
   ...(largeInventory?Array.from({length:480},(_,i)=>doc(1,arr(u32(20+i),u32(1877756618),[0],u32(i+1),[0xc0]))):[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
   ...(ordinaryFurnitureInventory?[doc(1,arr([8],u32(427689),[0],u32(5),[0xc0])),doc(1,arr([9],u32(3202680),[0],u32(6),[0xc0])),furnitureHomeObject]:[]),
@@ -1317,6 +1319,80 @@ async function inventoryRepairZeroOnlySmoke(){
   await card.waitFor();
   assert.equal(await field.count(),0);
   console.log('CHROMIUM REPAIR ZERO-ONLY QUANTITY PASS');
+ }finally{await context.close()}
+}
+async function inventoryDuplicateMissingUniqueZeroSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-duplicate-repair.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({duplicateMissingUnique:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-controls input[type="search"]').fill('203331651');
+  const card=page.locator('.inventory-card'),modal=page.locator('.removal-confirm-dialog');
+  await card.nth(1).waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').count(),0);
+  await page.locator('.inventory-batch-toggle').click();
+  const batch=page.locator('.inventory-batch-form input[type="number"]');
+  await card.first().locator('.inventory-batch-checkbox').check();
+  assert.equal(await batch.isDisabled(),true);
+  await card.nth(1).locator('.inventory-batch-checkbox').check();
+  assert.equal(await batch.isDisabled(),false);
+  assert.equal(await batch.getAttribute('min'),'0');
+  assert.equal(await batch.getAttribute('max'),'0');
+  await batch.fill('0');
+  await page.locator('.inventory-batch-form button[type="submit"]').click();
+  await modal.locator('.removal-confirm-action').waitFor({state:'visible'});
+  assert.equal(await modal.locator('.inventory-removal-targets li').count(),2);
+  assert.equal(await modal.locator('.inventory-remove-entry-action').count(),0);
+  await modal.locator('.removal-confirm-action').click();
+  await card.first().waitFor({state:'hidden'});
+  await page.locator('.inventory-show-zero-toggle').click();
+  await card.nth(1).waitFor();
+  assert.equal(await card.count(),2);
+  assert.equal(await card.locator('input[name="quantity"]').count(),0);
+  console.log('CHROMIUM DUPLICATE MISSING PAYLOAD ZERO PASS');
+ }finally{await context.close()}
+}
+async function inventoryDuplicateBaseFurnitureZeroSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-duplicate-base-furniture.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({duplicateBaseFurniture:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-controls input[type="search"]').fill('61381969');
+  const cards=page.locator('.inventory-card'),modal=page.locator('.removal-confirm-dialog');
+  await cards.nth(2).waitFor();
+  const base3=cards.filter({has:page.locator('.inventory-quantity-form[data-quantity-committed="3"]')});
+  const base2=cards.filter({has:page.locator('.inventory-quantity-form[data-quantity-committed="2"]')});
+  // Batch mode hides the quantity inputs; capture the native rendered order
+  // before switching rather than selecting the customized peer by assumption.
+  const indexes=await cards.evaluateAll(nodes=>nodes.map((node,i)=>({i,q:node.querySelector('.inventory-quantity-form')?.getAttribute('data-quantity-committed')})));
+  assert.equal(await base3.count(),1);assert.equal(await base2.count(),1);
+  assert.equal(indexes.filter(row=>row.q==='7').length,1);
+  await page.locator('.inventory-batch-toggle').click();
+  const batch=page.locator('.inventory-batch-form input[type="number"]');
+  await cards.nth(indexes.find(row=>row.q==='3').i).locator('.inventory-batch-checkbox').check();
+  assert.equal(await batch.getAttribute('min'),'1');
+  await cards.nth(indexes.find(row=>row.q==='2').i).locator('.inventory-batch-checkbox').check();
+  assert.equal(await batch.getAttribute('min'),'0');
+  await batch.fill('0');
+  await page.locator('.inventory-batch-form button[type="submit"]').click();
+  await modal.locator('.removal-confirm-action').waitFor({state:'visible'});
+  assert.equal(await modal.locator('.inventory-removal-targets li').count(),2);
+  assert.equal(await modal.locator('.inventory-remove-entry-action').count(),0);
+  await modal.locator('.removal-confirm-action').click();
+  await cards.nth(1).waitFor({state:'hidden'});
+  await page.locator('.inventory-batch-toggle').click();
+  await cards.locator('.inventory-quantity-form[data-quantity-committed="7"]').waitFor();
+  assert.equal(await cards.count(),1);
+  await page.locator('.inventory-show-zero-toggle').click();
+  await cards.nth(2).waitFor();
+  assert.deepEqual((await cards.locator('input[name="quantity"]').evaluateAll(inputs=>inputs.map(x=>Number(x.value)))).sort((a,b)=>a-b),[0,0,7]);
+  console.log('CHROMIUM DUPLICATE BASE FURNITURE ZERO PASS');
  }finally{await context.close()}
 }
 async function inventoryLastPositiveDuplicateZeroSmoke(){
@@ -4231,6 +4307,8 @@ async function run(){
  await inventoryEditExportSmoke();
  await inventoryBatchQuantitySmoke();
  await inventoryRepairZeroOnlySmoke();
+ await inventoryDuplicateMissingUniqueZeroSmoke();
+ await inventoryDuplicateBaseFurnitureZeroSmoke();
  await inventoryLastPositiveDuplicateZeroSmoke();
  await inventoryDuplicateBatchZeroInputSmoke();
  await inventoryMixedSelectionZeroOnlySmoke();

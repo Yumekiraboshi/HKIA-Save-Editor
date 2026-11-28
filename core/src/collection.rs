@@ -521,7 +521,7 @@ impl Editor {
   let mut rows:Vec<_>=self.slot.index.inventory.iter().filter_map(|r|{
    if self.inventory_removed.contains(&r.id){return None}
    let quantity=self.inventory_changes.get(&r.id).copied().or(r.quantity)?;
-   let quantity_limit=self.inventory_quantity_limit(r).filter(|&cap|cap!=0||quantity>0);
+   let quantity_limit=self.inventory_quantity_limit(r).or_else(||sole_positive.contains(&r.id).then(||self.repair_nil_zero_cap(r)).flatten()).filter(|&cap|cap!=0||quantity>0);
    let quantity_minimum=if self.inventory_can_empty(r)||sole_positive.contains(&r.id){0}else{1};
    Some(InventoryEntry{document_id:r.id,item_id:r.item_id?,quantity,
     editable:quantity_limit.is_some(),quantity_limit,quantity_minimum})
@@ -2832,11 +2832,19 @@ impl Editor {
   // The existing reference-safe nil repair permits emptying a complete
   // positive record, not synthesizing its missing required payload.
   // A zero-only bound is not positive quantity or creation authority.
+  if r.quantity.is_some_and(|q|q>0)&&self.inventory_can_empty(r){self.repair_nil_zero_cap(r)}else{None}
+ }
+ // Same native repair authority for single and duplicate nil families.
+ // No positive quantity bound or payload synthesis is ever inferred.
+ fn repair_nil_zero_cap(&self,r:&crate::native::InventoryRow)->Option<i32>{
   let item=r.item_id?;
-  (r.unique_is_nil==Some(true)&&r.unique_id==Some(0)&&r.quantity.is_some_and(|q|q>0)&&
+  (self.slot.envelope.version==Version::V301&&r.unique_is_nil==Some(true)&&r.unique_id==Some(0)&&
    crate::inventory_source::definition_requires_unique(item)==Some(true)&&
-   self.inventory_can_empty(r)&&
+   Self::physical_inventory_reference_safe(&self.slot.index,r,false)&&
    (!crate::inventory_source::wand_output_item(item)||self.structural_wand_zero_context_safe(item))).then_some(0)
+ }
+ fn duplicate_nil_zero_cap(&self,r:&crate::native::InventoryRow)->Option<i32>{
+  self.structural_quantity_caps.get(&r.id).copied().or_else(||self.repair_nil_zero_cap(r))
  }
  fn inventory_creation_source_valid(&self)->bool{
   !self.slot.index.inventory_item_refs_incomplete&&self.inventory_creation_rows_valid()
@@ -2950,17 +2958,23 @@ impl Editor {
    Some(InventoryEntry{document_id,item_id,quantity:0,editable:true,quantity_limit:Some(crate::inventory_source::ordinary_quantity_limit(item_id)?),quantity_minimum:1})
   }).collect()
  }
- // Whole-family zero is a batch-only repair for existing duplicated
- // ordinary nil records. Do not treat duplicate IDs as distinct game items.
+ // Whole-base-family zero is a batch-only repair for duplicated nil records.
+ // Verified nondefault furniture peers have independent native identities:
+ // they are not members of the nil family and must not be zeroed with it.
  fn duplicate_nil_zero_groups(&self)->HashSet<i32>{
   if self.slot.envelope.version!=Version::V301{return HashSet::new()}
   self.inventory_item_documents.iter().filter_map(|(&item,ids)|{
-   if ids.len()<2||crate::inventory_source::definition_requires_unique(item)!=Some(false){return None}
+   if ids.len()<2{return None}
+   let requires_unique=crate::inventory_source::definition_requires_unique(item)?;
    let mut count=0;
    for &id in ids{
     if self.inventory_removed.contains(&id){continue}
     let row=self.saved_inventory_row(id)?;
-    if row.unique_is_nil!=Some(true)||row.unique_id!=Some(0)||!self.structural_quantity_caps.contains_key(&id)||
+    if row.unique_is_nil!=Some(true){
+     if requires_unique||!self.permits_separate_ordinary_base(row){return None}
+     continue
+    }
+    if row.unique_id!=Some(0)||self.duplicate_nil_zero_cap(row).is_none()||
      !Self::physical_inventory_reference_safe(&self.slot.index,row,false){return None}
     count+=1;
    }
@@ -2978,6 +2992,7 @@ impl Editor {
    for &id in self.inventory_item_documents.get(&item)?{
     if self.inventory_removed.contains(&id){continue}
     let row=self.saved_inventory_row(id)?;
+    if row.unique_is_nil!=Some(true){continue}
     if self.inventory_changes.get(&id).copied().or(row.quantity)?>0{
      if positive.is_some(){return None}
      positive=Some(id);
@@ -2989,7 +3004,7 @@ impl Editor {
  /// Batch-capable candidates; every positive active peer must reach zero.
  pub fn inventory_batch_zero_only_ids(&self)->Vec<u32>{
   let groups=self.duplicate_nil_zero_groups();
-  self.active_saved_inventory().filter_map(|row|groups.contains(&row.item_id?).then_some(row.id)).collect()
+  self.active_saved_inventory().filter_map(|row|(row.unique_is_nil==Some(true)&&groups.contains(&row.item_id?)).then_some(row.id)).collect()
  }
  fn validate_duplicate_nil_zero_state(&self,deltas:&[InventoryQuantityDelta])->Result<(),Error>{
   let groups=self.duplicate_nil_zero_groups();
@@ -3000,6 +3015,7 @@ impl Editor {
    for &id in self.inventory_item_documents.get(&item).ok_or(Error::Schema)?{
     if self.inventory_removed.contains(&id){continue}
     let row=self.saved_inventory_row(id).ok_or(Error::Schema)?;
+    if row.unique_is_nil!=Some(true){continue}
     let patch=staged.get(&id).copied().unwrap_or_else(||self.inventory_changes.get(&id).copied());
     let qty=patch.or(row.quantity).ok_or(Error::Schema)?;
     patched_zero|=patch==Some(0);positive|=qty>0;
@@ -3024,8 +3040,8 @@ impl Editor {
    return Ok(InventoryQuantityDelta{document_id:id,before,after:(next>0).then_some(next)})
   }
   let row=self.saved_inventory_row(id).ok_or(Error::Schema)?;
-  let group_zero=next==0&&batch_zero_groups.is_some_and(|groups|row.item_id.is_some_and(|item|groups.contains(&item)));
-  let cap=if group_zero{self.structural_quantity_caps.get(&id).copied()}else{self.inventory_quantity_limit(row)}.ok_or(Error::Schema)?;
+  let group_zero=next==0&&row.unique_is_nil==Some(true)&&batch_zero_groups.is_some_and(|groups|row.item_id.is_some_and(|item|groups.contains(&item)));
+  let cap=if group_zero{self.duplicate_nil_zero_cap(row)}else{self.inventory_quantity_limit(row)}.ok_or(Error::Schema)?;
   let minimum=if group_zero||self.inventory_can_empty(row){0}else{1};
   if next<minimum||next>cap||
    self.inventory_changes.get(&id).copied().or(row.quantity)!=Some(expected){return Err(Error::Schema)}
@@ -3659,9 +3675,9 @@ impl Editor {
   for row in &self.slot.index.inventory {
    if self.inventory_removed.contains(&row.id){continue}
    if let Some(v)=self.inventory_changes.get(&row.id){
-    let group_zero=*v==0&&row.item_id.is_some_and(|item|zero_groups.contains(&item));
+    let group_zero=*v==0&&row.unique_is_nil==Some(true)&&row.item_id.is_some_and(|item|zero_groups.contains(&item));
     let minimum=if group_zero||self.inventory_can_empty(row){0}else{1};
-    let cap=if group_zero{self.structural_quantity_caps.get(&row.id).copied()}else{self.inventory_quantity_limit(row)};
+    let cap=if group_zero{self.duplicate_nil_zero_cap(row)}else{self.inventory_quantity_limit(row)};
     if cap.is_none_or(|cap|*v<minimum||*v>cap){return Err(Error::Schema)}
     let span=row.fields[2].clone().ok_or(Error::Schema)?;
     let mut encoded=vec![0xd2];encoded.extend(v.to_be_bytes());
