@@ -2,21 +2,21 @@ import type {Locale} from './locales';
 import type {FlowerGrowthKind} from './inventory-flower-display';
 type FlowerGrowthCopy=Record<FlowerGrowthKind,string>;
 // Editor descriptions of native state, not claimed original game strings.
-const growthEn:FlowerGrowthCopy={seed:'Seed',plucked:'Flower',uprooted:'Uprooted plant',unknown:'Unknown state'};
+const growthEn:FlowerGrowthCopy={planted:"Planted",seedling:"Seedling",grown:"Grown",bud:"Bud",bloom:"Bloom",seed:'Seed',plucked:'Flower',uprooted:'Uprooted plant',unknown:'Unknown state'};
 const growth:Partial<Record<Locale,FlowerGrowthCopy>>={
- ja:{seed:'種',plucked:'花',uprooted:'掘り起こした株',unknown:'状態未確認'},
- ar:{seed:'بذرة',plucked:'زهرة',uprooted:'نبتة مقتلعة',unknown:'حالة غير معروفة'},
- de:{seed:'Samen',plucked:'Blüte',uprooted:'Ausgegrabene Pflanze',unknown:'Unbekannter Zustand'},
- es:{seed:'Semilla',plucked:'Flor',uprooted:'Planta desenterrada',unknown:'Estado desconocido'},
- fr:{seed:'Graine',plucked:'Fleur',uprooted:'Plante déterrée',unknown:'État inconnu'},
- it:{seed:'Seme',plucked:'Fiore',uprooted:'Pianta dissotterrata',unknown:'Stato sconosciuto'},
- ko:{seed:'씨앗',plucked:'꽃',uprooted:'캐낸 식물',unknown:'알 수 없는 상태'},
- nl:{seed:'Zaad',plucked:'Bloem',uprooted:'Uitgegraven plant',unknown:'Onbekende staat'},
- 'pt-BR':{seed:'Semente',plucked:'Flor',uprooted:'Planta desenterrada',unknown:'Estado desconhecido'},
- ru:{seed:'Семя',plucked:'Цветок',uprooted:'Выкопанное растение',unknown:'Неизвестное состояние'},
- tr:{seed:'Tohum',plucked:'Çiçek',uprooted:'Sökülmüş bitki',unknown:'Bilinmeyen durum'},
- 'zh-Hans':{seed:'种子',plucked:'花朵',uprooted:'挖出的植株',unknown:'未知状态'},
- 'zh-Hant':{seed:'種子',plucked:'花朵',uprooted:'挖出的植株',unknown:'未知狀態'}
+ ja:{planted:"植え付け済み",seedling:"苗",grown:"成長済み",bud:"つぼみ",bloom:"開花",seed:'種',plucked:'花',uprooted:'掘り起こした株',unknown:'状態未確認'},
+ ar:{planted:"مزروعة",seedling:"شتلة",grown:"ناضجة",bud:"برعم",bloom:"متفتحة",seed:'بذرة',plucked:'زهرة',uprooted:'نبتة مقتلعة',unknown:'حالة غير معروفة'},
+ de:{planted:"Gepflanzt",seedling:"Setzling",grown:"Ausgewachsen",bud:"Knospe",bloom:"In Blüte",seed:'Samen',plucked:'Blüte',uprooted:'Ausgegrabene Pflanze',unknown:'Unbekannter Zustand'},
+ es:{planted:"Plantada",seedling:"Plántula",grown:"Crecida",bud:"Capullo",bloom:"En flor",seed:'Semilla',plucked:'Flor',uprooted:'Planta desenterrada',unknown:'Estado desconocido'},
+ fr:{planted:"Plantée",seedling:"Plantule",grown:"Adulte",bud:"Bouton",bloom:"En floraison",seed:'Graine',plucked:'Fleur',uprooted:'Plante déterrée',unknown:'État inconnu'},
+ it:{planted:"Piantata",seedling:"Germoglio",grown:"Cresciuta",bud:"Bocciolo",bloom:"In fiore",seed:'Seme',plucked:'Fiore',uprooted:'Pianta dissotterrata',unknown:'Stato sconosciuto'},
+ ko:{planted:"심은 상태",seedling:"새싹",grown:"성장 완료",bud:"꽃봉오리",bloom:"개화",seed:'씨앗',plucked:'꽃',uprooted:'캐낸 식물',unknown:'알 수 없는 상태'},
+ nl:{planted:"Geplant",seedling:"Zaailing",grown:"Volgroeid",bud:"Knop",bloom:"In bloei",seed:'Zaad',plucked:'Bloem',uprooted:'Uitgegraven plant',unknown:'Onbekende staat'},
+ 'pt-BR':{planted:"Plantada",seedling:"Muda",grown:"Crescida",bud:"Botão",bloom:"Florescida",seed:'Semente',plucked:'Flor',uprooted:'Planta desenterrada',unknown:'Estado desconhecido'},
+ ru:{planted:"Посажено",seedling:"Сеянец",grown:"Выросшее растение",bud:"Бутон",bloom:"Цветение",seed:'Семя',plucked:'Цветок',uprooted:'Выкопанное растение',unknown:'Неизвестное состояние'},
+ tr:{planted:"Dikilmiş",seedling:"Fide",grown:"Büyümüş",bud:"Tomurcuk",bloom:"Çiçek açmış",seed:'Tohum',plucked:'Çiçek',uprooted:'Sökülmüş bitki',unknown:'Bilinmeyen durum'},
+ 'zh-Hans':{planted:"已种植",seedling:"幼苗",grown:"已长成",bud:"花苞",bloom:"开花",seed:'种子',plucked:'花朵',uprooted:'挖出的植株',unknown:'未知状态'},
+ 'zh-Hant':{planted:"已種植",seedling:"幼苗",grown:"已長成",bud:"花苞",bloom:"開花",seed:'種子',plucked:'花朵',uprooted:'挖出的植株',unknown:'未知狀態'}
 };
 export function flowerGrowthLabel(locale:Locale,kind:FlowerGrowthKind|null):string{
  return kind?(growth[locale]??(locale==='fr-CA'?growth.fr!:growthEn))[kind]:'';

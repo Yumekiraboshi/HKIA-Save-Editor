@@ -19,8 +19,10 @@ export function resolvePaletteTints(itemId:number,palette:InventoryPalette):Tint
  // The exact v3.0.1 dynamic-color definition is the customized avatar
  // palette. Do not infer that arbitrary clothing uses this icon.
  if(itemId!==CUSTOM_PALETTE_ITEM_ID||palette.length!==3||
-  !palette.every(c=>c.length===4&&c.every(v=>Number.isFinite(v)&&v>=0&&v<=1)))return null;
- return palette;
+  !palette.every(c=>c.length===4&&c.every(Number.isFinite)&&c.slice(0,3).every(v=>v>=0&&v<=1)))return null;
+ // The native Dynamic Sprite Color pixel program reads tint RGB only.
+ // Canonicalize the display/cache identity, never the saved float words.
+ return palette.every(c=>c[3]===1)?palette:palette.map(c=>[c[0],c[1],c[2],1] as Rgba) as unknown as TintSet;
 }
 
 /** Exact unsigned words for transport/history. Float conversion is display-only. */

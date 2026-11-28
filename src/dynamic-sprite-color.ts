@@ -6,6 +6,9 @@
 export type Rgba=readonly [number,number,number,number];
 export type TintSet=readonly [Rgba,Rgba,Rgba];
 export type UvRect=readonly [number,number,number,number];
+/** In the original sequential RGB lerps, all-white RGB tints make the
+ * mask mathematically irrelevant. Call only after source tint validation. */
+export function isNeutralTintSet(tints:TintSet):boolean{return tints.every(c=>c[0]===1&&c[1]===1&&c[2]===1);}
 const WHITE:Rgba=[1,1,1,1];
 const ZERO:Rgba=[0,0,0,0];
 function lerp(a:number,b:number,t:number){return a+(b-a)*t;}
