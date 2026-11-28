@@ -380,6 +380,7 @@ pub struct Editor {
  pending_wands:HashMap<u32,(i32,WandData)>,
  pending_bobas:HashMap<u32,BobaVariant>,
  inventory_item_rows:HashMap<i32,usize>,
+ inventory_item_documents:HashMap<i32,Vec<u32>>,
  unique_quantity_ids:HashSet<u32>,
  structural_quantity_caps:HashMap<u32,i32>,
  structural_zero_ids:HashSet<u32>,
@@ -417,14 +418,15 @@ impl Editor {
    entries.push(Entry{id:row.id,ticks:row.ticks});
   }
   let mut inventory_item_rows=HashMap::new();
+  let mut inventory_item_documents:HashMap<i32,Vec<u32>>=HashMap::new();
   for row in &slot.index.inventory{
-   if let Some(id)=row.item_id{*inventory_item_rows.entry(id).or_insert(0usize)+=1;}
+   if let Some(id)=row.item_id{*inventory_item_rows.entry(id).or_insert(0usize)+=1;inventory_item_documents.entry(id).or_default().push(row.id);}
   }
   // Original slot bytes and native index are immutable for the session.
   let legacy_wand_sources_resolved=slot.index.inventory.iter().filter(|r|matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))).all(|r|
    r.id>0&&r.id<PENDING_ITEM&&r.unique_id.is_some_and(|uid|uid>0)&&r.quantity.is_some_and(|q|q>=0)&&
    r.fields.iter().all(Option::is_some)&&Self::legacy_wand_identity_in(&slot.envelope.decoded,r).is_some());
-  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),inventory_removed:HashSet::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),pending_bobas:HashMap::new(),pending_cafes:HashMap::new(),pending_wands:HashMap::new(),inventory_item_rows,unique_quantity_ids:HashSet::new(),structural_quantity_caps:HashMap::new(),structural_zero_ids:HashSet::new(),legacy_wand_sources_resolved,flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),boba_variant_changes:HashMap::new(),wand_variant_changes:HashMap::new(),cafe_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
+  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),inventory_removed:HashSet::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),pending_bobas:HashMap::new(),pending_cafes:HashMap::new(),pending_wands:HashMap::new(),inventory_item_rows,inventory_item_documents,unique_quantity_ids:HashSet::new(),structural_quantity_caps:HashMap::new(),structural_zero_ids:HashSet::new(),legacy_wand_sources_resolved,flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),boba_variant_changes:HashMap::new(),wand_variant_changes:HashMap::new(),cafe_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
   editor.unique_quantity_ids=editor.index_unique_quantity_ids();
   editor.structural_quantity_caps=editor.index_structural_quantity_caps();
   let removable:HashSet<_>=editor.inventory_removable_ids().into_iter().collect();
@@ -734,7 +736,7 @@ impl Editor {
  fn active_saved_item_count(&self,item:i32)->usize{
   let original=self.inventory_item_rows.get(&item).copied().unwrap_or(0);
   if original==0||self.inventory_removed.is_empty(){return original}
-  self.active_saved_inventory().filter(|r|r.item_id==Some(item)).count()
+  self.inventory_item_documents.get(&item).map_or(0,|ids|ids.iter().filter(|id|!self.inventory_removed.contains(id)).count())
  }
  fn saved_item_family_empty(&self,item:i32)->bool{
   !self.inventory_item_rows.contains_key(&item)||self.active_saved_inventory().filter(|r|r.item_id==Some(item)).all(|r|
@@ -1296,7 +1298,7 @@ impl Editor {
   let Some(item)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.unique_is_nil==Some(true)&&
    Self::physical_inventory_reference_safe(&self.slot.index,r,false)&&
-   (self.inventory_item_rows.get(&item)==Some(&1)||self.ordinary_furniture_base_distinct(r,item))
+   (self.active_saved_item_count(item)==1||self.ordinary_furniture_base_distinct(r,item))
  }
  // Index the original unique identities once, rather than scanning all
  // peers per visible row or per complete Worker snapshot. Variant changes
@@ -2515,8 +2517,9 @@ impl Editor {
    if (uid==0)!=r.unique_is_nil?{return None}
    if r.unique_is_nil==Some(true)&&crate::inventory_source::definition_requires_unique(item)?{return None}
    let cap=crate::inventory_source::definition_quantity_limit(item)?;
-   // A finite item cap must not be multiplied by ambiguous same-item rows.
-   if cap<i32::MAX&&self.inventory_item_rows.get(&item)!=Some(&1){return None}
+   // Keep structural bounds for nil rows even when duplicates temporarily
+   // block quantity editing. The live membership gate below re-evaluates them.
+   if uid!=0&&cap<i32::MAX&&self.inventory_item_rows.get(&item)!=Some(&1){return None}
    Some((r.id,cap))
   }).collect()
  }
@@ -2564,7 +2567,12 @@ impl Editor {
   Ok(())
  }
  fn inventory_quantity_limit(&self,r:&crate::native::InventoryRow)->Option<i32>{
-  self.structural_quantity_caps.get(&r.id).copied()
+  let cap=self.structural_quantity_caps.get(&r.id).copied()?;
+  // Finite bounds apply to the active family, not the original count. A
+  // duplicate must be explicitly deleted before the surviving nil row can
+  // be edited, and undoing that deletion restores the restriction.
+  if r.unique_is_nil==Some(true)&&cap<i32::MAX&&self.active_saved_item_count(r.item_id?)!=1{return None}
+  Some(cap)
  }
  fn inventory_creation_source_valid(&self)->bool{
   !self.slot.index.inventory_item_refs_incomplete&&self.inventory_creation_rows_valid()
@@ -2741,7 +2749,9 @@ impl Editor {
   }
  }
  pub fn inventory_entry_removable(&self,id:u32)->bool{
-  self.slot.envelope.version==Version::V301&&!self.inventory_removed.contains(&id)&&
+  if self.slot.envelope.version!=Version::V301{return false}
+  if id&PENDING_ITEM!=0{return self.inventory_changes.get(&id).is_some_and(|q|*q>0)}
+  !self.inventory_removed.contains(&id)&&
    self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|Self::physical_inventory_reference_safe(&self.slot.index,r,self.slot.index.inventory.iter().filter(|p|p.unique_id==r.unique_id).count()==1))
  }
  pub fn inventory_removable_ids(&self)->Vec<u32>{
@@ -2749,9 +2759,10 @@ impl Editor {
   let mut uids=HashMap::<i32,usize>::new();
   for row in &self.slot.index.inventory{if let Some(uid)=row.unique_id{*uids.entry(uid).or_default()+=1;}}
   self.slot.index.inventory.iter().filter_map(|r|(!self.inventory_removed.contains(&r.id)&&
-   Self::physical_inventory_reference_safe(&self.slot.index,r,r.unique_id.is_some_and(|uid|uids.get(&uid)==Some(&1)))).then_some(r.id)).collect()
+   Self::physical_inventory_reference_safe(&self.slot.index,r,r.unique_id.is_some_and(|uid|uids.get(&uid)==Some(&1)))).then_some(r.id))
+   .chain(self.inventory_changes.iter().filter_map(|(&id,&q)|(id&PENDING_ITEM!=0&&q>0).then_some(id))).collect()
  }
- /// Exact persisted document removal; quantity zero is a separate operation.
+ /// Exact persisted document removal and cancellation of staged additions in one transaction.
  pub fn remove_inventory_entries(&mut self,requests:&[(u32,i32)])->Result<(),Error>{
   if requests.is_empty()||requests.len()>MAX_INVENTORY_BATCH{return Err(Error::Budget)}
   let mut seen=HashSet::new();
@@ -3156,7 +3167,11 @@ impl Editor {
     }
    }
    Change::InventoryRemoved{ref rows}=>{
-    for &(id,_) in rows{if reverse{self.inventory_removed.remove(&id);}else{self.inventory_removed.insert(id);}}
+    for &(id,quantity) in rows{
+     if id&PENDING_ITEM!=0{
+      if reverse{self.inventory_changes.insert(id,quantity);}else{self.inventory_changes.remove(&id);}
+     }else if reverse{self.inventory_removed.remove(&id);}else{self.inventory_removed.insert(id);}
+    }
    }
    Change::FlowerCreated{document_id,flower,quantity,..}=>{
     if reverse{self.pending_flowers.remove(&document_id);self.inventory_changes.remove(&document_id);}
