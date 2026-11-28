@@ -36,7 +36,10 @@ export async function wandRuntimeSmoke(browser,origin,base){
     const b={magicCharacteristicId:109,fleckCharacteristicId:127};
     const first=await renderWandBaseArt(row.itemId,a),second=await renderWandBaseArt(row.itemId,b);
     const original=await renderWandOriginalBaseArt(row.itemId);
-    rows.push({id:row.itemId,a:await pixels(first),b:await pixels(second),original:await pixels(original),originalCache:original===await renderWandOriginalBaseArt(row.itemId),cache:first===await renderWandBaseArt(row.itemId,a)});
+    const neutral={magicCharacteristicId:1,fleckCharacteristicId:2};
+    const unmapped=await renderWandBaseArt(row.itemId,neutral);
+    const full=await renderWandArt(row.itemId,{...neutral,sourceItemId:1185152302});
+    rows.push({id:row.itemId,a:await pixels(first),b:await pixels(second),original:await pixels(original),originalCache:original===await renderWandOriginalBaseArt(row.itemId),cache:first===await renderWandBaseArt(row.itemId,a),neutral:await pixels(unmapped),neutralCache:unmapped!==null&&unmapped===await renderWandBaseArt(row.itemId,{magicCharacteristicId:2,fleckCharacteristicId:1}),neutralFull:await pixels(full),neutralNoSource:await renderWandMagicArt(row.itemId,{...neutral,sourceItemId:0})===null});
    }
    const composed=[];
    for(const magic of m.magic){
@@ -134,6 +137,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
    return {rows,composed,itemRows,added,inv,directSources,placeholders,outside,allShapes,templateRows,sharedAliases,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315823,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
   },base);
   assert.equal(out.rows.length,9);assert.ok(out.unknown&&out.unknownOriginal);
+  for(const row of out.rows){assert.equal(row.neutral.rgba,row.original.rgba);assert.ok(row.neutralCache&&row.neutralFull.visible&&row.neutralNoSource);}
   assert.equal(out.composed.length,13);assert.ok(out.unsupportedSource);
   assert.equal(out.templateRows.length,18);
   for(const row of out.templateRows){assert.ok(row.art.visible&&row.cached);assert.notEqual(row.art.rgba,row.plain);}
