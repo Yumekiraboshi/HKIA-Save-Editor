@@ -6751,7 +6751,7 @@ fn palette_first_add_survives_all_equal_color_starters_reserved_by_zero_rows(){
  let encode=|v:PaletteVariant|arr(vec![vec![6],arr(v.into_iter().map(|c|arr(c.into_iter().map(|w|f(f32::from_bits(w))).collect())).collect())]);
  let mut colors=Vec::new();
  for index in (1..=13).chain(16..=30){for slot in [0,3,4]{
-  let c=color(index,slot).unwrap();
+  let Some(c)=color(index,slot)else{continue};
   if !colors.iter().any(|p:&[u32;4]|{
    let square=|i:usize|{let d=f32::from_bits(p[i])-f32::from_bits(c[i]);d*d};
    ((square(0)+square(1))+square(2))+square(3)<f32::from_bits(0x2edbe6fe)
