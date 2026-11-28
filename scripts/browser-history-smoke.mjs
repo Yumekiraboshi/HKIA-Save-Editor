@@ -1356,6 +1356,9 @@ async function inventoryDuplicateBatchZeroInputSmoke(){
   await card.nth(1).waitFor();
   assert.equal(await card.count(),2,'both native records remain');
   await page.locator('button[title="Undo"]:not([disabled])').click();
+  // Undo crosses the Worker asynchronously; wait for both committed rows, not a click completion.
+  await card.locator('.inventory-quantity-form[data-quantity-committed="3"]').waitFor();
+  await card.locator('.inventory-quantity-form[data-quantity-committed="6"]').waitFor();
   assert.deepEqual((await card.locator('input[name="quantity"]').evaluateAll(inputs=>inputs.map(x=>Number(x.value)))).sort((a,b)=>a-b),[3,6]);
   console.log('CHROMIUM DUPLICATE BATCH ZERO INPUT PASS');
  }finally{await context.close()}
