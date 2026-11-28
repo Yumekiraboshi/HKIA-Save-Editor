@@ -258,23 +258,6 @@ def plan_routes(rows,cells,expected,overrides,dynamic,texture_records,results,pl
         routes[i]={'itemId':i,'kind':'native-result','targetItemId':target,'sourceBlockers':blockers}
     return routes
 
-def collection_own_routes(catalog,cells,expected,completed,placeholders,dynamic):
-    # Collection is indexed by its own definition even for recipe items.
-    # An unavailable original override must not fall back to a shared grey base.
-    routes=[]
-    for i in sorted(catalog):
-        if i in expected:
-            kind='original-override'
-            missing=i not in completed
-        elif i in placeholders:
-            kind='source-placeholder'
-            missing=i not in cells
-        else:
-            kind='original-base-only' if i in dynamic and dynamic[i]['family']!='instruction' else 'original-base'
-            missing=i not in cells
-        routes.append([i,kind,missing])
-    return routes
-
 def zip_bytes(files):
     buffer=io.BytesIO()
     with zipfile.ZipFile(buffer,'w',compression=zipfile.ZIP_STORED) as z:
@@ -513,6 +496,88 @@ def pack_dynamic(folder,stage_dir,stage):
                                       'records':records,'unresolved':stage['unresolved']})
     return len(records),len(pages)
 
+def collection_own_routes(catalog,cells,expected,completed,placeholders,dynamic):
+    # Collection is indexed by its own definition even for recipe items.
+    # An unavailable original override must not fall back to a shared grey base.
+    routes=[]
+    for i in sorted(catalog):
+        if i in expected:
+            kind='original-override'
+            missing=i not in completed
+        elif i in placeholders:
+            kind='source-placeholder'
+            missing=i not in cells
+        else:
+            kind='original-base-only' if i in dynamic and dynamic[i]['family']!='instruction' else 'original-base'
+            missing=i not in cells
+        routes.append([i,kind,missing])
+    return routes
+
+
+def native_partitions(base,overrides,rows,override_rows,snapshot):
+    native=module('native-raster-webp')
+    require(base['renderer']==overrides['renderer']==native.POLICY and
+            base['definitionCount']==len(rows),'native artwork stage policy/census')
+    cells={}
+    for i,key in base['records']:
+        require(type(i) is int and i in rows and i not in cells and key in base['sprites'],'native base identity')
+        rec=base['sprites'][key];b=rec['binding'];a=rec['asset']
+        require(key==b['spriteCab']+':'+b['spritePathId'] and b['spritePathId']==rows[i]['sprite']['pathId'] and
+                rows[i]['sprite']['objectSha256'] in (None,b['spriteSha256']) and
+                [a['width'],a['height']]==[round(v) for v in b['logicalSize']],
+                'native original sprite binding/dimensions')
+        cells[i]=rec
+    missing=[r['itemId'] for r in base['unresolved']]
+    require(len(set(missing))==len(missing) and not set(missing)&set(cells) and
+            set(missing)|set(cells)==set(rows) and
+            {key for _,key in base['records']}==set(base['sprites']),'native base partition')
+    require(snapshot.get('outfitIconOverrideLayout')==source.OUTFIT_LAYOUT,'reviewed override layout')
+    expected={i:r['outfitIconOverrideGuid'] for i,r in override_rows.items() if r['outfitIconOverrideGuid']}
+    completed={}
+    for key,rec in overrides['records'].items():
+        i=int(key);b=rec['binding']
+        require(str(i)==key and i in expected and b['assetGuid']==expected[i] and b['itemId']==i and
+                b['serializedGuidBytes']==override_rows[i]['serializedGuidBytes'] and
+                override_rows[i]['key'] in (b['itemKey'],b['itemKey']+SUFFIX) and b['renderer']==native.POLICY,
+                'native override source identity')
+        completed[i]=rec
+    missing=overrides['unresolvedItemIds']
+    require(overrides['expectedCount']==len(expected) and len(missing)==len(set(missing)) and
+            not set(missing)&set(completed) and set(missing)|set(completed)==set(expected),'native override partition')
+    return cells,expected,completed
+
+def pack_native_static(folder,base_dir,override_dir,cells,completed,catalog,expected,placeholders,dynamic,version):
+    native=module('native-raster-webp')
+    out=folder/'native-art';out.mkdir()
+    assets={}
+    def add(directory,rec):
+        a=rec['asset'];digest=a['sha256']
+        require(source.SHA.fullmatch(digest) and a['file']==digest+'.webp' and a['conversion']==native.POLICY,
+                'native static asset identity')
+        if digest in assets:
+            require(assets[digest]==a,'conflicting content-addressed asset')
+        else:
+            native.reuse(out,directory,a)
+            assets[digest]=a
+        return digest
+    base={str(i):add(base_dir,r) for i,r in sorted(cells.items())}
+    overrides={str(i):add(override_dir,r) for i,r in sorted(completed.items())}
+    own=[]
+    for i in sorted(catalog):
+        if i in expected:kind,missing='original-override',i not in completed
+        elif i in placeholders:kind,missing='source-placeholder',i not in cells
+        else:
+            kind='original-base-only' if i in dynamic and dynamic[i]['family']!='instruction' else 'original-base'
+            missing=i not in cells
+        own.append([i,kind,missing])
+    source.write_new(out/'index.json',{'schema':'HKIA.NativeResolutionItemArt.1','version':version,
+        'artworkPolicy':native.POLICY,'assets':assets,'base':base,'overrides':overrides,'collectionOwnRoutes':own})
+    return {'artworkPolicy':native.POLICY,'nativeStaticAssetCount':len(assets),
+            'nativeStaticImageBytes':sum(a['bytes'] for a in assets.values()),
+            'missingInventoryBaseItemIds':sorted(set(dynamic)-set(cells)),
+            'placeholderCount':len(set(placeholders)&set(cells)),
+            'collectionOwnRoutes':own}
+
 def assemble(args):
     # Load and validate the source-bound receipts before producing anything.
     snapshot=source.read_json(args.snapshot)
@@ -523,8 +588,9 @@ def assemble(args):
             all((r['key'],r['serializedGuidBytes'])==
                 (override_rows[i]['key'],override_rows[i]['serializedGuidBytes']) for i,r in rows.items()),
             'cross-platform definition identity mismatch')
-    base=receipt(args.base_stage/'index.json','HKIA.NativeIconAtlasStaging.1')
-    overrides=receipt(args.override_stage/'index.json','HKIA.IconOverrideStaging.1')
+    native_resolution=getattr(args,'native_resolution',False)
+    base=receipt(args.base_stage/'index.json','HKIA.NativeResolutionIconStage.1' if native_resolution else 'HKIA.NativeIconAtlasStaging.1')
+    overrides=receipt(args.override_stage/'index.json','HKIA.NativeResolutionOverrideStage.1' if native_resolution else 'HKIA.IconOverrideStaging.1')
     bindings=receipt(args.dynamic_receipt,'HKIA.DynamicIconSourceCandidate.1')
     dynamic_stage=receipt(args.dynamic_stage/'index.json','HKIA.DynamicIconTextureStaging.1')
     for item in (base,bindings,dynamic_stage):bind(item,snapshot)
@@ -536,10 +602,12 @@ def assemble(args):
     require(base['sourceBundles'].get('definitions')==snapshot['sourceBundleSha256']['definitions'] and
             dynamic_stage['sourceBundles'].get('definitions')==snapshot['sourceBundleSha256']['definitions'],
             'staged original definition mismatch')
-    catalog_value=source.read_json(args.catalog)
-    catalog=group_catalog(catalog_value,rows,snapshot['version'])
-    cells,sprite_cells=base_partition(base,rows)
-    expected,completed=override_partition(overrides,override_snapshot,override_rows)
+    catalog=group_catalog(source.read_json(args.catalog),rows,snapshot['version'])
+    if native_resolution:
+        cells,expected,completed=native_partitions(base,overrides,rows,override_rows,override_snapshot)
+    else:
+        cells,sprite_cells=base_partition(base,rows)
+        expected,completed=override_partition(overrides,override_snapshot,override_rows)
     dynamic=dynamic_partition(bindings,dynamic_stage,rows)
     results,placeholders=original_routes(snapshot,rows,args.definitions,args.reviewed_result_layout)
     routes=plan_routes(rows,cells,expected,completed,dynamic,dynamic_stage['records'],results,placeholders)
@@ -549,9 +617,14 @@ def assemble(args):
     args.out.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='hkia-icon-release-',dir=args.out.parent) as tmp:
         folder=Path(tmp)/'candidate';folder.mkdir()
-        source.write_new(folder/'collection-catalog.json',catalog_value)
-        static=pack_static(folder,args.base_stage,base,cells,sprite_cells,catalog,placeholders,dynamic,dynamic_stage['records'],atlas)
-        override_count=pack_overrides(folder,args.override_stage,completed)
+        if native_resolution:
+            static=pack_native_static(folder,args.base_stage,args.override_stage,cells,completed,catalog,expected,placeholders,dynamic,snapshot['version'])
+            source.write_new(folder/'collection-catalog.json',source.read_json(args.catalog))
+            override_count=len(completed)
+        else:
+            source.write_new(folder/'collection-catalog.json',source.read_json(args.catalog))
+            static=pack_static(folder,args.base_stage,base,cells,sprite_cells,catalog,placeholders,dynamic,dynamic_stage['records'],atlas)
+            override_count=pack_overrides(folder,args.override_stage,completed)
         texture_count,page_count=pack_dynamic(folder,args.dynamic_stage,dynamic_stage)
         report={'schema':SCHEMA,'approval':'review-required','version':snapshot['version'],
                 'platform':snapshot['platform'],'snapshotSha256':snapshot['snapshotSha256'],
@@ -581,7 +654,6 @@ def assemble(args):
     return report
 
 def self_test():
-    assert collection_own_routes({1:'a',2:'a',3:'a',4:'b',5:'b'},{1:1,2:1,3:1,4:1},{2:'x',5:'y'},{5:1},{3},{4:{'family':'flower'}})==[[1,'original-base',False],[2,'original-override',True],[3,'source-placeholder',False],[4,'original-base-only',False],[5,'original-override',False]]
     sprite={'fileId':0,'pathId':'7','objectSha256':'a'*64}
     rows={1:{'sprite':sprite,'dynamicColor':False},2:{'sprite':sprite,'dynamicColor':False}}
     bindings={'rows':[],'receiptSha256':'b'*64}
@@ -648,6 +720,7 @@ if __name__=='__main__':
                  'dynamic-receipt','dynamic-stage','out'):
         p.add_argument('--'+name,type=Path)
     p.add_argument('--reviewed-result-layout',choices=[RESULT_LAYOUT])
+    p.add_argument('--native-resolution',action='store_true')
     a=p.parse_args()
     if a.self_test:self_test()
     elif all(getattr(a,k) for k in ('snapshot','definitions','catalog','base_stage','override_stage',
