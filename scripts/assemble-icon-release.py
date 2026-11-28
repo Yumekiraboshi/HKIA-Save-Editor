@@ -258,6 +258,23 @@ def plan_routes(rows,cells,expected,overrides,dynamic,texture_records,results,pl
         routes[i]={'itemId':i,'kind':'native-result','targetItemId':target,'sourceBlockers':blockers}
     return routes
 
+def collection_own_routes(catalog,cells,expected,completed,placeholders,dynamic):
+    # Collection is indexed by its own definition even for recipe items.
+    # An unavailable original override must not fall back to a shared grey base.
+    routes=[]
+    for i in sorted(catalog):
+        if i in expected:
+            kind='original-override'
+            missing=i not in completed
+        elif i in placeholders:
+            kind='source-placeholder'
+            missing=i not in cells
+        else:
+            kind='original-base-only' if i in dynamic and dynamic[i]['family']!='instruction' else 'original-base'
+            missing=i not in cells
+        routes.append([i,kind,missing])
+    return routes
+
 def zip_bytes(files):
     buffer=io.BytesIO()
     with zipfile.ZipFile(buffer,'w',compression=zipfile.ZIP_STORED) as z:
@@ -519,7 +536,8 @@ def assemble(args):
     require(base['sourceBundles'].get('definitions')==snapshot['sourceBundleSha256']['definitions'] and
             dynamic_stage['sourceBundles'].get('definitions')==snapshot['sourceBundleSha256']['definitions'],
             'staged original definition mismatch')
-    catalog=group_catalog(source.read_json(args.catalog),rows,snapshot['version'])
+    catalog_value=source.read_json(args.catalog)
+    catalog=group_catalog(catalog_value,rows,snapshot['version'])
     cells,sprite_cells=base_partition(base,rows)
     expected,completed=override_partition(overrides,override_snapshot,override_rows)
     dynamic=dynamic_partition(bindings,dynamic_stage,rows)
@@ -531,6 +549,7 @@ def assemble(args):
     args.out.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='hkia-icon-release-',dir=args.out.parent) as tmp:
         folder=Path(tmp)/'candidate';folder.mkdir()
+        source.write_new(folder/'collection-catalog.json',catalog_value)
         static=pack_static(folder,args.base_stage,base,cells,sprite_cells,catalog,placeholders,dynamic,dynamic_stage['records'],atlas)
         override_count=pack_overrides(folder,args.override_stage,completed)
         texture_count,page_count=pack_dynamic(folder,args.dynamic_stage,dynamic_stage)
@@ -545,6 +564,7 @@ def assemble(args):
                 'unresolvedOriginalUiIconItemIds':sorted(i for i in rows if 'item:'+str(i) not in dynamic_stage['records']),
                 'nativePlaceholderItemIds':sorted(placeholders),'routes':list(routes.values()),
                 'missingCollectionBaseItemIds':sorted(set(catalog)-set(cells)),
+                'collectionOwnRoutes':collection_own_routes(catalog,cells,expected,completed,placeholders,dynamic),
                 'unresolvedInventorySourceItemIds':[i for i,r in routes.items() if r['sourceBlockers']],
                 'remainingReleaseChecks':['verify source image sampling and special native routes',
                     'verify characteristic/swatch, growth, decorator and original UiIcon overlay dependencies',
@@ -561,6 +581,7 @@ def assemble(args):
     return report
 
 def self_test():
+    assert collection_own_routes({1:'a',2:'a',3:'a',4:'b',5:'b'},{1:1,2:1,3:1,4:1},{2:'x',5:'y'},{5:1},{3},{4:{'family':'flower'}})==[[1,'original-base',False],[2,'original-override',True],[3,'source-placeholder',False],[4,'original-base-only',False],[5,'original-override',False]]
     sprite={'fileId':0,'pathId':'7','objectSha256':'a'*64}
     rows={1:{'sprite':sprite,'dynamicColor':False},2:{'sprite':sprite,'dynamicColor':False}}
     bindings={'rows':[],'receiptSha256':'b'*64}

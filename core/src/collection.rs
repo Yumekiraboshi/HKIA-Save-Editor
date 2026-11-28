@@ -824,13 +824,20 @@ impl Editor {
  fn active_saved_inventory(&self)->impl Iterator<Item=&crate::native::InventoryRow>+'_{
   self.slot.index.inventory.iter().filter(|r|!self.inventory_removed.contains(&r.id))
  }
- fn active_saved_item_count(&self,item:i32)->usize{
-  let original=self.inventory_item_rows.get(&item).copied().unwrap_or(0);
-  if original==0||self.inventory_removed.is_empty(){return original}
-  self.inventory_item_documents.get(&item).map_or(0,|ids|ids.iter().filter(|id|!self.inventory_removed.contains(id)).count())
+ // Preserve native document order, while looking only at the requested
+ // Item ID's original membership. Staged removals (including Undo/Redo)
+ // are filtered at read time; no second mutable membership authority.
+ fn active_saved_item_rows(&self,item:i32)->impl Iterator<Item=&crate::native::InventoryRow>+'_{
+  self.inventory_item_documents.get(&item).into_iter().flatten()
+   .filter_map(move |&id|if self.inventory_removed.contains(&id){None}else{self.saved_inventory_row(id)})
+ }
+ fn has_single_active_saved_item(&self,item:i32)->bool{
+  if self.inventory_removed.is_empty(){return self.inventory_item_rows.get(&item)==Some(&1)}
+  // All callers only need the distinction between zero, one and many.
+  self.active_saved_item_rows(item).take(2).count()==1
  }
  fn saved_item_family_empty(&self,item:i32)->bool{
-  !self.inventory_item_rows.contains_key(&item)||self.active_saved_inventory().filter(|r|r.item_id==Some(item)).all(|r|
+  !self.inventory_item_rows.contains_key(&item)||self.active_saved_item_rows(item).all(|r|
    self.inventory_can_empty(r)&&self.inventory_changes.get(&r.id).copied().or(r.quantity)==Some(0))
  }
  fn absent_furniture_choices(&self,item_id:i32)->Vec<FurnitureVariant>{
@@ -850,7 +857,7 @@ impl Editor {
    self.slot.index.inventory_referenced_items.contains(&item){return None}
   let source=furniture_source::item(item)?;
   if source.is_home_layout||crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX){return None}
-  if self.active_saved_item_count(item)!=1&&self.active_saved_inventory().filter(|r|r.item_id==Some(item)&&r.id!=row.id).any(|r|!self.permits_separate_ordinary_base(r)){return None}
+  if !self.has_single_active_saved_item(item)&&self.active_saved_item_rows(item).filter(|r|r.id!=row.id).any(|r|!self.permits_separate_ordinary_base(r)){return None}
   Some(item)
  }
  fn default_furniture_choices(&self,item_id:i32)->Vec<FurnitureVariant>{
@@ -864,7 +871,7 @@ impl Editor {
  fn default_furniture_reserved(&self,source:&FurnitureItemSource)->Option<HashSet<FurnitureVariant>>{
   let mut reserved=HashSet::new();
   if self.inventory_item_rows.contains_key(&source.item_id){
-  for row in self.active_saved_inventory().filter(|r|r.item_id==Some(source.item_id)){
+  for row in self.active_saved_item_rows(source.item_id){
    if row.unique_is_nil==Some(true){reserved.insert(furniture_key(source,[0;3])?);continue}
    if !self.permits_separate_ordinary_base(row){return None}
    let original=self.original_furniture_variant(row.id)?;
@@ -1040,7 +1047,7 @@ impl Editor {
   if index.inventory_furniture_guid_refs.contains(&key)||index.inventory_clothing_guid_refs.contains(&key)||
    !valid_flower_variant(policy,draft){return None}
   let mut reserved=HashSet::new();
-  for row in self.active_saved_inventory().filter(|r|r.item_id==Some(item)){
+  for row in self.active_saved_item_rows(item){
    if !self.unique_quantity_ids.contains(&row.id){return None}
    let before=self.original_flower_variant(row.id)?;
    reserved.insert(before);reserved.insert(self.flower_variant_changes.get(&row.id).copied().unwrap_or(before));
@@ -1198,7 +1205,7 @@ impl Editor {
  fn absent_flower_reservations(&self,item:i32)->Option<HashSet<FlowerVariant>>{
   if !self.saved_item_family_empty(item){return None}
   let mut reserved=HashSet::new();
-  for row in self.active_saved_inventory().filter(|r|r.item_id==Some(item)){
+  for row in self.active_saved_item_rows(item){
    if !self.unique_quantity_ids.contains(&row.id){return None}
    let original=self.original_flower_variant(row.id)?;
    reserved.insert(original);reserved.insert(self.flower_variant_changes.get(&row.id).copied().unwrap_or(original));
@@ -1487,7 +1494,7 @@ impl Editor {
   let Some(item)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.unique_is_nil==Some(true)&&
    Self::physical_inventory_reference_safe(&self.slot.index,r,false)&&
-   (self.active_saved_item_count(item)==1||self.ordinary_furniture_base_distinct(r,item))
+   (self.has_single_active_saved_item(item)||self.ordinary_furniture_base_distinct(r,item))
  }
  // Index the original unique identities once, rather than scanning all
  // peers per visible row or per complete Worker snapshot. Variant changes
@@ -1767,7 +1774,7 @@ impl Editor {
    }
    Some(())
   };
-  for row in self.active_saved_inventory().filter(|r|r.item_id==Some(item)){
+  for row in self.active_saved_item_rows(item){
    if !self.unique_quantity_ids.contains(&row.id){return None}
    reserve(row.id,self.saved_wand_identity(row)?)?;
   }
@@ -1820,7 +1827,7 @@ impl Editor {
  fn nested_wand_output_reservations(&self)->Option<HashSet<WandData>>{
   let item=crate::inventory_source::ITEM_WAND_ID;
   let mut keys=HashSet::new();
-  for r in self.active_saved_inventory().filter(|r|r.item_id==Some(item)){
+  for r in self.active_saved_item_rows(item){
    if !self.unique_quantity_ids.contains(&r.id){return None}
    let original=self.saved_wand_identity(r)?;
    for v in [original,self.wand_variant_changes.get(&r.id).copied().unwrap_or(original)]{keys.insert(Self::wand_key(item,v)?);}
@@ -2130,7 +2137,7 @@ impl Editor {
  // variants, but have no existing player payload to copy.
  fn absent_chef_allowed(&self,item:i32)->bool{
   crate::inventory_source::is_uncapped_required_unique_stack(item)&&
-   self.active_saved_inventory().filter(|r|r.item_id==Some(item)).all(|r|
+   self.active_saved_item_rows(item).all(|r|
     self.unique_quantity_ids.contains(&r.id)&&self.inventory_can_empty(r)&&
     self.inventory_changes.get(&r.id).copied().or(r.quantity)==Some(0))&&
    self.absent_flower_budget_available()&&self.inventory_creation_payload_safe(item)&&
@@ -2141,7 +2148,7 @@ impl Editor {
   if !self.absent_chef_allowed(src::BOBA_ID)||
    self.pending_bobas.keys().any(|id|self.inventory_changes.contains_key(id)){return Vec::new()}
   let mut reserved=HashSet::new();
-  for row in self.active_saved_inventory().filter(|r|r.item_id==Some(src::BOBA_ID)){
+  for row in self.active_saved_item_rows(src::BOBA_ID){
    let Some(v)=Self::boba_words(&self.slot.envelope.decoded,row)else{return Vec::new()};
    reserved.insert(v);reserved.insert(self.boba_variant_changes.get(&row.id).copied().unwrap_or(v));
   }
@@ -2355,7 +2362,7 @@ impl Editor {
   if !self.absent_chef_allowed(item)||
    self.pending_cafes.iter().any(|(&id,&(i,_))|i==item&&self.inventory_changes.contains_key(&id)){return None}
   let mut reserved=HashSet::new();
-  for row in self.active_saved_inventory().filter(|r|r.item_id==Some(item)){
+  for row in self.active_saved_item_rows(item){
    // Exact complete unequal-length keys cannot collide with generated tuples.
    let (flavors,colors)=self.chef_identity(row)?;
    if flavors.len()!=colors.len()||!crate::inventory_source::cafe_count_allowed(item,flavors.len()){continue}
@@ -2572,7 +2579,7 @@ impl Editor {
    !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
    index.inventory_referenced_items.contains(&item){return None}
   let mut reserved=index.inventory_palette_copies.clone();
-  for row in self.active_saved_inventory().filter(|r|r.item_id==Some(item)){
+  for row in self.active_saved_item_rows(item){
    if !self.unique_quantity_ids.contains(&row.id)||!self.palette_zero_reference_safe(row)||
     self.inventory_changes.get(&row.id).copied().or(row.quantity)!=Some(0){return None}
    let original=Self::palette_identity(row)?;
@@ -2850,13 +2857,13 @@ impl Editor {
  fn ordinary_furniture_base_distinct(&self,row:&crate::native::InventoryRow,item:i32)->bool{
   crate::inventory_source::ordinary_quantity_limit(item)==Some(i32::MAX)&&
    furniture_source::item(item).is_some_and(|s|!s.is_home_layout)&&
-   self.active_saved_inventory().filter(|r|r.item_id==Some(item)&&r.id!=row.id)
+   self.active_saved_item_rows(item).filter(|r|r.id!=row.id)
     .all(|r|self.permits_separate_ordinary_base(r))
  }
  fn can_create_inventory_item(&self,item_id:i32)->bool{
   self.ordinary_inventory_creation_source_valid()&&self.item_reference_scope_safe(item_id)&&crate::inventory_source::ordinary_bag_creation_item(item_id)&&
    (!self.inventory_item_rows.contains_key(&item_id)||
-    self.active_saved_inventory().filter(|r|r.item_id==Some(item_id)).all(|r|self.permits_separate_ordinary_base(r)))&&
+    self.active_saved_item_rows(item_id).all(|r|self.permits_separate_ordinary_base(r)))&&
    self.ordinary_creation_payload_safe(item_id)&&
    !self.slot.index.inventory_referenced_items.contains(&item_id)
  }

@@ -295,6 +295,30 @@ test('native positive-only ordinary zero rows remain refillable without enabling
 });
 
 
+test('native v3.0.1 inventory ranks preserve source order, favorites and unknown records',async()=>{
+ const {decodeNativeInventorySort,compareNativeInventory}=await buildSource('../src/inventory-native-sort.ts');
+ const bytes=readFileSync(new URL('../public/inventory-native-sort.json',import.meta.url));
+ assert.equal(createHash('sha256').update(bytes).digest('hex'),'d37e7ba5f0db6413ab9b24bb2969479073c533c90f2c08a24363c8d25659e3ad');
+ const source=JSON.parse(bytes),order=decodeNativeInventorySort(source);
+ assert.equal(order.itemRanks.size,12156);
+ assert.equal(order.colorRanks.size,30);
+ assert.equal(order.patternRanks.size,16);
+ assert.equal(new Set([...source.sortedItemIds,...source.unranked]).size,12163);
+ assert.deepEqual(new Set([...source.sortedItemIds,...source.unranked]),new Set(index.keys()));
+ const [first,second,third]=source.sortedItemIds;
+ const row=(itemId,documentId,nativePinOrder)=>({itemId,documentId,nativePinOrder,quantity:1,editable:true,quantityLimit:null,quantityMinimum:0});
+ const input=[row(second,2),row(third,3,0),row(first,1),row(second,4,1),row(0,5)];
+ assert.deepEqual(input.slice().sort((a,b)=>compareNativeInventory(a,b,order)).map(r=>r.documentId),[3,4,1,2,5]);
+ const group=nativeInventoryGroups(first,index)[0];
+ const ids=source.sortedItemIds.filter(id=>nativeInventoryGroups(id,index).includes(group)).slice(0,3);
+ assert.equal(ids.length,3);
+ const sample=ids.map((id,i)=>row(id,i+1));
+ assert.deepEqual(browseInventory(sample.slice().reverse(),'',group,false,{},items,index,'ja',undefined,order).map(r=>r.itemId),ids);
+ assert.deepEqual(browseInventory(sample.slice().reverse(),'',group,false,{},items,index,'en',undefined,order).map(r=>r.itemId),ids);
+ assert.throws(()=>decodeNativeInventorySort({...source,sortedItemIds:source.sortedItemIds.slice(1)}));
+});
+
+
 test('batch-only duplicate zero requires every positive peer and respects lock scope',()=>{
  const a={documentId:1,itemId:315822,quantity:2,editable:false,quantityMinimum:1,batchZeroOnly:true};
  const b={...a,documentId:2,quantity:3};

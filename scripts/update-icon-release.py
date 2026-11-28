@@ -271,6 +271,7 @@ def run(input_path,root,previous=None,resume=False,execute=command):
                 'candidate index binding mismatch')
         blockers={'inventorySourceItemIds':release['unresolvedInventorySourceItemIds'],
                   'collectionBaseItemIds':release['missingCollectionBaseItemIds'],
+                  'collectionOwnImageItemIds':[i for i,_,missing in release['collectionOwnRoutes'] if missing],
                   'inventoryBaseItemIds':release.get('missingInventoryBaseItemIds',[]),
                   'originalUiIconItemIds':release['unresolvedOriginalUiIconItemIds'],
                   'auxiliarySpriteRoutes':aux['unresolved'],'chefSwatches':aux['unresolvedSwatches']}
@@ -280,6 +281,9 @@ def run(input_path,root,previous=None,resume=False,execute=command):
             'auxiliaryDirectory':(x/'output').relative_to(root).as_posix(),
             'familyBindings':(f/'family-bindings.json').relative_to(root).as_posix(),
             'familyBindingsSha256':source.file_digest(f/'family-bindings.json'),
+            'releaseReceiptFileSha256':source.file_digest(rel/'output'/'release-candidate.json'),
+            'dynamicIndexSha256':families['dynamicIndexSha256'],
+            'auxiliaryIndexSha256':families['auxiliaryIndexSha256'],
             'remainingReleaseChecks':release['remainingReleaseChecks'],
             'automaticReleaseActivationAuthorized':False})
     out=step('summary',['definition-delta','dynamic-delta','release','auxiliary-assets','families'],summary)
