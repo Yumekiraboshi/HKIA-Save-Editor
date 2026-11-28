@@ -1117,11 +1117,18 @@ async function inventoryEditExportSmoke(){
   assert.equal(await quantity.isDisabled(),false);
   const apply=card.locator('button[type="submit"]');
   assert.equal(await apply.isVisible(),false,'unchanged owned quantity has no visible apply action');
+  const quantityWidth=()=>quantity.evaluate(el=>el.getBoundingClientRect().width);
+  const fullWidth=await quantityWidth();
+  const formWidth=await card.locator('.inventory-quantity-form').evaluate(el=>el.getBoundingClientRect().width);
+  assert.ok(Math.abs(fullWidth-formWidth)<1,'unchanged quantity fills the entire ordinary footer');
   await quantity.fill('25');
   await apply.waitFor({state:'visible'});
+  const pendingWidth=await quantityWidth(),applyWidth=await apply.evaluate(el=>el.getBoundingClientRect().width);
+  assert.ok(fullWidth-pendingWidth>=applyWidth&&fullWidth-pendingWidth<=applyWidth+5,'pending quantity reserves only the visible apply control and gap');
   assert.equal(await card.locator('.inventory-quantity-delta').count(),0,'pending quantity uses only the apply control, not a delta label');
   await quantity.fill('6');
   await apply.waitFor({state:'hidden'});
+  assert.ok(Math.abs(await quantityWidth()-fullWidth)<1,'reverting input restores full width');
   await quantity.fill('25');
   await apply.click();
   await page.locator('.inventory-card input[name="quantity"]').first().waitFor();
@@ -1132,6 +1139,7 @@ async function inventoryEditExportSmoke(){
   await page.locator('.state-dot.changed').waitFor();
   await apply.waitFor({state:'hidden'});
   assert.equal(await card.locator('.inventory-quantity-delta').count(),0,'committed quantity has no persistent delta label');
+  assert.ok(Math.abs(await quantityWidth()-fullWidth)<1,'committing input restores full width');
   assert.equal(await card.locator('.inventory-quantity-form').getAttribute('data-quantity-committed'),'25');
   const storedInventory=await page.evaluate(()=>new Promise((resolve,reject)=>{
    const open=indexedDB.open('hkia-editor-local-session',1);
@@ -2104,9 +2112,11 @@ async function assertInventoryControlGeometry(page,button,standalone=false){
     const box=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,right:r.right,bottom:r.bottom}};
     const card=el.closest('.inventory-card'),r=box(el),c=box(card),form=el.closest('.inventory-quantity-form');
     const svg=el.querySelector('svg'),s=svg?box(svg):null;
-    const controls=form?[...form.querySelectorAll('input,button')].map(box):[r];
+    const controls=form?[...form.querySelectorAll('input,button')].filter(e=>getComputedStyle(e).display!=='none').map(box):[r];
+    const f=form?box(form):null;
+    const noUnusedTracks=!f||Math.abs(controls.reduce((n,a)=>n+a.w,0)+Math.max(0,controls.length-1)*parseFloat(getComputedStyle(form).columnGap)-f.w)<1;
     const center=(a,b)=>Math.abs(a.y+a.h/2-b.y-b.h/2)<1;
-    return {inside:controls.every(a=>a.x>=c.x&&a.right<=c.right&&a.y>=c.y&&a.bottom<=c.bottom),
+    return {noUnusedTracks,inside:controls.every(a=>a.x>=c.x&&a.right<=c.right&&a.y>=c.y&&a.bottom<=c.bottom),
      height:r.h,aligned:controls.every(a=>Math.abs(a.h-r.h)<1&&center(a,r)),
      nonOverlapping:controls.every((a,i)=>controls.every((b,j)=>i===j||a.right<=b.x+.5||b.right<=a.x+.5)),
      square:Math.abs(r.w-r.h)<1,svgCentered:!s||(center(s,r)&&Math.abs(s.x+s.w/2-r.x-r.w/2)<1),
@@ -2116,6 +2126,7 @@ async function assertInventoryControlGeometry(page,button,standalone=false){
    const label=width+'px '+mode+' '+dir+' '+JSON.stringify(geometry);
    assert.equal(geometry.inside,true,label);assert.equal(geometry.aligned,true,label);
    assert.equal(geometry.nonOverlapping,true,label);
+   assert.equal(geometry.noUnusedTracks,true,label);
    assert.equal(geometry.height,width<=730?34:30,label);
    assert.notEqual(geometry.background,'rgba(0, 0, 0, 0)',label);
    assert.notEqual(geometry.background,'rgb(239, 239, 239)',label);
