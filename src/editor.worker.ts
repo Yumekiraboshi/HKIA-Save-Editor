@@ -1,20 +1,21 @@
 import {HISTORY_MAX_BYTES,MAX_INVENTORY_DRAFT_PATCHES} from './history-limits';
-import type {InventoryPatch,InventoryQuantityRequest,InventoryRemovalRequest} from './worker-client';
+import type {InventoryPatch,InventoryQuantityRequest,InventoryRemovalRequest,LayoutSourceScope,LayoutSourceRoom,LayoutSourceCatalog,LayoutGuid} from './worker-client';
 import {decodeInventoryUnique,decodeFlowerVariants,isFlowerVariantWire,decodeFurnitureVariants,isFurnitureVariantWire,type FurnitureVariant,type FlowerVariant,type InventoryUniqueInfo} from './inventory-unique';
 import {decodeInventoryFlowers,type InventoryFlower} from './inventory-flower-display';
 import {decodeInventoryPalettes,decodePaletteVariants,isPaletteVariantWire,type InventoryPalette,type PaletteVariant} from './inventory-palette-display';
 import {decodeBobaRows,decodeBobaVariants,isBobaVariantWire,type InventoryBoba,type BobaVariant} from './inventory-boba-display';
 import {decodeCafeRows,decodeCafeOptions,isCafeVariantWire,type CafeVariant,type CafeRow} from './inventory-cafe-display';
 import {decodeWandVariants,isWandVariantWire,isWandIdentityWire,isWandNestedWire,type WandVariant,type WandIdentity,type WandNested} from './inventory-wand-display';
-type Action = 'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'inventory-change'|'inventory-batch-change'|'inventory-remove-entries'|'flower-variant-change'|'flower-species-options'|'flower-species-replace'|'flower-variants'|'flower-preview'|'flower-create'|'flower-create-variants'|'furniture-preview'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-preview'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'boba-variants'|'boba-variant-change'|'boba-create-variants'|'boba-create'|'cafe-variants'|'cafe-preview'|'cafe-variant-change'|'cafe-create-variants'|'cafe-create'|'wand-variants'|'wand-variant-change'|'wand-identity-change'|'wand-nested-materials'|'wand-nested-pairs'|'wand-nested-change'|'wand-nested-create'|'wand-create-variants'|'wand-absent-sources'|'wand-create'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action = 'layout-source-inspect'|'layout-source-catalog'|'layout-source-capture'|'open'|'snapshot'|'change'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'inventory-change'|'inventory-batch-change'|'inventory-remove-entries'|'flower-variant-change'|'flower-species-options'|'flower-species-replace'|'flower-variants'|'flower-preview'|'flower-create'|'flower-create-variants'|'furniture-preview'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-preview'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'boba-variants'|'boba-variant-change'|'boba-create-variants'|'boba-create'|'cafe-variants'|'cafe-preview'|'cafe-variant-change'|'cafe-create-variants'|'cafe-create'|'wand-variants'|'wand-variant-change'|'wand-identity-change'|'wand-nested-materials'|'wand-nested-pairs'|'wand-nested-change'|'wand-nested-create'|'wand-create-variants'|'wand-absent-sources'|'wand-create'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type AchievementValue = {complete:boolean;current:number;completed:[bigint,number]|null};
 type AchievementPatch = {guid:number[];before:AchievementValue;after:AchievementValue};
 type AchievementDraftPatch = {guid:number[];before:AchievementValue|null;after:AchievementValue};
-type Request = { id:number; action:Action; checkpoint?:Uint8Array; scope?:'collections'|'achievements'|'inventory'; target?:number; file?:Uint8Array; itemId?:number;targetItemId?:number;documentId?:number;beforeQuantity?:number;nextQuantity?:number;quantityBatch?:InventoryQuantityRequest[];removalBatch?:InventoryRemovalRequest[];beforeVariant?:FlowerVariant;nextVariant?:FlowerVariant;beforeFurnitureVariant?:FurnitureVariant;nextFurnitureVariant?:FurnitureVariant;beforePaletteVariant?:PaletteVariant;nextPaletteVariant?:PaletteVariant;beforeBobaVariant?:BobaVariant;nextBobaVariant?:BobaVariant;beforeCafeVariant?:CafeVariant;nextCafeVariant?:CafeVariant;beforeWandVariant?:WandVariant;nextWandVariant?:WandVariant;beforeWandIdentity?:WandIdentity;nextWandIdentity?:WandIdentity;beforeWandNested?:WandNested;nextWandNested?:WandNested; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];inventoryPatches?:InventoryPatch[];guid?:number[];nowMs?:number;beforeValue?:AchievementValue|null;afterValue?:AchievementValue };
+type Request = { id:number; action:Action; layoutIdentity?:Uint8Array;layoutScope?:LayoutSourceScope;layoutName?:string; checkpoint?:Uint8Array; scope?:'collections'|'achievements'|'inventory'; target?:number; file?:Uint8Array; itemId?:number;targetItemId?:number;documentId?:number;beforeQuantity?:number;nextQuantity?:number;quantityBatch?:InventoryQuantityRequest[];removalBatch?:InventoryRemovalRequest[];beforeVariant?:FlowerVariant;nextVariant?:FlowerVariant;beforeFurnitureVariant?:FurnitureVariant;nextFurnitureVariant?:FurnitureVariant;beforePaletteVariant?:PaletteVariant;nextPaletteVariant?:PaletteVariant;beforeBobaVariant?:BobaVariant;nextBobaVariant?:BobaVariant;beforeCafeVariant?:CafeVariant;nextCafeVariant?:CafeVariant;beforeWandVariant?:WandVariant;nextWandVariant?:WandVariant;beforeWandIdentity?:WandIdentity;nextWandIdentity?:WandIdentity;beforeWandNested?:WandNested;nextWandNested?:WandNested; expected?:bigint|null; next?:bigint|null; patches?:Array<{id:number;before:bigint|null;after:bigint|null}>;achievementPatches?:AchievementDraftPatch[];inventoryPatches?:InventoryPatch[];guid?:number[];nowMs?:number;beforeValue?:AchievementValue|null;afterValue?:AchievementValue };
 type Transport = { postMessage(data:unknown, transfer?:Transferable[]):void; onmessage:((event:MessageEvent<Request>)=>void)|null };
 type Engine = {
  memory:WebAssembly.Memory;
  hkia_stage(n:number):number; hkia_open():number;
+ hkia_layout_source_inspect():number;hkia_layout_source_catalog():number;hkia_layout_source_capture(scope:number,a0:number,a1:number,a2:number,a3:number,createdMs:bigint):number;
  hkia_collection_creatable_snapshot():number;
  hkia_inventory_snapshot():number;hkia_inventory_creatable_snapshot():number;hkia_inventory_quantity_bounds():number;hkia_inventory_flowers_snapshot():number;hkia_inventory_palettes_snapshot():number;hkia_inventory_absent_palette_default():number;hkia_inventory_boba_snapshot():number;hkia_inventory_absent_chef_defaults():number;hkia_inventory_wand_variants(id:number):number;hkia_inventory_wand_creation_variants(id:number):number;hkia_inventory_wand_source_creation_variants(id:number,source:number):number;hkia_inventory_absent_wand_ids():number;hkia_inventory_absent_wand_sources(id:number):number;hkia_inventory_wand_edit_sources(id:number):number;hkia_inventory_wand_edit_source_variants(id:number,source:number):number;hkia_inventory_wand_identity_change(id:number,...words:number[]):number;hkia_inventory_wand_nested_material_variants(id:number,creation:number,magic:number,fleck:number):number;hkia_inventory_wand_nested_material_draft(id:number,creation:number,magic:number,fleck:number,m0:number,m1:number,m2:number):number;hkia_inventory_owned_furniture_wand_sources(id:number):number;hkia_inventory_owned_furniture_wand_pairs(id:number):number;hkia_inventory_wand_nested_pairs(id:number,creation:number):number;hkia_inventory_wand_nested_change(id:number,...words:number[]):number;hkia_inventory_wand_nested_create(id:number,...words:number[]):number;hkia_inventory_wand_create(id:number,...words:number[]):number;hkia_inventory_wand_variant_change(id:number,...words:number[]):number;hkia_inventory_cafe_snapshot():number;hkia_inventory_cafe_variants(id:number):number;hkia_inventory_cafe_preview(id:number,...words:number[]):number;hkia_inventory_cafe_creation_variants(id:number):number;hkia_inventory_cafe_create(id:number,...words:number[]):number;hkia_inventory_cafe_variant_change(id:number,...words:number[]):number;hkia_inventory_boba_variants(id:number):number;hkia_inventory_boba_creation_variants(id:number):number;hkia_inventory_boba_create(id:number,...words:number[]):number;hkia_inventory_boba_variant_change(id:number,...words:number[]):number;hkia_inventory_palette_variants(id:number):number;hkia_inventory_palette_preview(id:number,...words:number[]):number;hkia_inventory_palette_creation_variants(id:number):number;hkia_inventory_palette_create(id:number,...words:number[]):number;hkia_inventory_palette_variant_change(id:number,...words:number[]):number;hkia_inventory_unique_snapshot():number;hkia_inventory_flower_species_preview(id:number,...words:number[]):number;hkia_inventory_flower_species_options(id:number,...words:number[]):number;hkia_inventory_flower_species_replace(id:number,...words:number[]):number;hkia_inventory_flower_variants(id:number):number;hkia_inventory_flower_preview(id:number,...values:[...FlowerVariant,...FlowerVariant]):number;hkia_inventory_absent_flower_ids():number;hkia_inventory_absent_furniture_ids():number;hkia_inventory_default_furniture_ids():number;hkia_inventory_flower_creation_variants(id:number):number;hkia_inventory_flower_create(id:number,...values:[...FlowerVariant,...FlowerVariant,number]):number;hkia_inventory_flower_variant_change(id:number,...values:[...FlowerVariant,...FlowerVariant]):number;hkia_inventory_furniture_variants(id:number):number;hkia_inventory_furniture_preview(id:number,...values:[...FurnitureVariant,...FurnitureVariant]):number;hkia_inventory_furniture_creation_variants(id:number):number;hkia_inventory_furniture_create(id:number,...values:[...FurnitureVariant,...FurnitureVariant,number]):number;hkia_inventory_furniture_variant_change(id:number,...values:[...FurnitureVariant,...FurnitureVariant]):number;hkia_inventory_change(id:number,before:number,after:number):number;hkia_inventory_batch_limit():number;hkia_inventory_batch_change():number;hkia_inventory_remove_entries():number;hkia_inventory_removable_snapshot():number;hkia_inventory_batch_zero_only_snapshot():number;
  hkia_change(id:number,expectedPresent:number,old:bigint,nextPresent:number,value:bigint):number;
@@ -369,6 +370,46 @@ async function execute(r:Request):Promise<unknown>{
    return snapshot(e);
   }
   case 'snapshot':return snapshot(e);
+  case 'layout-source-catalog':{
+   if(e.hkia_layout_source_catalog()!==0)throw Error('LAYOUT_SOURCE_UNSUPPORTED');
+   const b=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+   if(b.length<36)throw Error('LAYOUT_SOURCE_INVALID');
+   const v=new DataView(b.buffer,b.byteOffset,b.byteLength),count=v.getUint32(32,true);
+   if(count>4096||b.length!==36+count*33)throw Error('LAYOUT_SOURCE_INVALID');
+   const rooms:LayoutSourceRoom[]=[];
+   const guid=(at:number):LayoutGuid=>[v.getUint32(at,true),v.getUint32(at+4,true),v.getUint32(at+8,true),v.getUint32(at+12,true)];
+   for(let i=0;i<count;i++){const at=36+i*33;rooms.push({cabin:guid(at),home:guid(at+16),apartment:b[at+32]});}
+   const result:LayoutSourceCatalog={identity:b.slice(0,32),rooms};return result;
+  }
+  case 'layout-source-inspect':{
+   const bytes=r.file;
+   if(!(bytes instanceof Uint8Array)||bytes.length<1||bytes.length>45*1024*1024)throw Error('LAYOUT_SOURCE_INVALID');
+   const p=e.hkia_stage(bytes.length);
+   if(p<=0||p+bytes.length>e.memory.buffer.byteLength)throw Error('LAYOUT_SOURCE_INVALID');
+   new Uint8Array(e.memory.buffer,p,bytes.length).set(bytes);
+   if(e.hkia_layout_source_inspect()!==0)throw Error('LAYOUT_SOURCE_INVALID');
+   const b=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+   if(b.length<20||b.length>275||b[0]>2||b[1]>1||b[2]>1)throw Error('LAYOUT_SOURCE_INVALID');
+   const v=new DataView(b.buffer,b.byteOffset,b.byteLength);
+   return {scope:b[0],version:b[1]===0?'3.0.0':'3.0.1',sameSource:b[2]===1,
+     createdMs:Number(v.getBigInt64(3,true)),buildings:v.getUint32(11,true),rooms:v.getUint32(15,true),
+     name:new TextDecoder('utf-8',{fatal:true}).decode(b.subarray(19))};
+  }
+  case 'layout-source-capture':{
+   const identity=r.layoutIdentity,scope=r.layoutScope,name=r.layoutName,now=r.nowMs;
+   if(!(identity instanceof Uint8Array)||identity.length!==32||typeof name!=='string'||!scope||
+      typeof now!=='number'||!Number.isSafeInteger(now)||now<=0)throw Error('LAYOUT_SOURCE_INVALID');
+   const encoded=new TextEncoder().encode(name);
+   if(encoded.length<1||encoded.length>256)throw Error('LAYOUT_SOURCE_INVALID');
+   const kind=scope.kind==='room'?0:scope.kind==='cabin'?1:scope.kind==='all-cabin-sources'?2:-1;
+   const id=scope.kind==='all-cabin-sources'?[0,0,0,0]:scope.id;
+   if(kind<0||!Array.isArray(id)||id.length!==4||id.some(n=>!Number.isInteger(n)||n<0||n>0xffffffff))throw Error('LAYOUT_SOURCE_INVALID');
+   const size=32+encoded.length,p=e.hkia_stage(size);
+   if(p<=0||p+size>e.memory.buffer.byteLength)throw Error('LAYOUT_SOURCE_INVALID');
+   const staged=new Uint8Array(e.memory.buffer,p,size);staged.set(identity);staged.set(encoded,32);
+   if(e.hkia_layout_source_capture(kind,id[0],id[1],id[2],id[3],BigInt(now))!==0)throw Error('LAYOUT_SOURCE_CONFLICT');
+   return readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
+  }
   case 'change':{
    if(typeof r.itemId!=='number'||!Number.isInteger(r.itemId)||r.itemId<=0||r.itemId>2147483647)throw Error('ItemIdが不正です。');
    const a=r.expected??null,b=r.next??null;

@@ -141,3 +141,6 @@ pub fn read_slot(raw:&[u8])->Result<ReadSlot,Error>{
 
 /// Source-verified furniture material choices, independent of save edits.
 pub mod furniture_source;
+
+/// Local-only native layout source capture; no restore authority.
+pub mod layouts;

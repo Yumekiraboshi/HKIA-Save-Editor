@@ -1088,7 +1088,7 @@ async function inventoryEditExportSmoke(){
    name:'synthetic-hkia-inventory.save',mimeType:'application/octet-stream',buffer:source
   });
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
-  assert.deepEqual(await page.locator('.tools-nav button.tool-tab').evaluateAll(tabs=>tabs.map(tab=>tab.dataset.tool)),['inventory','collections','achievements']);
+  assert.deepEqual(await page.locator('.tools-nav button.tool-tab').evaluateAll(tabs=>tabs.map(tab=>tab.dataset.tool)),['inventory','collections','achievements','layouts']);
   await chooseTab(page,'inventory');
   const search=page.locator('.inventory-controls input[type="search"]');
   await search.fill('315822');

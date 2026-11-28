@@ -1,5 +1,6 @@
 <script lang="ts">
  import {onMount,tick,untrack} from 'svelte';
+ import LayoutsPanel from './LayoutsPanel.svelte';
  import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,removeInventoryEntries,requestFlowerVariants,requestFlowerSpeciesOptions,replaceInventoryFlowerSpecies,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurniturePreview,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPalettePreview,changeInventoryPaletteVariant,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafePreview,changeInventoryCafeVariant,createInventoryCafeVariant,requestWandVariants,changeInventoryWandIdentity,requestWandNestedMaterials,requestWandNestedPairs,changeInventoryWandNested,createInventoryWandNested,requestWandEditSources,requestAbsentWandSources,requestOwnedFurnitureWandSources,requestOwnedFurnitureWandPairs,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,inventoryPatchesEqual,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
@@ -68,7 +69,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  type Group=[string,string,string,number,number,string];
  type Catalog={schema:string;version:string;source:{membership:string;names:string;nameVersionMatchesSave:boolean};groups:Group[];items:Item[]};
  type Filter='all'|'recorded'|'unrecorded';
- type Tool='collections'|'achievements'|'inventory';
+ type Tool='collections'|'achievements'|'inventory'|'layouts';
  type ThemePref='system'|'light'|'dark';
  type PendingRemoval=
   | {kind:'collections';id:number;name:string;before:bigint;revision:number;fromDateDialog:boolean}
@@ -88,7 +89,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function restoreActiveTool(){
   try{
    const tool=sessionStorage.getItem('hkia-active-tool');
-   if(tool==='collections'||tool==='achievements'||tool==='inventory')activeTool=tool;
+   if(tool==='collections'||tool==='achievements'||tool==='inventory'||tool==='layouts')activeTool=tool;
   }catch{}
  }
  let achievementQuery=$state('');
@@ -1510,6 +1511,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    isInventoryLocked(detail.documentId)||'createdHandle' in detail&&isInventoryLocked(detail.createdHandle)||'batch' in detail&&detail.batch.some(row=>isInventoryLocked(row.documentId))));
  }
  async function goToHistory(target:number){
+  if(activeTool==='layouts')return;
   if(!snapshot||busy||!Number.isSafeInteger(target)||target<0||target>tabHistory.length||target===tabHistoryCursor||historyBlockedByLocks(target))return;
   const scope=activeTool;
   busy=true;error='';
@@ -1658,6 +1660,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     <button type="button" class="tool-tab" data-tool="inventory" class:active={activeTool==='inventory'} aria-current={activeTool==='inventory'?'page':undefined} onclick={openInventoryTab}>{iCopy.tab}</button>
     <button type="button" class="tool-tab" data-tool="collections" class:active={activeTool==='collections'} aria-current={activeTool==='collections'?'page':undefined} onclick={goHome}>{copy.toolCollection}</button>
     <button type="button" class="tool-tab" data-tool="achievements" class:active={activeTool==='achievements'} aria-current={activeTool==='achievements'?'page':undefined} onclick={openAchievementsTab}>{achCopy.title}</button>
+    <button type="button" class="tool-tab" data-tool="layouts" class:active={activeTool==='layouts'} aria-current={activeTool==='layouts'?'page':undefined} onclick={()=>selectTool('layouts')}>Layouts</button>
    </nav>{/if}
    <div class="bar-actions">
     {#if snapshot}
@@ -1667,7 +1670,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <details class="history-menu" bind:this={historyMenu}>
       <summary class="icon-button" title={hCopy.title} aria-label={hCopy.title}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></summary>
       <div class="history-popover">
-       <div class="history-heading">{hCopy.title} · {activeTool==='collections'?copy.toolCollection:achCopy.title}</div>
+       <div class="history-heading">{hCopy.title} · {activeTool==='layouts'?'Layouts':activeTool==='collections'?copy.toolCollection:achCopy.title}</div>
        {#if !tabHistory.length}
         <p class="history-empty">{hCopy.empty}</p>
        {:else}
@@ -1730,6 +1733,8 @@ import {verifiedFloorplanName} from './floorplan-names';
     <p>{copy.openHint}</p>
    </section>
 
+  {:else if activeTool==='layouts'}
+   {#key original}<LayoutsPanel {locale} {busy}/>{/key}
   {:else if activeTool==='achievements'}
    {#if achievementImagesFailed}
     <p class="compact-hint" role="status">{achCopy.imagesUnavailable}</p>

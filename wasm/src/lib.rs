@@ -1247,3 +1247,59 @@ pub extern "C" fn hkia_inventory_wand_create(id:u32,b0:i32,b1:i32,a0:i32,a1:i32,
   }
  })
 }
+
+/// Source-only catalog: exact decoded source digest, count, followed by
+/// cabin Hash128, home Hash128 and apartment byte per native row.
+#[no_mangle]
+pub extern "C" fn hkia_layout_source_catalog()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let Ok(rows)=e.layout_source_catalog()else{return 1};
+  let mut out=e.layout_source_identity().to_vec();
+  out.extend((rows.len() as u32).to_le_bytes());
+  for row in rows{
+   for n in row.cabin.into_iter().chain(row.home){out.extend(n.to_le_bytes())}
+   out.push(row.apartment);
+  }
+  a.reply=out;0
+ })
+}
+/// Scope 0=room, 1=building, 2=all structurally linked Cabin sources.
+/// Stage contains expected 32-byte source digest + UTF-8 backup name.
+/// No mutation, no restore authority.
+#[no_mangle]
+pub extern "C" fn hkia_layout_source_capture(scope:u32,a0:u32,a1:u32,a2:u32,a3:u32,created_ms:i64)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  let stage=std::mem::take(&mut a.stage);
+  if stage.len()<33||stage.len()>288{return 1}
+  let expected:[u8;32]=stage[..32].try_into().unwrap();
+  let Ok(name)=std::str::from_utf8(&stage[32..])else{return 1};
+  let id=[a0,a1,a2,a3];
+  use hkia_save_core::layouts::Scope;
+  let selected=match scope{0=>Scope::Room(id),1=>Scope::Cabin(id),2 if id==[0;4]=>Scope::AllCabinSources,_=>return 1};
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let Ok(bytes)=e.capture_layout_source(expected,selected,name,created_ms)else{return 1};
+  a.reply=bytes;0
+ })
+}
+
+#[no_mangle]
+pub extern "C" fn hkia_layout_source_inspect()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  let bytes=std::mem::take(&mut a.stage);
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let Ok((info,same))=e.inspect_layout_source(&bytes)else{return 1};
+  use hkia_save_core::{layouts::Scope,envelope::Version};
+  let scope=match info.scope{Scope::Room(_)=>0,Scope::Cabin(_)=>1,Scope::AllCabinSources=>2};
+  let version=match info.version{Version::V300=>0,Version::V301=>1,_=>return 1};
+  let mut out=vec![scope,version,u8::from(same)];
+  out.extend(info.created_ms.to_le_bytes());
+  out.extend(info.buildings.to_le_bytes());
+  out.extend(info.rooms.to_le_bytes());
+  out.extend(info.name.as_bytes());
+  a.reply=out;0
+ })
+}
