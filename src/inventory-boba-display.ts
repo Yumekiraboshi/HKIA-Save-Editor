@@ -86,3 +86,42 @@ export function bobaSelectionForBase(before:BobaVariant,options:readonly BobaVar
  if(bobaBaseKey(before)===base&&before[2]===current[2]&&before[4]===current[4])return -1;
  return options.findIndex(v=>bobaBaseKey(v)===base&&v[2]===current[2]&&v[4]===current[4]);
 }
+
+/** Project the exact tuples offered by Rust onto a single UI field.
+ * Flavor/color is an authored pair; a required milk change is shown explicitly. */
+export type BobaField=1|2|3|4;
+export function bobaFieldOptions(before:BobaVariant,options:readonly BobaVariant[],selection:number,field:BobaField,absent=false):{index:number;variant:BobaVariant}[]{
+ const current=options[selection]??before;
+ const rows=options.map((variant,index)=>({variant,index}));
+ if(!absent)rows.unshift({variant:before,index:-1});
+ const projected=new Map<number,{index:number;variant:BobaVariant}>();
+ for(const row of rows){
+  const v=row.variant;
+  if(field===1? v[2]!==current[2]||v[4]!==current[4]:
+   v.some((n,i)=>i!==field&&n!==current[i]))continue;
+  const prior=projected.get(v[field]);
+  if(!prior||row.index===selection||(field===1&&prior.index!==selection&&v[3]===current[3]&&prior.variant[3]!==current[3]))projected.set(v[field],row);
+ }
+ return [...projected.values()];
+}
+const fieldLabels:Record<string,[string,string,string,string]>={
+ en:['Flavor','Tapioca','Milk','Sweetness'],ja:['フレーバー','タピオカ','ミルク','甘さ'],
+ ar:['النكهة','التابيوكا','الحليب','الحلاوة'],de:['Geschmack','Tapioka','Milch','Süße'],
+ es:['Sabor','Tapioca','Leche','Dulzor'],fr:['Saveur','Tapioca','Lait','Sucre'],
+ it:['Gusto','Tapioca','Latte','Dolcezza'],ko:['맛','타피오카','우유','당도'],
+ nl:['Smaak','Tapioca','Melk','Zoetheid'],'pt-BR':['Sabor','Tapioca','Leite','Doçura'],
+ ru:['Вкус','Тапиока','Молоко','Сладость'],tr:['Aroma','Tapyoka','Süt','Tatlılık'],
+ 'zh-Hans':['口味','珍珠','牛奶','甜度'],'zh-Hant':['口味','珍珠','牛奶','甜度']
+};
+export function bobaFieldLabel(locale:string,field:BobaField):string{
+ return (fieldLabels[locale]??(locale==='fr-CA'?fieldLabels.fr:fieldLabels.en))[field-1];
+}
+export function bobaFieldValue(v:BobaVariant,current:BobaVariant,field:BobaField,locale:string,witnesses:readonly BobaWitness[],name:(id:number)=>string):string{
+ const c=copies[locale]??(locale==='fr-CA'?copies.fr:en),milk=milkLabels[locale]??milkLabels.en;
+ if(field===2)return v[2]===76?c[0]:v[2]===79?c[1]:'—';
+ if(field===3)return v[3]===75?milk[0]:v[3]===78?milk[1]:'—';
+ if(field===4)return v[4]>=71&&v[4]<=74?c[v[4]-69]:'—';
+ const ingredient=witnesses.find(w=>w[1]===v[1]&&w[2]===v[0]);
+ const label=ingredient?name(ingredient[0])||'—':'—';
+ return v[3]!==current[3]?label+' · '+bobaFieldValue(v,current,3,locale,witnesses,name):label;
+}
