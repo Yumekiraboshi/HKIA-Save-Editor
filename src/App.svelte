@@ -7,9 +7,9 @@
  import {historyCopy,historyDetailCopy} from './history-copy';
  import {selectMatchingInventoryRows,deselectMatchingInventoryRows} from './inventory-selection';
  import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy,inventoryDeselectVisibleCopy,inventoryDeleteCopy,inventoryShowZeroCopy,inventoryZeroStackCopy,inventoryRemoveEntryCopy,inventoryRemoveEntryWarning} from './inventory-copy';
- import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant} from './inventory-unique';
+ import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant,inventorySavedHomeName} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
- import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,furnitureHasCustomizedAppearance,type FurnitureDisplay} from './inventory-furniture-display';
+ import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,furnitureHasCustomizedAppearance,furnitureChoiceLabel,type FurnitureDisplay} from './inventory-furniture-display';
  import InventoryDecorator from './InventoryDecorator.svelte';
  import {flowerDecorators} from './inventory-flower-display';
  import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
@@ -28,7 +28,7 @@ import {searchAchievementRows} from './achievement-search';
  import {loadAchievementGroups,groupRows,ungroupedRows,nativeAchievementOrder,groupSummaries as summarizeAchievementGroups,type AchievementHierarchy} from './achievement-groups';
  import {achievementGroupCopy} from './achievement-group-ui';
  import {loadAchievementCategoryAtlas,resolveAchievementDetailCategoryArt,type CategoryIconAtlas} from './achievement-category-icons';
- import {loadAchievementIndividualAtlas,type IndividualAchievementAtlas} from './achievement-individual-icons';
+ import {loadAchievementIndividualAtlas,type IndividualAchievementAtlas,type IndividualAchievementIdentity} from './achievement-individual-icons';
  import {loadAchievementIndex,achievementGuid,readableSourceKey,type AchievementIndex} from './achievement-index';
  import {loadAchievementTitles,type AchievementTitles} from './achievement-localization';
  import {editorErrors} from './ui-copy';
@@ -164,6 +164,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let achievementGroupHierarchy:AchievementHierarchy|null=$state(null);
  let achievementCategoryAtlas:CategoryIconAtlas|null=$state(null);
  let achievementIndividualAtlas:IndividualAchievementAtlas|null=$state(null);
+ let achievementIndividualIdentity:IndividualAchievementIdentity|null=$state(null);
  let achievementIndividualFailed=$state(false),achievementCategoryFailed=$state(false);
  const achievementImagesFailed=$derived(achievementIndividualFailed||achievementCategoryFailed);
  let achievementIndividualPending=false,achievementCategoryPending=false,achievementImagesDisposed=false;
@@ -172,7 +173,9 @@ import {verifiedFloorplanName} from './floorplan-names';
   const index=achievementIndex,groups=achievementGroupHierarchy;
   if(!achievementIndividualAtlas&&!achievementIndividualPending){
    achievementIndividualPending=true;
-   void loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index).then(atlas=>{
+   void loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index,identity=>{
+    if(!achievementImagesDisposed)achievementIndividualIdentity=identity;
+   }).then(atlas=>{
     if(achievementImagesDisposed){atlas.dispose?.();return;}
     achievementIndividualAtlas=atlas;achievementIndividualFailed=false;
    }).catch(()=>{if(!achievementImagesDisposed)achievementIndividualFailed=true;}).finally(()=>{achievementIndividualPending=false;});
@@ -545,6 +548,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function cafeName(v:CafeVariant):string{return cafeVariantLabel(v,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}
  function wandName(v:WandVariant):string{return wandVariantLabel(v,id=>sourceNames[String(id)]??'—')}
  function inventoryVariantSearchName(row:InventoryEntry):string{
+  const savedHomeName=inventorySavedHomeName(row.unique);if(savedHomeName!==null)return savedHomeName;
   const w=wandVariantOf(row.unique);if(w){
    const nested=wandNestedOf(row.unique);
    return nested?[inventoryName(nested[0]),wandName(w),furnitureVariantTitle(furnitureDisplay,nested[0],nested.slice(3),furnitureCopy.defaultMaterial)].filter(Boolean).join(' · '):wandName(w)
@@ -1671,7 +1675,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#if editingAchievement}
      {@const editingSaveGuid=achievementGuid(editingAchievement.guid)}
      {@const dialogIndividualArt=achievementIndividualAtlas?.bySaveGuid.get(editingSaveGuid)}
-     {@const dialogCategoryArt=resolveAchievementDetailCategoryArt(editingSaveGuid,snapshot.version,achievementCategoryAtlas,achievementIndividualAtlas,achievementGroupHierarchy)}
+     {@const dialogCategoryArt=resolveAchievementDetailCategoryArt(editingSaveGuid,snapshot.version,achievementCategoryAtlas,achievementIndividualIdentity,achievementGroupHierarchy)}
      <form class="achievement-form" onsubmit={e=>{e.preventDefault();void saveAchievement()}}>
       <div class="date-dialog-heading">
        <h2>{compactCopy.date}</h2>
@@ -2331,7 +2335,7 @@ import {verifiedFloorplanName} from './floorplan-names';
         <select name={'furniture-part-'+slot} value={-1} disabled={busy||!choices.length} onchange={e=>{const index=Number(e.currentTarget.value);e.currentTarget.value='-1';void selectFurniturePart(index)}}>
          <option value={-1} disabled>{materialLabel(furnitureDisplay,selected[slot],furnitureCopy.defaultMaterial)}</option>
          {#each choices as choice (choice.index)}
-          <option value={choice.index} data-material-index={choice.variant[slot]}>{materialLabel(furnitureDisplay,choice.variant[slot],furnitureCopy.defaultMaterial)}</option>
+          <option value={choice.index} data-material-index={choice.variant[slot]}>{furnitureChoiceLabel(furnitureDisplay,selected,choice.variant,slot,furnitureCopy.defaultMaterial,furnitureCopy.part)}</option>
          {/each}
         </select>
        </label>

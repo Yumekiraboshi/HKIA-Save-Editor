@@ -507,6 +507,11 @@ Native Switch IL2CPP metadata (dump.cs SHA-256 `4b4eb6a543722e1dfaf8aad5593e9e13
 
 The source outfit registry is grouped by actual OutfitItemDetails.Outfit PPtr, not presumed equivalence by ParentItem: the additional cosmetic rows include divergent exact outfits within apparent parent groups. Preserve prior verified reference groups and resolve each new PPtr independently; 949 exact outfit groups and 2,049 piece links. Sorted row and group fingerprints `ea9fbdb217aaf41e2d94b7320c6d13f5f073534e8406af2580222b249c2f3aed` and `7c1d7dc8b3d64aafafd57aff8181d67b3fea8900e738ea884fd1a765cd07ebf4`. Runtime uses the same bag definition/quantity and complete reference gates, rather than individual exceptions. All special rules are generated from the native definition table. Synthetic raw/ZIP roundtrip tests exercise quest-rarity cosmetic zero/refill, equipment denial, finite absent and existing limits, and refusal to synthesize restricted or quest-state items. Actual game acceptance remains unverified.
 
+
+#### Read-only special inventory metadata (tags 0, 10, 11)
+
+The schema-walked original inventory payload supplies exact schematic CraftOriginGuid words, saved home layout names and signed Int64 LayoutId (two exact 32-bit words plus Reported), and saved home kit InstanceId and name. Use the existing bounded Rust snapshot projection and display/search the saved names only; preserve user-entered UTF-8 and omit internal identifiers from tiles. Nil/truncated fields remain opaque; full payload bytes and embedded layout stay untouched. No new identity, rename, quantity change, removal, RPC or home placement editing is authorized. Synthetic raw/ZIP roundtrip and transport tests cover precision, Unicode and malformed metadata denial. Game acceptance unverified.
+
 #### Repair complete existing Boba recipe identities
 
 The existing tag-4 semantic editor can repair a distinct, fully decoded saved tuple that passes the shared source/UID/reference and quantity identity checks even when its current recipe is not in the 152 authored source tuples. Only those source-valid target tuples may be written, and all original/effective peer identities remain reserved. A repair-only original is not a new acquisition witness during the session. The dialog offers a complete native tuple with all attribute labels if no independent field choice can reach an available target. Unknown or unverified payloads are not generated. Raw/ZIP CAS, history and independent reparse and transport presentation regressions apply; real-game acceptance unverified.
@@ -542,6 +547,11 @@ The source-defined unrestricted starter is also available when every original pa
 
 When all original saved rows of a source-defined shaped wand or unrestricted ordinary customizable furniture family are independently zero/refill eligible and effectively zero, reuse the existing source-defined creation route. Preserve every zero row and reserve original/effective identities. Shaped wand choices exclude reserved source-zero characteristic pairs, retain the existing first-add output/style and family gates, and never authorize the generic output as absent. For furniture with a saved nil base row, use that row's default dialog only if its ordinary definition independently permits new acquisition and the entire family is safely zero; restricted owned-only furniture still requires a positive witness. Without a nil row, reuse the common ordinary candidate alongside verified nondefault zero peers. Existing normalized material checks and restricted material policy remain mandatory. Raw/ZIP synthetic regression includes collisions, history, native reparse and refill. Actual game acceptance unverified.
 
+
+
+#### Reachable free furniture combinations
+
+The same native material tuple planner serves existing furniture, default sources and first additions. When every single-slot neighbor is reserved, it may offer one free complete combination of original source materials. Reuse the same final target validator, including material unlock, normalized equality, reference and original/effective reservation rules. The UI must expose coupled slot changes in the choice label. No entitlement or unsupported material is generated. Raw/ZIP regression covers occupied single-slot choices, retained zero stacks, creation CAS, Undo/Redo and independent reparse. Actual game acceptance unverified.
 
 #### Native furniture material draft preview
 

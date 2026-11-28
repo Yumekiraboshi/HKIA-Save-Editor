@@ -74,11 +74,15 @@ export function decodeAchievementIndividualAtlas(
   throw Error('ACH_INDIVIDUAL_ICONS_INCOMPLETE');
  return {url:base+'achievement-individual-atlas.webp',bySaveGuid};
 }
+/** Identity evidence comes from the verified manifest, not delivery of the
+ * image file. Parent fallback can safely use this evidence independently. */
+export type IndividualAchievementIdentity=Pick<IndividualAchievementAtlas,'bySaveGuid'>;
 export async function loadAchievementIndividualAtlas(
- base:string,index:AchievementIndex
+ base:string,index:AchievementIndex,onIdentity?:(identity:IndividualAchievementIdentity)=>void
 ):Promise<IndividualAchievementAtlas>{
  const manifest=await loadVerifiedAchievementManifest(base,'achievement-individual-atlas.json',MANIFEST_SHA);
  const atlas=decodeAchievementIndividualAtlas(manifest,index,base);
+ onIdentity?.({bySaveGuid:atlas.bySaveGuid});
  const image=await loadVerifiedAchievementImage(base,'achievement-individual-atlas.webp',ATLAS_SHA);
  return {...atlas,...image};
 }
