@@ -16,6 +16,7 @@
  import {nativeInventoryGroups,inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryCustomizationSource,inventoryBatchZeroRows,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {createFlowerDisplayLoader,flowerDisplay,flowerGrowthKind,hasNativeFlowerArt,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
+ import {loadNativeInventorySort,type NativeInventorySort} from './inventory-native-sort';
  import {initialInventoryNativeArt,createInventoryNativeArtLoader,type InventoryNativeArt} from './inventory-native-art';
  import {nativeInventoryIconScale} from './native-inventory-icon-scale';
  import {inventoryGroupLabel} from './inventory-native-category-copy';
@@ -115,6 +116,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryQuery=$state('');
  let inventoryGroup:InventoryGroupKey|null=$state(null);
  let nativeInventoryIndex:NativeInventoryIndex=$state(new Map());
+ let nativeInventorySort:NativeInventorySort|null=$state(null);
  let flowerDefinitions:FlowerDisplayDefinitions|null=$state(null);
  let flowerLabels:FlowerLabels=$state({});
  const flowerDisplayLoader=createFlowerDisplayLoader(import.meta.env.BASE_URL);
@@ -393,7 +395,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const categoryRemoveRows=$derived(inventoryCategoryRows.filter(row=>!isInventoryBulkProtected(row.documentId)&&row.removable));
  const inventoryRows=$derived(browseInventory(
   inventoryDisplayedRows,inventoryQuery,activeInventoryGroup,
-  inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale,inventoryVariantSearchName));
+  inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale,inventoryVariantSearchName,nativeInventorySort));
  const achievementRows=$derived(searchAchievementRows(achievementQuery,sourceOrderedAchievementRows,
   groupScopedAchievementRows,achievementName,guid=>achievementIndex.get(guid)?.key??''));
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
@@ -420,6 +422,7 @@ import {verifiedFloorplanName} from './floorplan-names';
 
  onMount(()=>{
   void loadNativeInventoryIndex(import.meta.env.BASE_URL).then(index=>nativeInventoryIndex=index).catch(()=>{});
+  void loadNativeInventorySort(import.meta.env.BASE_URL).then(order=>nativeInventorySort=order).catch(()=>{});
   refreshFlowerDisplay();
   window.addEventListener('online',refreshFlowerDisplay);
   void loadFurnitureDisplay().then(data=>furnitureDisplay=data).catch(()=>{});

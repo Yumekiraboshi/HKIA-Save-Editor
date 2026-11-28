@@ -7142,6 +7142,56 @@ fn finite_peer_quantities_use_one_structural_cap_without_disabling_rows(){
  }
 }
 
+#[test]
+fn dense_ordinary_family_membership_after_removal(){
+ use hkia_save_core::collection::{INVENTORY_BATCH_TEST_TARGET,HistoryScope::Inventory};
+ // A single dense saved ordinary family exercises the common membership
+ // path after exact removal. No new identity or source authority.
+ let n=INVENTORY_BATCH_TEST_TARGET+1;
+ let item=1614767621u32;
+ let mut p=vec![0x93,0];p.extend(u((n+8) as u32));p.push(0xdd);
+ p.extend(((n+7) as u32).to_be_bytes());
+ p.extend_from_slice(&synthetic_payload("3.0.1")[4..]);
+ for i in 0..n{
+  p.extend(doc(1,arr(vec![u((i+4) as u32),u(item),u(0),u(1),vec![0xc0]])));
+ }
+ let tail=(n+4) as u32;
+ p.extend(doc(10,arr(vec![u(tail),guid([0;4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([0;4]),vec![0xc3],vec![0xc0]])));
+ p.extend(doc(22,arr(vec![u(tail+1),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
+ let input=slot_from_payload("3.0.1",p);
+ let mut e=Editor::open(input.clone()).unwrap();
+ let original=e.inventory();
+ assert_eq!(original.len(),n);
+ assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==1));
+ e.remove_inventory_entries(&[(4,1)]).unwrap();
+ let survivors=e.inventory();
+ assert_eq!(survivors.len(),n-1);
+ assert!(survivors.iter().all(|r|r.editable&&r.quantity_minimum==1));
+ assert_eq!(e.inventory_batch_zero_only_ids().len(),n-1);
+ let rest:Vec<_>=survivors.iter().skip(1).map(|r|(r.document_id,1)).collect();
+ e.remove_inventory_entries(&rest).unwrap();
+ let last=e.inventory();
+ assert_eq!(last.len(),1);
+ assert_eq!(last[0].document_id,5);
+ assert_eq!(last[0].quantity_minimum,0);
+ e.change_inventory_quantity(5,1,0).unwrap();
+ let checkpoint=e.history_checkpoint().unwrap();
+ let mut recovered=Editor::open(input).unwrap();
+ recovered.restore_history(&checkpoint).unwrap();
+ assert_eq!(recovered.inventory(),e.inventory());
+ assert!(recovered.undo_scope(Inventory));
+ assert_eq!(recovered.inventory(),last);
+ assert!(recovered.undo_scope(Inventory));
+ assert_eq!(recovered.inventory(),survivors);
+ assert!(recovered.undo_scope(Inventory));
+ assert_eq!(recovered.inventory(),original);
+ for _ in 0..3{assert!(recovered.redo_scope(Inventory));}
+ let reopened=Editor::open(recovered.export().unwrap()).unwrap();
+ assert_eq!(reopened.inventory().len(),1);
+ assert_eq!(reopened.inventory()[0].quantity,0);
+ assert_eq!(reopened.inventory_original_unique_payload(5),Some([0xc0].as_slice()));
+}
+
 
 #[test]
 fn native_pin_source_joins_exact_screen_and_preserves_other_settings(){
