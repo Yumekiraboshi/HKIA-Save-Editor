@@ -1362,6 +1362,7 @@ async function inventoryMixedSelectionZeroOnlySmoke(){
   assert.deepEqual(await card.locator('input[name="quantity"]').evaluateAll(inputs=>inputs.map(x=>Number(x.value))),[0,0]);
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await card.locator('.inventory-quantity-form[data-quantity-committed="6"]').waitFor();
+  await page.locator('.inventory-batch-toggle').click();
   await search.fill('203331651');
   await card.waitFor();
   assert.equal(await card.locator('.inventory-stack-delete').isDisabled(),false);
