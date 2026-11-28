@@ -282,7 +282,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  const historyItems=$derived(new Map(((catalog as Catalog|null)?.items??[]).map(item=>[item[0],item])));
  const inventoryHistoryItems=$derived.by(()=>{
   const result=new Map(((snapshot as SaveSnapshot|null)?.inventory??[]).map(item=>[item.documentId,item.itemId]));
-  for(const detail of historyDetails)if(detail.scope==='inventory'&&'createdHandle' in detail)result.set(detail.createdHandle,detail.itemId);
+  for(const detail of historyDetails)if(detail.scope==='inventory'&&'createdHandle' in detail){
+   result.set(detail.createdHandle,detail.itemId);
+   if('replacedItemId' in detail&&detail.replacedItemId!==undefined)result.set(detail.documentId,detail.replacedItemId);
+  }
   return result;
  });
  // Item IDs and category-to-art mappings are original Steam v3.0.1
@@ -2367,7 +2370,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    {@const displaySpecies=flowerTargetSpecies??edit.itemId}
    <form class="date-dialog-inner" onsubmit={e=>{if(edit.absent){e.preventDefault();void addInventoryFlowerVariant()}else void applyInventoryFlowerVariant(e)}}>
     <div class="date-dialog-heading">
-     <h2 id="flower-editor-title">{inventoryName(displaySpecies)}{#if flowerGrowthKind(edit.itemId,{growState:current[0],baseColor:0,pattern:0,patternColor:0})} · {flowerGrowthLabel(locale,flowerGrowthKind(edit.itemId,{growState:current[0],baseColor:0,pattern:0,patternColor:0}))}{/if}</h2>
+     <h2 id="flower-editor-title">{inventoryName(displaySpecies)}{#if flowerGrowthKind(displaySpecies,{growState:current[0],baseColor:0,pattern:0,patternColor:0})} · {flowerGrowthLabel(locale,flowerGrowthKind(displaySpecies,{growState:current[0],baseColor:0,pattern:0,patternColor:0}))}{/if}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFlowerEditor}>×</button>
     </div>
     <div class="date-dialog-item">

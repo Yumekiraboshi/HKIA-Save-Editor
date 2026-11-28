@@ -117,11 +117,11 @@ export function decodeHistoryDetails(
     const createdHandle=u32(),documentId=u32(),itemId=i32();
     const before:FlowerVariant=[i32(),i32(),i32(),i32()],variant:FlowerVariant=[i32(),i32(),i32(),i32()];
     const quantity=i32();
-    const candidate=documentId===2147483648+itemId&&before.every(n=>n===0);
+    const candidate=documentId===2147483648+itemId;
     const stagedSource=result.some(r=>r.scope==='inventory'&&'createdHandle' in r&&!r.furnitureCreated&&!r.paletteCreated&&!r.bobaCreated&&!r.cafeCreated&&!r.wandCreated&&r.createdHandle===documentId&&r.itemId===itemId);
     if(createdHandle<=2147483647||createdHandle===documentId||documentId<=0||itemId<=0||quantity<=0||
      (documentId>2147483647&&!candidate&&!stagedSource)||
-     (!candidate&&(before[0]!==variant[0]||before.every((v,i)=>v===variant[i]))))return [];
+     (!candidate&&before.every((v,i)=>v===variant[i])))return [];
     result.push({scope:'inventory',documentId,createdHandle,itemId,variant,quantity});
    }else if(kind===12){
     const createdHandle=u32(),documentId=u32(),itemId=i32();

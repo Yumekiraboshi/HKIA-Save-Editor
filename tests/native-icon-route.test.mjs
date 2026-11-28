@@ -39,8 +39,9 @@ test('all 50 source dynamic flags map to the correct verified image families',()
 });
 test('flower edit preview retains the source image if tint definitions are unavailable',()=>{
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
- const marker='<DynamicFlowerSprite itemId={edit.itemId} flower={appearance} definitions={flowerDefinitions} fallback={inventoryOriginalSprite(edit.itemId)}/>';
+ const marker='<DynamicFlowerSprite itemId={displaySpecies} flower={appearance} definitions={flowerDefinitions} fallback={inventoryOriginalSprite(displaySpecies)}/>';
  assert.ok(app.includes(marker));
+ assert.ok(app.includes('const displaySpecies=flowerTargetSpecies??edit.itemId'));
  assert.ok(!app.includes('{#if flowerDefinitions}\n        '+marker));
 });
 
