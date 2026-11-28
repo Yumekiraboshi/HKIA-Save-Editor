@@ -1007,8 +1007,8 @@ impl Editor {
   }
   if id&PENDING_ITEM!=0{
    let item=(id&!PENDING_ITEM) as i32;
-   // Preserve legacy default-only requests; customized first stacks
-   // require an exact, currently offered original default witness.
+   // A direct request must match a currently offered starter; further
+   // customization requires an exact, currently offered starter witness.
    if expected==[0;4]{return self.absent_flower_options(item).contains(&next).then_some(item)}
    let (patterns,reserved)=self.absent_flower_preview_context(item,expected)?;
    return ((next[0]==6||Self::absent_flower_growth_supported(item,next[0]))&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
@@ -1083,16 +1083,15 @@ impl Editor {
    self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item_id){return Vec::new()}
   if !crate::inventory_source::is_uncapped_required_unique_stack(item_id){return Vec::new()}
   let Some(reserved)=self.absent_flower_reservations(item_id)else{return Vec::new()};
-  // Missing crowns use only their exact source species' original default
-  // colors. Generic processors can use any of the unrestricted source
-  // species; only their actual default colors are offered here.
+  // Start with original default witnesses; if every default is reserved,
+  // use one free tuple from the same verified customization policy.
   if rare_candle_key(item_id).is_some(){
    let policy=flower_item_patterns(item_id,6).expect("verified rare candle");
-   return ABSENT_FLOWER_DEFAULTS.iter().flat_map(|&(species,colors)|{
+   let defaults=ABSENT_FLOWER_DEFAULTS.iter().flat_map(|&(species,colors)|{
     let eligible=FLOWER_SPECIES.iter().any(|&(id,p)|id==species&&p.contains(&10));
     colors.iter().copied().filter(move |_|eligible).map(|color|[6,color,10,default_flower_accent(color)])
-   }).collect::<std::collections::BTreeSet<_>>().into_iter().filter(|v|valid_flower_variant(policy,*v)&&
-    !reserved.contains(v)).collect()
+   }).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+   return Self::free_flower_starters(item_id,policy,defaults,&reserved)
   }
   let species=flower_candle_source(item_id).map(|r|r.1).or_else(||FLOWER_CROWN_SPECIES.iter().find(|&&(id,_)|id==item_id).map(|&(_,species)|species)).unwrap_or(item_id);
   let colors:Vec<i32>=if let Some((_,colors))=ABSENT_FLOWER_DEFAULTS.iter().find(|&&(id,_)|id==species){
@@ -1102,7 +1101,33 @@ impl Editor {
    colors.sort_unstable();colors.dedup();colors
   }else{return Vec::new()};
   let Some(patterns)=flower_item_patterns(item_id,6)else{return Vec::new()};
-  colors.into_iter().map(|color|[6,color,0,0]).filter(|v|valid_flower_variant(patterns,*v)&&!reserved.contains(v)).collect()
+  Self::free_flower_starters(item_id,patterns,colors.into_iter().map(|color|[6,color,0,0]).collect(),&reserved)
+ }
+ // Default identities remain reserved for exact history replay, even at
+ // zero quantity. Exhaustion must not hide an otherwise supported family.
+ // A valid original default is still required as source evidence; enumerate
+ // only the finite values already accepted by the native preview validator.
+ fn free_flower_starters(item:i32,policy:FlowerPolicy,defaults:Vec<FlowerVariant>,reserved:&HashSet<FlowerVariant>)->Vec<FlowerVariant>{
+  let defaults:Vec<_>=defaults.into_iter().filter(|&v|valid_flower_variant(policy,v)).collect();
+  let free:Vec<_>=defaults.iter().copied().filter(|v|!reserved.contains(v)).collect();
+  if !free.is_empty()||defaults.is_empty(){return free}
+  for grow in [6,0,7]{
+   if grow!=6&&!Self::absent_flower_growth_supported(item,grow){continue}
+   for base in FLOWER_COLORS.iter().copied(){
+    for pattern in std::iter::once(0).chain(policy.patterns.iter().copied()){
+     if pattern==0||FLOWER_EFFECTS.contains(&pattern){
+      let v=[grow,base,pattern,0];
+      if valid_flower_variant(policy,v)&&!reserved.contains(&v){return vec![v]}
+     }else{
+      for accent in FLOWER_COLORS.iter().copied(){
+       let v=[grow,base,pattern,accent];
+       if valid_flower_variant(policy,v)&&!reserved.contains(&v){return vec![v]}
+      }
+     }
+    }
+   }
+  }
+  Vec::new()
  }
  pub fn inventory_absent_flower_ids(&self)->Vec<i32>{
   if !self.absent_flower_budget_available(){return Vec::new()}
