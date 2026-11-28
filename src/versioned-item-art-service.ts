@@ -66,7 +66,7 @@ export function decodeNativeItemArt(receipt:unknown,value:unknown,catalog:unknow
 }
 export function createVersionedItemArtService(
  roots:{release:string;bindings:string;auxiliary:string},pin:ItemArtServicePin,
- options:{load?:typeof loadVerifiedArtAsset;loadTexture?:NonNullable<Parameters<typeof createVersionedFamilyRenderer>[2]>['loadTexture']}={}
+ options:{load?:typeof loadVerifiedArtAsset;loadTexture?:NonNullable<Parameters<typeof createVersionedFamilyRenderer>[2]>['loadTexture'];sharedImages?:ReturnType<typeof createNativeRasterLoader>}={}
 ){
  for(const root of Object.values(roots))check(root.startsWith('/')&&root.endsWith('/')&&!root.includes('..')&&!root.includes('//')&&!root.includes('\\')&&!/[?#%]/.test(root));
  check(pin.family.version===pin.version&&pin.family.dynamic.resolution==='native'&&pin.family.auxiliary.resolution==='native');
@@ -79,7 +79,7 @@ export function createVersionedItemArtService(
   }
   return actualLoad(root,file,sha,max,exact);
  };
- const images=createNativeRasterLoader(roots.release+'native-art/',load);
+ const images=options.sharedImages??createNativeRasterLoader(roots.release+'native-art/',load);
  let contextPending:Promise<Awaited<ReturnType<typeof init>>>|undefined;
  async function init(){
   const receipt=obj(json(await load(roots.release,'release-candidate.json',pin.receiptFileSha256,16*1024*1024)));
@@ -120,6 +120,7 @@ export function createVersionedItemArtService(
     return {itemId:i,sourceItemId:i,kind:route.kind==='original-base-only'?'original-base':route.kind,fidelity:route.kind==='source-placeholder'?'source-placeholder':route.kind==='original-base-only'?'original-base-only':'original',art};
    }catch{return null;}
   },
-  dispose(){disposed=true;images.dispose();}
+  async flowerPattern(i:number,v:string){if(disposed||v!==pin.version)return null;try{const image=await (await context()).family.flowerPattern(i,v);return disposed?null:image;}catch{return null;}},
+  dispose(){disposed=true;if(!options.sharedImages)images.dispose();}
  };
 }
