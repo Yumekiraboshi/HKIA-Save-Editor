@@ -240,16 +240,23 @@ test('flower creation from a staged source shows both native journal steps',()=>
 });
 
 test('maximum native inventory batch and full history remain displayable',async()=>{
- const {HISTORY_MAX_BYTES,HISTORY_MAX_ROWS,HISTORY_MAX_BATCH_ROWS}=await compiled('../src/history-limits.ts');
- assert.equal(HISTORY_MAX_BATCH_ROWS,256);
+ const {HISTORY_MAX_BYTES,HISTORY_MAX_ROWS,INVENTORY_BATCH_TEST_TARGET}=await compiled('../src/history-limits.ts');
+ assert.equal(INVENTORY_BATCH_TEST_TARGET,65536);
  const make=n=>bytes([u8(10),u32(n),...Array.from({length:n},(_,i)=>bytes([u32(4+i),i32(1),i32(2)]))]);
- const op=make(HISTORY_MAX_BATCH_ROWS),records=Array.from({length:HISTORY_MAX_ROWS},()=>meta('inventory',4,null));
+ const op=make(256),records=Array.from({length:HISTORY_MAX_ROWS},()=>meta('inventory',4,null));
  const full=log(Array.from({length:HISTORY_MAX_ROWS},()=>op),HISTORY_MAX_ROWS);
  assert.ok(full.length>128*1024&&full.length<=HISTORY_MAX_BYTES);
  const decoded=decodeHistoryDetails(full,records);
  assert.equal(decoded.length,HISTORY_MAX_ROWS);
- assert.equal(decoded[0].batch.length,HISTORY_MAX_BATCH_ROWS);
- assert.deepEqual(decodeHistoryDetails(log([make(HISTORY_MAX_BATCH_ROWS+1)],1),[records[0]]),[]);
+ assert.equal(decoded[0].batch.length,256);
+ // 65,536 rows exercise the actual target without spreading a huge
+ // argument array through the test helper.
+ const large=new Uint8Array(5+12*INVENTORY_BATCH_TEST_TARGET),view=new DataView(large.buffer);
+ large[0]=10;view.setUint32(1,INVENTORY_BATCH_TEST_TARGET,true);
+ for(let i=0;i<INVENTORY_BATCH_TEST_TARGET;i++){const at=5+12*i;view.setUint32(at,i+4,true);view.setInt32(at+4,1,true);view.setInt32(at+8,2,true)}
+ assert.equal(decodeHistoryDetails(log([large],1),[records[0]])[0].batch.length,INVENTORY_BATCH_TEST_TARGET);
+ view.setUint32(1,INVENTORY_BATCH_TEST_TARGET+1,true);
+ assert.deepEqual(decodeHistoryDetails(log([large],1),[records[0]]),[]);
 });
 
 test('wand native history accepts absent source handles and full source/material identities',()=>{

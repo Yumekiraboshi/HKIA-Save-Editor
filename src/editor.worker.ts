@@ -317,7 +317,7 @@ function snapshot(e:Engine){
   eligibleCollectionHistoryIds.push(id);
   lastId=id;
  }
- return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,inventory,inventoryCreatable,inventoryBatchLimit:e.hkia_inventory_batch_limit(),bobaWitnesses:bobaData.witnesses,cafeWitnesses:cafeData.witnesses,achievements,counters,history,historyCheckpoint:checkpoint,eligibleCollectionHistoryIds,achievementGoals};
+ return {version,zip:(b[1]&1)!==0,membershipEdit:(b[1]&2)!==0,dirty:b[2]===1,canUndo:b[3]===1,canRedo:b[4]===1,revision:v.getUint32(5,true),bytes:v.getUint32(9,true),entries,inventory,inventoryCreatable,inventoryBatchLimit:Math.min(e.hkia_inventory_batch_limit(),inventory.length+inventoryCreatable.length),bobaWitnesses:bobaData.witnesses,cafeWitnesses:cafeData.witnesses,achievements,counters,history,historyCheckpoint:checkpoint,eligibleCollectionHistoryIds,achievementGoals};
 }
 function validAchievement(v:AchievementValue):boolean{
  return !!v&&typeof v.complete==='boolean'&&typeof v.current==='number'&&Number.isFinite(v.current)&&v.current>=0&&
