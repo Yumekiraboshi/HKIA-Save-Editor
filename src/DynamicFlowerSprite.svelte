@@ -2,6 +2,7 @@
  import type {SpriteCell} from './icon-packs';
  import {flowerGrowthKind,flowerGrowthSpriteState,flowerUsesDefinitionIcon,type InventoryFlower,type FlowerDisplayDefinitions} from './inventory-flower-display';
  import {renderFlowerArt,renderFlowerOriginalBaseArt,renderFlowerDefinitionBaseArt} from './flower-runtime-art';
+ import {flowerArtKey} from './flower-appearance';
  import {isStaticFlowerCreationIcon} from './flower-icon-route';
  import {loadFlowerGrowthCell} from './flower-growth-art';
  import {watchDynamicArtVisibility,startDynamicArtRequest} from './dynamic-art-view';
@@ -49,7 +50,7 @@
   if(!near||key===null||growthResult?.cell!==null||visible){baseFallback=null;return;}
   return startDynamicArtRequest(()=>renderFlowerDefinitionBaseArt(id),value=>{baseFallback=value?{key,url:value}:null;});
  });
- const renderKey=$derived(JSON.stringify([itemId,flower?.growState,flower?.baseColor,flower?.pattern,flower?.patternColor,!!definitions]));
+ const renderKey=$derived(flowerArtKey(itemId,flower,definitions));
  let render=$derived.by(()=>{
   const id=itemId,defs=definitions,fields=flower?{...flower}:undefined;
   // Native states 1, 2, 4 and 5 select the unmodified definition icon.

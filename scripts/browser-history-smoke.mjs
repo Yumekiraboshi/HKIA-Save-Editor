@@ -27,7 +27,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false,categoryProtectionInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -57,6 +57,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
    paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
    doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
+  ...(categoryProtectionInventory?[doc(1,arr([8],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([9],u32(627013240),[0],u32(9),[0xc0]))]:[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
   ...(ordinaryFurnitureInventory?[doc(1,arr([8],u32(427689),[0],u32(5),[0xc0])),doc(1,arr([9],u32(3202680),[0],u32(6),[0xc0])),furnitureHomeObject]:[]),
   ...(ordinaryClothingInventory?[doc(10,arr([8],hash(1,2,3,4),
@@ -193,9 +194,9 @@ async function inventoryDynamicPaletteArtSmoke(){
   const inputs=page.locator('.inventory-card input[name="quantity"]');
   assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.min)),['1','1']);
   await inputs.first().fill('4');await page.locator('.inventory-card button[type="submit"]').first().click();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await inputs.nth(1).fill('7');await page.locator('.inventory-card button[type="submit"]').nth(1).click();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await sprites.nth(1).waitFor({timeout:30_000});
   assert.deepEqual(await sprites.evaluateAll(els=>els.map(e=>getComputedStyle(e).backgroundImage).sort()),originalUrls,'quantity-only snapshot refresh retains dynamic artwork URLs');
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();
@@ -204,7 +205,7 @@ async function inventoryDynamicPaletteArtSmoke(){
   await editor.locator('button[type="submit"]:not([disabled])').click();await editor.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await page.locator('button[title="Redo"]:not([disabled])').click();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
   await inputs.nth(1).waitFor();
@@ -334,7 +335,7 @@ async function inventoryPaletteCreationSmoke(){
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
   await page.locator('button[title="Undo"]:not([disabled])').click();await rows.nth(1).waitFor({state:'detached'});
   await page.locator('button[title="Redo"]:not([disabled])').click();await rows.nth(1).waitFor();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
@@ -643,7 +644,7 @@ async function inventoryWandEditSmoke(){
   await chooseWandFields(dialog,106,127);
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();await page.locator('button[title="Redo"]:not([disabled])').click();
-  await card.locator('button[type="submit"]:not([disabled])').waitFor();
+  await card.locator('.inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-show-zero-toggle[aria-pressed="false"]').click();await page.locator('.inventory-controls input[type="search"]').fill('1429161083');
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
@@ -655,7 +656,7 @@ async function inventoryWandEditSmoke(){
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
   await page.locator('button[title="Undo"]:not([disabled])').click();await rows.nth(1).waitFor({state:'detached'});
   await page.locator('button[title="Redo"]:not([disabled])').click();await rows.nth(1).waitFor();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-show-zero-toggle[aria-pressed="false"]').click();await page.locator('.inventory-controls input[type="search"]').fill('1429161083');
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
@@ -685,16 +686,40 @@ async function inventoryBobaEditSmoke(){
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1798633565');
   const card=page.locator('.inventory-card').first(),dialog=page.locator('dialog[aria-labelledby="boba-editor-title"]');
   await assertInventoryControlGeometry(page,card.locator('.inventory-compact-variant'));
+  const honey=card.locator('[data-ingredient-key="honeycomb"]');
+  await honey.locator('.ingredient-count').filter({hasText:'2'}).waitFor();
+  assert.equal(await card.locator('[data-ingredient-key="milk"]').getAttribute('data-ingredient-candidates'),'1743974962,619719355');
+  await card.locator('[data-ingredient-key="tapioca"]').waitFor();
+  const milkBadge=card.locator('[data-ingredient-key="milk"]');
+  await milkBadge.locator('.ingredient-candidate .item-sprite').nth(1).waitFor({timeout:30_000});
+  assert.equal(await milkBadge.locator('.ingredient-ambiguity').count(),0);
+  assert.equal(await milkBadge.locator('.ingredient-unknown').count(),0);
+  assert.equal(await milkBadge.getAttribute('title'),'Coral Milk / Cactus Cream');
+  const lane=card.locator('.ingredient-badges');
+  for(const width of [1280,390]){
+   await page.setViewportSize({width,height:800});
+   const box=await lane.boundingBox(),del=await card.locator('.inventory-stack-delete').boundingBox();
+   assert.ok(box&&del&&(box.x+box.width<=del.x||del.x+del.width<=box.x||box.y+box.height<=del.y||del.y+del.height<=box.y),'ingredient lane must not cover delete control');
+   const lock=await card.locator('.inventory-lock-button').boundingBox();
+   assert.ok(box&&lock&&(box.x+box.width<=lock.x||lock.x+lock.width<=box.x||box.y+box.height<=lock.y||lock.y+lock.height<=box.y),'ingredient lane must not cover lock control');
+   assert.equal(await lane.locator('.ingredient-badge').count(),4);
+  }
+  await page.setViewportSize({width:1280,height:800});
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  await dialog.locator('[data-ingredient-key="honeycomb"] .ingredient-count').filter({hasText:'2'}).waitFor();
+  await dialog.locator('select[name="boba-sweetness"]').selectOption({label:'Very sweet'});
+  await dialog.locator('[data-ingredient-key="honeycomb"] .ingredient-count').filter({hasText:'3'}).waitFor();
   await dialog.locator('select[name="boba-pearls"]').selectOption({label:'Without tapioca'});
   await dialog.locator('select[name="boba-sweetness"]').selectOption({label:'Unsweetened'});
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await card.locator('.inventory-flower-variant-name').filter({hasText:'Without tapioca · Unsweetened'}).waitFor();
+  assert.equal(await honey.count(),0);
+  assert.equal(await card.locator('[data-ingredient-key="tapioca"]').count(),0);
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await card.locator('.inventory-flower-variant-name').filter({hasText:'With tapioca · Sweet'}).waitFor();
   await page.locator('button[title="Redo"]:not([disabled])').click();
   await card.locator('.inventory-flower-variant-name').filter({hasText:'Without tapioca · Unsweetened'}).waitFor();
-  await card.locator('button[type="submit"]:not([disabled])').waitFor();
+  await card.locator('.inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1798633565');
   await card.locator('.inventory-flower-variant-name').filter({hasText:'Without tapioca · Unsweetened'}).waitFor();
@@ -800,7 +825,7 @@ async function inventoryBobaFullCreationSmoke(){
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
   await page.locator('button[title="Undo"]:not([disabled])').click();await rows.nth(1).waitFor({state:'detached'});
   await page.locator('button[title="Redo"]:not([disabled])').click();await rows.nth(1).waitFor();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('1798633565');await rows.nth(1).waitFor();
   assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
@@ -844,7 +869,7 @@ async function inventoryCafeEditSmoke(){
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await page.locator('button[title="Redo"]:not([disabled])').click();
-  await card.locator('button[type="submit"]:not([disabled])').waitFor();
+  await card.locator('.inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('203331651');
   await card.locator('.inventory-unique-edit-button').waitFor();
@@ -857,6 +882,13 @@ async function inventoryCafeEditSmoke(){
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
   assert.equal(v.getUint32(0,true),1);const final=Array.from({length:6},(_,i)=>v.getInt32(12+i*4,true));
   assert.equal(final[0],48);assert.equal(final[3],9);assert.notDeepEqual([final[1],final[4]],[49,46]);assert.equal(final[2],48);assert.equal(final[5],9);
+  const badges=card.locator('.ingredient-badge');
+  await badges.nth(2).waitFor();
+  assert.deepEqual(await badges.evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-ingredient-slots'))),['1','2','3']);
+  assert.deepEqual(await badges.evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-ingredient-count'))),['1','1','1']);
+  assert.equal(await badges.first().getAttribute('data-ingredient-candidates'),'1622861092');
+  assert.equal(await badges.nth(2).getAttribute('data-ingredient-candidates'),'1622861092');
+  assert.equal(await card.locator('.ingredient-count').count(),0);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM CAFE VARIANT PASS: native ingredient pair, history, recovery and export');
  }finally{await context.close()}
@@ -885,7 +917,7 @@ async function inventoryCafeCreationAndOptionalSideSmoke(){
   const none=side.locator('option[data-ingredient-id="0"]');
   await side.selectOption(await none.getAttribute('value'));
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').first().waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').first().waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('1338995084');await rows.nth(1).waitFor();
   assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
@@ -948,7 +980,7 @@ async function inventoryChefQuantitySmoke(){
    const inputs=page.locator('.inventory-card input[name="quantity"]');await inputs.nth(1).waitFor();return inputs;
   };
   const apply=(index=0)=>page.locator('.inventory-card button[type="submit"]').nth(index).click();
-  const settled=()=>page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  const settled=()=>page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await openInventory();
   let inputs=await inputFor(203331651);
   assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.min)),['0','0']);
@@ -1007,14 +1039,24 @@ async function inventoryEditExportSmoke(){
   const quantity=card.locator('input[name="quantity"]');
   assert.equal(await quantity.inputValue(),'6');
   assert.equal(await quantity.isDisabled(),false);
+  const apply=card.locator('button[type="submit"]');
+  assert.equal(await apply.isVisible(),false,'unchanged owned quantity has no visible apply action');
   await quantity.fill('25');
-  await card.locator('button[type="submit"]').click();
+  await apply.waitFor({state:'visible'});
+  assert.equal(await card.locator('.inventory-quantity-delta').innerText(),'6 → 25');
+  await quantity.fill('6');
+  await apply.waitFor({state:'hidden'});
+  await quantity.fill('25');
+  await apply.click();
   await page.locator('.inventory-card input[name="quantity"]').first().waitFor();
   // The filled DOM input already contains 25 before the native edit. Wait for
   // the completed CAS transaction and actual committed IndexedDB draft, not
   // just the input's value, before exercising recovery.
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').first().waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').first().waitFor();
   await page.locator('.state-dot.changed').waitFor();
+  await apply.waitFor({state:'hidden'});
+  assert.equal(await card.locator('.inventory-quantity-delta').innerText(),'6 → 25');
+  assert.equal(await card.locator('.inventory-quantity-form').getAttribute('data-quantity-committed'),'25');
   const storedInventory=await page.evaluate(()=>new Promise((resolve,reject)=>{
    const open=indexedDB.open('hkia-editor-local-session',1);
    open.onerror=()=>reject(open.error);
@@ -1066,6 +1108,70 @@ async function confirmInventoryRemoval(page,accept=true){
  await modal.locator(accept?'.removal-confirm-action':'.removal-cancel').click();
  await modal.waitFor({state:'hidden'});
 }
+async function inventoryCategoryProtectionSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-category-lock.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({categoryProtectionInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]'),card=page.locator('.inventory-card');
+  await search.fill('1877756618');
+  await card.locator('.inventory-lock-button').click();
+  await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').isDisabled(),true);
+  assert.equal(await card.locator('.inventory-quantity-form button[type="submit"]').isDisabled(),true);
+  assert.equal(await card.locator('.inventory-quantity-form').getAttribute('data-quantity-ready'),'false');
+  assert.equal(await card.locator('.inventory-stack-delete').isDisabled(),true);
+  await page.locator('.inventory-batch-toggle').click();
+  assert.equal(await card.locator('.inventory-batch-checkbox').count(),0);
+  await page.locator('.inventory-batch-toggle').click();
+  await page.waitForFunction(async()=>new Promise(resolve=>{
+   const req=indexedDB.open('hkia-editor-local-session',1);
+   req.onsuccess=()=>{const db=req.result;const get=db.transaction('unsaved-changes','readonly').objectStore('unsaved-changes').get('current');get.onsuccess=()=>{db.close();resolve(get.result?.ui?.inventoryLocks?.length===1)};get.onerror=()=>{db.close();resolve(false)}};
+   req.onerror=()=>resolve(false);
+  }));
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('1877756618');
+  await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
+  const modal=page.locator('.removal-confirm-dialog');
+  // Both ordinary material rows have verified zero/removal eligibility.
+  // Search deliberately hides the only unlocked row. Category operation
+  // still targets it, never the locked visible row.
+  await page.locator('.inventory-category-zero').click();
+  await modal.waitFor({state:'visible'});
+  assert.equal(await modal.locator('.inventory-removal-targets li').count(),1);
+  await modal.locator('.removal-confirm-action').click();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
+  await search.fill('627013240');
+  await card.waitFor({state:'hidden'});
+  await page.locator('.inventory-show-zero-toggle').click();
+  await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'0');
+  await card.locator('.inventory-lock-button').click();
+  assert.equal(await page.locator('button[title="Undo"]').isDisabled(),true,'history cannot change a locked row');
+  await card.locator('.inventory-lock-button').click();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  await page.locator('.inventory-show-zero-toggle').click();
+  await search.fill('1877756618');
+  await page.locator('.inventory-category-remove').click();
+  await modal.waitFor({state:'visible'});
+  assert.equal(await modal.locator('.inventory-removal-targets li').count(),1,'hidden zero row included');
+  await modal.locator('.inventory-remove-entry-action').click();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  await page.locator('.inventory-show-zero-toggle').click();
+  await search.fill('627013240');await card.waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]').click();
+  await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'0');
+  await search.fill('1877756618');await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
+  console.log('CHROMIUM CATEGORY PROTECTION PASS: persisted lock, filtered category zero, hidden physical deletion, protected history');
+ }finally{await context.close()}
+}
 async function inventoryBatchQuantitySmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -1098,7 +1204,7 @@ async function inventoryBatchQuantitySmoke(){
   assert.equal(await page.locator('.inventory-batch-checkbox:checked').count(),0);
   await page.locator('.inventory-batch-toggle').click();
   await page.locator('.inventory-batch-form').waitFor({state:'hidden'});
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').first().waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').first().waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');
@@ -1157,11 +1263,12 @@ async function inventoryBatchQuantitySmoke(){
   const limit=Number((await selectedTotal.innerText()).split('/')[1].replace(/[,\s]/g,''));
   assert.ok(limit>=40);
   await page.locator('.inventory-select-visible').click();
-  assert.equal(Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,'')),limit);
+  const selected=Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,''));
+  assert.ok(selected>40&&selected<=limit,'select all matching furniture, not all categories or the journal capacity');
   await page.locator('.inventory-deselect-visible').click();
   assert.equal(Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,'')),0);
   await page.locator('.inventory-select-visible').click();
-  assert.equal(Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,'')),limit);
+  assert.equal(Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,'')),selected);
   await page.locator('.inventory-batch-toggle').click();
   assert.equal(await page.locator('.inventory-batch-form').count(),0);
   assert.deepEqual(errors,[]);
@@ -1191,7 +1298,7 @@ async function inventoryQuantityBoundsSmoke(){
   await input.fill('3');
   await page.locator('.inventory-card button[type="submit"]').click();
   await page.locator('.state-dot.changed').waitFor();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   assert.equal(await input.inputValue(),'3');
   await page.locator('.inventory-batch-toggle').click();
   await page.locator('.inventory-batch-checkbox').check();
@@ -1242,12 +1349,12 @@ async function inventoryEmptyMaterialSmoke(currency=false){
   await deleteButton.click();await removal.waitFor({state:'visible'});
   await removal.locator('.removal-confirm-action').click();
   await page.locator('.state-dot.changed').waitFor();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   input=await inputFor(second);
   assert.equal(await input.inputValue(),'0');
   await input.fill('5');
   await apply();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await openItems();
   assert.equal(await (await inputFor(first)).inputValue(),'0');
@@ -1260,7 +1367,7 @@ async function inventoryEmptyMaterialSmoke(currency=false){
   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
   assert.equal(await (await inputFor(second)).inputValue(),'5');
   input=await inputFor(first);await input.fill('6');await apply();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.locator('.inventory-batch-toggle').click();
   const firstName=await page.locator('.inventory-card .inventory-name').innerText();
   await page.locator('.inventory-batch-checkbox').check();
@@ -1288,7 +1395,7 @@ async function inventoryEmptyMaterialSmoke(currency=false){
   assert.equal(await (await inputFor(first)).inputValue(),'6');
   assert.equal(await (await inputFor(second)).inputValue(),'5');
   await page.locator('button[title="Undo"]').click();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   assert.equal(await (await inputFor(first)).inputValue(),'0');
   assert.equal(await (await inputFor(second)).inputValue(),'5');
   await page.locator('.file-menu > summary').click();
@@ -1550,22 +1657,25 @@ async function inventoryCreateMaterialSmoke(){
   console.log('CHROMIUM INVENTORY CREATE PASS: individual/batch add, local recovery, undo/redo, native ID allocation and export reparse');
  }finally{await context.close()}
 }
-async function assertNativeFlowerPatternClip(badge){
- const image=badge.locator('img');
- const original=await image.getAttribute('src');
- assert.ok(original?.endsWith('.webp'));
+async function assertNativeFlowerPatternGeometry(badge){
  const geometry=await badge.evaluate(el=>{
   const primary=el.querySelector('.plate-inner'),clip=el.querySelector('.native-decorator-icon-clip'),img=clip?.querySelector('img');
   if(!primary||!clip||!img)return null;
   const a=getComputedStyle(primary),b=getComputedStyle(clip);
   const bounds=e=>{const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height];};
-  return {mask:a.maskImage===b.maskImage&&a.maskImage.includes('plate.webp'),sameGeometry:JSON.stringify(bounds(primary))===JSON.stringify(bounds(clip))&&JSON.stringify(bounds(clip))===JSON.stringify(bounds(img)),alpha:b.maskMode==='alpha',size:b.width+' '+b.height};
+  return {mask:a.maskImage===b.maskImage&&a.maskImage.includes('plate.webp'),sameGeometry:JSON.stringify(bounds(primary))===JSON.stringify(bounds(clip))&&img.offsetWidth===clip.offsetWidth&&img.offsetHeight===clip.offsetHeight,alpha:b.maskMode==='alpha',size:b.width+' '+b.height,outer:el.offsetWidth+' '+el.offsetHeight,rim:getComputedStyle(el,'::before').backgroundColor,rimMask:getComputedStyle(el,'::before').maskImage===a.maskImage};
  });
- assert.deepEqual(geometry,{mask:true,sameGeometry:true,alpha:true,size:'18px 18px'});
+ assert.deepEqual(geometry,{mask:true,sameGeometry:true,alpha:true,size:'18px 18px',outer:'22 22',rim:'rgb(255, 255, 255)',rimMask:true});
+}
+async function assertNativeFlowerPatternClip(badge){
+ await assertNativeFlowerPatternGeometry(badge);
+ const image=badge.locator('img');
+ const original=await image.getAttribute('src');
+ assert.ok(original?.endsWith('.webp'));
  const saved=await badge.evaluate(el=>{
   const img=el.querySelector('img'),saved=[el.getAttribute('style'),img.getAttribute('style')];
-  // A black outside region and a green inner plate make leakage observable.
-  el.style.setProperty('--primary','#00ff00');el.style.setProperty('--accent','transparent');
+  // Preserve the white outer rim and make the inner plate high contrast.
+  el.style.setProperty('--primary','#00ff00');
   el.style.backgroundColor='#000000';img.style.visibility='hidden';return saved;
  });
  try{
@@ -1573,6 +1683,26 @@ async function assertNativeFlowerPatternClip(badge){
   const baseline=await badge.screenshot({scale:'css'});
   for(let id=1;id<=16;id++){
    await image.evaluate(async (img,src)=>{img.src=src;await img.decode();img.style.visibility='visible';},original.replace(/pattern-\d+\.webp$/,'pattern-'+id+'.webp'));
+   const fit=await image.evaluate(img=>{
+    const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
+    const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0);
+    const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+    let left=canvas.width,top=canvas.height,right=0,bottom=0;
+    for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++){
+     if(!pixels[(y*canvas.width+x)*4+3])continue;
+     left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x+1);bottom=Math.max(bottom,y+1);
+    }
+    const transform=getComputedStyle(img).transform,rect=img.getBoundingClientRect(),clip=img.parentElement.getBoundingClientRect();
+    return {size:[canvas.width,canvas.height],bounds:[left,top,right,bottom],
+     scale:transform==='none'?1:new DOMMatrix(transform).a,
+     centered:Math.abs(rect.x+rect.width/2-clip.x-clip.width/2)<.05&&Math.abs(rect.y+rect.height/2-clip.y-clip.height/2)<.05};
+   });
+   // Bounds measured from original RGBA32 definition textures, not the screenshot.
+   const expected=[[2,2,48,50],[2,2,52,52],[0,0,54,54],[0,0,54,54],[2,2,52,52],[0,0,54,54],[4,4,49,49],[2,2,52,52],[2,2,52,52],[2,2,52,51],[2,2,52,52],[2,2,52,52],[2,2,52,52],[2,2,52,52],[0,0,54,54],[10,10,44,44]];
+   const padded=[1,2,5,8,9,10,11,12,13,14].includes(id);
+   const scale=id===7?54/44:id===16?54/34:padded?54/50:1;
+   assert.deepEqual({size:fit.size,bounds:fit.bounds,centered:fit.centered},{size:[54,54],bounds:expected[id-1],centered:true},'native pattern padding fit '+id);
+   assert.ok(Math.abs(fit.scale-scale)<.00001,'centered source crop '+id);
    const actual=await badge.screenshot({scale:'css'});
    const result=await badge.page().evaluate(async ([a,b])=>{
     async function pixels(s){
@@ -1580,15 +1710,17 @@ async function assertNativeFlowerPatternClip(badge){
      const canvas=document.createElement('canvas');canvas.width=img.width;canvas.height=img.height;
      const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0);return ctx.getImageData(0,0,canvas.width,canvas.height).data;
     }
-    const [before,after]=await Promise.all([pixels(a),pixels(b)]);let outside=0,inside=0;
+    const [before,after]=await Promise.all([pixels(a),pixels(b)]);let outside=0,inside=0,rim=0;
     for(let i=0;i<before.length;i+=4){
      const diff=Math.max(...[0,1,2].map(c=>Math.abs(before[i+c]-after[i+c])));
      if(before[i]===0&&before[i+1]===0&&before[i+2]===0&&diff>5)outside++;
+     if(before[i]>250&&before[i+1]>250&&before[i+2]>250&&diff>5)rim++;
      if(before[i]<5&&before[i+1]>240&&before[i+2]<5&&diff>20)inside++;
     }
-    return {outside,inside};
+    return {outside,inside,rim};
    },[baseline.toString('base64'),actual.toString('base64')]);
    assert.equal(result.outside,0,'pattern '+id+' escapes the inner plate');
+   assert.equal(result.rim,0,'pattern '+id+' covers the white rim');
    assert.ok(result.inside>0,'pattern '+id+' must remain visible');
   }
  }finally{
@@ -1597,6 +1729,34 @@ async function assertNativeFlowerPatternClip(badge){
    if(imgStyle===null)img.removeAttribute('style');else img.setAttribute('style',imgStyle);
   },[...saved,original]);
  }
+}
+async function assertStableInventoryArtworkSlot(slot,contentSize=64){
+ const result=await slot.evaluate((el,size)=>{
+  const image=el.querySelector('.item-sprite,.item-art-empty');
+  const badges=el.querySelector('.inventory-native-decorators');
+  const measure=()=>{
+   const a=el.getBoundingClientRect(),b=image.getBoundingClientRect();
+   return {width:a.width,height:a.height,x:b.x+b.width/2-a.x,y:b.y+b.height/2-a.y,
+    imageWidth:b.width,imageHeight:b.height};
+  };
+  if(!image)return null;
+  const before=measure();
+  const gap=badges?el.getBoundingClientRect().top+22-badges.getBoundingClientRect().bottom:0;
+  // Toggle the actual overlay without touching the art element or its source.
+  // The same fixed slot must be used even with no badges.
+  const marker=document.createComment('temporary badge position');
+  if(badges)badges.replaceWith(marker);
+  const without=measure();
+  if(badges)marker.replaceWith(badges);
+  return {before,without,gap,expectedWidth:size,expectedHeight:size+22};
+ },contentSize);
+ assert.ok(result);
+ assert.deepEqual(result.before,result.without,'badge presence must not move or resize main artwork');
+ assert.ok(Math.abs(result.before.width-result.expectedWidth)<.05);
+ assert.ok(Math.abs(result.before.height-result.expectedHeight)<.05);
+ assert.ok(Math.abs(result.before.x-contentSize/2)<.05);
+ assert.ok(Math.abs(result.before.y-(22+contentSize/2))<.05);
+ assert.ok(result.gap>=-.5,'decorators must stay above the main artwork');
 }
 async function inventoryDynamicFlowerArtSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
@@ -1625,6 +1785,7 @@ async function inventoryDynamicFlowerArtSmoke(){
   // by that same attribute would disappear after the first replacement.
   const effectIndex=await effectCard.evaluate(el=>Array.from(document.querySelectorAll('.inventory-card')).indexOf(el));
   assert.ok(effectIndex>=0);
+  await assertStableInventoryArtworkSlot(page.locator('.inventory-card').nth(effectIndex).locator('.inventory-item-art'));
   await assertNativeFlowerPatternClip(page.locator('.inventory-card').nth(effectIndex).locator('[data-native-decorator="11"]'));
   await page.locator('.inventory-card [data-native-decorator="12"] img[src$="decorator-12.webp"]').first().waitFor({timeout:30_000});
   const images=await sprites.evaluateAll(async els=>Promise.all(els.map(async el=>{
@@ -1792,8 +1953,8 @@ async function inventoryFlowerGrowthDisplaySmoke(){
    const card=cards.first(),quantity=card.locator('input[name="quantity"]'),apply=card.locator('.inventory-quantity-form button[type="submit"]');
    assert.equal(await quantity.getAttribute('min'),'0');
    await quantity.fill('0');await apply.click();await confirmInventoryRemoval(page);
-   await apply.waitFor({state:'visible'});
-   await card.locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+   await apply.waitFor({state:'hidden'});
+   await card.locator('.inventory-quantity-form[data-quantity-ready="true"]').waitFor();
    assert.equal(await quantity.inputValue(),'0');
    await page.locator('button[title="Undo"]:not([disabled])').click();
    await page.locator('button[title="Redo"]:not([disabled])').waitFor();
@@ -1954,10 +2115,10 @@ async function inventoryFlowerVariantEditSmoke(){
   await quantity.waitFor();assert.equal(await quantity.getAttribute('min'),'0');
   await quantity.fill('0');await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]').click();await confirmInventoryRemoval(page);
   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
-  await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   assert.equal(await quantity.inputValue(),'0');
   await quantity.fill('25');await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]').click();
-  await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-show-zero-toggle[aria-pressed="false"]').click();
@@ -2049,7 +2210,7 @@ async function inventoryFlowerCreationSmoke(){
   await added.waitFor();assert.equal(await added.inputValue(),'5');
   assert.equal(await cards.first().locator('input[name="quantity"]').inputValue(),'1');
   await added.fill('7');await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]').click();
-  await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await cards.nth(1).locator('.inventory-quantity-form[data-quantity-ready="true"][data-quantity-committed="7"]').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('43114910');
@@ -2105,6 +2266,7 @@ async function inventoryAbsentFlowerCreationSmoke(){
   await dialog.locator('select[name="flower-pattern"]').selectOption(firstPattern);
   await dialog.locator('[data-native-decorator="11"] img[src$="pattern-1.webp"]').waitFor({timeout:30_000});
   await dialog.locator('[data-flower-two-tone="true"]').waitFor();
+  await assertNativeFlowerPatternGeometry(dialog.locator('[data-native-decorator="11"]'));
   assert.deepEqual(await dialog.locator('[data-native-decorator]').evaluateAll(els=>els.map(e=>e.getAttribute('data-native-decorator'))),['12','11']);
   const reset=dialog.locator('.inventory-flower-reset:not([disabled])');
   await reset.waitFor();
@@ -2170,7 +2332,9 @@ async function inventoryRareCandleSmoke(){
   const value=await dialog.locator('option[data-flower-variant="'+target.join(',')+'"]').getAttribute('value');assert.ok(value!==null);
   await dialog.locator('select[name="flower-effect"]').selectOption(value);
   await dialog.locator('[data-native-decorator="11"] img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
+  await assertNativeFlowerPatternGeometry(dialog.locator('[data-native-decorator="11"]'));
   await dialog.locator('[data-inventory-art="native-static-route"].item-sprite').waitFor({timeout:30_000});
+  await assertStableInventoryArtworkSlot(dialog.locator('.inventory-flower-preview-frame'),96);
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-flower:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('22657460');
@@ -2383,7 +2547,7 @@ async function inventoryFurnitureCreationSmoke(){
   await dialog.locator('select').filter({has:page.locator('option[value="'+next+'"]')}).first().selectOption(next);
   await dialog.locator('button[type="submit"]').click();await dialog.waitFor({state:'hidden'});
   await added.fill('7');await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]').click();
-  await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await cards.nth(1).locator('.inventory-quantity-form[data-quantity-ready="true"][data-quantity-committed="7"]').waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('61381969');
   await added.waitFor();assert.equal(await added.inputValue(),'7');
@@ -2463,6 +2627,7 @@ async function inventoryFurnitureVariantEditSmoke(){
   await mainIcon.waitFor({timeout:30_000});
   const art=el=>{const c=getComputedStyle(el);return [c.backgroundImage,c.backgroundPosition];};
   const source=await preview.evaluate(art);
+  await assertStableInventoryArtworkSlot(dialog.locator('[data-furniture-icon-preview]'));
   assert.deepEqual(source,await mainIcon.evaluate(art),'furniture preview must retain the same original icon as the card');
   const select=dialog.locator('select[name="furniture-part-0"]');
   const value=await select.locator('option[data-material-index="502"]').getAttribute('value');
@@ -2511,7 +2676,7 @@ async function inventoryFurnitureVariantEditSmoke(){
   assert.equal(await quantity.inputValue(),'93');
   await quantity.fill('42');
   await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]').click();
-  await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');
@@ -2571,6 +2736,7 @@ async function inventoryIconScaleSmoke(){
    });
    assert.ok(Math.abs(size.width-64*scale)<.05);assert.ok(Math.abs(size.height-64*scale)<.05);
    assert.equal(size.slot,64);
+   await assertStableInventoryArtworkSlot(art);
   }
   console.log('CHROMIUM INVENTORY ICON SCALE PASS: three sizes of original fish and ordinary item');
  }finally{await context.close();}
@@ -2689,6 +2855,7 @@ async function inventoryNativeResultArtSmoke(){
    await grid.waitFor({timeout:30_000});
    const plan=card.locator('[data-native-decorator="8"]');
    await plan.waitFor({timeout:30_000});
+   await assertStableInventoryArtworkSlot(card.locator('.inventory-item-art'));
    assert.equal(await plan.count(),1);
    assert.ok(await plan.evaluate(async el=>{
     const image=el.querySelector('img');if(!image||!image.src.endsWith('/inventory-decorators/decorator-08.webp'))return false;
@@ -3155,6 +3322,43 @@ async function achievementAtlasRetrySmoke(trigger='tab'){
  }finally{await context.close();}
 }
 
+async function fullWidthWorkspaceSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1920,height:900}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  const empty=page.locator('.empty-workspace');
+  await empty.waitFor();
+  const center=await empty.boundingBox();
+  assert.ok(center&&center.width<=640&&Math.abs(center.x+center.width/2-960)<2,'unloaded screen remains centered');
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-wide-workspace.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({flowerInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  const width=async locator=>locator.evaluate(el=>el.getBoundingClientRect().width);
+  for(const tool of ['collections','achievements','inventory']){
+   await chooseTab(page,tool);
+   assert.ok(await width(page.locator('main.content.workspace-wide'))>1880,tool+' uses the wide viewport');
+   assert.ok(await width(page.locator('.bar-inner'))>1880,'header uses wide viewport');
+  }
+  await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  await page.locator('.inventory-card').first().waitFor({timeout:30_000});
+  const columns=()=>page.locator('.inventory-grid').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length);
+  const wide=await columns();
+  await page.setViewportSize({width:1280,height:900});
+  const narrow=await columns();
+  assert.ok(wide>narrow,'wide inventory increases the number of columns');
+  await page.setViewportSize({width:1920,height:900});
+  await page.locator('.inventory-card .inventory-unique-edit-button:not([disabled])').first().click();
+  const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');
+  await dialog.waitFor();
+  const bounds=await dialog.boundingBox();
+  assert.ok(bounds&&bounds.width<=450&&Math.abs(bounds.x+bounds.width/2-960)<2,'focused editor stays centered and bounded');
+  await dialog.locator('.date-dialog-close').click();
+  await page.setViewportSize({width:390,height:844});
+  const mobile=await page.locator('main.content.workspace-wide').boundingBox();
+  assert.ok(mobile&&mobile.x>=-1&&mobile.x+mobile.width<=391,'narrow workspace remains within viewport');
+  console.log('CHROMIUM FULL WIDTH WORKSPACE PASS: centered start/dialog, all three full-width tools, responsive inventory columns');
+ }finally{await context.close()}
+}
 async function run(){
  await waitForServer();
  browser=await chromium.launch({headless:true,executablePath:installedChrome(),args:['--no-sandbox','--disable-dev-shm-usage']});
@@ -3621,6 +3825,7 @@ async function run(){
  assert.deepEqual(errors,[],'no console exceptions or 5xx during browser replay');
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
  await context.close();
+ await fullWidthWorkspaceSmoke();
  await achievementExportReopenRoundtrip();
  await inventoryDynamicPaletteArtSmoke();
  await inventoryPaletteCreationSmoke();
@@ -3644,6 +3849,7 @@ async function run(){
  await wandMipSmoke(browser,origin,base);
  await inventoryEditExportSmoke();
  await inventoryBatchQuantitySmoke();
+ await inventoryCategoryProtectionSmoke();
  await inventoryQuantityBoundsSmoke();
  await inventoryEmptyMaterialSmoke();
  await inventoryEmptyMaterialSmoke(true);

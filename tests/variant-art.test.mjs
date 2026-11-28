@@ -125,7 +125,7 @@ test('Collection and Inventory select original images without inferred recolorin
  assert.match(app,/exactVariantArt\[String\(dateDialogItem\[0\]\)\]/);
  assert.match(view,/await picture\.decode\(\)/);
  assert.doesNotMatch(sprite,/renderApproximation|renderDyeSprite|source-fit|native-icon/);
- assert.match(sprite,/data-dye-source=\{imageSource\}/);
+ assert.match(sprite,/data-dye-source=\{displayedUrl\|\|visible\?imageSource:undefined\}/);
  assert.match(sprite,/imageSource='game-render'/);
  assert.match(sprite,/background-size=\{imageSource==='game-render'\?'contain'/);
  assert.match(view,/return \(\)=>\{canceled=true;untrackUnavailableArt\(retry\);\}/);

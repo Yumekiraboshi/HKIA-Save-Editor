@@ -21,7 +21,7 @@
    {#if dyeTint}
     <span class="native-dye-icon-tint" style:background-color={iconColor} style:mask-image={'url("'+icon+'")' }></span>
    {:else}
-    <img src={icon} alt="" width={art.geometry.inner} height={art.geometry.inner}/>
+    <img class:flower-pattern={type===11} src={icon} alt="" width={art.geometry.inner} height={art.geometry.inner}/>
    {/if}
   </span>
  </span>
@@ -36,4 +36,11 @@
  .plate-inner{background:var(--primary);z-index:-1}
  .native-dye-icon-tint{display:block;width:100%;height:100%;mask-size:100% 100%;mask-position:center;mask-repeat:no-repeat;mask-mode:alpha}
  img{display:block;object-fit:contain}
+ /* Crop the original square into the same circular interior as FlowerColor.
+    Remove the source's transparent outer padding, not the white accent rim.
+    Keep the original center, aspect ratio, RGB and internal motif alpha. */
+ img.flower-pattern{object-fit:cover;transform-origin:center}
+ img.flower-pattern:is([src$="/pattern-1.webp"],[src$="/pattern-2.webp"],[src$="/pattern-5.webp"],[src$="/pattern-8.webp"],[src$="/pattern-9.webp"],[src$="/pattern-10.webp"],[src$="/pattern-11.webp"],[src$="/pattern-12.webp"],[src$="/pattern-13.webp"],[src$="/pattern-14.webp"]){transform:scale(1.08)}
+ img.flower-pattern[src$="/pattern-7.webp"]{transform:scale(1.2272727273)}
+ img.flower-pattern[src$="/pattern-16.webp"]{transform:scale(1.5882352941)}
 </style>

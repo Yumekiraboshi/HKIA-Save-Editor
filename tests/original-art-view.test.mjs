@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
+import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/original-art-view.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
 const {startOriginalArtRequest,createOriginalImageDecoder}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
@@ -70,4 +71,28 @@ test('shared waiting image remains available if one requesting card stays live',
  assert.equal(started.at(-1),'shared');
  for(const release of releases)release();
  await Promise.all([...pending,a,b]);
+});
+
+test('completed art uses one persistent viewport target and current request identity',()=>{
+ const view=readFileSync(new URL('../src/DyeSprite.svelte',import.meta.url),'utf8');
+ assert.equal((view.match(/use:watchDynamicArtVisibility/g)||[]).length,1);
+ assert.match(view,/if\(!near\)\{displayed=null;return;\}/);
+ assert.match(view,/near&&displayed\?\.identity===identity\?displayed:null/);
+ assert.match(view,/createVerifiedSpriteView\(\(\)=>sprite,\(\)=>near&&!displayedUrl\)/);
+ assert.match(view,/const identity=\$derived\(JSON\.stringify\(\[originalArtUrl,exactArtUrl\]\)\)/);
+});
+test('scrolling away cancels offscreen waiting original decode before it loads',async()=>{
+ const releases=[],started=[];
+ const decode=createOriginalImageDecoder(url=>new Promise(resolve=>{started.push(url);releases.push(resolve);}));
+ const pending=Array.from({length:6},(_,i)=>decode('busy-'+i));
+ const shown=[];
+ const stop=startOriginalArtRequest('offscreen',undefined,'/',url=>shown.push(url),decode,async()=>undefined);
+ await flush();assert.equal(started.length,6);
+ stop();
+ releases[0]();await flush();
+ assert.equal(started.length,6);assert.deepEqual(shown,[]);
+ const resumed=startOriginalArtRequest('offscreen',undefined,'/',url=>shown.push(url),decode,async()=>undefined);
+ await flush();assert.equal(started.at(-1),'offscreen');
+ releases.slice(1).forEach(release=>release());await Promise.all(pending);await flush();
+ assert.deepEqual(shown,['offscreen']);resumed();
 });

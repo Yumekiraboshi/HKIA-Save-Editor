@@ -7,7 +7,12 @@ import {isBobaVariantWire} from './inventory-boba-display';
 import {cloneStoredAchievementPatches,type StoredPatch} from './achievement-draft';
 import type {InventoryEntry,InventoryPatch} from './worker-client';
 export type DraftPatch={id:number;before:string|null;after:string|null};
-export type DraftUi={group:string|null;subgroup:string|null};
+export type DraftUi={group:string|null;subgroup:string|null;inventoryLocks?:number[]};
+function safeInventoryLocks(value:unknown):number[]{
+ if(value===undefined)return [];
+ if(!Array.isArray(value)||value.length>Math.floor(HISTORY_MAX_BYTES/4)||value.some(id=>!Number.isInteger(id)||id<=0||id>4294967295)||new Set(value).size!==value.length)throw Error('DRAFT_INVALID');
+ return [...value] as number[];
+}
 export type LocalDraft={file:File;patches:DraftPatch[];achievementPatches:StoredPatch[];inventoryPatches:InventoryPatch[];ui:DraftUi;historyCheckpoint:Uint8Array|null};
 const DB_NAME='hkia-editor-local-session';
 const BASE='source-save';
@@ -217,7 +222,7 @@ export async function restoreLocalDraft():Promise<LocalDraft|null>{
   if(!Array.isArray(achievementPatches)||achievementPatches.length>10000)throw Error('DRAFT_INVALID');
   const group=typeof state?.ui?.group==='string'&&state.ui.group.length<128?state.ui.group:null;
   const subgroup=typeof state?.ui?.subgroup==='string'&&state.ui.subgroup.length<128?state.ui.subgroup:null;
-  return {file:actualFile,patches,achievementPatches:achievementPatches as StoredPatch[],inventoryPatches:safeInventoryPatches(state?.inventoryPatches??[]),ui:{group,subgroup},historyCheckpoint:safeHistoryCheckpoint(state?.historyCheckpoint)};
+  return {file:actualFile,patches,achievementPatches:achievementPatches as StoredPatch[],inventoryPatches:safeInventoryPatches(state?.inventoryPatches??[]),ui:{group,subgroup,...(state?.ui?.inventoryLocks!==undefined?{inventoryLocks:safeInventoryLocks(state.ui.inventoryLocks)}:{})},historyCheckpoint:safeHistoryCheckpoint(state?.historyCheckpoint)};
  }finally{db.close()}
 }
 export async function saveOriginalLocally(file:File):Promise<void>{
@@ -237,7 +242,7 @@ export async function saveDraftChanges(patches:DraftPatch[],ui:DraftUi,achieveme
  const savedPatches=safePatches(patches).map(p=>({id:p.id,before:p.before,after:p.after}));
  const savedAchievements=cloneStoredAchievementPatches(achievementPatches);
  const savedInventory=safeInventoryPatches(inventoryPatches);
- const savedUi:DraftUi={group:ui.group,subgroup:ui.subgroup};
+ const savedUi:DraftUi={group:ui.group,subgroup:ui.subgroup,...(ui.inventoryLocks!==undefined?{inventoryLocks:safeInventoryLocks(ui.inventoryLocks)}:{})};
  const savedHistory=historyCheckpoint===null?null:safeHistoryCheckpoint(historyCheckpoint);
  if(historyCheckpoint!==null&&!savedHistory)throw Error('HISTORY_CHECKPOINT_INVALID');
  const db=await openDatabase();

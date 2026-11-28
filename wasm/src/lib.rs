@@ -73,14 +73,14 @@ pub extern "C" fn hkia_inventory_change(document_id:u32,before:i32,after:i32)->u
 /// The batch transport uses the same local staging buffer as history replay.
 #[no_mangle]
 pub extern "C" fn hkia_inventory_batch_limit()->u32{
- hkia_save_core::collection::MAX_INVENTORY_BATCH as u32
+ STATE.with(|s|s.borrow().editor.as_ref().map_or(0,|e|e.inventory_batch_limit() as u32))
 }
 #[no_mangle]
 pub extern "C" fn hkia_inventory_batch_change()->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
   let bytes=std::mem::take(&mut a.stage);
-  if bytes.is_empty()||bytes.len()%12!=0||bytes.len()/12>hkia_save_core::collection::MAX_INVENTORY_BATCH{return 1}
+  if bytes.is_empty()||bytes.len()%12!=0||bytes.len()>hkia_save_core::collection::HISTORY_MAX_BYTES{return 1}
   let requests=bytes.chunks_exact(12).map(|row|(
    u32::from_le_bytes(row[0..4].try_into().unwrap()),
    i32::from_le_bytes(row[4..8].try_into().unwrap()),
@@ -95,7 +95,7 @@ pub extern "C" fn hkia_inventory_remove_entries()->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
   let bytes=std::mem::take(&mut a.stage);
-  if bytes.is_empty()||bytes.len()%8!=0||bytes.len()/8>hkia_save_core::collection::MAX_INVENTORY_BATCH{return 1}
+  if bytes.is_empty()||bytes.len()%8!=0||bytes.len()>hkia_save_core::collection::HISTORY_MAX_BYTES{return 1}
   let requests=bytes.chunks_exact(8).map(|row|(
    u32::from_le_bytes(row[0..4].try_into().unwrap()),
    i32::from_le_bytes(row[4..8].try_into().unwrap())

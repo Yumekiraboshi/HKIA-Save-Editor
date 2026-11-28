@@ -6,13 +6,14 @@
  import {achievementCopy} from './achievement-ui';
  import {historyCopy,historyDetailCopy} from './history-copy';
  import {selectMatchingInventoryRows,deselectMatchingInventoryRows} from './inventory-selection';
+ import {inventoryProtectionCopy} from './inventory-protection-copy';
  import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy,inventoryDeselectVisibleCopy,inventoryDeleteCopy,inventoryShowZeroCopy,inventoryZeroStackCopy,inventoryRemoveEntryCopy,inventoryRemoveEntryWarning} from './inventory-copy';
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant,inventorySavedHomeName} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
  import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,furnitureHasCustomizedAppearance,furnitureChoiceLabel,furnitureAppearanceSwatches,type FurnitureDisplay} from './inventory-furniture-display';
  import InventoryDecorator from './InventoryDecorator.svelte';
  import {flowerDecorators} from './inventory-flower-display';
- import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
+ import {nativeInventoryGroups,inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
  import {createFlowerDisplayLoader,flowerDisplay,flowerGrowthKind,hasNativeFlowerArt,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {initialInventoryNativeArt,createInventoryNativeArtLoader,type InventoryNativeArt} from './inventory-native-art';
@@ -53,8 +54,10 @@ import {searchAchievementRows} from './achievement-search';
  import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
  import {nativeChefInstructionBase} from './native-icon-route';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteAppearanceSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
+ import IngredientBadges from './IngredientBadges.svelte';
+ import {cafeIngredientBadges,bobaIngredientBadges,type IngredientBadge} from './ingredient-badges';
  import {cafeSlotLabel,cafeVariantLabel,cafeOptionLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
- import {bobaFieldOptions,bobaFieldLabel,bobaFieldValue,fullBobaLabel,type BobaVariant,type BobaField} from './inventory-boba-display';
+ import {bobaFieldOptions,bobaFieldLabel,bobaFieldValue,bobaNeedsTupleChoice,fullBobaLabel,type BobaVariant,type BobaField} from './inventory-boba-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {toAchievementDateTimeValue,fromAchievementDateTimeValue} from './achievement-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
@@ -69,7 +72,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  type PendingRemoval=
   | {kind:'collections';id:number;name:string;before:bigint;revision:number;fromDateDialog:boolean}
   | {kind:'achievements';item:AchievementListRow;name:string;revision:number}
-  | {kind:'inventory';requests:InventoryQuantityRequest[];physical:boolean;zero:boolean;batch:boolean;name:string;targets:{documentId:number;name:string;quantity:number;paletteColors:string[]}[];revision:number};
+  | {kind:'inventory';requests:InventoryQuantityRequest[];physical:boolean;zero:boolean;batch:boolean;name:string;targets:{documentId:number;name:string;quantity:number;paletteColors:string[]}[];revision:number;categoryExcluded?:number};
  const BATCH_SIZE=40;
  const EPOCH=621355968000000000n;
  const ICONS=import.meta.env.BASE_URL+'icons/';
@@ -125,10 +128,47 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(!inventoryNativeArtDisposed)inventoryNativeArt=art;
   }).catch(()=>{});
  }
+ let topbarElement=$state<HTMLElement|undefined>();
+ let topbarHeight=$state(64);
+ $effect(()=>{
+  const element=topbarElement;if(!element)return;
+  const measure=()=>{topbarHeight=Math.ceil(element.getBoundingClientRect().height)};
+  measure();const observer=new ResizeObserver(measure);observer.observe(element);
+  return ()=>observer.disconnect();
+ });
  let inventoryEditableOnly=$state(false);
  let inventoryShowZero=$state(false);
  let inventoryAddMode=$state(false);
  let inventoryBatchMode=$state(false);
+ let inventoryLocks=$state<Set<number>>(new Set());
+ function isInventoryLocked(id:number){return inventoryLocks.has(id)}
+ function setInventoryLocks(rows:readonly InventoryEntry[],locked:boolean){
+  if(busy||!snapshot||pendingRemoval)return;
+  const liveIds=new Set(snapshot.inventory.map(row=>row.documentId));
+  const next=new Set(inventoryLocks);
+  for(const row of rows){if(locked&&liveIds.has(row.documentId))next.add(row.documentId);else next.delete(row.documentId)}
+  inventoryLocks=next;
+  inventoryBatchSelected=new Set([...inventoryBatchSelected].filter(id=>!next.has(id)));
+  void persistDraft();
+ }
+ // Quantity input is a UI draft, not a native edit. A changed snapshot
+ // invalidates draft values so Undo/Redo and reload cannot show stale input.
+ let inventoryQuantityDrafts=$state<Record<number,string>>({});
+ function quantityInput(row:InventoryEntry):string{
+  return inventoryQuantityDrafts[row.documentId]??String(inventoryAddMode?1:row.quantity);
+ }
+ function quantityPending(row:InventoryEntry):boolean{
+  const value=quantityInput(row);
+  return inventoryAddMode||value!==String(row.quantity);
+ }
+ function quantityInputValid(row:InventoryEntry):boolean{
+  const value=quantityInput(row),next=Number(value);
+  return /^(0|[1-9][0-9]*)$/.test(value)&&Number.isSafeInteger(next)&&
+   row.quantityLimit!==null&&next>=(inventoryAddMode?Math.max(1,row.quantityMinimum):row.quantityMinimum)&&next<=row.quantityLimit;
+ }
+ function setQuantityInput(row:InventoryEntry,value:string){
+  inventoryQuantityDrafts={...inventoryQuantityDrafts,[row.documentId]:value};
+ }
  let inventoryBatchSelected=$state<Set<number>>(new Set());
  let inventoryBatchQuantity=$state<number|undefined>(undefined);
  // Presentation only: the tightest bound returned by Rust for selected rows.
@@ -151,7 +191,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  $effect(()=>{if(activeTool!=='inventory'){clearInventoryBatch();inventoryAddMode=false}});
  let inventoryLimit=$state(BATCH_SIZE);
  let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
- let inventoryBaseline:InventoryEntry[]=[];
+ let inventoryBaseline:InventoryEntry[]=$state.raw([]);
+ const originalInventoryQuantities=$derived(new Map(inventoryBaseline.map(row=>[row.documentId,row.quantity])));
  // Source-verified game UiIcon ZIP packs are shared by Collection/Inventory.
  // Inventory loads only groups currently needed by visible owned rows.
  const inventoryIconPending=new Set<string>();
@@ -264,6 +305,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const removalCopy=$derived(removalConfirmationCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
  const iCopy=$derived(inventoryCopy(locale));
+ const inventoryLockCopy=$derived(inventoryProtectionCopy(locale));
  const iBatchCopy=$derived(inventoryBatchCopy(locale));
  const flowerCopy=$derived(flowerEditorCopy(locale));
  const furnitureCopy=$derived(furnitureEditorCopy(locale));
@@ -306,6 +348,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  const inventoryMatchTotals=$derived(inventorySearchGroupCounts(inventoryDisplayedRows,inventoryQuery,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName));
  const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
  const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
+ const inventoryCategoryRows=$derived(nativeInventoryIndex.size?((snapshot as SaveSnapshot|null)?.inventory??[]).filter(row=>nativeInventoryGroups(row.itemId,nativeInventoryIndex).includes(activeInventoryGroup)):[]);
+ const categoryZeroRows=$derived(inventoryCategoryRows.filter(row=>!isInventoryLocked(row.documentId)&&row.editable&&row.quantityMinimum===0&&row.quantity>0));
+ const categoryRemoveRows=$derived(inventoryCategoryRows.filter(row=>!isInventoryLocked(row.documentId)&&row.removable));
+ const categoryLockedCount=$derived(inventoryCategoryRows.filter(row=>isInventoryLocked(row.documentId)).length);
  const inventoryRows=$derived(browseInventory(
   inventoryDisplayedRows,inventoryQuery,activeInventoryGroup,
   inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale,inventoryVariantSearchName));
@@ -494,7 +540,10 @@ import {verifiedFloorplanName} from './floorplan-names';
    const item=inventorySourceItems.get(id);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
+  function addIngredientSources(badges:IngredientBadge[]){for(const badge of badges)if(badge.itemIds.length<=2)for(const id of badge.itemIds)addWandSource(id);}
   for(const row of inventoryRows.slice(0,inventoryLimit)){
+   addIngredientSources(cafeIngredientBadges(row.cafe?.variant,snapshot.cafeWitnesses??[]));
+   addIngredientSources(bobaIngredientBadges(row.boba?.variant,snapshot.bobaWitnesses??[]));
    // Native TryGetSubIcon returns the source item's normal UiIcon, even
    // when the wand itself has a native inventory-art entry.
    if(hasNativeWandArt(row.itemId))addWandSource(inventoryWandAppearance(row.itemId,row.unique)?.sourceItemId);
@@ -510,6 +559,8 @@ import {verifiedFloorplanName} from './floorplan-names';
    const item=inventorySourceItems.get(row.itemId);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
+  if(cafeEdit)addIngredientSources(cafeIngredientBadges(cafeDraft??cafeEdit.before,snapshot.cafeWitnesses??[]));
+  if(bobaEdit)addIngredientSources(bobaIngredientBadges(bobaEdit.options[bobaSelection]??bobaEdit.before,snapshot.bobaWitnesses??[]));
   if(wandEdit&&hasNativeWandArt(wandEdit.itemId))addWandSource(wandEdit.appearance.sourceItemId);
   // A dialog may outlive its visible inventory row or be opened from Add.
   // Load its own original definition group using the same bounded pack queue.
@@ -557,8 +608,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const savedHomeName=inventorySavedHomeName(row.unique);if(savedHomeName!==null)return savedHomeName;
   const w=wandVariantOf(row.unique);if(w){
    const nested=wandNestedOf(row.unique);
-   const appearance=inventoryWandAppearance(row.itemId,row.unique);
-   const source=appearance?.sourceItemId;
+   const source=inventoryWandAppearance(row.itemId,row.unique)?.sourceItemId;
    return [source&&source>0?inventoryName(source):'',wandName(w),nested?furnitureVariantTitle(furnitureDisplay,nested[0],nested.slice(3),furnitureCopy.defaultMaterial):''].filter(Boolean).join(' · ')
   }
   if(row.boba)return bobaName(row.boba.variant);
@@ -587,7 +637,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function flowerFieldOption(before:FlowerVariant,next:FlowerVariant,group:number):string{
   const name=flowerFieldValue(next,group);
-  return group!==2&&next[3]!==before[3]?name+' · '+flowerCopy.accent+': '+flowerFieldValue(next,2):name;
+  const labels=[name];
+  if(group!==0&&next[1]!==before[1])labels.push(flowerCopy.color+': '+flowerFieldValue(next,0));
+  if(group!==2&&next[3]!==before[3])labels.push(flowerCopy.accent+': '+flowerFieldValue(next,2));
+  return labels.join(' · ');
  }
  function wandOriginalCell(id:number){
   if(inventoryNativeArt?.withheld.has(id))return undefined;
@@ -740,6 +793,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   return achievementName(achievementGuid(entry.guid),0);
  }
  function update(s:SaveSnapshot){
+  inventoryQuantityDrafts={};
   const previousGroup=activeInventoryGroup;
   snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));
   // A restored or newly created search match must not remain hidden in a
@@ -773,7 +827,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const patches=diffPatches(baseline,recorded);
   const achievements=diffAchievements(achievementBaseline,snapshot?.achievements??[]);
   const inventoryPatches=diffInventory(inventoryBaseline,snapshot?.inventory??[]);
-  const ui={group:selectedGroup,subgroup:selectedSubgroup};
+  const ui={group:selectedGroup,subgroup:selectedSubgroup,inventoryLocks:[...inventoryLocks]};
   const checkpoint=(snapshot as SaveSnapshot|null)?.historyCheckpoint??null;
   const job=draftWrites.catch(()=>{}).then(()=>saveDraftChanges(patches,ui,achievements,checkpoint,inventoryPatches));
   draftWrites=job;
@@ -810,6 +864,8 @@ import {verifiedFloorplanName} from './floorplan-names';
     if(!session)session=patches.length||achievementPatches.length||inventoryPatches.length?await applyDraft(patches,achievementPatches,inventoryPatches):s;
    collectionSearchDrilldown=false;query='';
     original=draft.file;baseline=originalRows;achievementBaseline=s.achievements;inventoryBaseline=s.inventory;update(session);
+    const liveIds=new Set(session.inventory.map(row=>row.documentId));
+    inventoryLocks=new Set((draft.ui.inventoryLocks??[]).filter(id=>liveIds.has(id)));
     selectedGroup=draft.ui.group;selectedSubgroup=draft.ui.subgroup;
     if(draft.ui.group)void fetchImages(draft.ui.group);
    }
@@ -826,6 +882,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(busy||!restored)return;
   if(snapshot?.dirty&&!confirm(copy.discard))return;
   const priorFile=original;
+  const priorLocks=inventoryLocks;
   const priorBaseline=baseline;
   const priorRecorded=recorded;
   const priorAchievements=snapshot?.achievements??[];
@@ -841,7 +898,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(file.size>60*1024*1024||file.size===0)throw Error(copy.typeIssue);
    await draftWrites.catch(()=>{});
    const session=await openSave(file);
-   clearInventoryBatch();inventoryAddMode=false;
+   clearInventoryBatch();inventoryAddMode=false;inventoryLocks=new Set();
    original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;inventoryBaseline=session.inventory;update(session);
    selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';collectionSearchDrilldown=false;filter='all';
    iconEpoch++;iconLoadingGroup=null;iconPack=null;iconError=false;
@@ -870,11 +927,12 @@ import {verifiedFloorplanName} from './floorplan-names';
       }catch{await openSave(priorFile)}
      }
      if(!previous)previous=patches.length||decodedAchievements.length||inventoryPatches.length?await applyDraft(patches,decodedAchievements,inventoryPatches):opened;
+     inventoryLocks=priorLocks;
      original=priorFile;baseline=priorBaseline;achievementBaseline=priorAchievementBaseline;inventoryBaseline=priorInventoryBaseline;update(previous);
      selectedGroup=priorGroup;selectedSubgroup=priorSubgroup;showVariants=priorVariants;visibleLimit=BATCH_SIZE;
      if(priorGroup&&(!iconPack||iconPack.group!==priorGroup))void fetchImages(priorGroup);
     }catch{
-     original=null;snapshot=null;recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];
+     original=null;snapshot=null;inventoryLocks=new Set();recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];
      selectedGroup=null;selectedSubgroup=null;showVariants=false;iconEpoch++;iconLoadingGroup=null;iconPack=null;
     }
    }
@@ -883,6 +941,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{busy=false}
  }
  async function openFlowerEditor(row:InventoryEntry){
+  if(isInventoryLocked(row.documentId))return;
   if(!snapshot||busy||!row.flower||!row.unique?.flowerEditable)return;
   const revision=snapshot.revision,before=flowerVariantOf(row.flower);
   busy=true;error='';
@@ -896,6 +955,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{busy=false}
  }
  async function openAbsentFlowerEditor(row:InventoryEntry){
+  if(isInventoryLocked(row.documentId))return;
   if(!snapshot||busy||!row.flowerCreatable)return;
   const revision=snapshot.revision;
   busy=true;error='';
@@ -912,6 +972,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{busy=false}
  }
  async function openFurnitureEditor(row:InventoryEntry){
+  if(isInventoryLocked(row.documentId))return;
   const createOnly=row.furnitureCreatable===true;
   const before:FurnitureVariant|null=createOnly?[0,0,0]:furnitureVariantOf(row.unique);
   if(!snapshot||busy||!before||(!createOnly&&!row.unique?.furnitureEditable))return;
@@ -928,6 +989,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   finally{busy=false}
  }
  async function openCafeEditor(row:InventoryEntry){
+  if(isInventoryLocked(row.documentId))return;
   if(!snapshot||busy||!row.cafe?.editable)return;
   const before=row.cafe.variant,revision=snapshot.revision;busy=true;error='';
   try{
@@ -939,7 +1001,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  async function addInventoryCafeVariant(){
   const edit=cafeEdit,quantity=variantAddQuantity;
-  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
+  if(!snapshot||busy||!edit||isInventoryLocked(edit.documentId)||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
   const next=cafeDraft;if(!next||!cafeDraftCreatable)return;
   busy=true;error='';
   try{update(await createInventoryCafeVariant(edit.documentId,edit.before,next,quantity));closeCafeEditor();await persistDraft()}
@@ -958,13 +1020,14 @@ import {verifiedFloorplanName} from './floorplan-names';
  function closeCafeEditor(){if(cafeDialogEl?.open)cafeDialogEl.close()}
  async function applyInventoryCafeVariant(event:SubmitEvent){
   event.preventDefault();if(inventoryAddMode)return;const edit=cafeEdit;
-  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
+  if(!snapshot||busy||!edit||isInventoryLocked(edit.documentId)||snapshot.revision!==edit.revision)return;
   const next=cafeDraft;if(!next||next.every((n,i)=>n===edit.before[i]))return;
   busy=true;error='';
   try{update(await changeInventoryCafeVariant(edit.documentId,edit.before,next));closeCafeEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
  }
  async function openAbsentWandEditor(row:InventoryEntry){
+  if(isInventoryLocked(row.documentId))return;
   if(!snapshot||busy||row.wandCreatableStyle===undefined)return;
   const revision=snapshot.revision;busy=true;error='';
   try{
@@ -1003,6 +1066,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   }catch(e){error=describeError(e)}finally{busy=false}
  }
  async function openWandEditor(row:InventoryEntry){
+  if(isInventoryLocked(row.documentId))return;
   const before=wandVariantOf(row.unique),appearance=inventoryWandAppearance(row.itemId,row.unique);
   if(!snapshot||busy||!row.unique?.wandEditable||!before||!appearance)return;
   const revision=snapshot.revision;busy=true;error='';
@@ -1054,8 +1118,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  async function addInventoryWandVariant(){
   const edit=wandEdit,quantity=variantAddQuantity;
-  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
-  if(!canAddWandVariant())return;
+  if(!snapshot||busy||!edit||isInventoryLocked(edit.documentId)||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
+  if(!canAddWandVariant()||(edit.ownedFurnitureSource!==undefined&&isInventoryLocked(edit.ownedFurnitureSource)))return;
   const next=edit.options[wandSelection]??edit.before;
   const materials=edit.nestedOptions?.[wandMaterialSelection];
   busy=true;error='';
@@ -1065,7 +1129,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function closeWandEditor(){if(wandDialogEl?.open)wandDialogEl.close()}
  async function applyInventoryWandVariant(event:SubmitEvent){
   event.preventDefault();if(inventoryAddMode)return;const edit=wandEdit;
-  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
+  if(!snapshot||busy||!edit||isInventoryLocked(edit.documentId)||snapshot.revision!==edit.revision)return;
   const pair=edit.options[wandSelection],materials=edit.nestedOptions?.[wandMaterialSelection];
   if(edit.nestedBefore?!materials:!pair)return;
   const next=pair??edit.before;
@@ -1074,6 +1138,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   catch(e){error=describeError(e)}finally{busy=false}
  }
  async function openBobaEditor(row:InventoryEntry){
+  if(isInventoryLocked(row.documentId))return;
   if(!snapshot||busy||!row.boba?.editable)return;
   const before=row.boba.variant,revision=snapshot.revision;busy=true;error='';
   try{
@@ -1085,7 +1150,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  async function addInventoryBobaVariant(){
   const edit=bobaEdit,quantity=variantAddQuantity;
-  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
+  if(!snapshot||busy||!edit||isInventoryLocked(edit.documentId)||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
   const next=edit.options[bobaSelection];if(!next||!edit.creationOptions.some(v=>v.every((n,i)=>n===next[i])))return;
   busy=true;error='';
   try{update(await createInventoryBobaVariant(edit.documentId,edit.before,next,quantity));closeBobaEditor();await persistDraft()}
@@ -1094,13 +1159,14 @@ import {verifiedFloorplanName} from './floorplan-names';
  function closeBobaEditor(){if(bobaDialogEl?.open)bobaDialogEl.close()}
  async function applyInventoryBobaVariant(event:SubmitEvent){
   event.preventDefault();if(inventoryAddMode)return;const edit=bobaEdit;
-  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
+  if(!snapshot||busy||!edit||isInventoryLocked(edit.documentId)||snapshot.revision!==edit.revision)return;
   const next=edit.options[bobaSelection];if(!next)return;
   busy=true;error='';
   try{update(await changeInventoryBobaVariant(edit.documentId,edit.before,next));closeBobaEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
  }
  async function openPaletteEditor(row:InventoryEntry){
+  if(isInventoryLocked(row.documentId))return;
   const before=row.paletteCreationDefault??paletteVariantOf(row.unique);
   if(!snapshot||busy||(!row.paletteCreationDefault&&!row.unique?.paletteEditable)||!before)return;
   const revision=snapshot.revision;busy=true;error='';
@@ -1115,7 +1181,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  async function addInventoryPaletteVariant(){
   const edit=paletteEdit,quantity=variantAddQuantity;
-  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
+  if(!snapshot||busy||!edit||isInventoryLocked(edit.documentId)||snapshot.revision!==edit.revision||quantity===undefined||!validVariantAddQuantity)return;
   const next=paletteDraft;if(!next||!paletteDraftCreatable)return;
   busy=true;error='';
   try{update(await createInventoryPaletteVariant(edit.documentId,edit.before,next,quantity));closePaletteEditor();await persistDraft()}
@@ -1135,7 +1201,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function closePaletteEditor(){if(paletteDialogEl?.open)paletteDialogEl.close()}
  async function applyInventoryPaletteVariant(event:SubmitEvent){
   event.preventDefault();if(inventoryAddMode)return;const edit=paletteEdit;
-  if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
+  if(!snapshot||busy||!edit||isInventoryLocked(edit.documentId)||snapshot.revision!==edit.revision)return;
   const next=paletteDraft;if(!next||next.every((n,i)=>n===edit.before[i]))return;
   busy=true;error='';
   try{update(await changeInventoryPaletteVariant(edit.documentId,edit.before,next));closePaletteEditor();await persistDraft()}
@@ -1161,7 +1227,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  async function applyInventoryFurnitureVariant(event:SubmitEvent){
   event.preventDefault();if(inventoryAddMode)return;
   const selected=furnitureEdit;
-  if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
+  if(!snapshot||busy||!selected||isInventoryLocked(selected.documentId)||snapshot.revision!==selected.revision)return;
   const next=furnitureDraft;if(!next||next.every((v,i)=>v===selected.before[i]))return;
   busy=true;error='';
   try{
@@ -1172,7 +1238,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  async function addInventoryFurnitureVariant(){
   const selected=furnitureEdit;
-  if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
+  if(!snapshot||busy||!selected||isInventoryLocked(selected.documentId)||snapshot.revision!==selected.revision)return;
   const next=furnitureDraft;
   const quantity=variantAddQuantity;
   if(!next||!validVariantAddQuantity||quantity===undefined||!furnitureDraftCreatable)return;
@@ -1205,7 +1271,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  async function applyInventoryFlowerVariant(event:SubmitEvent){
   event.preventDefault();if(inventoryAddMode)return;
   const selected=flowerEdit;
-  if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
+  if(!snapshot||busy||!selected||isInventoryLocked(selected.documentId)||snapshot.revision!==selected.revision)return;
   const next=flowerDraft,target=flowerTargetSpecies;if(!next||(target===null&&next.every((n,i)=>n===selected.before[i])))return;
   if(target!==null&&(!selected.speciesOptions?.includes(target)||selected.quantity===undefined))return;
   busy=true;error='';
@@ -1217,7 +1283,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  async function addInventoryFlowerVariant(){
   const selected=flowerEdit;
-  if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
+  if(!snapshot||busy||!selected||isInventoryLocked(selected.documentId)||snapshot.revision!==selected.revision)return;
   const next=flowerDraft;
   const quantity=variantAddQuantity;
   if(!next||!validVariantAddQuantity||quantity===undefined||!flowerDraftCreatable||flowerTargetSpecies!==null)return;
@@ -1246,7 +1312,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(inventoryQuery.trim())inventoryGroup=inventorySearchTarget(previous,counts);
  }
  function toggleInventoryBatch(row:InventoryEntry){
-  if(!snapshot||busy||!inventoryBatchMode||(!row.editable&&(inventoryAddMode||!row.removable)))return;
+  if(!snapshot||busy||isInventoryLocked(row.documentId)||!inventoryBatchMode||(!row.editable&&(inventoryAddMode||!row.removable)))return;
   const next=new Set(inventoryBatchSelected);
   if(next.has(row.documentId))next.delete(row.documentId);
   else if(next.size<snapshot.inventoryBatchLimit)next.add(row.documentId);
@@ -1254,7 +1320,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  // Select matching editable records independently of incremental rendering.
  // Explicit selections in other categories/searches remain selected.
- const inventorySelectableMatching=$derived(inventoryRows.some(row=>(row.editable||!inventoryAddMode&&row.removable)&&!inventoryBatchSelected.has(row.documentId)));
+ const inventorySelectableMatching=$derived(inventoryRows.some(row=>!isInventoryLocked(row.documentId)&&(row.editable||!inventoryAddMode&&row.removable)&&!inventoryBatchSelected.has(row.documentId)));
  const inventoryDeselectableMatching=$derived(inventoryRows.some(row=>inventoryBatchSelected.has(row.documentId)));
  function deselectMatchingInventoryBatch(){
   if(!snapshot||busy||!inventoryBatchMode)return;
@@ -1262,18 +1328,32 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function selectMatchingInventoryBatch(){
   if(!snapshot||busy||!inventoryBatchMode)return;
-  inventoryBatchSelected=selectMatchingInventoryRows(inventoryRows,inventoryBatchSelected,snapshot.inventoryBatchLimit,!inventoryAddMode);
+  const eligible=inventoryRows.filter(row=>!isInventoryLocked(row.documentId)&&(row.editable||!inventoryAddMode&&row.removable));
+  const needed=new Set([...inventoryBatchSelected,...eligible.map(row=>row.documentId)]).size;
+  if(needed>snapshot.inventoryBatchLimit){error=inventoryLockCopy.limit+': '+snapshot.inventoryBatchLimit.toLocaleString(locale);return}
+  inventoryBatchSelected=selectMatchingInventoryRows(eligible,inventoryBatchSelected,snapshot.inventoryBatchLimit,!inventoryAddMode);
  }
  function requestInventoryDelete(rows:InventoryEntry[],batch:boolean,opener:HTMLElement,allowPhysical=true){
-  if(!snapshot||busy||inventoryAddMode||!rows.length)return;
+  if(!snapshot||busy||inventoryAddMode||!rows.length||rows.some(row=>isInventoryLocked(row.documentId))||rows.length>snapshot.inventoryBatchLimit)return;
   const physical=allowPhysical&&rows.every(row=>row.removable);
   const zero=rows.every(row=>row.editable&&row.quantityMinimum===0)&&rows.some(row=>row.quantity>0);
   if(!physical&&!zero)return;
   const targets=physical?rows:rows.filter(row=>row.quantity>0);
   const requests:InventoryQuantityRequest[]=targets.map(row=>[row.documentId,row.quantity,0]);
-  const details=targets.map(row=>({documentId:row.documentId,name:[inventoryName(row.itemId),inventoryVariantSearchName(row)].filter(Boolean).join(' · '),quantity:row.quantity,paletteColors:paletteRemovalSwatches(row.palette)}));
+  const details=targets.slice(0,BATCH_SIZE).map(row=>({documentId:row.documentId,name:[inventoryName(row.itemId),inventoryVariantSearchName(row)].filter(Boolean).join(' · '),quantity:row.quantity,paletteColors:paletteRemovalSwatches(row.palette)}));
   const name=batch?targets.length.toLocaleString(locale):details[0].name+' × '+details[0].quantity.toLocaleString(locale);
   void requestRemoval({kind:'inventory',requests,physical,zero,batch,name,targets:details,revision:snapshot.revision},opener);
+ }
+ function requestInventoryCategoryDelete(physical:boolean,opener:HTMLElement){
+  if(!snapshot||busy||inventoryAddMode||pendingRemoval)return;
+  const rows=physical?categoryRemoveRows:categoryZeroRows;
+  if(!rows.length||rows.length>snapshot.inventoryBatchLimit)return;
+  const requests:InventoryQuantityRequest[]=rows.map(row=>[row.documentId,row.quantity,0]);
+  const targets=rows.slice(0,BATCH_SIZE).map(row=>({documentId:row.documentId,name:[inventoryName(row.itemId),inventoryVariantSearchName(row)].filter(Boolean).join(' · '),quantity:row.quantity,paletteColors:paletteRemovalSwatches(row.palette)}));
+  const category=activeInventoryGroup===OTHER_INVENTORY_GROUP?iCopy.other:inventoryGroupLabel(locale,activeInventoryGroup);
+  const excluded=inventoryCategoryRows.length-rows.length;
+  const name=category+' · '+rows.length.toLocaleString(locale)+' / '+inventoryCategoryRows.length.toLocaleString(locale);
+  void requestRemoval({kind:'inventory',requests,physical,zero:!physical,batch:true,name,targets,revision:snapshot.revision,categoryExcluded:excluded},opener);
  }
  function requestInventoryBatchDelete(opener:HTMLElement){
   if(!inventoryBatchMode||!inventoryBatchCanDelete)return;
@@ -1287,7 +1367,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const next=inventoryBatchQuantity;
   if(next===undefined||!Number.isSafeInteger(next)||next<inventoryBatchMinimum||next>inventoryBatchMaximum)return;
   const rows=inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId));
-  if(rows.length!==inventoryBatchSelected.size||rows.some(row=>!row.editable))return;
+  if(rows.length!==inventoryBatchSelected.size||rows.some(row=>!row.editable||isInventoryLocked(row.documentId)))return;
   if(rows.every(row=>row.quantity===next)){resetInventoryBatchSelection();return}
   if(next===0){requestInventoryDelete(rows,true,(event.submitter??event.currentTarget) as HTMLElement,false);return;}
   const requests:InventoryQuantityRequest[]=rows.map(row=>[row.documentId,row.quantity,next]);
@@ -1301,7 +1381,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  async function applyInventoryQuantity(row:InventoryEntry,event:SubmitEvent){
   event.preventDefault();
-  if(!snapshot||busy||inventoryBatchMode||!row.editable)return;
+  if(!snapshot||busy||inventoryBatchMode||!row.editable||isInventoryLocked(row.documentId)||!quantityPending(row)||!quantityInputValid(row))return;
   const value=new FormData(event.currentTarget as HTMLFormElement).get('quantity');
   if(typeof value!=='string'||!/^(0|[1-9][0-9]*)$/.test(value)){
    error=copy.fileError;return;
@@ -1343,12 +1423,16 @@ import {verifiedFloorplanName} from './floorplan-names';
  async function confirmRemoval(physical=false){
   const target=pendingRemoval;
   if(!target||!snapshot||busy)return;
+  const liveInventory=target.kind==='inventory'?new Map(snapshot.inventory.map(row=>[row.documentId,row])):null;
   if(snapshot.revision!==target.revision||original!==removalOriginal||
    (target.kind==='collections'
     ?recorded[String(target.id)]!==target.before
     :target.kind==='achievements'
      ?snapshot.achievements.find(row=>achievementGuid(row.guid)===target.item.guid)?.value.complete!==true
-     :((physical?!target.physical:!target.zero)||target.requests.some(([id,before])=>!snapshot?.inventory.some(row=>row.documentId===id&&row.quantity===before&&(physical?row.removable:row.editable&&row.quantityMinimum===0)))))){
+     :((physical?!target.physical:!target.zero)||target.requests.some(([id,before])=>{
+      const row=liveInventory?.get(id);
+      return isInventoryLocked(id)||!row||row.quantity!==before||!(physical?row.removable:row.editable&&row.quantityMinimum===0)
+     })))){
    closeRemovalConfirmation();error=removalCopy.stale;return;
   }
   closeRemovalConfirmation();
@@ -1378,8 +1462,14 @@ import {verifiedFloorplanName} from './floorplan-names';
    await requestRemoval({kind:'collections',id,name,before,revision:snapshot.revision,fromDateDialog:false},opener);
   }else await change(id,EPOCH+BigInt(Date.now())*10000n);
  }
+ function historyBlockedByLocks(target:number):boolean{
+  if(activeTool!=='inventory'||inventoryLocks.size===0||target===tabHistoryCursor)return false;
+  if(tabHistoryDetails.length!==tabHistory.length)return true;
+  return tabHistoryDetails.slice(Math.min(target,tabHistoryCursor),Math.max(target,tabHistoryCursor)).some(detail=>detail.scope==='inventory'&&(
+   isInventoryLocked(detail.documentId)||'createdHandle' in detail&&isInventoryLocked(detail.createdHandle)||'batch' in detail&&detail.batch.some(row=>isInventoryLocked(row.documentId))));
+ }
  async function goToHistory(target:number){
-  if(!snapshot||busy||!Number.isSafeInteger(target)||target<0||target>tabHistory.length||target===tabHistoryCursor)return;
+  if(!snapshot||busy||!Number.isSafeInteger(target)||target<0||target>tabHistory.length||target===tabHistoryCursor||historyBlockedByLocks(target))return;
   const scope=activeTool;
   busy=true;error='';
   try{
@@ -1417,7 +1507,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy)return;
   if(snapshot.dirty&&!confirm(copy.discard))return;
   busy=true;error='';
-  try{await draftWrites.catch(()=>{});await forgetLocalDraft();await clear();snapshot=null;original=null;recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];editingAchievement=null;goHome();draftReady=true;draftWarning=false;}
+  try{await draftWrites.catch(()=>{});await forgetLocalDraft();await clear();snapshot=null;original=null;inventoryLocks=new Set();recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];editingAchievement=null;goHome();draftReady=true;draftWarning=false;}
   catch(e){error=e instanceof Error?e.message:copy.unknown}
   finally{busy=false}
  }
@@ -1518,7 +1608,7 @@ import {verifiedFloorplanName} from './floorplan-names';
 </svelte:head>
 
 <div class="site-shell">
- <header class="topbar">
+ <header class="topbar" bind:this={topbarElement}>
   <div class="bar-inner">
    <button class="brand" type="button" onclick={goHome} aria-label={copy.brand}>
     <span class="brand-mark" aria-hidden="true">✦</span><span class="brand-name">{copy.brand}</span>
@@ -1531,8 +1621,8 @@ import {verifiedFloorplanName} from './floorplan-names';
    <div class="bar-actions">
     {#if snapshot}
      <span class="save-indicator" title={original?.name??''}><span class:changed={snapshot.dirty} class="state-dot"></span><span class="file-short">{original?.name}</span>{#if draftWarning}<span class="draft-risk" title={copy.autosaveFailed}>⚠</span>{/if}</span>
-     <button type="button" class="icon-button" title={copy.undo} aria-label={copy.undo} disabled={busy||tabHistoryCursor===0} onclick={()=>void actHistory('undo')}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 1 2.7 6.3"/></svg></button>
-     <button type="button" class="icon-button" title={copy.redo} aria-label={copy.redo} disabled={busy||tabHistoryCursor>=tabHistory.length} onclick={()=>void actHistory('redo')}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 0-2.7 6.3"/></svg></button>
+     <button type="button" class="icon-button" title={copy.undo} aria-label={copy.undo} disabled={busy||tabHistoryCursor===0||historyBlockedByLocks(tabHistoryCursor-1)} onclick={()=>void actHistory('undo')}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 1 2.7 6.3"/></svg></button>
+     <button type="button" class="icon-button" title={copy.redo} aria-label={copy.redo} disabled={busy||tabHistoryCursor>=tabHistory.length||historyBlockedByLocks(tabHistoryCursor+1)} onclick={()=>void actHistory('redo')}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 0-2.7 6.3"/></svg></button>
      <details class="history-menu" bind:this={historyMenu}>
       <summary class="icon-button" title={hCopy.title} aria-label={hCopy.title}><svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></summary>
       <div class="history-popover">
@@ -1541,12 +1631,12 @@ import {verifiedFloorplanName} from './floorplan-names';
         <p class="history-empty">{hCopy.empty}</p>
        {:else}
         <div class="history-list">
-         <button type="button" class:active={tabHistoryCursor===0} disabled={busy} title={hCopy.step} onclick={()=>void goToHistory(0)}>
+         <button type="button" class:active={tabHistoryCursor===0} disabled={busy||historyBlockedByLocks(0)} title={hCopy.step} onclick={()=>void goToHistory(0)}>
           <span class="history-step">0</span><span class="history-text">{hCopy.initial}</span>
           {#if tabHistoryCursor===0}<span class="history-current" aria-label={hCopy.current}>✓</span>{/if}
          </button>
          {#each tabHistory as entry,i (i)}
-          <button type="button" class:active={tabHistoryCursor===i+1} disabled={busy} title={hCopy.step} onclick={()=>void goToHistory(i+1)}>
+          <button type="button" class:active={tabHistoryCursor===i+1} disabled={busy||historyBlockedByLocks(i+1)} title={hCopy.step} onclick={()=>void goToHistory(i+1)}>
            <span class="history-step">{i+1}</span><span class="history-text"><span class="history-item-name">{historyEntryLabel(entry,i)}</span>{#if historyEntryChange(i)}<span class="history-change">{historyEntryChange(i)}</span>{/if}</span>
            {#if tabHistoryCursor===i+1}<span class="history-current" aria-label={hCopy.current}>✓</span>{/if}
           </button>
@@ -1588,7 +1678,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  </header>
  <input class="visually-hidden" type="file" accept=".zip,.save,.dat,application/zip" bind:this={fileInput}
   onchange={e=>{const f=e.currentTarget.files?.[0];if(f)void load(f);e.currentTarget.value=''}}/>
- <main class="content">
+ <main class="content" class:workspace-wide={!!snapshot}>
   {#if error}<div class="message error" role="alert">{error}<button type="button" aria-label={copy.collapse} onclick={()=>error=''}>×</button></div>{/if}
   {#if snapshot && draftWarning}<div class="message error" role="alert">{copy.autosaveFailed}</div>{/if}
   {#if !snapshot}
@@ -1734,6 +1824,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {/if}
    </dialog>
   {:else if activeTool==='inventory'}
+   <div class="inventory-sticky-tools" style:--inventory-sticky-top={topbarHeight+'px'}>
    <div class="collection-controls inventory-controls">
     <label class="search-field">
      <svg class="search-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.75" cy="10.75" r="6.75"/><path d="m16 16 5 5"/></svg>
@@ -1750,7 +1841,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {/if}
     <button type="button" class="inventory-editable-filter inventory-add-toggle" class:active={inventoryAddMode}
      aria-pressed={inventoryAddMode} disabled={busy||(!inventoryAddMode&&inventoryAvailableToAdd.length===0)}
-     onclick={()=>{clearInventoryBatch();inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;inventoryLimit=BATCH_SIZE}}>
+     onclick={()=>{clearInventoryBatch();inventoryQuantityDrafts={};inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;inventoryLimit=BATCH_SIZE}}>
      {inventoryAddMode?iCopy.tab:'+ '+inventoryAddCopy(locale)}
     </button>
     <button type="button" class="inventory-editable-filter inventory-batch-toggle" class:active={inventoryBatchMode}
@@ -1775,6 +1866,16 @@ import {verifiedFloorplanName} from './floorplan-names';
     {:else}
      <span class="inventory-total">{inventoryAddMode?inventoryAddCopy(locale):iCopy.count}: {inventoryRows.length.toLocaleString(locale)}</span>
     {/if}
+   {#if !inventoryAddMode&&inventoryCategoryRows.length}
+    <div class="inventory-category-actions">
+     <button type="button" class="inventory-editable-filter inventory-category-zero" disabled={busy||!categoryZeroRows.length||categoryZeroRows.length>snapshot.inventoryBatchLimit} onclick={e=>requestInventoryCategoryDelete(false,e.currentTarget)}>{inventoryLockCopy.categoryZero} ({categoryZeroRows.length.toLocaleString(locale)})</button>
+     <button type="button" class="inventory-editable-filter inventory-category-remove" disabled={busy||!categoryRemoveRows.length||categoryRemoveRows.length>snapshot.inventoryBatchLimit} onclick={e=>requestInventoryCategoryDelete(true,e.currentTarget)}>{inventoryLockCopy.categoryRemove} ({categoryRemoveRows.length.toLocaleString(locale)})</button>
+     <button type="button" class="inventory-editable-filter" disabled={busy||categoryLockedCount===inventoryCategoryRows.length} onclick={()=>setInventoryLocks(inventoryCategoryRows,true)}>{inventoryLockCopy.lockAll}</button>
+     <button type="button" class="inventory-editable-filter" disabled={busy||!categoryLockedCount} onclick={()=>setInventoryLocks(inventoryCategoryRows,false)}>{inventoryLockCopy.unlockAll}</button>
+     <span class="inventory-total">{inventoryLockCopy.locked}: {categoryLockedCount.toLocaleString(locale)}</span>
+     {#if categoryZeroRows.length>snapshot.inventoryBatchLimit||categoryRemoveRows.length>snapshot.inventoryBatchLimit}<span role="status" class="inventory-total">{inventoryLockCopy.limit}: {snapshot.inventoryBatchLimit.toLocaleString(locale)}</span>{/if}
+    </div>
+   {/if}
    </div>
    {#if inventoryVisibleGroups.length>0||(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)>0}
     
@@ -1810,8 +1911,10 @@ import {verifiedFloorplanName} from './floorplan-names';
      {/if}
     </nav>
    {/if}
+   </div>
    <div class="inventory-grid">
     {#each inventoryRows.slice(0,inventoryLimit) as item (item.documentId)}
+     {@const locked=isInventoryLocked(item.documentId)}
      {@const definition=inventorySourceItems.get(item.itemId)}
      {@const nativeSprite=inventoryNativeArt?.entries.get(item.itemId)}
      {@const resultId=nativeResultIconTarget(item.itemId,snapshot.version)}
@@ -1835,16 +1938,19 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const canCafe=!!item.cafe?.editable}
      {@const canWand=!!item.unique?.wandEditable&&!!wand}
      {@const canBoba=!!item.boba?.editable}
-      <article class="inventory-card" class:inventory-empty-stack={!inventoryAddMode&&item.quantity===0} class:inventory-readonly={!item.editable&&!item.removable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable&&item.wandCreatableStyle===undefined} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
-      {#if inventoryBatchMode&&(item.editable||!inventoryAddMode&&item.removable)}
+      <article class="inventory-card" class:inventory-locked={locked} class:inventory-empty-stack={!inventoryAddMode&&item.quantity===0} class:inventory-readonly={!item.editable&&!item.removable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable&&item.wandCreatableStyle===undefined} class:inventory-batch-selected={inventoryBatchMode&&inventoryBatchSelected.has(item.documentId)}>
+      {#if !inventoryAddMode&&(!inventoryBatchMode||locked)}
+       <button type="button" class="inventory-lock-button" aria-pressed={locked} disabled={busy} aria-label={(locked?inventoryLockCopy.unlock:inventoryLockCopy.lock)+': '+inventoryName(item.itemId)} title={locked?inventoryLockCopy.unlock:inventoryLockCopy.lock} onclick={()=>setInventoryLocks([item],!locked)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/>{#if locked}<path d="M8 10V6a4 4 0 0 1 8 0v4"/>{:else}<path d="M8 10V6a4 4 0 0 1 8 0"/>{/if}<path d="M12 14v3"/></svg></button>
+      {/if}
+      {#if inventoryBatchMode&&!locked&&(item.editable||!inventoryAddMode&&item.removable)}
        <input class="inventory-batch-checkbox" type="checkbox" checked={inventoryBatchSelected.has(item.documentId)} aria-label={iBatchCopy+': '+inventoryName(item.itemId)}
         disabled={busy||(!inventoryBatchSelected.has(item.documentId)&&inventoryBatchSelected.size>=snapshot.inventoryBatchLimit)} onchange={()=>toggleInventoryBatch(item)}/>
       {/if}
         {#if !inventoryAddMode&&!inventoryBatchMode}
-         <button type="button" class="inventory-stack-delete" disabled={busy||!item.removable&&(!item.editable||item.quantityMinimum!==0||item.quantity<=0)} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)+': '+inventoryName(item.itemId)} onclick={e=>requestInventoryDelete([item],false,e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
+         <button type="button" class="inventory-stack-delete" disabled={busy||locked||!item.removable&&(!item.editable||item.quantityMinimum!==0||item.quantity<=0)} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)+': '+inventoryName(item.itemId)} onclick={e=>requestInventoryDelete([item],false,e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
         {/if}
       <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
-       <span class="inventory-item-art" class:inventory-blueprint={resultId!==undefined} class:flower-variant={customized||flowerBadges.length>0||!!dyeBadge||resultId!==undefined} style:position="relative" style:--inventory-icon-scale={nativeInventoryIconScale(item.itemId,snapshot.version)} aria-hidden="true">
+       <span class="inventory-item-art" class:inventory-blueprint={resultId!==undefined} style:--inventory-icon-scale={nativeInventoryIconScale(item.itemId,snapshot.version)} aria-hidden="true">
         {#if resultId!==undefined}
          <span class="inventory-blueprint-pattern" data-native-blueprint-pattern="bp_grid" style:background-image={'url("'+INVENTORY_UI+'bp-grid.webp")'}></span>
         {/if}
@@ -1891,6 +1997,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          </span>
         {/if}
        </span>
+       <IngredientBadges rows={snapshot.version==='3.0.1'?(item.cafe?cafeIngredientBadges(item.cafe.variant,snapshot.cafeWitnesses??[]):bobaIngredientBadges(item.boba?.variant,snapshot.bobaWitnesses??[])):[]} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/>
        <strong class="inventory-name" title={inventoryName(item.itemId)}>{inventoryName(item.itemId)}</strong>
        {#if uniqueSwatches.length}
         <span class="inventory-appearance-swatches" data-unique-swatches={item.palette?'palette':nestedWand?'wand-furniture':'furniture'} aria-hidden="true">
@@ -1900,17 +2007,22 @@ import {verifiedFloorplanName} from './floorplan-names';
        {#if variantTitle}<span class="inventory-flower-variant-name" class:inventory-recipe-variant={!!chef||!!wand} title={variantTitle}>{variantTitle}</span>{/if}
       </div>
       {#if item.editable}
-       <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>
+       {@const pending=quantityPending(item)}
+       {@const originalQuantity=originalInventoryQuantities.get(item.documentId)??0}
+       <form class="inventory-quantity-form" class:quantity-pending={pending&&!inventoryAddMode} data-quantity-pending={pending&&!inventoryAddMode} data-quantity-committed={item.quantity} data-quantity-ready={!busy&&!inventoryBatchMode&&!locked} onsubmit={e=>void applyInventoryQuantity(item,e)}>
         <label>
          <span class="visually-hidden">{iCopy.quantity}</span>
          <input type="number" name="quantity" min={inventoryAddMode?Math.max(1,item.quantityMinimum):item.quantityMinimum} max={item.quantityLimit??1} step="1"
-          value={inventoryAddMode?1:item.quantity} disabled={busy||inventoryBatchMode} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
+          value={quantityInput(item)} oninput={e=>setQuantityInput(item,e.currentTarget.value)} disabled={busy||inventoryBatchMode||locked} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
+         {#if !inventoryAddMode&&(pending||originalQuantity!==item.quantity)}
+          <small class="inventory-quantity-delta" class:unapplied={pending}>{(pending?item.quantity:originalQuantity).toLocaleString(locale)} → {(pending?quantityInput(item):item.quantity.toLocaleString(locale))}</small>
+         {/if}
         </label>
-        <button type="submit" class="primary" disabled={busy||inventoryBatchMode} title={iCopy.apply} aria-label={iCopy.apply}>
+        <button type="submit" class="primary" class:quantity-unchanged={!pending} disabled={busy||inventoryBatchMode||locked||!pending||!quantityInputValid(item)} title={iCopy.apply} aria-label={iCopy.apply}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
         </button>
         {#if canFlower||canFurniture||canPalette||canBoba||canCafe||canWand}
-         <button class="inventory-unique-edit-button inventory-compact-variant" type="button" disabled={busy||inventoryBatchMode}
+         <button class="inventory-unique-edit-button inventory-compact-variant" type="button" disabled={busy||inventoryBatchMode||locked}
           title={canWand||canCafe?inventoryName(item.itemId):canBoba?inventoryName(item.itemId):canPalette?flowerCopy.color:canFurniture?furnitureCopy.title:flowerCopy.title} aria-label={(canWand||canCafe?inventoryName(item.itemId):canBoba?inventoryName(item.itemId):canPalette?flowerCopy.color:canFurniture?furnitureCopy.title:flowerCopy.title)+': '+inventoryName(item.itemId)}
           onclick={()=>void (canWand?openWandEditor(item):canCafe?openCafeEditor(item):canBoba?openBobaEditor(item):canPalette?openPaletteEditor(item):canFurniture?openFurnitureEditor(item):openFlowerEditor(item))}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg>
@@ -1918,22 +2030,22 @@ import {verifiedFloorplanName} from './floorplan-names';
         {/if}
        </form>
       {:else if inventoryAddMode&&inventoryCustomizationSource(item)&&(canFlower||canFurniture||canPalette||canBoba||canCafe||canWand)}
-       <button class="inventory-unique-edit-button inventory-add-source" type="button" disabled={busy||inventoryBatchMode}
+       <button class="inventory-unique-edit-button inventory-add-source" type="button" disabled={busy||inventoryBatchMode||locked}
         title={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)}
         onclick={()=>void (canWand?openWandEditor(item):canCafe?openCafeEditor(item):canBoba?openBobaEditor(item):canPalette?openPaletteEditor(item):canFurniture?openFurnitureEditor(item):openFlowerEditor(item))}>
         <span>{item.quantity.toLocaleString(locale)}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
        </button>
       {:else if item.wandCreatableStyle!==undefined}
-       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openAbsentWandEditor(item)}>{inventoryAddCopy(locale)}</button>
+       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode||locked} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openAbsentWandEditor(item)}>{inventoryAddCopy(locale)}</button>
       {:else if item.paletteCreationDefault}
-       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openPaletteEditor(item)}>{inventoryAddCopy(locale)}</button>
+       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode||locked} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openPaletteEditor(item)}>{inventoryAddCopy(locale)}</button>
       {:else if item.flowerCreatable}
-       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openAbsentFlowerEditor(item)}>{inventoryAddCopy(locale)}</button>
+       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode||locked} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openAbsentFlowerEditor(item)}>{inventoryAddCopy(locale)}</button>
       {:else if item.boba?.creationOnly||item.cafe?.creationOnly}
-       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void (item.boba?.creationOnly?openBobaEditor(item):openCafeEditor(item))}>{inventoryAddCopy(locale)}</button>
+       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode||locked} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void (item.boba?.creationOnly?openBobaEditor(item):openCafeEditor(item))}>{inventoryAddCopy(locale)}</button>
       {:else if canFlower||canFurniture||canPalette||canBoba||canCafe||canWand}
-       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode}
+       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode||locked}
         title={canFurniture?furnitureCopy.title:canFlower?flowerCopy.title:inventoryName(item.itemId)} aria-label={(canFurniture?furnitureCopy.title:canFlower?flowerCopy.title:inventoryName(item.itemId))+': '+inventoryName(item.itemId)}
         onclick={()=>void (canWand?openWandEditor(item):canCafe?openCafeEditor(item):canBoba?openBobaEditor(item):canPalette?openPaletteEditor(item):canFurniture?openFurnitureEditor(item):openFlowerEditor(item))}>
         <span>{item.quantity.toLocaleString(locale)}</span>
@@ -2113,7 +2225,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="cafe-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeCafeEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'cafe',colors:selected.slice(3).filter(n=>n>0)}} fallback={inventoryOriginalSprite(edit.itemId)}/></div>
+    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'cafe',colors:selected.slice(3).filter(n=>n>0)}} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={cafeIngredientBadges(selected,snapshot?.cafeWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/></span></div>
     {#each [0,1,2].filter(i=>selected[i]>0||edit.before[i]>0||edit.options.some(v=>v.slot===i)) as slot}
      {@const choices=edit.options.map((option,index)=>({option,index})).filter(({option})=>option.slot===slot)}
      <label class="date-dialog-field" data-cafe-slot={slot}>
@@ -2167,7 +2279,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          <select name={'wand-nested-part-'+slot} value={-1} disabled={busy||!choices.length} onchange={e=>{const index=Number(e.currentTarget.value);e.currentTarget.value='-1';void chooseWandNestedMaterial(index)}}>
           <option value={-1} disabled>{materialLabel(furnitureDisplay,materials[slot],furnitureCopy.defaultMaterial)}</option>
           {#each choices as choice (choice.index)}
-           <option value={choice.index} data-wand-material={choice.variant.join(':')} data-material-index={choice.variant[slot]}>{materialLabel(furnitureDisplay,choice.variant[slot],furnitureCopy.defaultMaterial)}</option>
+           <option value={choice.index} data-wand-material={choice.variant.join(':')} data-material-index={choice.variant[slot]}>{furnitureChoiceLabel(furnitureDisplay,materials,choice.variant,slot,furnitureCopy.defaultMaterial,furnitureCopy.part)}</option>
           {/each}
          </select>
         </label>
@@ -2246,7 +2358,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="boba-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeBobaEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}} fallback={inventoryOriginalSprite(edit.itemId)}/></div>
+    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={bobaIngredientBadges(selected,snapshot?.bobaWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/></span></div>
     {#each ([1,3,2,4] as BobaField[]) as field}
      {@const choices=bobaFieldOptions(edit.before,edit.options,bobaSelection,field,edit.absent)}
      <label class="date-dialog-field">
@@ -2259,6 +2371,15 @@ import {verifiedFloorplanName} from './floorplan-names';
       </select>
      </label>
     {/each}
+    {#if bobaNeedsTupleChoice(edit.before,edit.options,bobaSelection,edit.absent)}
+     <label class="date-dialog-field">
+      <span>{([1,3,2,4] as BobaField[]).map(field=>bobaFieldLabel(locale,field)).join(' / ')}</span>
+      <select name="boba-full-tuple" value={bobaSelection} disabled={busy} onchange={e=>{bobaSelection=Number(e.currentTarget.value);error=''}}>
+       {#if !edit.absent}<option value={-1}>{bobaName(edit.before)}</option>{/if}
+       {#each edit.options as variant,index}<option value={index}>{bobaName(variant)}</option>{/each}
+      </select>
+     </label>
+    {/if}
     {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
     {#if edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[bobaSelection]?.[i]))}
      <label class="date-dialog-field">
@@ -2344,7 +2465,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFurnitureEditor}>×</button>
     </div>
     <div style="display:flex;justify-content:center" aria-hidden="true">
-     <span class="inventory-item-art" class:flower-variant={customized} style:position="relative" data-furniture-icon-preview>
+     <span class="inventory-item-art" data-furniture-icon-preview>
       {#if originalVariantArt[String(edit.itemId)]||exactVariantArt[String(edit.itemId)]}
        <DyeSprite sprite={original} originalArtUrl={originalVariantArt[String(edit.itemId)]} exactArtUrl={exactVariantArt[String(edit.itemId)]}/>
       {:else if inventoryNativeArt?.placeholders.has(edit.itemId)}
@@ -2411,8 +2532,8 @@ import {verifiedFloorplanName} from './floorplan-names';
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFlowerEditor}>×</button>
     </div>
     <div class="date-dialog-item">
-     <span class="date-dialog-art" style:height={previewBadges.length?'118px':undefined} aria-hidden="true">
-      <span style:position="relative" style:display="flex" style:padding-top={previewBadges.length?'22px':undefined}>
+     <span class="date-dialog-art inventory-flower-preview" aria-hidden="true">
+      <span class="inventory-flower-preview-frame">
        <DynamicFlowerSprite itemId={displaySpecies} flower={appearance} definitions={flowerDefinitions} fallback={inventoryOriginalSprite(displaySpecies)}/>
        {#if previewBadges.length}
         <span class="inventory-native-decorators">
@@ -2521,6 +2642,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     </div>
     <strong class="removal-confirm-name">{pendingRemoval.name}</strong>
     {#if pendingRemoval.kind==='inventory'}
+     {#if pendingRemoval.categoryExcluded!==undefined}<p class="removal-confirm-warning">{inventoryLockCopy.excluded}: {pendingRemoval.categoryExcluded.toLocaleString(locale)}</p>{/if}
      {#if pendingRemoval.batch}
       <ul class="inventory-removal-targets">
        {#each pendingRemoval.targets as target (target.documentId)}
@@ -2528,6 +2650,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          {#if target.paletteColors.length}<span class="inventory-removal-palette">{#each target.paletteColors as color}<span class="inventory-removal-swatch" style:background-color={color} title={color} aria-label={color} role="img"></span>{/each}</span>{/if}
         </span><span class="inventory-removal-quantity">× {target.quantity.toLocaleString(locale)}</span></li>
        {/each}
+       {#if pendingRemoval.requests.length>pendingRemoval.targets.length}<li>… +{(pendingRemoval.requests.length-pendingRemoval.targets.length).toLocaleString(locale)}</li>{/if}
       </ul>
      {:else if pendingRemoval.targets[0]?.paletteColors.length}
       <span class="inventory-removal-palette">{#each pendingRemoval.targets[0].paletteColors as color}<span class="inventory-removal-swatch" style:background-color={color} title={color} aria-label={color} role="img"></span>{/each}</span>
