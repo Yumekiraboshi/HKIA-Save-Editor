@@ -22,10 +22,12 @@ LAYOUTS={'outfit':'outfit-icon-override-v1','atlas':'unity-v22-uiicon-v1',
          'dynamic':'native-dynamic-v1','auxiliary':'native-icon-auxiliary-v1',
          'result':'native-result-icon-v1'}
 STAGES=('snapshot','definition-delta','dynamic-bindings','dynamic-delta','auxiliary-bindings',
-        'base-atlas','overrides','dynamic-textures','auxiliary-assets','release','families','summary')
+        'base-atlas','overrides','dynamic-textures','auxiliary-assets','release','families',
+        'achievement-art','category-art','summary')
 SCRIPTS=('icon-source-update.py','dynamic-icon-source-update.py','extract-icon-auxiliary-source.py',
          'stage-native-icon-atlas.py','stage-icon-overrides.py','stage-dynamic-icon-textures.py',
-         'stage-icon-auxiliary-assets.py','assemble-icon-release.py','compile-icon-family-bindings.py')
+         'stage-icon-auxiliary-assets.py','assemble-icon-release.py','compile-icon-family-bindings.py',
+         'stage-achievement-art.py','stage-category-art.py')
 
 def hash_record(value):
     return sha(source.stable(value))
@@ -85,7 +87,54 @@ def load_input(path):
                 all(isinstance(layout[k],str) and 0<len(layout[k])<=128
                     for k in ('swatchMapField','rgbaField')),'invalid reviewed swatch layout')
         config['reviewedSwatchLayout']=layout
+    for key,fields in (('achievementArt',('census','index','hierarchy')),('categoryArt',('census','scope'))):
+        if key in v:
+            require(isinstance(v[key],dict) and set(v[key])==set(fields),'incomplete reviewed '+key+' inputs')
+            config[key]={field:input_file(path.parent,v[key][field]) for field in fields}
     return config
+
+def check_view_inputs(config,kind,snapshot):
+    """Bind optional reviewed view-art inputs to this run, not a prior catalog."""
+    records=config[kind]
+    for rec in records.values():
+        require(source.file_digest(Path(rec['file']))==rec['sha256'],'view art input changed: '+kind)
+    census=source.read_json(Path(records['census']['file']))
+    require(census['version']==config['version'] and census['platform']==config['platform'] and
+            census['definitionsSha256']==snapshot['sourceBundleSha256']['definitions'],
+            'view art census original identity mismatch')
+    if kind=='achievementArt':
+        require(census['catalogIndexFileSha256']==records['index']['sha256'] and
+                census['catalogHierarchyFileSha256']==records['hierarchy']['sha256'],
+                'achievement catalog fingerprint mismatch')
+    else:
+        require(census['scopeFileSha256']==records['scope']['sha256'],'category scope fingerprint mismatch')
+        scope=source.read_json(Path(records['scope']['file']))
+        catalog=source.read_json(Path(config['catalog']['file']))
+        require(source.file_digest(Path(config['catalog']['file']))==config['catalog']['sha256'] and
+                set(scope['collectionKeys'])=={g[0] for g in catalog['groups']} and
+                set(scope['itemIds'])==set(source.validate_snapshot(snapshot)),
+                'category scope differs from current collection/item catalog')
+    return records
+
+def view_art_summary(path,kind,config):
+    if path is None:
+        return None,[],[kind]
+    file=path/'output'/('achievement-art.json' if kind=='achievementArt' else 'category-art.json')
+    value=source.read_json(file)
+    schema='HKIA.AchievementArtCandidate.1' if kind=='achievementArt' else 'HKIA.CategoryArtCandidate.1'
+    require(value['schema']==schema and value['version']==config['version'] and
+            value['platform']==config['platform'] and
+            value['definitionsSha256']==next(b['sha256'] for b in config['bundles'] if b['name']=='definitions') and
+            value['sourceCensusFileSha256']==config[kind]['census']['sha256'] and
+            value['automaticReleaseActivationAuthorized'] is False,'view artwork candidate identity mismatch')
+    missing=[]
+    for row in value['rows']:
+        if kind=='achievementArt' and row['icon']['kind']=='unresolved':
+            missing.append(row['saveGuid'])
+        elif kind=='categoryArt' and row['native']['kind']=='unresolved':
+            missing.append(row['domain']+':'+row['key'])
+    require(len(missing)==value['unresolvedCount'],'view artwork unresolved partition mismatch')
+    return file,sorted(missing),[]
 
 def tree_digest(folder):
     """Hash actual file contents + relative names; never follow output links."""
@@ -261,6 +310,27 @@ def run(input_path,root,previous=None,resume=False,execute=command):
         lambda out:execute('compile-icon-family-bindings.py',['--dynamic',d/'dynamic.json',
         '--auxiliary',a/'auxiliary.json','--auxiliary-stage',x/'output','--release',rel/'output',
         '--out',out/'family-bindings.json']))
+    # Main item and dynamic artwork still use the existing pipeline. Reviewed
+    # achievement/category pointers are optional inputs; absence is an
+    # explicit source blocker, not successful coverage.
+    def stage_view_art(kind,script,schema,fields,out):
+        primary=source.read_json(snapshot_path)
+        records=check_view_inputs(config,kind,primary)
+        source.write_new(out/'bundle-input.json',{'schema':schema,'version':version,'platform':platform,
+            'censusFileSha256':records['census']['sha256'],'bundles':config['bundles']})
+        execute(script,[*[x for field in fields for x in ('--'+field,records[field]['file'])],
+            '--bundles',out/'bundle-input.json','--out',out/'output'])
+        check_view_inputs(config,kind,primary)
+    achievement=None
+    category=None
+    if 'achievementArt' in config:
+        achievement=step('achievement-art',['snapshot'],lambda out:stage_view_art(
+            'achievementArt','stage-achievement-art.py','HKIA.AchievementArtBundleInput.1',
+            ('census','index','hierarchy'),out))
+    if 'categoryArt' in config:
+        category=step('category-art',['snapshot','release'],lambda out:stage_view_art(
+            'categoryArt','stage-category-art.py','HKIA.CategoryArtBundleInput.1',
+            ('census','scope'),out))
     def summary(out):
         release=checked_record(rel/'output'/'release-candidate.json','HKIA.IconReleaseCandidate.1')
         aux=checked_record(x/'output'/'index.json','HKIA.IconAuxiliaryAssetStage.1')
@@ -274,15 +344,26 @@ def run(input_path,root,previous=None,resume=False,execute=command):
                   'inventoryBaseItemIds':release.get('missingInventoryBaseItemIds',[]),
                   'originalUiIconItemIds':release['unresolvedOriginalUiIconItemIds'],
                   'auxiliarySpriteRoutes':aux['unresolved'],'chefSwatches':aux['unresolvedSwatches']}
+        view_arts={}
+        absent=[]
+        for kind,folder in (('achievementArt',achievement),('categoryArt',category)):
+            file,missing,omitted=view_art_summary(folder,kind,config)
+            blockers[kind+'Unresolved']=missing
+            absent.extend(omitted)
+            if file is not None:
+                view_arts[kind]={'manifest':file.relative_to(root).as_posix(),'manifestFileSha256':source.file_digest(file)}
+        blockers['missingViewArtInputs']=absent
         source.write_new(out/'candidate.json',{'schema':'HKIA.IconUpdateCandidate.1','version':version,'platform':platform,
             'runSha256':identity,'definitionCount':release['definitionCount'],'sourceBlockers':blockers,
             'releaseDirectory':(rel/'output').relative_to(root).as_posix(),
             'auxiliaryDirectory':(x/'output').relative_to(root).as_posix(),
             'familyBindings':(f/'family-bindings.json').relative_to(root).as_posix(),
             'familyBindingsSha256':source.file_digest(f/'family-bindings.json'),
-            'remainingReleaseChecks':release['remainingReleaseChecks'],
+            'viewArtwork':view_arts,
+            'remainingReleaseChecks':release['remainingReleaseChecks']+(['review original achievement/category pointer censuses'] if absent else []),
             'automaticReleaseActivationAuthorized':False})
-    out=step('summary',['definition-delta','dynamic-delta','release','auxiliary-assets','families'],summary)
+    out=step('summary',['definition-delta','dynamic-delta','release','auxiliary-assets','families']+
+             [name for name in ('achievement-art','category-art') if name in done],summary)
     report=source.read_json(out/'candidate.json')
     print('HKIA_ICON_UPDATE_CANDIDATE',str(out/'candidate.json'),flush=True)
     for k,ids in report['sourceBlockers'].items():print('  '+k+': '+str(len(ids)),flush=True)
@@ -314,6 +395,23 @@ def self_test():
         except ValueError:pass
         else:raise AssertionError('reused tampered checkpoint')
         assert called==[1,1]
+    assert view_art_summary(None,'achievementArt',{})==(None,[],['achievementArt'])
+    with tempfile.TemporaryDirectory() as tmp:
+        root=Path(tmp);(root/'output').mkdir()
+        h='a'*64
+        config={'version':'9.1.0','platform':'steam','bundles':[{'name':'definitions','sha256':h}],
+                'achievementArt':{'census':{'sha256':h}}}
+        path=root/'output'/'achievement-art.json'
+        value={'schema':'HKIA.AchievementArtCandidate.1','version':'9.1.0','platform':'steam',
+               'definitionsSha256':h,'sourceCensusFileSha256':h,'automaticReleaseActivationAuthorized':False,
+               'rows':[{'saveGuid':'native-null','icon':{'kind':'null'}},{'saveGuid':'blocked','icon':{'kind':'unresolved'}}],
+               'unresolvedCount':1}
+        source.write_new(path,value)
+        assert view_art_summary(root,'achievementArt',config)==(path,['blocked'],[])
+        path.unlink();value['unresolvedCount']=0;source.write_new(path,value)
+        try:view_art_summary(root,'achievementArt',config)
+        except ValueError:pass
+        else:raise AssertionError('accepted incomplete view-art blockers')
     print('HKIA_ICON_UPDATE_PIPELINE_SELF_TEST_OK')
 
 if __name__=='__main__':
