@@ -9,7 +9,7 @@ import type {Rect,SpriteOverlay} from './dynamic-sprite-raster';
 
 export type VersionedOverlay={version:string;sourceHash:string;route:string;texture:string;overlay:SpriteOverlay};
 export type DynamicSourcePin=Readonly<{
- version:string;indexSha256:string;renderer:'guarded-native-rgb-alpha-v1';
+ version:string;indexSha256:string;renderer:'guarded-native-rgb-alpha-v1';resolution?:'native';
 }>;
 type SourceRow=Readonly<{
  texture:string;asset:TextureAsset;sampleRect:Rect;trimTopLeft:Rect;guardRect:Rect;
@@ -44,7 +44,7 @@ function asset(v:unknown):TextureAsset{
  return {file,sha256,rgbSha256:hash(a.rgbSha256),width,height,bytes:integer(a.bytes,1,1024*1024)};
 }
 function validatePin(pin:DynamicSourcePin){
- assertSource(/^\d+\.\d+\.\d+$/.test(pin.version)&&SHA.test(pin.indexSha256)&&pin.renderer==='guarded-native-rgb-alpha-v1');
+ assertSource(/^\d+\.\d+\.\d+$/.test(pin.version)&&SHA.test(pin.indexSha256)&&pin.renderer==='guarded-native-rgb-alpha-v1'&&(pin.resolution===undefined||pin.resolution==='native'));
 }
 function sameAsset(a:TextureAsset,b:TextureAsset){return a.file===b.file&&a.sha256===b.sha256&&a.rgbSha256===b.rgbSha256&&a.width===b.width&&a.height===b.height&&a.bytes===b.bytes;}
 /** Decode an already hash-verified index. Missing routes remain missing.
@@ -103,10 +103,10 @@ export function createVersionedDynamicSourceLoader(root:string,pin:DynamicSource
  }
  async function originalRoute(route:string,version:string):Promise<Blob|null>{
   try{
-   if(version!==pin.version||route.startsWith('mask:')||route.startsWith('item:'))return null;
+   if(version!==pin.version||route.startsWith('mask:')||(route.startsWith('item:')&&pin.resolution!=='native'))return null;
    const row=(await index()).get(routeKey(route));if(!row)return null;
    const base=await loadTexture(root,row.asset);
-   return await renderCachedOriginalBase(key(route,'original',row.texture),{base,baseRect:row.sampleRect,trim:row.trimTopLeft,alphaOffsetY:row.alphaOffsetY,logicalSize:row.logicalSize});
+   return await renderCachedOriginalBase(key(route,'original',row.texture),{base,baseRect:row.sampleRect,trim:row.trimTopLeft,alphaOffsetY:row.alphaOffsetY,logicalSize:row.logicalSize,logicalHeight:row.logicalHeight,resolution:pin.resolution});
   }catch{return null;}
  }
  async function original(itemId:number,version:string):Promise<Blob|null>{
@@ -129,7 +129,7 @@ export function createVersionedDynamicSourceLoader(root:string,pin:DynamicSource
    const overlayKey=layer?[layer.sourceHash,layer.route,layer.texture,layer.overlay.scale,layer.overlay.offsetPercent,layer.overlay.rotation]:null;
    return await renderCachedDynamicArt(key(itemId,'tinted',[row.texture,maskGuid,maskRow?.texture,tints,overlayKey]),{
     base,mask,baseRect:row.sampleRect,maskRect:maskRow?.sampleRect??[0,0,1,1],trim:row.trimTopLeft,
-    alphaOffsetY:row.alphaOffsetY,logicalSize:row.logicalSize,tints,maskColorSpace:maskRow?.maskColorSpace,overlay:layer?.overlay
+    alphaOffsetY:row.alphaOffsetY,logicalSize:row.logicalSize,logicalHeight:row.logicalHeight,resolution:pin.resolution,tints,maskColorSpace:maskRow?.maskColorSpace,overlay:layer?.overlay
    });
   }catch{return null;}
  }
