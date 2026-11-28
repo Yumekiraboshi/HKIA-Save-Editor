@@ -98,7 +98,7 @@ test('growth labels distinguish native species states and never describe clothin
  const {flowerGrowthKind}=await load('../src/inventory-flower-display.ts');
  const {flowerGrowthLabel}=await load('../src/inventory-unique-copy.ts');
  const flower=growState=>({growState,baseColor:1,pattern:0,patternColor:0});
- for(const [state,kind,label] of [[0,'seed','種'],[6,'plucked','花'],[7,'uprooted','掘り起こした株'],[255,'unknown','状態未確認']]){
+ for(const [state,kind,label] of [[0,'seed','種'],[1,'planted','植え付け済み'],[2,'seedling','苗'],[3,'grown','成長済み'],[4,'bud','つぼみ'],[5,'bloom','開花'],[6,'plucked','花'],[7,'uprooted','掘り起こした株'],[255,'unknown','状態未確認']]){
   assert.equal(flowerGrowthKind(43114910,flower(state)),kind);
   assert.equal(flowerGrowthLabel('ja',kind),label);
   assert.equal(flowerGrowthKind(1120342995,flower(state)),null);
@@ -107,7 +107,7 @@ test('growth labels distinguish native species states and never describe clothin
  const source=JSON.parse(readFileSync(new URL('../core/data/inventory-flower-definitions-v3.0.1.json',import.meta.url)));
  for(const row of source.flowers)assert.equal(flowerGrowthKind(row.itemId,flower(0)),'seed');
  for(const locale of ['ar','de','en','en-GB','es','fr','fr-CA','it','ja','ko','nl','pt-BR','ru','tr','zh-Hans','zh-Hant']){
-  const labels=['seed','plucked','uprooted','unknown'].map(k=>flowerGrowthLabel(locale,k));assert.equal(new Set(labels).size,4);assert.ok(labels.every(Boolean));
+  const labels=['seed','planted','seedling','grown','bud','bloom','plucked','uprooted','unknown'].map(k=>flowerGrowthLabel(locale,k));assert.equal(new Set(labels).size,9);assert.ok(labels.every(Boolean));
  }
 });
 
@@ -152,4 +152,20 @@ test('nested furniture wand snapshot and net draft preserve all three material w
  assert.ok(inventoryPatchesEqual(add,safeInventoryPatches(add)));
  assert.ok(!inventoryPatchesEqual(add,[{...add[0],nestedMaterials:[13,2,0]}]));
  assert.throws(()=>decodeInventoryUnique(wire([1,8,1,21,9,5,10,61381969,104,125,0,7,4,6,6,0,0,4]),new Set([8])));
+});
+
+test('all 25 native flower species distinguish all eight states from out-of-range values without changing artwork routes',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const {flowerGrowthKind,flowerGrowthSpriteState,flowerUsesDefinitionIcon}=await load('../src/inventory-flower-display.ts');
+ const source=JSON.parse(readFileSync(new URL('../public/inventory-flower-art/index.json',import.meta.url),'utf8'));
+ assert.equal(source.items.length,25);
+ for(const {itemId} of source.items){
+  for(const [growState,kind] of ['seed','planted','seedling','grown','bud','bloom','plucked','uprooted'].entries()){
+   const f={growState,baseColor:1,pattern:0,patternColor:0};
+   assert.equal(flowerGrowthKind(itemId,f),kind);
+   assert.equal(flowerGrowthSpriteState(itemId,f),growState===0?0:[3,7].includes(growState)?7:undefined);
+   assert.equal(flowerUsesDefinitionIcon(itemId,f),[1,2,4,5,6].includes(growState));
+  }
+  for(const growState of [-1,8,255,1.5,NaN])assert.equal(flowerGrowthKind(itemId,{growState,baseColor:1,pattern:0,patternColor:0}),'unknown');
+ }
 });

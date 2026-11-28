@@ -3,11 +3,12 @@ export type InventoryFlower={growState:number;baseColor:number;pattern:number;pa
 // Source species only: tag 7 is also used by flower-crafted clothing.
 import {nativeIconRoute} from './native-icon-route';
 export function hasNativeFlowerArt(itemId:number):boolean{return nativeIconRoute(itemId)==='flower';}
-export type FlowerGrowthKind='seed'|'plucked'|'uprooted'|'unknown';
+const nativeGrowthKinds=['seed','planted','seedling','grown','bud','bloom','plucked','uprooted'] as const;
+export type FlowerGrowthKind=typeof nativeGrowthKinds[number]|'unknown';
 /** Display classification, not an edit rule. Never infer an unknown state. */
 export function flowerGrowthKind(itemId:number,flower:InventoryFlower|undefined):FlowerGrowthKind|null{
  if(!flower||!hasNativeFlowerArt(itemId))return null;
- return flower.growState===0?'seed':flower.growState===6?'plucked':flower.growState===7?'uprooted':'unknown';
+ return Number.isInteger(flower.growState)&&flower.growState>=0&&flower.growState<nativeGrowthKinds.length?nativeGrowthKinds[flower.growState]:'unknown';
 }
 /** Native FlowerModel.IconForState selects GrownTroweledIcon for both
  * Grown (3) and GrownTroweled (7). Keep the saved state and its label distinct. */
