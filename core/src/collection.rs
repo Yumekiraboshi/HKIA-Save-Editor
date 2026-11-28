@@ -4171,6 +4171,8 @@ mod tests {
    assert!(!editor.unique_quantity_ids.contains(&r.id));
   }
   editor.slot.index.inventory.extend([flower,furniture,wand,unknown,magic,nested]);
+  // This test injects historical rows after open; rebuild the immutable lookup.
+  editor.inventory_document_index=editor.slot.index.inventory.iter().enumerate().map(|(i,r)|(r.id,i)).collect();
   assert_eq!(editor.inventory_flowers().collect::<Vec<_>>(),vec![(100,6,1,0,0)]);
   assert_eq!(editor.inventory_unique_rows().find(|r|r.0==102).unwrap().3.unwrap().display_words().1[0],source_id as u32);
   assert_eq!(editor.inventory_flower_edit_hints().count(),0);
