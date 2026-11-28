@@ -6200,3 +6200,34 @@ fn ordinary_bag_fish_critter_and_furniture_survive_independent_modern_remote_pla
   }
  }
 }
+
+#[test]
+fn macos_v301_platform_reference_preserved_through_inventory_roundtrip(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let mut p=synthetic_payload("3.0.1");p[2]=5;p[3]=0x96;
+ p.extend(doc(1,arr(vec![u(4),u(7285157),u(0),u(7),vec![0xc0]])));
+ let mut raw=slot_from_payload("3.0.1",p);
+ let marker=read_slot(&raw).unwrap().envelope.marker;
+ assert_eq!(&raw[marker-2..marker],&[0x91,9]);
+ raw[marker-1]=7;
+ for zipped in [false,true]{
+  let input=if zipped{zip(&raw)}else{raw.clone()};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let original=e.inventory();assert_eq!(original.len(),1);assert!(e.inventory_entry_removable(4));
+  e.change_inventory_quantity(4,7,12).unwrap();
+  e.remove_inventory_entries(&[(4,12)]).unwrap();
+  let checkpoint=e.history_checkpoint().unwrap();
+  let mut restored=Editor::open(input).unwrap();restored.restore_history(&checkpoint).unwrap();
+  assert!(restored.inventory().is_empty());assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory()[0].quantity,12);assert!(restored.redo_scope(Inventory));
+  let output=restored.export().unwrap();
+  let reopened=Editor::open(output.clone()).unwrap();assert!(reopened.inventory().is_empty());
+  let slot=if zipped{let z=ZipIndex::parse(&output).unwrap();z.extract(&output,z.entries.iter().position(|x|x.name==SLOT).unwrap()).unwrap()}else{output};
+  let checked=read_slot(&slot).unwrap();assert_eq!(&slot[..checked.envelope.marker],&raw[..marker]);
+  assert_eq!(reopened.entries(),restored.entries());assert_eq!(reopened.achievements(),restored.achievements());
+ }
+ for platform in [0,6,8,10,14,255]{
+  let mut rejected=raw.clone();rejected[marker-1]=platform;assert!(Editor::open(rejected).is_err());
+ }
+ let mut older=slot("3.0.0");let marker=read_slot(&older).unwrap().envelope.marker;older[marker-1]=7;
+ assert!(Editor::open(older).is_err());
+}
