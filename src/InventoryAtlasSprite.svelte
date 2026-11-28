@@ -1,17 +1,12 @@
 <script lang="ts">
  import type {SpriteCell} from './icon-packs';
- import {startInventorySpriteRequest} from './inventory-sheet-art';
+ import {createVerifiedSpriteView} from './verified-sprite-view.svelte';
  import {watchDynamicArtVisibility} from './dynamic-art-view';
  let {sprite,source,target}:{sprite:SpriteCell;source?:'native'|'native-result';target?:number}=$props();
  let near=$state(false);
- let verified=$state.raw<{source:SpriteCell;cell:SpriteCell}|undefined>();
- const visible=$derived(sprite.nativeSheet?verified?.source===sprite?verified.cell:undefined:sprite);
+ const view=createVerifiedSpriteView(()=>sprite,()=>near);
+ const visible=$derived(view.cell);
  const setNear=(value:boolean)=>{near=value;};
- $effect(()=>{
-  const current=sprite;
-  if(!near||!current.nativeSheet)return;
-  return startInventorySpriteRequest(current,cell=>{verified=cell?{source:current,cell}:undefined;});
- });
 </script>
 <span use:watchDynamicArtVisibility={setNear} class:item-sprite={!!visible} class:item-art-empty={!visible}
  data-inventory-art={visible?source:source==='native-result'?'native-result-unavailable':undefined}
