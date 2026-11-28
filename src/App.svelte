@@ -51,9 +51,9 @@ import {searchAchievementRows} from './achievement-search';
  import {nativeResultIconTarget} from './native-result-icon';
  import {selectWandOriginalCell,selectInventoryWandOriginalCell} from './wand-original-subicon';
  import {inventoryWandAppearance,hasNativeWandArt,wandVariantOf,wandVariantLabel,wandMaterialLabel,wandFieldOptions,wandFieldLabels,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
- import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
+ import {inventoryChefAppearance,chefDraftAppearance,hasNativeChefArt} from './inventory-chef-display';
  import {nativeChefInstructionBase} from './native-icon-route';
- import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
+ import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,inventoryPaletteCardAppearance,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
  import IngredientBadges from './IngredientBadges.svelte';
  import {ordinaryRecipeBadges} from './ordinary-recipe-badges';
  import {cafeIngredientBadges,bobaIngredientBadges,type IngredientBadge} from './ingredient-badges';
@@ -1951,7 +1951,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const customized=snapshot.version==='3.0.1'&&furnitureHasCustomizedAppearance(furnitureDisplay,furnitureVariantOf(item.unique))}
      {@const dyeBadge=flowerBadges.length===0?dyeDecoratorFor(item.itemId,snapshot.version,nativeDyePalettes):null}
      {@const variantTitle=inventoryVariantSearchName(item)}
-     {@const chef=inventoryChefAppearance(item.itemId,item.unique)}
+     {@const chef=inventoryChefAppearance(item.itemId,item.unique,item.cafe,item.boba)}
      {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
      {@const canFlower=!!item.flower&&!!item.unique?.flowerEditable&&!!flowerDefinitions&&!!flowerLabels[locale]}
      {@const canFurniture=!!item.unique?.furnitureEditable||!!item.furnitureCreatable}
@@ -1982,7 +1982,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          {:else if hasNativeChefArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicChefSprite itemId={item.itemId} appearance={chef} fallback={nativeSprite??sprite}/>
          {:else if item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
-         <DynamicPaletteSprite itemId={item.itemId} palette={item.palette} fallback={nativeSprite??sprite}/>
+         <DynamicPaletteSprite itemId={item.itemId} palette={inventoryPaletteCardAppearance(item.palette,item.paletteCreationDefault)} fallback={nativeSprite??sprite}/>
         {:else if hasNativeFlowerArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicFlowerSprite itemId={item.itemId} flower={item.flower} definitions={flowerDefinitions} fallback={nativeSprite??sprite}/>
         {:else if resultId!==undefined&&resultOriginal}
@@ -2241,7 +2241,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="cafe-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeCafeEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'cafe',colors:selected.slice(3).filter(n=>n>0)}} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={cafeIngredientBadges(selected,snapshot?.cafeWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/></span></div>
+    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={chefDraftAppearance(edit.itemId,selected)} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={cafeIngredientBadges(selected,snapshot?.cafeWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/></span></div>
     {#each [0,1,2].filter(i=>selected[i]>0||edit.before[i]>0||edit.options.some(v=>v.slot===i)) as slot}
      {@const choices=edit.options.map((option,index)=>({option,index})).filter(({option})=>option.slot===slot)}
      <label class="date-dialog-field" data-cafe-slot={slot}>
@@ -2374,7 +2374,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="boba-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeBobaEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={bobaIngredientBadges(selected,snapshot?.bobaWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/></span></div>
+    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={chefDraftAppearance(edit.itemId,selected)} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={bobaIngredientBadges(selected,snapshot?.bobaWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/></span></div>
     {#each ([1,3,2,4] as BobaField[]) as field}
      {@const choices=bobaFieldOptions(edit.before,edit.options,bobaSelection,field,edit.absent)}
      <label class="date-dialog-field">

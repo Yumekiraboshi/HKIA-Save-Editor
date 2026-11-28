@@ -74,3 +74,28 @@ test('native UI falls back to each species null-pattern mask for known patterns,
  }
  assert.equal(explicit,161);assert.equal(fallback,264);
 });
+
+test('all source-known flower tint inputs resolve every base/accent/pattern combination',()=>{
+ const colors=Object.keys(defs.colors).map(Number),patterns=[0,...Object.keys(defs.patterns).map(Number)];
+ assert.equal(colors.length,30);assert.equal(patterns.length,17);
+ let combinations=0;const missing=[],wrong=[];
+ for(const item of index.items){
+  const defaults=item.patterns.find(p=>p.patternIndex===0);
+  for(const pattern of patterns){
+   const binding=item.patterns.find(p=>p.patternIndex===pattern)??defaults;
+   for(const color of colors)for(const accent of [0,...colors]){
+    const result=resolveFlowerAppearance(item.itemId,{growState:6,baseColor:color,pattern,patternColor:accent},defs,index);
+    combinations++;
+    if(!result){missing.push([item.itemId,color,pattern,accent]);continue;}
+    const primary=defs.colors[color].rgba,secondary=pattern===0?primary:accent===0?[1,1,1,1]:defs.colors[accent].rgba;
+    if(result.maskGuid!==binding.maskGuid||result.baseSpritePathId!==item.baseSpritePathId||
+     result.tints.some((t,i)=>t.some((v,j)=>v!==[primary,secondary,primary][i][j])))
+     wrong.push([item.itemId,color,pattern,accent]);
+   }
+  }
+ }
+ assert.equal(combinations,395250);
+ assert.deepEqual(missing,[]);assert.deepEqual(wrong,[]);
+ // This is the display input domain, not a claim that all combinations can
+ // occur in the game, or that the full cartesian product was rasterized.
+});

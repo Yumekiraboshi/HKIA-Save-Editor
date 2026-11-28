@@ -274,6 +274,22 @@ async function inventoryPaletteRemovalSmoke(){
  }
  console.log('CHROMIUM PALETTE REMOVAL PASS: copied avatar palette protected; zero, recovery and undo');
 }
+// Compare the decoded generated pixels, not transient object URL identities.
+async function inventoryAppearanceDigest(locator){
+ await locator.waitFor({timeout:30_000});
+ return locator.evaluate(async el=>{
+  const url=getComputedStyle(el).backgroundImage.slice(5,-2);
+  if(!url.startsWith('blob:'))throw Error('Expected local generated image');
+  const bitmap=await createImageBitmap(await (await fetch(url)).blob());
+  try{
+   const canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;
+   const ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);
+   const bytes=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+   if(!bytes.some((v,i)=>i%4===3&&v>0))throw Error('Empty generated image');
+   return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),n=>n.toString(16).padStart(2,'0')).join('');
+  }finally{bitmap.close();}
+ });
+}
 async function inventoryFirstPaletteSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -284,9 +300,10 @@ async function inventoryFirstPaletteSmoke(){
   await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
   const search=page.locator('.inventory-controls input[type="search"]');await search.fill('1835273963');
   const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="palette-editor-title"]');
-  await card.locator('.item-sprite[data-dynamic-art-source="native-palette"][data-icon-fidelity="source-derived-base-only"]').waitFor({timeout:30_000});
+  const appearance=await inventoryAppearanceDigest(card.locator('.item-sprite[data-dynamic-art-source="native-palette"][data-icon-fidelity="source-derived-runtime"]'));
   await assertInventoryControlGeometry(page,card.locator('.inventory-unique-edit-button'),true);
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  assert.equal(await inventoryAppearanceDigest(dialog.locator('.item-sprite[data-dynamic-art-source="native-palette"][data-icon-fidelity="source-derived-runtime"]')),appearance);
   assert.equal(await dialog.locator('button[type="submit"]').count(),0);
   await dialog.locator('.inventory-palette-option:not([disabled])').first().click();
   await dialog.locator('[data-palette-slot="1"]:not([disabled])').click();
@@ -744,9 +761,11 @@ async function inventoryFirstChefSmoke(){
   await chooseTab(page,'inventory');await page.locator('.inventory-add-toggle').click();
   const search=page.locator('.inventory-controls input[type="search"]'),card=page.locator('.inventory-card');
   await search.fill('1798633565');
-  await card.locator('.item-sprite[data-dynamic-art-source="native-chef"][data-icon-fidelity="source-derived-base-only"]').waitFor({timeout:30_000});
+  const chefArt='.item-sprite[data-dynamic-art-source="native-chef"][data-icon-fidelity="source-derived-runtime"]';
+  const bobaArt=await inventoryAppearanceDigest(card.locator(chefArt));
   await card.locator('.inventory-unique-edit-button').click();
   const boba=page.locator('dialog[aria-labelledby="boba-editor-title"]');await boba.waitFor();
+  assert.equal(await inventoryAppearanceDigest(boba.locator(chefArt)),bobaArt);
   assert.equal(await boba.locator('button[type="submit"]').count(),0);
   const bs=boba.locator('select[name="boba-flavor"]');
   assert.equal(await bs.locator('option').count(),14);
@@ -759,8 +778,9 @@ async function inventoryFirstChefSmoke(){
   await boba.locator('input[name="variant-add-quantity"]').fill('2');
   await boba.locator('.inventory-create-boba:not([disabled])').click();await boba.waitFor({state:'hidden'});
   await card.locator('.inventory-add-source').waitFor();
-  await search.fill('1338995084');await card.locator('.inventory-unique-edit-button').click();
+  await search.fill('1338995084');const cafeArt=await inventoryAppearanceDigest(card.locator(chefArt));await card.locator('.inventory-unique-edit-button').click();
   const cafe=page.locator('dialog[aria-labelledby="cafe-editor-title"]');await cafe.waitFor();
+  assert.equal(await inventoryAppearanceDigest(cafe.locator(chefArt)),cafeArt);
   assert.equal(await cafe.locator('button[type="submit"]').count(),0);
   assert.equal(await cafe.locator('[data-cafe-slot]').count(),3);
   const select=cafe.locator('select[name="cafe-slot-0"]');
