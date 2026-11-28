@@ -1,5 +1,5 @@
 <script lang="ts">
- import {onMount,tick} from 'svelte';
+ import {onMount,tick,untrack} from 'svelte';
  import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,removeInventoryEntries,requestFlowerVariants,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurniturePreview,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPalettePreview,changeInventoryPaletteVariant,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafePreview,changeInventoryCafeVariant,createInventoryCafeVariant,requestWandVariants,changeInventoryWandIdentity,requestWandNestedMaterials,requestWandNestedPairs,changeInventoryWandNested,createInventoryWandNested,requestWandEditSources,requestAbsentWandSources,requestOwnedFurnitureWandSources,requestOwnedFurnitureWandPairs,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,inventoryPatchesEqual,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
@@ -167,9 +167,27 @@ import {verifiedFloorplanName} from './floorplan-names';
  let achievementGroupHierarchy:AchievementHierarchy|null=$state(null);
  let achievementCategoryAtlas:CategoryIconAtlas|null=$state(null);
  let achievementIndividualAtlas:IndividualAchievementAtlas|null=$state(null);
- let achievementImagesFailed=$state(false);
- let achievementImagesStarted=false;
- let achievementImagesEpoch=0;
+ let achievementIndividualFailed=$state(false),achievementCategoryFailed=$state(false);
+ const achievementImagesFailed=$derived(achievementIndividualFailed||achievementCategoryFailed);
+ let achievementIndividualPending=false,achievementCategoryPending=false,achievementImagesDisposed=false;
+ function refreshAchievementImages(){
+  if(achievementImagesDisposed||!snapshot||activeTool!=='achievements'||achievementIndex.size!==820||!achievementGroupHierarchy)return;
+  const index=achievementIndex,groups=achievementGroupHierarchy;
+  if(!achievementIndividualAtlas&&!achievementIndividualPending){
+   achievementIndividualPending=true;
+   void loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index).then(atlas=>{
+    if(achievementImagesDisposed){atlas.dispose?.();return;}
+    achievementIndividualAtlas=atlas;achievementIndividualFailed=false;
+   }).catch(()=>{if(!achievementImagesDisposed)achievementIndividualFailed=true;}).finally(()=>{achievementIndividualPending=false;});
+  }
+  if(!achievementCategoryAtlas&&!achievementCategoryPending){
+   achievementCategoryPending=true;
+   void loadAchievementCategoryAtlas(import.meta.env.BASE_URL,index,groups).then(atlas=>{
+    if(achievementImagesDisposed){atlas.dispose?.();return;}
+    achievementCategoryAtlas=atlas;achievementCategoryFailed=false;
+   }).catch(()=>{if(!achievementImagesDisposed)achievementCategoryFailed=true;}).finally(()=>{achievementCategoryPending=false;});
+  }
+ }
  let achievementGroupSelection:string|null=$state(null);
  let achievementFacts:AchievementFactsIndex=$state(new Map());
  let achievementFactsEpoch=0;
@@ -305,6 +323,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   void loadFurnitureDisplay().then(data=>furnitureDisplay=data).catch(()=>{});
   refreshInventoryNativeArt();
   window.addEventListener('online',refreshInventoryNativeArt);
+  window.addEventListener('online',refreshAchievementImages);
   // Exact game dye palettes, used exclusively for recoloring item image pixels.
   void loadNativeDyePalettes(import.meta.env.BASE_URL)
    .then(palettes=>nativeDyePalettes=palettes).catch(()=>{});
@@ -349,7 +368,8 @@ import {verifiedFloorplanName} from './floorplan-names';
    inventoryIconEpoch++;
    for(const pack of Object.values(inventoryIconPacks))pack.dispose();
    inventoryIconPacks={};
-   achievementImagesEpoch++;
+   window.removeEventListener('online',refreshAchievementImages);
+   achievementImagesDisposed=true;
    achievementIndividualAtlas?.dispose?.();
    achievementCategoryAtlas?.dispose?.();
   };
@@ -371,20 +391,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  /* Native artwork loads only with a save in the Achievements tab.
     Tampered or stale image data fail closed without blocking save edits. */
  $effect(()=>{
-  if(achievementImagesFailed||!snapshot||activeTool!=='achievements'||achievementIndex.size!==820||!achievementGroupHierarchy||achievementImagesStarted)return;
-  achievementImagesStarted=true;
-  const epoch=++achievementImagesEpoch;
-  const index=achievementIndex,groups=achievementGroupHierarchy;
-  if(!achievementIndividualAtlas)void loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index)
-   .then(atlas=>{
-    if(epoch!==achievementImagesEpoch){atlas.dispose?.();return;}
-    achievementIndividualAtlas=atlas;
-   }).catch(()=>{if(epoch===achievementImagesEpoch)achievementImagesFailed=true});
-  if(!achievementCategoryAtlas)void loadAchievementCategoryAtlas(import.meta.env.BASE_URL,index,groups)
-   .then(atlas=>{
-    if(epoch!==achievementImagesEpoch){atlas.dispose?.();return;}
-    achievementCategoryAtlas=atlas;
-   }).catch(()=>{if(epoch===achievementImagesEpoch)achievementImagesFailed=true});
+  if(!snapshot||activeTool!=='achievements'||achievementIndex.size!==820||!achievementGroupHierarchy)return;
+  // Atlas state changes must not themselves cause automatic retries. Each
+  // pending request is independent, including when the other atlas fails.
+  untrack(refreshAchievementImages);
  });
  $effect(()=>{
   const current=locale;
@@ -610,13 +620,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function openAchievementsTab(){
   activeTool='achievements';editingAchievement=null;showAchievementGroup(null);error='';
-  if(achievementImagesFailed){
-   // A verified atlas stays cached; only previously failed source images are
-   // re-fetched on an explicit tab visit (including selecting the current tab).
-   // The reactive error flag ensures the loader effect retries exactly once.
-   achievementImagesStarted=false;
-   achievementImagesFailed=false;
-  }
+  refreshAchievementImages();
  }
  function achievementName(guid:string,index:number):string{
   const meta=achievementIndex.get(guid);
