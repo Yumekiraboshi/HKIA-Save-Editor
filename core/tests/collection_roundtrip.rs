@@ -4351,6 +4351,11 @@ fn furniture_source_wand_edits_and_additions_preserve_exact_nested_identity(){
   assert!(e.inventory_wand_nested_pairs(4,true).contains(&[106,127]));
   let combined=e.inventory_wand_nested_materials_for_pair(4,[106,127],true);
   assert!(combined.contains(&[13,2,0])&&combined.contains(&[502,2,0]));
+  let draft=e.inventory_wand_nested_material_draft(4,[106,127],[502,2,0],true);
+  assert!(draft.contains(&[502,3,0])&&draft.contains(&[502,2,0]));
+  assert!(e.inventory_wand_nested_material_draft(4,[104,125],[502,2,0],false).is_empty());
+  assert!(e.inventory_wand_nested_material_draft(4,[106,127],[285,2,0],true).is_empty());
+  assert!(!e.dirty());
   assert!(e.inventory_wand_nested_materials_for_pair(4,[999,127],false).is_empty());
   assert!(!e.inventory_wand_source_creation_variants(candidate,source).contains(&[104,125]));
   assert!(e.change_inventory_wand_nested(4,before,[source,104,125,502,2,0]).is_err());

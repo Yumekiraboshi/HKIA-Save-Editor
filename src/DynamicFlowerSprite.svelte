@@ -29,6 +29,7 @@
   load();
   return ()=>{active=false;window.removeEventListener('online',load);};
  });
+ const renderKey=$derived(JSON.stringify([itemId,flower?.growState,flower?.baseColor,flower?.pattern,flower?.patternColor,!!definitions]));
  let render=$derived.by(()=>{
   const id=itemId,defs=definitions,fields=flower?{...flower}:undefined;
   // Native states 1, 2, 4 and 5 select the unmodified definition icon.
@@ -52,5 +53,5 @@
   style:background-image={fallback?'url("'+fallback.url+'")':undefined}
   style:background-position={fallback?'-'+fallback.x+'px -'+fallback.y+'px':undefined}>{#if !fallback}✧{/if}</span>
 {:else}
- <DynamicArtSprite {render} {renderPartial} source="native-flower" {fallback}/>
+ <DynamicArtSprite {renderKey} {render} {renderPartial} source="native-flower" {fallback}/>
 {/if}

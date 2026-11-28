@@ -285,6 +285,14 @@ export async function wandRuntimeSmoke(browser,origin,base){
     }finally{pack.dispose();}
    },base);
    assert.equal(results.length,27);assert.ok(results.every(r=>r.different&&r.cached&&r.missing));
+   const refused=await fallbackPage.evaluate(async base=>{
+    const {renderWandArt,selectInventoryWandOriginalCell,loadInventoryNativeArt}=await import(base+'__wand_runtime_fixture__.mjs');
+    const native=await loadInventoryNativeArt(base),cell=selectInventoryWandOriginalCell(427689,native.entries);
+    if(!cell)throw Error('missing source');
+    const broken={...cell,cell:{...cell.cell,nativeSheet:{...cell.cell.nativeSheet,sha256:'0'.repeat(64)}}};
+    return await renderWandArt(384749651,{sourceItemId:427689,magicCharacteristicId:104,fleckCharacteristicId:125},broken)===null;
+   },base);
+   assert.equal(refused,true,'a wrong sheet hash cannot be accepted as a source-cell fallback');
   }finally{await fallbackPage.close();}
   // Untinted source overlay has no dependency on the source item's mask.
   const templatePage=await context.newPage();

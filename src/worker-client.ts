@@ -250,8 +250,8 @@ export function createInventoryBobaVariant(documentId:number,beforeBobaVariant:B
  return rpc('boba-create',{documentId,beforeBobaVariant:[...beforeBobaVariant],nextBobaVariant:[...nextBobaVariant],nextQuantity}) as Promise<SaveSnapshot>;
 }
 
-export function requestWandNestedMaterials(documentId:number,creation=false,nextWandVariant?:WandVariant):Promise<FurnitureVariant[]>{
- return rpc('wand-nested-materials',{documentId,target:creation?1:0,nextWandVariant:nextWandVariant===undefined?undefined:[...nextWandVariant]}) as Promise<FurnitureVariant[]>;
+export function requestWandNestedMaterials(documentId:number,creation=false,nextWandVariant?:WandVariant,draft?:FurnitureVariant):Promise<FurnitureVariant[]>{
+ return rpc('wand-nested-materials',{documentId,target:creation?1:0,nextWandVariant:nextWandVariant===undefined?undefined:[...nextWandVariant],nextFurnitureVariant:draft===undefined?undefined:[...draft]}) as Promise<FurnitureVariant[]>;
 }
 export function requestWandNestedPairs(documentId:number,creation=false):Promise<WandVariant[]>{
  return rpc('wand-nested-pairs',{documentId,target:creation?1:0}) as Promise<WandVariant[]>;
