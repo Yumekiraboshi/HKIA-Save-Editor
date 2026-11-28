@@ -15,6 +15,10 @@ export function resolveFlowerAppearance(itemId:number,flower:InventoryFlower,def
  const primary=defs.colors[String(flower.baseColor)]?.rgba;
  const valid=(c:Rgba|undefined):c is Rgba=>!!c&&c.length===4&&c.every(v=>Number.isFinite(v)&&v>=0&&v<=1);
  if(!valid(primary))return null;
+ // Native TryGetFlowerVisualModel resolves every non-null GUID before
+ // choosing the plain/patterned tint branch. Even an unused accent must
+ // resolve; do not render an invented exact appearance for unknown values.
+ if(flower.patternColor!==0&&!valid(defs.colors[String(flower.patternColor)]?.rgba))return null;
  // Null native pattern has index zero in the mask manifest. An unrecognized
  // nonzero pattern is not silently treated as null.
  if(flower.pattern!==0&&!Object.hasOwn(defs.patterns,String(flower.pattern)))return null;

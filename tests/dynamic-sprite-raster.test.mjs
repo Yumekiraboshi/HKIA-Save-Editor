@@ -36,3 +36,19 @@ test('all native flower base bindings and lossless runtime assets are pinned',()
   assert.ok(gx+gw<=m.base.width&&gy+gh<=m.alphaOffsetY);
  }
 });
+
+test('all 171 flower and chef atlas mask GUIDs, Sprite identities and fractional rectangles match original source projection',()=>{
+ const read=p=>JSON.parse(readFileSync(new URL(p,import.meta.url),'utf8'));
+ const flower=read('../public/inventory-flower-art/index.json');
+ const chef=read('../public/dynamic-chef-art/chef-runtime-source-v3.0.1.json');
+ const rows=[...Object.entries(flower.masks).map(([guid,x])=>[guid,x.spritePathId,...['x','y','width','height'].map(k=>x.textureRect[k])]),...chef.rows.map(x=>[x.maskGuid,x.mask.spritePathId,...x.mask.sourceRect])].sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);
+ assert.equal(rows.length,171);assert.equal(new Set(rows.map(x=>x[0])).size,171);
+ const hash=createHash('sha256');
+ for(const [guid,pathId,...rect] of rows){
+  assert.match(guid,/^[0-9a-f]{32}$/);assert.equal(rect.length,4);
+  const buf=Buffer.alloc(24);buf.writeBigInt64LE(BigInt(pathId));
+  rect.forEach((v,i)=>buf.writeFloatLE(v,8+i*4));
+  hash.update(guid,'ascii');hash.update(buf);
+ }
+ assert.equal(hash.digest('hex'),'20a83e7aeffea161e16516ade047baff4689cba1710892e154eb5a891bb2282a');
+});

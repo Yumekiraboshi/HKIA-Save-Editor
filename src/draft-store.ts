@@ -70,6 +70,9 @@ export function diffInventory(before:readonly InventoryEntry[],after:readonly In
    result.push({documentId:row.documentId,before:0,after:row.quantity});
   }
  }
+ const retained=new Set(after.map(row=>row.documentId));
+ for(const row of before)if(row.documentId>0&&row.documentId<=2147483647&&!retained.has(row.documentId))
+  result.push({documentId:row.documentId,before:row.quantity,kind:'remove-entry'});
  return result.sort((a,b)=>a.documentId-b.documentId);
 }
 /** Compare canonical validated net edits, not incidental property order.
@@ -88,7 +91,10 @@ export function safeInventoryPatches(value:unknown):InventoryPatch[]{
   const key=p.documentId+':'+(p.kind??'quantity');
   if(ids.has(key))throw Error('DRAFT_INVALID');
   ids.add(key);
-  if(p.kind==='wand-create'){
+  if(p.kind==='remove-entry'){
+   if(p.documentId>2147483647||!Number.isInteger(p.before)||p.before<0||p.before>2147483647)throw Error('DRAFT_INVALID');
+   result.push({documentId:p.documentId,before:p.before,kind:'remove-entry'});
+  }else if(p.kind==='wand-create'){
    const variant:unknown=p.variant,source=p.sourceItemId===undefined?0:p.sourceItemId;
    if(p.documentId<=2147483647||!Number.isInteger(p.itemId)||p.itemId<=0||p.itemId>2147483647||!isWandVariantWire(variant)||!Number.isInteger(p.quantity)||p.quantity<=0||p.quantity>2147483647||!Number.isInteger(source)||source<0||source>2147483647)throw Error('DRAFT_INVALID');
    const nested=p.nestedMaterials;

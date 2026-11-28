@@ -4,8 +4,8 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-const {outputFiles}=await build({stdin:{contents:"export * from './wand-appearance'; export * from './dynamic-sprite-raster';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {resolveWandBaseTints,rasterizeDynamicSprite,overlayPlacement,sourceOver}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {outputFiles}=await build({stdin:{contents:"export * from './wand-appearance'; export * from './dynamic-sprite-raster'; export * from './native-characteristic-tint';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+const {resolveWandBaseTints,rasterizeDynamicSprite,overlayPlacement,sourceOver,NATIVE_CHARACTERISTIC_IDS,MAGIC_MAPPED_IDS,FLECK_MAPPED_IDS}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const dir=new URL('../public/dynamic-wand-art/',import.meta.url),read=n=>readFileSync(new URL(n,dir)),sha=b=>createHash('sha256').update(b).digest('hex');
 const raw=read('wand-runtime-source-v3.0.1.json'),m=JSON.parse(raw);
 const magic=new Map(m.magic.map(r=>[r.characteristicId,r.rgba])),flecks=new Map(m.flecks.map(r=>[r.characteristicId,r.rgba]));
@@ -145,4 +145,51 @@ test('all native shared placeholder identities are reused by saved wand source s
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  assert.ok(app.includes('if(hasNativeWandArt(row.itemId))addWandSource('));
  assert.ok(app.includes('if(wandEdit&&hasNativeWandArt(wandEdit.itemId))addWandSource('));
+});
+
+test('all 12163 native Item IDs resolve a source Sprite for all wand shapes, including the ramen recipe alias',async()=>{
+ const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/wand-runtime-art.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent',define:{'import.meta.env.BASE_URL':'"/"'}});
+ const {wandOriginalTemplate}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+ const {gunzipSync}=await import('node:zlib');
+ const envelope=JSON.parse(readFileSync(new URL('../public/inventory-native-categories.json',import.meta.url)));
+ const bytes=gunzipSync(Buffer.from(envelope.data,'base64'));
+ assert.equal(sha(bytes),envelope.rawSha256);
+ const originalIds=new Set();let offset=0,id=0;
+ while(offset<bytes.length){
+  let part,shift=0,delta=0;
+  do{part=bytes[offset++];delta+=(part&127)*2**shift;shift+=7;}while(part&128);
+  id+=delta;offset++;originalIds.add(id);
+ }
+ assert.equal(originalIds.size,12163);
+ const candidate=JSON.parse(read('candidate-source/index.json')),remaining=JSON.parse(read('remaining-source/index.json'));
+ const mip=JSON.parse(read('mip-source/wand-mip-source.json')),nonSquare=JSON.parse(read('candidate-source/wand-nonsquare.json'));
+ const aliases=JSON.parse(readFileSync(new URL('../data/wand-original-sprite-aliases-v3.0.1.json',import.meta.url)));
+ const placeholders=JSON.parse(readFileSync(new URL('../data/native-placeholder-main-routes-v3.0.1.json',import.meta.url)));
+ const atlas=JSON.parse(readFileSync(new URL('../public/inventory-art/index.json',import.meta.url)));
+ const chef=JSON.parse(readFileSync(new URL('../public/dynamic-chef-art/chef-runtime-source-v3.0.1.json',import.meta.url)));
+ const palette=JSON.parse(readFileSync(new URL('../public/dynamic-palette-art/palette-runtime-source-v3.0.1.json',import.meta.url)));
+ const ramen=chef.rows.find(r=>r.itemId===1061947263);
+ const recipe=atlas.records.find(r=>r[0]===964128772);
+ assert.equal(recipe[3],ramen.base.spritePathId);
+ assert.equal(recipe[3],atlas.withheld.find(r=>r[0]===1061947263)[1]);
+ assert.equal(palette.rows.find(r=>r.kind==='base').spritePathId,atlas.withheld.find(r=>r[0]===1835273963)[1]);
+ assert.deepEqual(wandOriginalTemplate(964128772),wandOriginalTemplate(1061947263));
+ assert.equal(wandOriginalTemplate(315823),undefined);
+ const templateIds=[...originalIds].filter(id=>wandOriginalTemplate(id));
+ assert.deepEqual(templateIds.sort((a,b)=>a-b),[964128772,1061947263,1835273963]);
+ const covered=new Set([...Object.keys(candidate.items).map(Number),...Object.keys(remaining.items).map(Number),...mip.rows.map(r=>r.itemId),...nonSquare.rows.map(r=>r.itemId),...aliases.rows.map(r=>r[0]),...placeholders.ids,...templateIds]);
+ assert.deepEqual(covered,originalIds);
+ const sprites=new Set([...candidate.sprites.map(r=>r[0]),...remaining.sprites.map(r=>r[0]),...mip.rows.map(r=>r.spritePathId),...nonSquare.rows.map(r=>r.spritePathId),ramen.base.spritePathId,palette.rows.find(r=>r.kind==='base').spritePathId]);
+ assert.equal(sprites.size,5020);
+});
+
+test('wand tints use native white for every known unmapped characteristic while preserving mapped colors',()=>{
+ const white=[1,1,1,1];
+ assert.deepEqual(new Set(magic.keys()),MAGIC_MAPPED_IDS);assert.deepEqual(new Set(flecks.keys()),FLECK_MAPPED_IDS);
+ for(const id of NATIVE_CHARACTERISTIC_IDS){
+  assert.deepEqual(resolveWandBaseTints({magicCharacteristicId:id,fleckCharacteristicId:125},magic,flecks),[magic.get(id)??white,flecks.get(125),white]);
+  assert.deepEqual(resolveWandBaseTints({magicCharacteristicId:104,fleckCharacteristicId:id},magic,flecks),[magic.get(104),flecks.get(id)??white,white]);
+ }
+ const broken=new Map(flecks);broken.delete(125);
+ assert.equal(resolveWandBaseTints({magicCharacteristicId:104,fleckCharacteristicId:125},magic,broken),null);
 });

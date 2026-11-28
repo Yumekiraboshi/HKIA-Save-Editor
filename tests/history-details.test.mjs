@@ -265,3 +265,14 @@ test('wand native history accepts absent source handles and full source/material
  assert.equal(details.length,2);assert.deepEqual(details[0].beforeMaterials,[13,2,0]);assert.deepEqual(details[0].afterMaterials,[13,3,0]);assert.deepEqual(details[1].nestedMaterials,[13,3,0]);
  assert.equal(details[1].sourceItemId,source);
 });
+
+test('mixed persisted and staged removals decode as one native history transaction',()=>{
+ const staged=2147483648+427689;
+ const batch=bytes([u8(24),u32(2),u32(4),i32(7),u32(staged),i32(3)]);
+ const [detail]=decodeHistoryDetails(log([batch],1),[meta('inventory',4,null)]);
+ assert.deepEqual(detail,{scope:'inventory',documentId:4,batch:[{documentId:4,before:7,after:0},{documentId:staged,before:3,after:0}],physical:true});
+ const [pendingFirst]=decodeHistoryDetails(log([bytes([u8(24),u32(1),u32(staged),i32(3)])],1),[meta('inventory',staged,null)]);
+ assert.equal(pendingFirst.documentId,staged);
+ const invalid=bytes([u8(24),u32(1),u32(staged),i32(0)]);
+ assert.deepEqual(decodeHistoryDetails(log([invalid],1),[meta('inventory',staged,null)]),[]);
+});

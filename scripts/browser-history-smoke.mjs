@@ -13,6 +13,7 @@ import {readFileSync} from 'node:fs';
 import {chromium} from 'playwright-core';
 import {chefRuntimeSmoke} from './chef-runtime-smoke.mjs';
 import {wandRuntimeSmoke} from './wand-runtime-smoke.mjs';
+import {wandMipSmoke} from './wand-mip-smoke.mjs';
 import {flowerRuntimeCoverage} from './flower-runtime-coverage.mjs';
 
 const append=(...arrays)=>Uint8Array.from(arrays.flatMap(x=>Array.from(x)));
@@ -547,6 +548,49 @@ async function inventoryNestedWandSmoke(){
   assert.equal(rows.length,3);
   assert.deepEqual(errors,[]);console.log('CHROMIUM NESTED FURNITURE WAND PASS: material edit, new pair, material-only Add, recovery and reparse');
  }finally{await context.close()}
+}
+async function inventoryWandArtworkRecoverySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  let maskAvailable=false,overlayAvailable=false,maskAttempts=0,overlayAttempts=0;
+  await page.route('**/wand-mask-rgb-v3.0.1.webp',r=>{
+   maskAttempts++;return maskAvailable?r.continue():r.fulfill({status:503,body:'unavailable'});
+  });
+  await page.route('**/wand-magic-overlay-v3.0.1.webp',r=>{
+   overlayAttempts++;return overlayAvailable?r.continue():r.fulfill({status:503,body:'unavailable'});
+  });
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-wand-art-recovery.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({wandEditInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1429161083');
+  const sprite=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-wand"]').first();
+  const partial=sprite.and(page.locator('[data-icon-fidelity="source-derived-base-only"]'));
+  await partial.waitFor({timeout:30_000});
+  const background=()=>sprite.evaluate(e=>getComputedStyle(e).backgroundImage);
+  const first=await background();
+  assert.ok(first.includes('blob:'));
+  assert.ok(maskAttempts>=1);
+  await page.waitForLoadState('networkidle');
+  maskAvailable=true;
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForFunction(previous=>{
+   const e=document.querySelector('.inventory-card .item-sprite[data-dynamic-art-source="native-wand"]');
+   return e?.getAttribute('data-icon-fidelity')==='source-derived-base-only'&&getComputedStyle(e).backgroundImage!==previous;
+  },first,{timeout:30_000});
+  const second=await background();
+  assert.notEqual(second,first);assert.ok(overlayAttempts>=1);
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForLoadState('networkidle');
+  assert.equal(await background(),second,'tinted base must remain during another failed overlay attempt');
+  overlayAvailable=true;
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await sprite.and(page.locator('[data-icon-fidelity="source-derived-composite-unverified"]')).waitFor({timeout:30_000});
+  assert.notEqual(await background(),second);
+  assert.deepEqual(errors,[]);
+ }finally{await context.close();}
+ console.log('CHROMIUM WAND ART RECOVERY PASS: original base, recovered tinted base, completed composite');
 }
 async function inventoryWandEditSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
@@ -1281,7 +1325,52 @@ async function ordinaryFurnitureRemovalSmoke(){
   await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});
   assert.equal(await input.inputValue(),'5');
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: unreferenced stack zero/undo; placed stack protected');
+  // A persisted zero record still exists. Physical removal must remove it
+  // even with Show zero enabled, and survive native history/draft replay.
+  await remove.click();await modal.waitFor({state:'visible'});
+  await modal.locator('.removal-confirm-action').click();
+  await page.locator('.inventory-empty-stack').waitFor();
+  await remove.click();await modal.waitFor({state:'visible'});
+  assert.equal(await modal.locator('.removal-confirm-action').count(),0);
+  await modal.locator('.inventory-remove-entry-action').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-show-zero-toggle[aria-pressed="false"]').click();
+  await search.fill('427689');await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await page.locator('.inventory-empty-stack').waitFor();assert.equal(await input.inputValue(),'0');
+  await page.locator('button[title="Redo"]:not([disabled])').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  // A deleted original row must be available in Add immediately, not just
+  // after writing a save and reimporting it.
+  await page.locator('.inventory-add-toggle').click();
+  await search.fill('427689');await input.waitFor();
+  assert.equal(await input.inputValue(),'1');
+  await input.fill('3');await page.locator('.inventory-card button[type="submit"]').click();
+  await page.locator('.inventory-add-toggle:not([disabled])').click();
+  await search.fill('427689');await input.waitFor();assert.equal(await input.inputValue(),'3');
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.locator('button[title="Redo"]:not([disabled])').click();
+  await input.waitFor();assert.equal(await input.inputValue(),'3');
+  // Newly staged additions expose the same removal action. Cancelling them
+  // never creates a native record and survives history/draft reload.
+  await remove.click();await modal.waitFor({state:'visible'});
+  await modal.locator('.inventory-remove-entry-action').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await input.waitFor();assert.equal(await input.inputValue(),'3');
+  await page.locator('button[title="Redo"]:not([disabled])').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('427689');await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await input.waitFor();assert.equal(await input.inputValue(),'3');
+  await search.fill('3202680');await input.waitFor();assert.equal(await remove.isDisabled(),true);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: zero, physical removal, re-add, draft reload, undo/redo and placed stack protection');
  }finally{await context.close()}
 }
 async function inventoryEmptyBrowseSmoke(){
@@ -1466,6 +1555,80 @@ async function inventoryDynamicFlowerArtSmoke(){
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM DYNAMIC FLOWER PASS: original source sampling, distinct same-ID appearances, native effect-mask fallback, unknown pattern refusal, local blob generation');
  }finally{await context.close();}
+}
+async function flowerDefinitionRecoverySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  let definitionsAvailable=false,labelsAvailable=false,definitionsAttempts=0,labelsAttempts=0;
+  await page.route('**/inventory-ui/flowers.json',r=>{
+   definitionsAttempts++;return definitionsAvailable?r.continue():r.fulfill({status:503,body:'unavailable'});
+  });
+  await page.route('**/inventory-ui/flower-labels.json',r=>{
+   labelsAttempts++;return labelsAvailable?r.continue():r.fulfill({status:503,body:'unavailable'});
+  });
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-flower-definition-recovery.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({flowerInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('43114910');
+  const complete=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"][data-icon-fidelity="source-derived-runtime"]');
+  const partial=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"][data-icon-fidelity="source-derived-base-only"]');
+  await partial.first().waitFor({timeout:30_000});
+  await page.waitForLoadState('networkidle');
+  assert.equal(await complete.count(),0);
+  assert.ok(definitionsAttempts>=1&&labelsAttempts>=1);
+  definitionsAvailable=true;const previous=definitionsAttempts;
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await complete.nth(3).waitFor({timeout:30_000});
+  assert.equal(await complete.count(),4);
+  assert.equal(definitionsAttempts,previous+1);
+  await page.waitForLoadState('networkidle');
+  labelsAvailable=true;const previousLabels=labelsAttempts;
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.locator('.inventory-flower-variant-name').filter({hasText:'Ombre'}).waitFor({timeout:30_000});
+  assert.equal(labelsAttempts,previousLabels+1);
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForLoadState('networkidle');
+  assert.equal(definitionsAttempts,previous+1);
+  assert.equal(labelsAttempts,previousLabels+1);
+  assert.equal(await complete.count(),4);
+  assert.equal(await search.inputValue(),'43114910');
+ }finally{await context.close();}
+ console.log('CHROMIUM FLOWER DEFINITION RECOVERY PASS: native color and labels recover independently without reloading verified data');
+}
+async function flowerGrowthSheetRecoverySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  let available=false,attempts=0;
+  await page.route('**/flower-growth-icons-v3.0.1.webp',async route=>{
+   attempts++;
+   if(!available)await route.fulfill({status:503,body:'synthetic temporary source failure'});
+   else await route.continue();
+  });
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-flower-growth-recovery.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({flowerGrowthInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-show-zero-toggle[aria-pressed="false"]').click();
+  await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  const seed=page.locator('[data-flower-growth="seed"]'),uprooted=page.locator('[data-flower-growth="uprooted"]');
+  await seed.waitFor({timeout:30_000});await uprooted.waitFor({timeout:30_000});
+  await page.waitForLoadState('networkidle');
+  assert.ok(attempts>=1);
+  assert.equal(await page.locator('[data-flower-state-art="native-state-sprite"]').count(),0);
+  available=true;const before=attempts;
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await seed.locator('[data-flower-state-art="native-state-sprite"]').waitFor({timeout:30_000});
+  await uprooted.locator('[data-flower-state-art="native-state-sprite"]').waitFor({timeout:30_000});
+  assert.equal(attempts,before+1,'both growth states share one recovered sheet');
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForLoadState('networkidle');
+  assert.equal(attempts,before+1,'verified state sheet is not reloaded');
+ }finally{await context.close();}
+ console.log('CHROMIUM FLOWER GROWTH RECOVERY PASS: shared original state sheet restored in place');
 }
 async function inventoryFlowerGrowthDisplaySmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
@@ -2206,6 +2369,44 @@ async function inventoryIconScaleSmoke(){
   console.log('CHROMIUM INVENTORY ICON SCALE PASS: three sizes of original fish and ordinary item');
  }finally{await context.close();}
 }
+async function inventoryNativeArtRetrySmoke(){
+ for(const mode of ['tab','online']){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();let online=false,requests=0;
+  await page.route('**/inventory-art/index.json',r=>{requests++;return online?r.continue():r.fulfill({status:503,body:'unavailable'});});
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-native-art-retry.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({resultArtInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('10455890');
+  await page.locator('.inventory-card [data-result-icon-target="357184380"][data-inventory-art="native-result-unavailable"]').waitFor({timeout:30_000});
+  await search.fill('1217231008');
+  await page.locator('.inventory-card [data-icon-fidelity="game-original-placeholder"]').waitFor({timeout:30_000});
+  await page.waitForLoadState('networkidle');
+  const failures=requests;assert.ok(failures>=1);
+  online=true;
+  if(mode==='tab'){
+   await chooseTab(page,'collections');
+   await chooseTab(page,'inventory');
+  }else await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await search.fill('10455890');
+  const result=page.locator('.inventory-card [data-result-icon-target="357184380"][data-inventory-art="native-result"]');
+  await result.waitFor({timeout:30_000});
+  assert.ok(await result.evaluate(async el=>{
+   const url=getComputedStyle(el).backgroundImage.match(/^url\("(.+)"\)$/)?.[1];
+   if(!url||!url.includes('/inventory-art/sheet-008.webp'))return false;
+   const image=new Image();image.src=url;await image.decode();return image.naturalWidth===1152;
+  }));
+  await chooseTab(page,'collections');
+  await chooseTab(page,'inventory');
+  await page.waitForLoadState('networkidle');
+  assert.equal(requests,failures+1);
+ }finally{await context.close();}
+ }
+ console.log('CHROMIUM NATIVE INVENTORY ART RETRY PASS: exact target recovered by tab or online event without page reload, withheld route retained');
+}
 async function inventoryNativeResultArtSmoke(){
  // The first recipe/schematic result is in the original inventory atlas,
  // the second resolves to the original shared placeholder.
@@ -2222,6 +2423,14 @@ async function inventoryNativeResultArtSmoke(){
    await search.fill('10455890');
    const card=page.locator('.inventory-card').first();
    await card.locator('[data-result-icon-target="357184380"][data-inventory-art="'+(missing?'native-result-unavailable':'native-result')+'"]').waitFor({timeout:30_000});
+   const grid=card.locator('[data-native-blueprint-pattern="bp_grid"]');
+   await grid.waitFor({timeout:30_000});
+   assert.ok(await grid.evaluate(async el=>{
+    const css=getComputedStyle(el),url=css.backgroundImage.match(/^url\("(.+)"\)$/)?.[1];
+    if(!url||!url.endsWith('/inventory-ui/bp-grid.webp')||Math.abs(Number(css.opacity)-0.392156869)>0.000001||css.zIndex!=='0'||css.backgroundRepeat!=='repeat')return false;
+    const image=new Image();image.src=url;await image.decode();
+    return image.naturalWidth===158&&image.naturalHeight===157;
+   }));
    if(missing)assert.equal(await card.locator('.inventory-item-art .item-sprite').count(),0);
    else{
     const art=card.locator('[data-result-icon-target="357184380"]');
@@ -2233,9 +2442,60 @@ async function inventoryNativeResultArtSmoke(){
    }
    await search.fill('1217231008');
    await page.locator('.inventory-card .inventory-item-art [data-icon-fidelity="game-original-placeholder"]').waitFor({timeout:30_000});
+   await page.locator('.inventory-card [data-native-blueprint-pattern="bp_grid"]').waitFor({timeout:30_000});
   }finally{await context.close();}
  }
  console.log('CHROMIUM NATIVE RESULT ICON PASS: original result Sprite, original placeholder, unavailable target does not substitute source art');
+}
+async function originalArtIndexRetrySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();let online=false,sourceRequests=0,dynamicRequests=0;
+  await page.route('**/source-colorways/index.json',r=>{sourceRequests++;return r.continue();});
+  await page.route('**/dynamic-colorways/index.json',r=>{dynamicRequests++;return online?r.continue():r.fulfill({status:503,body:'unavailable'});});
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-original-index-retry.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({artInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('315822');
+  const art=page.locator('.inventory-card .item-sprite[data-dye-source="game-source-sprite"]');
+  await art.waitFor({timeout:30_000});
+  assert.ok((await art.evaluate(el=>getComputedStyle(el).backgroundImage)).includes('/source-colorways/315822.webp'));
+  await page.waitForLoadState('networkidle');
+  const failedRequests=dynamicRequests;assert.ok(failedRequests>=1);
+  online=true;
+  await chooseTab(page,'collections');
+  await chooseTab(page,'inventory');
+  await search.fill('315822');
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('.inventory-card .item-sprite')).some(el=>getComputedStyle(el).backgroundImage.includes('/dynamic-colorways/315822.webp?v=')));
+  assert.equal(sourceRequests,1,'validated original index is not fetched again');
+  assert.equal(dynamicRequests,failedRequests+1,'missing dynamic index is retried once');
+  await search.fill('54272482');
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('.inventory-card .item-sprite')).some(el=>getComputedStyle(el).backgroundImage.includes('/dynamic-colorways/54272482.webp?v=')));
+ }finally{await context.close();}
+ console.log('CHROMIUM ORIGINAL ART INDEX RETRY PASS: cached source index, recovered dynamic originals without reload');
+}
+async function originalArtworkFileRecoverySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();let available=false,attempts=0;
+  await page.route(/\/dynamic-colorways\/315822\.webp\?v=/,r=>{
+   attempts++;return available?r.continue():r.fulfill({status:503,body:'unavailable'});
+  });
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-original-file-recovery.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({artInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('315822');
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('.inventory-card .item-sprite')).some(el=>getComputedStyle(el).backgroundImage.includes('/source-colorways/315822.webp')));
+  await page.waitForLoadState('networkidle');
+  assert.ok(attempts>=1);
+  available=true;
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('.inventory-card .item-sprite')).some(el=>getComputedStyle(el).backgroundImage.includes('/dynamic-colorways/315822.webp?v=')));
+  assert.equal(await page.locator('.inventory-controls input[type="search"]').inputValue(),'315822');
+ }finally{await context.close();}
+ console.log('CHROMIUM ORIGINAL ART FILE RECOVERY PASS: preferred completed native icon restored in place');
 }
 async function inventoryOriginalArtSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
@@ -2482,7 +2742,7 @@ async function achievementDstFoldExportSmoke(){
  * Achievements, without discarding/re-fetching an already-good category atlas.
  * Synthetic HTTP 503 is deliberately scoped to this isolated browser context.
  */
-async function achievementAtlasRetrySmoke(){
+async function achievementAtlasRetrySmoke(trigger='tab'){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
   const page=await context.newPage(),errors=[];
@@ -2516,17 +2776,25 @@ async function achievementAtlasRetrySmoke(){
   await page.locator('.achievement-item-grid button.achievement-toggle').first().waitFor();
   assert.equal(await page.locator('.achievement-individual-sprite').count(),0,
    'failed native atlas must never be presented as game-original imagery');
-  // A normal tab return retries the missing image only. No extra UI control.
-  await chooseTab(page,'collections');
-  await chooseTab(page,'achievements');
-  await page.locator('.collection-controls input[type="search"]').fill(key);
+  // Recovery never discards the other verified atlas or restarts a pending load.
+  if(trigger==='online'){
+   await page.evaluate(()=>{window.dispatchEvent(new Event('online'));window.dispatchEvent(new Event('online'));});
+  }else{
+   await chooseTab(page,'collections');
+   await chooseTab(page,'achievements');
+   await page.locator('.collection-controls input[type="search"]').fill(key);
+  }
   const recovered=page.locator('.achievement-item-grid .achievement-individual-sprite').first();
   await recovered.waitFor({timeout:30_000});
   assert.match(await recovered.evaluate(el=>getComputedStyle(el).backgroundImage),/blob:/,
    'recovered image must be actual hash-checked game source pixels');
   assert.equal(individualAttempts,2,'exactly one retry for missing individual atlas');
   assert.equal(categoryAttempts,1,'already verified category atlas is retained');
-  assert.equal(await page.locator('.compact-hint[role="status"]').count(),0);
+  await page.locator('.compact-hint[role="status"]').waitFor({state:'detached'});
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForLoadState('networkidle');
+  assert.equal(individualAttempts,2);assert.equal(categoryAttempts,1);
+  assert.equal(await search.inputValue(),key);
   assert.deepEqual(errors,[],'recovered images must not throw browser exceptions');
   console.log('CHROMIUM ACHIEVEMENT ATLAS RETRY PASS: transient failure, verified recovery, retained category art');
  }finally{await context.close();}
@@ -3006,6 +3274,7 @@ async function run(){
  await chefRuntimeSmoke(browser,origin,base);
  await inventoryChefArtSmoke();
  await inventoryBobaEditSmoke();
+ await inventoryWandArtworkRecoverySmoke();
  await inventoryWandEditSmoke();
  await inventoryFirstWandSmoke();
  await inventoryFirstItemWandSmoke();
@@ -3017,6 +3286,7 @@ async function run(){
  await inventoryCafeCreationAndOptionalSideSmoke();
  await inventoryChefQuantitySmoke();
  await wandRuntimeSmoke(browser,origin,base);
+ await wandMipSmoke(browser,origin,base);
  await inventoryEditExportSmoke();
  await inventoryBatchQuantitySmoke();
  await inventoryQuantityBoundsSmoke();
@@ -3027,10 +3297,15 @@ async function run(){
  await ordinaryClothingRemovalSmoke();
  await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
+ await originalArtIndexRetrySmoke();
+ await originalArtworkFileRecoverySmoke();
  await inventoryNativeResultArtSmoke();
+ await inventoryNativeArtRetrySmoke();
  await inventoryIconScaleSmoke();
  await inventoryDynamicFlowerArtSmoke();
+ await flowerDefinitionRecoverySmoke();
  await inventoryFlowerGrowthDisplaySmoke();
+ await flowerGrowthSheetRecoverySmoke();
  await flowerRuntimeCoverage(browser,origin,base);
  await inventoryFlowerVariantEditSmoke();
  await inventoryOwnedFlowerEffectSmoke();
@@ -3045,6 +3320,7 @@ async function run(){
  await inventoryDefaultFurnitureCreationSmoke();
  await achievementDstFoldExportSmoke();
  await achievementAtlasRetrySmoke();
+ await achievementAtlasRetrySmoke('online');
 }
 try{await run()}finally{
  await browser?.close();

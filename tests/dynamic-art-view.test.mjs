@@ -142,3 +142,79 @@ test('rejected complete artwork still shows independent base and respects cancel
  await new Promise(setImmediate);
  assert.equal(partialCalls,2);
 });
+
+test('network recovery upgrades partial artwork without discarding it or retrying complete or canceled cards',async()=>{
+ const previous=globalThis.window;
+ const events=new EventTarget();
+ globalThis.window=events;
+ const full=new Blob(['full']),base=new Blob(['base']);
+ let online=false,calls=0,partialCalls=0,completeCalls=0,canceledCalls=0;
+ const seen=[];
+ const stop=startDynamicArtRequest(async()=>{calls++;return online?full:null;},(url,partial)=>seen.push([url,partial]),async()=>{partialCalls++;return base;});
+ const done=startDynamicArtRequest(async()=>{completeCalls++;return full;},()=>{});
+ const gone=startDynamicArtRequest(async()=>{canceledCalls++;return null;},()=>{});
+ try{
+  await new Promise(setImmediate);
+  assert.equal(calls,1);assert.equal(partialCalls,1);
+  assert.equal(seen.length,2);assert.equal(seen[1][1],true);
+  gone();
+  events.dispatchEvent(new Event('online'));
+  events.dispatchEvent(new Event('online'));
+  await new Promise(setImmediate);
+  assert.equal(calls,2);assert.equal(partialCalls,1);assert.equal(seen.length,2);
+  online=true;events.dispatchEvent(new Event('online'));
+  await new Promise(setImmediate);
+  assert.equal(calls,3);assert.equal(seen.length,3);assert.equal(seen[2][1],false);
+  assert.notEqual(seen[1][0],seen[2][0]);
+  events.dispatchEvent(new Event('online'));
+  await new Promise(setImmediate);
+  assert.equal(calls,3);assert.equal(completeCalls,1);assert.equal(canceledCalls,1);
+ }finally{
+  stop();done();gone();
+  if(previous===undefined)delete globalThis.window;else globalThis.window=previous;
+ }
+});
+test('network recovery also restores a missing image with no partial source',async()=>{
+ const previous=globalThis.window;
+ const events=new EventTarget();globalThis.window=events;
+ let online=false,calls=0;const seen=[];
+ const stop=startDynamicArtRequest(async()=>{calls++;if(!online)throw Error('offline');return new Blob(['restored']);},url=>seen.push(url));
+ try{
+  await new Promise(setImmediate);
+  assert.deepEqual(seen,[null]);
+  online=true;events.dispatchEvent(new Event('online'));
+  await new Promise(setImmediate);
+  assert.equal(calls,2);assert.equal(seen.length,2);assert.ok(seen[1].startsWith('blob:'));
+ }finally{
+  stop();
+  if(previous===undefined)delete globalThis.window;else globalThis.window=previous;
+ }
+});
+
+test('three-stage artwork recovery upgrades an original base to tinted base and complete image without downgrades',async()=>{
+ const previous=globalThis.window,events=new EventTarget();globalThis.window=events;
+ const create=URL.createObjectURL,revoke=URL.revokeObjectURL,blobs=[],revoked=[],seen=[];
+ URL.createObjectURL=blob=>{blobs.push(blob);return 'blob:tier-'+blobs.length;};
+ URL.revokeObjectURL=url=>revoked.push(url);
+ const original=new Blob(['original']),tinted=new Blob(['tinted']),complete=new Blob(['complete']);
+ let stage=0,fullCalls=0,intermediateCalls=0,partialCalls=0;
+ const stop=startDynamicArtRequest(async()=>{fullCalls++;return stage===3?complete:null;},(url,partial)=>seen.push([url,partial]),
+  async()=>{partialCalls++;return original;},async()=>{intermediateCalls++;if(stage===0)throw Error('mask missing');return stage===1?tinted:null;});
+ const recover=async()=>{events.dispatchEvent(new Event('online'));events.dispatchEvent(new Event('online'));await new Promise(setImmediate);};
+ try{
+  await new Promise(setImmediate);
+  assert.deepEqual(blobs,[original]);assert.deepEqual(seen,[[null,undefined],['blob:tier-1',true]]);
+  stage=1;await recover();
+  assert.deepEqual(blobs,[original,tinted]);assert.deepEqual(revoked,['blob:tier-1']);
+  stage=2;await recover();
+  assert.deepEqual(blobs,[original,tinted]);assert.equal(partialCalls,1);assert.equal(intermediateCalls,2);
+  stage=3;await recover();
+  assert.deepEqual(blobs,[original,tinted,complete]);assert.deepEqual(seen.at(-1),['blob:tier-3',false]);
+  assert.deepEqual(revoked,['blob:tier-1','blob:tier-2']);
+  await recover();assert.equal(fullCalls,4);
+  stop();assert.deepEqual(revoked,['blob:tier-1','blob:tier-2','blob:tier-3']);
+ }finally{
+  stop();URL.createObjectURL=create;URL.revokeObjectURL=revoke;
+  if(previous===undefined)delete globalThis.window;else globalThis.window=previous;
+ }
+});

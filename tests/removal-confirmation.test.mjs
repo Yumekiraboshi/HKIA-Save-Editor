@@ -61,9 +61,9 @@ test('confirmation checks save identity, revision and current recorded/completed
  assert.match(app,/closeRemovalConfirmation\(\);error=removalCopy\.stale;return/);
  assert.match(app,/if\(target\.kind==='collections'\)\{[\s\S]*?await change\(target\.id,null\)/);
  assert.match(app,/else if\(target\.kind==='achievements'\)await quickToggleAchievement\(target\.item,undefined,undefined,true\)/);
- assert.match(app,/target\.requests\.some\(\(\[id,before\]\)=>!snapshot\?\.inventory\.some\(row=>row\.documentId===id&&row\.quantity===before&&row\.editable&&row\.quantityMinimum===0\)/);
- assert.match(app,/if\(target\.batch\)\{update\(await changeInventoryQuantities\(target\.requests\)\)/);
- assert.match(app,/requestRemoval\(\{kind:'inventory',requests,batch,name,targets:details,revision:snapshot\.revision\},opener\)/);
+ assert.match(app,/target\.requests\.some\(\(\[id,before\]\)=>!snapshot\?\.inventory\.some\(row=>row\.documentId===id&&row\.quantity===before&&\(physical\?row\.removable:row\.editable&&row\.quantityMinimum===0\)\)/);
+ assert.match(app,/if\(target\.batch\)\{update\(await changeInventoryQuantities\(target\.requests\.filter\(\(\[,before\]\)=>before!==0\)\)\)/);
+ assert.match(app,/requestRemoval\(\{kind:'inventory',requests,physical,zero,batch,name,targets:details,revision:snapshot\.revision\},opener\)/);
  assert.match(app,/if\(next===0\)\{requestInventoryDelete\(rows,true,/);
  assert.match(app,/if\(next===0\)\{requestInventoryDelete\(\[row\],false,/);
  assert.doesNotMatch(app,/confirm\(inventoryEmptyCopy\(locale\)\)/);
@@ -78,11 +78,13 @@ test('confirmation checks save identity, revision and current recorded/completed
  assert.match(style,/\.removal-confirm-action\{background:var\(--danger\)/);
 });
 
-test('batch removal preview is derived from the same nonzero targets as the native CAS requests',()=>{
+test('batch removal preview includes zero records only for physical removal and uses the exact native CAS targets',()=>{
  const app=read('../src/App.svelte');
- assert.match(app,/const targets=rows\.filter\(row=>row\.quantity>0\)/);
+ assert.match(app,/const targets=physical\?rows:rows\.filter\(row=>row\.quantity>0\)/);
  assert.match(app,/const requests:InventoryQuantityRequest\[\]=targets\.map\(row=>\[row\.documentId,row\.quantity,0\]\)/);
  assert.match(app,/const details=targets\.map\(row=>\(\{documentId:row\.documentId,name:/);
  assert.match(app,/\{#each pendingRemoval\.targets as target \(target\.documentId\)\}/);
  assert.match(app,/target\.quantity\.toLocaleString\(locale\)/);
+ assert.match(app,/removeInventoryEntries\(target\.requests\.map\(\(\[id,before\]\)=>\[id,before\]\)\)/);
+ assert.match(app,/onclick=\{\(\)=>void confirmRemoval\(true\)\}/);
 });

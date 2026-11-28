@@ -1,4 +1,5 @@
 import {rasterizeDynamicSprite,type PixelBuffer,type RasterInput} from './dynamic-sprite-raster';
+import {encodeDynamicArtPng} from './dynamic-art-png';
 
 export type TextureAsset={file:string;bytes:number;sha256:string;rgbSha256:string;width:number;height:number};
 const digest=async(data:ArrayBuffer)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data)),v=>v.toString(16).padStart(2,'0')).join('');
@@ -48,12 +49,7 @@ export function renderCachedDynamicArt(key:string,input:RasterInput):Promise<Blo
  const old=cache.get(key);if(old){cache.delete(key);cache.set(key,old);return old;}
  const task=(async()=>{
   await new Promise<void>(resolve=>setTimeout(resolve,0));
-  const rgba=rasterizeDynamicSprite(input);
-  const {canvas,ctx}=canvas2d(96,96);
-  try{
-   ctx.putImageData(new ImageData(new Uint8ClampedArray(rgba),96,96),0,0);
-   return await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,'image/png'));
-  }finally{canvas.width=0;canvas.height=0;}
+  return await encodeDynamicArtPng(rasterizeDynamicSprite(input));
  })().catch(()=>null);
  cache.set(key,task);
  if(cache.size>CACHE_LIMIT)cache.delete(cache.keys().next().value!);
@@ -65,7 +61,7 @@ export function renderCachedDynamicArt(key:string,input:RasterInput):Promise<Blo
  * cannot be reproduced. This is not an inferred color variant. A neutral
  * one-pixel mask keeps the existing raster geometry and alpha sampling; no
  * native mask texture is required for the source-only fallback. */
-const NO_TINT_MASK:PixelBuffer={width:1,height:1,rgba:new Uint8ClampedArray([0,0,0,255])};
+export const NO_TINT_MASK:PixelBuffer={width:1,height:1,rgba:new Uint8ClampedArray([0,0,0,255])};
 export function renderCachedOriginalBase(key:string,input:Pick<RasterInput,'base'|'baseRect'|'trim'|'alphaOffsetY'|'logicalSize'>):Promise<Blob|null>{
  return renderCachedDynamicArt(JSON.stringify(['original-base-only',key]),{...input,mask:NO_TINT_MASK,maskRect:[0,0,1,1],tints:[[1,1,1,1],[1,1,1,1],[1,1,1,1]]});
 }

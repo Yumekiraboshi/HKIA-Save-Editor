@@ -37,24 +37,54 @@ function drainArtQueue(){
  * an object URL after the card leaves the viewport or is destroyed.
  * Canceled waiting jobs never load assets or run the renderer; started jobs
  * keep their slot until completion, even if their output is no longer needed. */
-export function startDynamicArtRequest(render:()=>Promise<Blob|null>,show:(url:string|null,partial?:boolean)=>void,renderPartial?:()=>Promise<Blob|null>):()=>void{
- let canceled=false,created:string|null=null;
+// All failed/partial visible cards share one browser recovery listener.
+const recoverable=new Set<()=>void>();
+function retryUnavailableArt(){
+ for(const retry of [...recoverable])retry();
+}
+export function trackUnavailableArt(retry:()=>void){
+ if(recoverable.size===0&&typeof window!=='undefined')window.addEventListener('online',retryUnavailableArt);
+ recoverable.add(retry);
+}
+export function untrackUnavailableArt(retry:()=>void){
+ recoverable.delete(retry);
+ if(recoverable.size===0&&typeof window!=='undefined')window.removeEventListener('online',retryUnavailableArt);
+}
+export function startDynamicArtRequest(render:()=>Promise<Blob|null>,show:(url:string|null,partial?:boolean)=>void,renderPartial?:()=>Promise<Blob|null>,renderIntermediate?:()=>Promise<Blob|null>):()=>void{
+ let canceled=false,created:string|null=null,scheduled=false,best=Infinity;
  show(null);
+ function retry(){
+  if(canceled||scheduled)return;
+  untrackUnavailableArt(retry);
+  scheduled=true;pending.add(job);drainArtQueue();
+ }
  const job=async()=>{
   try{
    if(canceled)return;
-   let blob:Blob|null=null,partial=false;
-   try{blob=await render();}catch{/* The independently verified base may remain available. */}
-   if(canceled)return;
-   if(!blob&&renderPartial){blob=await renderPartial();partial=true;}
-   if(canceled||!blob)return;
-   created=URL.createObjectURL(blob);
-   show(created,partial);
-  }catch{/* An unavailable asset retains the explicitly marked fallback. */}
+   // Full image, verified tinted base, original untinted base. A successful
+   // lower tier stays visible until a strictly better tier is available.
+   const tiers=[render,renderIntermediate,renderPartial];
+   for(let rank=0;rank<best&&rank<tiers.length;rank++){
+    const load=tiers[rank];if(!load)continue;
+    let blob:Blob|null=null;
+    try{blob=await load();}catch{/* Independent lower tiers remain available. */}
+    if(canceled)return;
+    if(!blob)continue;
+    const next=URL.createObjectURL(blob),previous=created;
+    created=next;best=rank;show(next,rank!==0);
+    if(previous!==null)URL.revokeObjectURL(previous);
+    if(rank===0)return;
+    break;
+   }
+   trackUnavailableArt(retry);
+  }catch{
+   if(!canceled)trackUnavailableArt(retry);
+  }finally{scheduled=false;}
  };
- pending.add(job);drainArtQueue();
+ retry();
  return ()=>{
   canceled=true;
+  untrackUnavailableArt(retry);
   pending.delete(job);
   if(created!==null){URL.revokeObjectURL(created);created=null;}
  };

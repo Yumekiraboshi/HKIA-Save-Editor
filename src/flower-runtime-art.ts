@@ -1,12 +1,12 @@
 import {resolveFlowerAppearance,type FlowerMaskIndex} from './flower-appearance';
-import type {PixelBuffer,Rect} from './dynamic-sprite-raster';
+import type {PixelBuffer,Rect,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
-import {flowerGrowthKind,type InventoryFlower,type FlowerDisplayDefinitions} from './inventory-flower-display';
+import {hasNativeFlowerArt,flowerGrowthKind,flowerUsesDefinitionIcon,type InventoryFlower,type FlowerDisplayDefinitions} from './inventory-flower-display';
 
 const ROOT=import.meta.env.BASE_URL+'inventory-flower-art/';
 const MANIFEST_SHA='0cefd2977c3e25157023e3c47a180e7ebe4e8ab850dfdbe5bd481ae38d0b5020';
 const INDEX_SHA='dfc7abc0963e1e1ff7700b2b7806bc156614bba48c1f6ef4b69114e92cc54771';
-type SourceRow={itemId:number;baseSpritePathId:string;baseSampleRect:Rect;sourceTrimTopLeft:Rect};
+type SourceRow={itemId:number;baseSpritePathId:string;baseSampleRect:Rect;sourceTrimTopLeft:Rect;guardRect:Rect};
 type Manifest={schema:string;version:string;base:TextureAsset;mask:TextureAsset;alphaOffsetY:number;logicalSize:number;rows:SourceRow[]};
 type Mask={textureRect:{x:number;y:number;width:number;height:number}};
 type Sources={manifest:Manifest;index:FlowerMaskIndex;base:PixelBuffer;mask:PixelBuffer;rows:Map<number,SourceRow>};
@@ -35,7 +35,7 @@ function sources():Promise<Sources>{
  return loading;
 }
 export async function renderFlowerOriginalBaseArt(itemId:number,flower:InventoryFlower):Promise<Blob|null>{
- if(flowerGrowthKind(itemId,flower)!=='plucked')return null;
+ if(!flowerUsesDefinitionIcon(itemId,flower))return null;
  return renderFlowerDefinitionBaseArt(itemId);
 }
 /** Definition template only: no growth state or individual color is inferred. */
@@ -61,5 +61,20 @@ export async function renderFlowerArt(itemId:number,flower:InventoryFlower,defs:
   return await renderCachedDynamicArt(appearance.cacheKey,{base:source.base,mask:source.mask,baseRect:row.baseSampleRect,
    maskRect:[m.x,source.mask.height-m.y-m.height,m.width,m.height],trim:row.sourceTrimTopLeft,
    alphaOffsetY:source.manifest.alphaOffsetY,logicalSize:source.manifest.logicalSize,tints:appearance.tints});
+ }catch{return null;}
+}
+
+/** Exact definition UiIcon for native wand TryGetSubIcon. The stored
+ * flower growth state, colors and pattern are not part of this source lookup. */
+export async function loadFlowerOriginalOverlay(itemId:number,transform:Pick<SpriteOverlay,'scale'|'offsetPercent'|'rotation'>):Promise<{spritePathId:string;sourceHash:string;overlay:SpriteOverlay}|null>{
+ if(!hasNativeFlowerArt(itemId))return null;
+ try{
+  const s=await sourceBinding(),row=s.rows.get(itemId);if(!row?.guardRect)return null;
+  const [x,y,w,h]=row.guardRect,size=s.manifest.logicalSize;
+  return {spritePathId:row.baseSpritePathId,sourceHash:MANIFEST_SHA,overlay:{
+   texture:await loadOpaqueArtTexture(ROOT,s.manifest.base),sampleRect:row.baseSampleRect,trim:row.sourceTrimTopLeft,
+   alphaOffsetY:s.manifest.alphaOffsetY,logicalWidth:size,logicalHeight:size,
+   sampleClamp:[x+.5,y+.5,x+w-.5,y+h-.5],...transform
+  }};
  }catch{return null;}
 }

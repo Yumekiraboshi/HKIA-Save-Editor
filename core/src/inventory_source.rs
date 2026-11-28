@@ -14,6 +14,15 @@ use crate::inventory_gathered_data::{GATHERED_IDS,FOOD_BAIT_IDS};
 pub(crate) fn ordinary_quantity_limit(item_id:i32)->Option<i32>{
  let flags=RULES[RULES.binary_search_by_key(&item_id,|row|row.0).ok()?].1;
  if flags&2!=0{return None}
+ definition_quantity_limit(item_id)
+}
+/// Native MaxCount is independent of whether a definition requires unique
+/// data. This is only a bound, not permission to create or alter a payload.
+pub(crate) fn definition_requires_unique(item_id:i32)->Option<bool>{
+ Some(RULES[RULES.binary_search_by_key(&item_id,|row|row.0).ok()?].1&2!=0)
+}
+pub(crate) fn definition_quantity_limit(item_id:i32)->Option<i32>{
+ let flags=RULES[RULES.binary_search_by_key(&item_id,|row|row.0).ok()?].1;
  if flags&1==0{return Some(1)}
  if flags&4==0{return Some(i32::MAX)}
  CUSTOM_CAPS.binary_search_by_key(&item_id,|row|row.0).ok().map(|i|CUSTOM_CAPS[i].1).filter(|&cap|cap>0)
@@ -63,6 +72,11 @@ const CURRENCY_CREATION_IDS:&[i32]=&[
   if flags&1==0{return None}
   ordinary_quantity_limit(item_id)?;
   Some((flags&2!=0,*ITEM_GUID_DENIAL_KEYS.get(i)?))
+ }
+ /// Exact source GUID fingerprint, for reference denial only.
+ pub(crate) fn inventory_item_denial_key(item_id:i32)->Option<u32>{
+  let i=RULES.binary_search_by_key(&item_id,|r|r.0).ok()?;
+  ITEM_GUID_DENIAL_KEYS.get(i).copied()
  }
  pub(crate) fn ordinary_bag_creation_item(item_id:i32)->bool{
   RULES.binary_search_by_key(&item_id,|r|r.0).ok().is_some_and(|i|

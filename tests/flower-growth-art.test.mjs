@@ -27,6 +27,8 @@ test('all 25 source species have distinct seed and grown-troweled source sprites
   assert.deepEqual(cell,{url:'blob:test',x:(row.cell%10)*96,y:Math.floor(row.cell/10)*96,cell:row.cell});
   assert.equal(resolveFlowerGrowthCell(cells,row.itemId,{growState:6,baseColor:1,pattern:0,patternColor:0}),undefined);
   assert.equal(resolveFlowerGrowthCell(cells,row.itemId,{growState:5,baseColor:1,pattern:0,patternColor:0}),undefined);
+  if(row.state===7)assert.deepEqual(resolveFlowerGrowthCell(cells,row.itemId,{growState:3,baseColor:1,pattern:0,patternColor:0}),cell);
+  for(const state of [1,2,4,5,8,255])assert.equal(resolveFlowerGrowthCell(cells,row.itemId,{growState:state,baseColor:1,pattern:0,patternColor:0}),undefined);
  }
  assert.equal(resolveFlowerGrowthCell(cells,108363489,{growState:0,baseColor:1,pattern:0,patternColor:0}),undefined);
 });
@@ -42,4 +44,14 @@ test('invalid source and duplicate state rows cannot produce a sprite',()=>{
  const changed=structuredClone(manifest);
  changed.rows[1].state=changed.rows[0].state;
  assert.throws(()=>decodeFlowerGrowthCells(changed,'blob:test'),/ROW/);
+});
+
+test('flower growth view retries its verified state sheet and preserves native untinted state routing',()=>{
+ const view=readFileSync(new URL('../src/DynamicFlowerSprite.svelte',import.meta.url),'utf8');
+ assert.ok(view.includes("window.addEventListener('online',load)"));
+ assert.ok(view.includes("window.removeEventListener('online',load)"));
+ assert.ok(view.includes('if(!active||pending||loaded)return'));
+ assert.ok(view.includes('fields.growState!==6&&flowerUsesDefinitionIcon(id,fields)'));
+ assert.ok(view.includes('?renderFlowerOriginalBaseArt(id,fields)'));
+ assert.ok(view.includes(':fields&&defs?renderFlowerArt(id,fields,defs)'));
 });

@@ -3,11 +3,22 @@ export type InventoryFlower={growState:number;baseColor:number;pattern:number;pa
 // Source species only: tag 7 is also used by flower-crafted clothing.
 import {nativeIconRoute} from './native-icon-route';
 export function hasNativeFlowerArt(itemId:number):boolean{return nativeIconRoute(itemId)==='flower';}
-export type FlowerGrowthKind='seed'|'plucked'|'uprooted'|'unknown';
+const nativeGrowthKinds=['seed','planted','seedling','grown','bud','bloom','plucked','uprooted'] as const;
+export type FlowerGrowthKind=typeof nativeGrowthKinds[number]|'unknown';
 /** Display classification, not an edit rule. Never infer an unknown state. */
 export function flowerGrowthKind(itemId:number,flower:InventoryFlower|undefined):FlowerGrowthKind|null{
  if(!flower||!hasNativeFlowerArt(itemId))return null;
- return flower.growState===0?'seed':flower.growState===6?'plucked':flower.growState===7?'uprooted':'unknown';
+ return Number.isInteger(flower.growState)&&flower.growState>=0&&flower.growState<nativeGrowthKinds.length?nativeGrowthKinds[flower.growState]:'unknown';
+}
+/** Native FlowerModel.IconForState selects GrownTroweledIcon for both
+ * Grown (3) and GrownTroweled (7). Keep the saved state and its label distinct. */
+export function flowerGrowthSpriteState(itemId:number,flower:InventoryFlower|undefined):0|7|undefined{
+ if(!flower||!hasNativeFlowerArt(itemId))return undefined;
+ return flower.growState===0?0:flower.growState===3||flower.growState===7?7:undefined;
+}
+/** Known states that select the definition UiIcon; only 6 applies tint. */
+export function flowerUsesDefinitionIcon(itemId:number,flower:InventoryFlower|undefined):boolean{
+ return !!flower&&hasNativeFlowerArt(itemId)&&[1,2,4,5,6].includes(flower.growState);
 }
 type ColorDef={labelId:string;rgba:[number,number,number,number]};
 type PatternDef={labelId:string;effect:boolean};
@@ -71,4 +82,14 @@ export function flowerDecorators(flower:InventoryFlower|undefined,defs:FlowerDis
  const rows:FlowerDecorator[]=[{type:12,primaryColor:color}];
  if(flower.pattern!==0)rows.push({type:11,patternUrl:'pattern-'+flower.pattern+'.webp'});
  return rows;
+}
+
+/** Independent immutable source requests. A failed label file never blocks
+ * color rendering, and successful definitions are not fetched again. */
+export function createFlowerDisplayLoader(base:string){
+ function retryable<T>(load:()=>Promise<T>){
+  let pending:Promise<T>|undefined;
+  return ()=>pending??(pending=load().catch(error=>{pending=undefined;throw error;}));
+ }
+ return {definitions:retryable(()=>loadFlowerDisplayDefinitions(base)),labels:retryable(()=>loadFlowerLabels(base))};
 }

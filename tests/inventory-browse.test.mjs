@@ -136,7 +136,7 @@ test('Inventory UI selects native source definitions, retains original game art 
  assert.doesNotMatch(app,/\{iCopy\.all\}/);
  assert.match(app,/inventoryIconPacks\[definition\[3\]\]/);
  assert.match(app,/changeInventoryQuantity\(row.documentId,row.quantity,next\)/);
- assert.match(app,/class:inventory-readonly=\{!item.editable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable&&item.wandCreatableStyle===undefined\}/);
+ assert.match(app,/class:inventory-readonly=\{!item.editable&&!item.removable&&!canFlower&&!canFurniture&&!canPalette&&!canBoba&&!canCafe&&!canWand&&!item.flowerCreatable&&item.wandCreatableStyle===undefined\}/);
  assert.match(app,/changeInventoryFurnitureVariant\(selected.documentId,selected.before,next\)/);
  assert.match(app,/requestFurniturePreview\(row.documentId,before,before\)/);
  assert.match(app,/requestFurniturePreview\(edit.documentId,edit.before,next\)/);
