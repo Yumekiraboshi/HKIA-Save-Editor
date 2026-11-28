@@ -280,6 +280,7 @@ async function inventoryFirstPaletteSmoke(){
   const search=page.locator('.inventory-controls input[type="search"]');await search.fill('1835273963');
   const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="palette-editor-title"]');
   await card.locator('.item-sprite[data-dynamic-art-source="native-palette"][data-icon-fidelity="source-derived-base-only"]').waitFor({timeout:30_000});
+  await assertInventoryControlGeometry(page,card.locator('.inventory-unique-edit-button'),true);
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
   assert.equal(await dialog.locator('button[type="submit"]').count(),0);
   await dialog.locator('.inventory-palette-option:not([disabled])').first().click();
@@ -317,6 +318,7 @@ async function inventoryPaletteCreationSmoke(){
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
   const rows=page.locator('.inventory-card input[name="quantity"]'),dialog=page.locator('dialog[aria-labelledby="palette-editor-title"]');
   await rows.first().waitFor();assert.equal(await rows.count(),1);
+  await assertInventoryControlGeometry(page,page.locator('.inventory-card .inventory-compact-variant').first());
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();
   await dialog.waitFor();await dialog.locator('.inventory-palette-option').first().click();
   await dialog.locator('[data-palette-slot="1"]').click();await dialog.locator('.inventory-palette-option').first().click();
@@ -611,6 +613,7 @@ async function inventoryWandEditSmoke(){
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-show-zero-toggle[aria-pressed="false"]').click();await page.locator('.inventory-controls input[type="search"]').fill('1429161083');
   const card=page.locator('.inventory-card').first(),dialog=page.locator('dialog[aria-labelledby="wand-editor-title"]');
+  await assertInventoryControlGeometry(page,card.locator('.inventory-compact-variant'));
   await card.locator('.inventory-stack-delete:not([disabled])').click();await confirmInventoryRemoval(page,false);
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'1');
   await card.locator('.inventory-stack-delete:not([disabled])').click();await confirmInventoryRemoval(page);
@@ -666,6 +669,7 @@ async function inventoryBobaEditSmoke(){
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1798633565');
   const card=page.locator('.inventory-card').first(),dialog=page.locator('dialog[aria-labelledby="boba-editor-title"]');
+  await assertInventoryControlGeometry(page,card.locator('.inventory-compact-variant'));
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
   await dialog.locator('select[name="boba-pearls"]').selectOption({label:'Without tapioca'});
   await dialog.locator('select[name="boba-sweetness"]').selectOption({label:'Unsweetened'});
@@ -807,6 +811,7 @@ async function inventoryCafeEditSmoke(){
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('203331651');
   const card=page.locator('.inventory-card').first(),dialog=page.locator('dialog[aria-labelledby="cafe-editor-title"]');
+  await assertInventoryControlGeometry(page,card.locator('.inventory-compact-variant'));
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
   const select=dialog.locator('select[name="cafe-variant"]');
   const option=select.locator('option[data-ingredient-id="1622861092"]');
@@ -1728,6 +1733,43 @@ async function inventoryFlowerGrowthDisplaySmoke(){
   console.log('CHROMIUM FLOWER GROWTH PASS: native seed/troweled art, localized search, zero and Undo/Redo');
  }finally{await context.close();}
 }
+// Verify real rendered controls rather than only matching their classes.
+async function assertInventoryControlGeometry(page,button,standalone=false){
+ await button.waitFor({timeout:30_000});
+ const initial=page.viewportSize(),theme=page.locator('.theme-select select'),initialTheme=await theme.inputValue();
+ try{
+  for(const [width,mode,dir] of [[1280,'light','ltr'],[768,'dark','ltr'],[390,'light','ltr'],[320,'dark','rtl']]){
+   await page.setViewportSize({width,height:800});
+   await theme.selectOption(mode);
+   await page.evaluate(dir=>{document.documentElement.dir=dir},dir);
+   const geometry=await button.evaluate(el=>{
+    const box=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,right:r.right,bottom:r.bottom}};
+    const card=el.closest('.inventory-card'),r=box(el),c=box(card),form=el.closest('.inventory-quantity-form');
+    const svg=el.querySelector('svg'),s=svg?box(svg):null;
+    const controls=form?[...form.querySelectorAll('input,button')].map(box):[r];
+    const center=(a,b)=>Math.abs(a.y+a.h/2-b.y-b.h/2)<1;
+    return {inside:controls.every(a=>a.x>=c.x&&a.right<=c.right&&a.y>=c.y&&a.bottom<=c.bottom),
+     height:r.h,aligned:controls.every(a=>Math.abs(a.h-r.h)<1&&center(a,r)),
+     nonOverlapping:controls.every((a,i)=>controls.every((b,j)=>i===j||a.right<=b.x+.5||b.right<=a.x+.5)),
+     square:Math.abs(r.w-r.h)<1,svgCentered:!s||(center(s,r)&&Math.abs(s.x+s.w/2-r.x-r.w/2)<1),
+     svgVerticallyCentered:!s||center(s,r),background:getComputedStyle(el).backgroundColor,
+     accent:getComputedStyle(el).color};
+   });
+   const label=width+'px '+mode+' '+dir+' '+JSON.stringify(geometry);
+   assert.equal(geometry.inside,true,label);assert.equal(geometry.aligned,true,label);
+   assert.equal(geometry.nonOverlapping,true,label);
+   assert.equal(geometry.height,width<=730?34:30,label);
+   assert.notEqual(geometry.background,'rgba(0, 0, 0, 0)',label);
+   assert.notEqual(geometry.background,'rgb(239, 239, 239)',label);
+   if(standalone)assert.equal(geometry.svgVerticallyCentered,true,label);
+   else{assert.equal(geometry.square,true,label);assert.equal(geometry.svgCentered,true,label);}
+  }
+ }finally{
+  await page.evaluate(()=>{document.documentElement.dir='ltr'});
+  await theme.selectOption(initialTheme);
+  if(initial)await page.setViewportSize(initial);
+ }
+}
 async function inventoryFlowerVariantEditSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -1743,8 +1785,7 @@ async function inventoryFlowerVariantEditSmoke(){
   await page.locator('.inventory-controls input[type="search"]').fill('43114910');
   const button=page.locator('.inventory-card .inventory-unique-edit-button');
   await button.waitFor({timeout:30_000});
-  const geometry=await button.evaluate(el=>{const r=el.getBoundingClientRect(),svg=el.querySelector('svg').getBoundingClientRect(),apply=el.parentElement.querySelector('.primary').getBoundingClientRect();return {centered:Math.abs(r.x+r.width/2-svg.x-svg.width/2)<1&&Math.abs(r.y+r.height/2-svg.y-svg.height/2)<1,aligned:Math.abs(r.height-apply.height)<1,background:getComputedStyle(el).backgroundColor,expected:getComputedStyle(document.documentElement).getPropertyValue('--accent-soft').trim()}});
-  assert.equal(geometry.centered,true);assert.equal(geometry.aligned,true);assert.notEqual(geometry.background,'rgb(239, 239, 239)');
+  await assertInventoryControlGeometry(page,button);
   await button.click();
   const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');
   await dialog.waitFor();
@@ -2089,6 +2130,7 @@ async function inventoryDefaultFurnitureCreationSmoke(){
   await page.locator('.inventory-batch-toggle').click();
   assert.equal(await card.locator('.inventory-batch-checkbox').count(),0);
   await page.locator('.inventory-batch-toggle').click();
+  await assertInventoryControlGeometry(page,card.locator('.inventory-add-source'),true);
   await card.locator('.inventory-add-source').click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"]');
   await dialog.waitFor();
@@ -2287,6 +2329,7 @@ async function inventoryFurnitureVariantEditSmoke(){
   const quantity=page.locator('.inventory-card input[name="quantity"]');
   await quantity.waitFor();assert.equal(await quantity.inputValue(),'93');
   assert.equal(await quantity.getAttribute('min'),'0');
+  await assertInventoryControlGeometry(page,button);
   await button.click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"][open]');
   await dialog.waitFor();
