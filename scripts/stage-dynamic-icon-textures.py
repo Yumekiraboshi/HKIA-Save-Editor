@@ -27,6 +27,10 @@ require, supported, sha = atlas.require, atlas.supported, atlas.sha
 SCHEMA = 'HKIA.DynamicIconTextureStaging.1'
 RENDERER = 'guarded-native-rgb-alpha-v1'
 MAX_FILE = 1024*1024
+SPRITE_TYPE = 'UnityEngine.Sprite, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null'
+
+def supported_mask_selector(refs):
+    return bool(refs) and all(not name and kind in ('',SPRITE_TYPE) for name,kind in refs)
 
 def container_refs(bundle, wanted):
     """Use actual container keys and exact Sprite PPtrs, not asset names."""
@@ -197,7 +201,7 @@ def stage(snapshot, receipt, manifest_path, out, prior_dir=None):
         label='mask:'+guid
         # Nonempty subobject selectors need an independently reviewed adapter;
         # never choose an arbitrary Sprite from an ambiguous container.
-        if refs!={('','')} or len(found[guid])!=1:
+        if not supported_mask_selector(refs) or len(found[guid])!=1:
             unresolved.append({'key':label,'reason':'unresolved/ambiguous original mask reference'})
             continue
         cab,pid=next(iter(found[guid]))
@@ -256,6 +260,10 @@ def stage(snapshot, receipt, manifest_path, out, prior_dir=None):
     return result
 
 def self_test():
+    assert supported_mask_selector({('',''),('',SPRITE_TYPE)})
+    assert supported_mask_selector({('',SPRITE_TYPE)})
+    assert not supported_mask_selector({('named',SPRITE_TYPE)})
+    assert not supported_mask_selector({('','Unknown.Type')})
     # Test coordinate/guard logic using an image stub; no Pillow required.
     class ImageStub:
         width=32
