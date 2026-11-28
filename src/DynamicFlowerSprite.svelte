@@ -4,35 +4,50 @@
  import {renderFlowerArt,renderFlowerOriginalBaseArt,renderFlowerDefinitionBaseArt} from './flower-runtime-art';
  import {isStaticFlowerCreationIcon} from './flower-icon-route';
  import {loadFlowerGrowthCell} from './flower-growth-art';
- import {watchDynamicArtVisibility} from './dynamic-art-view';
+ import {watchDynamicArtVisibility,startDynamicArtRequest} from './dynamic-art-view';
  import DynamicArtSprite from './DynamicArtSprite.svelte';
  import {createVerifiedSpriteView} from './verified-sprite-view.svelte';
  let {itemId,flower,definitions,fallback}:{itemId:number;flower?:InventoryFlower;definitions:FlowerDisplayDefinitions|null;fallback?:SpriteCell}=$props();
  const growth=$derived(flowerGrowthKind(itemId,flower));
  const spriteState=$derived(flowerGrowthSpriteState(itemId,flower));
  let near=$state(false);
- let resolved=$state<{id:number;state:number;cell:SpriteCell}|undefined>();
+ let resolved=$state<{id:number;state:number;cell:SpriteCell|null}|undefined>();
+ let baseFallback=$state.raw<{key:string;url:string}|null>(null);
+ const growthKey=$derived(spriteState===undefined?null:itemId+':'+spriteState);
  const setNear=(value:boolean)=>{near=value;};
- const growthCell=$derived(resolved?.id===itemId&&resolved.state===flower?.growState?resolved.cell:undefined);
+ const growthResult=$derived(resolved?.id===itemId&&resolved.state===spriteState?resolved:undefined);
+ const growthCell=$derived(growthResult?.cell??undefined);
  const staticRoute=$derived(isStaticFlowerCreationIcon(itemId));
  const unknownRoute=$derived(growth==='unknown'&&!flowerUsesDefinitionIcon(itemId,flower));
  const fallbackView=createVerifiedSpriteView(()=>fallback,()=>staticRoute||unknownRoute||near&&spriteState!==undefined&&!growthCell);
  const visible=$derived(fallbackView.cell);
  const displayed=$derived(growthCell??visible);
  $effect(()=>{
-  if(!flower||!near||spriteState===undefined)return;
-  const id=itemId,fields={...flower};
+  if(!near||spriteState===undefined)return;
+  const id=itemId,state=spriteState;
+  // Only the normalized native sprite state affects the finished image.
+  // Color, quantity and the equivalent Grown/GrownTroweled state do not.
+  const fields={growState:state,baseColor:0,pattern:0,patternColor:0};
   let active=true,pending=false,loaded=false;
   const load=()=>{
    if(!active||pending||loaded)return;
    pending=true;
    void loadFlowerGrowthCell(id,fields).then(cell=>{
-    if(active&&cell){loaded=true;resolved={id,state:fields.growState,cell};}
+    if(active){loaded=!!cell;resolved={id,state,cell:cell??null};}
    }).finally(()=>{pending=false;});
   };
   window.addEventListener('online',load);
   load();
   return ()=>{active=false;window.removeEventListener('online',load);};
+ });
+ // If both ordinary atlas delivery and the state-specific sheet fail,
+ // use the independently pinned definition template, never claim it is
+ // the actual seed/plant image. The state-specific sheet still wins.
+ const baseUrl=$derived(near&&growthKey!==null&&baseFallback?.key===growthKey?baseFallback.url:null);
+ $effect(()=>{
+  const key=growthKey,id=itemId;
+  if(!near||key===null||growthResult?.cell!==null||visible){baseFallback=null;return;}
+  return startDynamicArtRequest(()=>renderFlowerDefinitionBaseArt(id),value=>{baseFallback=value?{key,url:value}:null;});
  });
  const renderKey=$derived(JSON.stringify([itemId,flower?.growState,flower?.baseColor,flower?.pattern,flower?.patternColor,!!definitions]));
  let render=$derived.by(()=>{
@@ -46,11 +61,14 @@
  let renderPartial=$derived.by(()=>{const id=itemId,fields=flower?{...flower}:undefined;return ()=>fields?renderFlowerOriginalBaseArt(id,fields):renderFlowerDefinitionBaseArt(id);});
 </script>
 {#if spriteState!==undefined}
- <span use:watchDynamicArtVisibility={setNear} class:item-sprite={!!displayed} class:item-art-empty={!displayed}
-  data-flower-state-art={growthCell?'native-state-sprite':visible?'species-reference':undefined}
+ <span use:watchDynamicArtVisibility={setNear} class:item-sprite={!!displayed||!!baseUrl} class:item-art-empty={!displayed&&!baseUrl}
+  data-flower-state-art={growthCell?'native-state-sprite':visible||baseUrl?'species-reference':undefined}
+  data-icon-fidelity={!displayed&&baseUrl?'source-derived-base-only':undefined}
   data-inventory-art={growthCell?'native-growth-state':undefined}
-  style:background-image={displayed?'url("'+displayed.url+'")':undefined}
-  style:background-position={displayed?'-'+displayed.x+'px -'+displayed.y+'px':undefined}>{#if !displayed}✧{/if}</span>
+  style:background-image={displayed?'url("'+displayed.url+'")':baseUrl?'url("'+baseUrl+'")':undefined}
+  style:background-position={displayed?'-'+displayed.x+'px -'+displayed.y+'px':baseUrl?'center':undefined}
+  style:background-size={!displayed&&baseUrl?'96px 96px':undefined}
+  style:background-repeat={!displayed&&baseUrl?'no-repeat':undefined}>{#if !displayed&&!baseUrl}✧{/if}</span>
 {:else if staticRoute}
  <span class:item-sprite={!!visible} class:item-art-empty={!visible} data-inventory-art="native-static-route" style:background-image={visible?'url("'+visible.url+'")':undefined} style:background-position={visible?'-'+visible.x+'px -'+visible.y+'px':undefined}>{#if !visible}✧{/if}</span>
 {:else if unknownRoute}
