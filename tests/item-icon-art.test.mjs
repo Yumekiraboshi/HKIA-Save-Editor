@@ -60,7 +60,7 @@ test('pre-rendered native-colorways and runtime recolor remain approximate in UI
   assert.equal(displayedDyeIconFidelity(source),'approximate');
  assert.equal(displayedDyeIconFidelity('game-render'),'verified-reconstruction');
  const component=readFileSync(new URL('../src/DyeSprite.svelte',import.meta.url),'utf8');
- assert.match(component,/data-icon-fidelity=\{displayedDyeIconFidelity\(imageSource\)\}/);
+ assert.match(component,/data-icon-fidelity=\{displayedUrl\|\|visible\?displayedDyeIconFidelity\(imageSource\):undefined\}/);
 });
 
 test('audited original striped masks are flower patterns, not clothing UiIcon masks',()=>{
