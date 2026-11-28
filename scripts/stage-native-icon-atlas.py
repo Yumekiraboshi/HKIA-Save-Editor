@@ -24,6 +24,7 @@ def module(name):
     return m
 
 source = module('icon-source-update')
+native_webp = module('native-raster-webp')
 helpers = module('extract-native-result-icons')
 mesh = helpers.module('extract-furniture-mesh-source')
 typed = helpers.module('extract-furniture-preview-camera')
@@ -85,12 +86,13 @@ def geometry(sprite, cabs, atlas_cache):
     bundle, sid, tree, raw = sprite
     f = helpers.fields(tree, raw, mesh)
     logical = struct.unpack('<4f', f['m_Rect'])
-    supported(all(math.isfinite(v) for v in logical) and logical[:2] == (0.,0.) and
+    supported(all(math.isfinite(v) for v in logical) and min(logical[:2]) >= 0 and
               0 < min(logical[2:]) <= max(logical[2:]) <= 4096 and
               f['m_Border'] == bytes(16) and struct.unpack('<2f',f['m_Pivot']) == (.5,.5),
               'unsupported sprite logical geometry')
     atlas_ref = mesh.ptr(f['m_SpriteAtlas'])
     if atlas_ref != [0,'0']:
+        supported(logical[:2] == (0.,0.), 'unsupported packed Sprite origin')
         ab, aid, at, ar = resolve(bundle, atlas_ref, cabs, 687078895)
         cache_key = (ab['cab'], aid)
         if cache_key not in atlas_cache:
@@ -117,19 +119,31 @@ def geometry(sprite, cabs, atlas_cache):
         offset = struct.unpack('<2f', rd['textureRectOffset'])
         texture = resolve(bundle, mesh.ptr(rd['texture']), cabs, 28)
         binding = {'renderDataSha256': sha(f['m_RD'])}
+        if logical[:2] != (0.,0.):
+            # Direct texture subrect: verify trim is relative to authored rect.
+            supported(all(abs(rect[i]-logical[i]-offset[i]) <= .001 for i in range(2)),
+                      'standalone subrect origin/trim mismatch')
+            binding['originalRectOrigin'] = logical[:2]
     supported(all(math.isfinite(v) for v in [*rect,*offset]), 'invalid crop coordinates')
     return logical[2:], tuple(rect), tuple(offset), texture, binding
+
+def texture_level_bytes(w,h,fmt):
+    if fmt in (10,12):
+        return ((w+3)//4)*((h+3)//4)*(8 if fmt==10 else 16)
+    return w*h*({3:3,4:4}[fmt])
 
 def texture_data(texture,allowed_color_spaces=(1,)):
     bundle, tid, tree, raw = texture
     f = helpers.fields(tree, raw, mesh)
     w,h,fmt,mips = [mesh.u(f[k]) for k in ('m_Width','m_Height','m_TextureFormat','m_MipCount')]
     supported(0 < min(w,h) <= max(w,h) <= 8192 and mesh.u(f['m_ColorSpace']) in allowed_color_spaces
-              and fmt in (3,4,12) and mips == 1, 'unsupported texture format/mip/color space')
+              and fmt in (3,4,10,12) and 1<=mips<=max(w,h).bit_length(), 'unsupported texture format/mip/color space')
+    # Unity Texture2D stores the largest level first. Validate the whole
+    # mip chain and bind its original bytes, then decode only level zero.
+    expected = sum(texture_level_bytes(max(1,w>>i),max(1,h>>i),fmt) for i in range(mips))
     stream = f['m_StreamData']
     off,z = struct.unpack_from('<QI', stream)
     name,end = mesh.string(stream,12)
-    expected = {3:w*h*3,4:w*h*4,12:((w+3)//4)*((h+3)//4)*16}[fmt]
     if z:
         supported(name == f"archive:/{bundle['cab']}/{bundle['cab']}.resS" and
                   end == len(stream) and z == expected and off+z <= len(bundle['res']),
@@ -140,12 +154,13 @@ def texture_data(texture,allowed_color_spaces=(1,)):
         supported(len(data) == 4+expected and mesh.u(data) == expected, 'unsupported inline texture')
         payload = data[4:]
     from PIL import Image
-    image = (Image.frombytes('RGBA',(w,h),payload,'bcn',3) if fmt == 12 else
-             Image.frombytes('RGB' if fmt == 3 else 'RGBA',(w,h),payload).convert('RGBA'))
+    top=payload[:texture_level_bytes(w,h,fmt)]
+    image = (Image.frombytes('RGBA',(w,h),top,'bcn',1 if fmt==10 else 3) if fmt in (10,12) else
+             Image.frombytes('RGB' if fmt == 3 else 'RGBA',(w,h),top).convert('RGBA'))
     return image.transpose(Image.Transpose.FLIP_TOP_BOTTOM), {'textureCab':bundle['cab'],
             'texturePathId':tid,'textureObjectSha256':sha(raw),'texturePayloadSha256':sha(payload)}
 
-def crop_tile(image, logical, rect, offset):
+def original_canvas(image, logical, rect, offset):
     from PIL import Image
     lw,lh = logical
     x,y,w,h = rect
@@ -165,6 +180,68 @@ def crop_tile(image, logical, rect, offset):
     supported(left>=0 and upper>=0 and left+crop.width<=canvas.width and
               upper+crop.height<=canvas.height, 'rounded trim outside logical bounds')
     canvas.paste(crop,(left,upper))
+    return canvas
+
+def stage_original_sprites(folder, requests, loaded, cabs, hashes, prior_dir=None, prior=None):
+    """Shared original Sprite extraction for all reviewed view/icon roles.
+    requests: [(route_key, owner_bundle_name, native PPtr)].
+    Identity includes actual Sprite, render data, texture bytes and policy.
+    Unsupported pointers stay absent; caller retains explicit null/unresolved.
+    """
+    jobs=collections.defaultdict(list)
+    cache={}
+    for key,owner,ref in requests:
+        if ref==[0,'0'] or owner not in loaded:continue
+        try:
+            sprite=resolve(loaded[owner],ref,cabs,213)
+            logical,rect,offset,texture,binding=geometry(sprite,cabs,cache)
+            jobs[(texture[0]['cab'],texture[1])].append((key,sprite,logical,rect,offset,texture,binding))
+        except (Unsupported,KeyError,StopIteration,struct.error):continue
+    results={};resolved={}
+    for _,group in sorted(jobs.items()):
+        try:image,tex=texture_data(group[0][5])
+        except (Unsupported,KeyError,StopIteration,struct.error):continue
+        for key,sprite,logical,rect,offset,texture,binding in group:
+            sb,pid,_,raw=sprite;identity=(sb['cab'],pid)
+            if identity not in resolved:
+                proof={'spriteSha256':sha(raw),'logicalSize':logical,'rect':rect,'offset':offset,
+                       **binding,**tex,'renderer':native_webp.POLICY}
+                fingerprint=sha(source.stable(proof))
+                old=(prior or {}).get(fingerprint)
+                try:
+                    if old is not None:
+                        asset=native_webp.reuse(folder,prior_dir,old)
+                        require((asset['width'],asset['height'])==tuple(round(v) for v in logical),
+                                'prior source dimensions mismatch')
+                    else:
+                        asset=native_webp.store(folder,original_canvas(image,logical,rect,offset))
+                except Unsupported:continue
+                resolved[identity]={'kind':'sprite','sourceBundleSha256':hashes[sb['cab']],
+                    'spritePathId':pid,'sourceSha256':fingerprint,'asset':asset}
+            results[key]=resolved[identity]
+        del image
+    return results
+
+def previous_original_sprites(directory,manifest_name,schema,platform,field):
+    if directory is None:return {}
+    value=source.read_json(directory/manifest_name)
+    require(value['schema']==schema and value['platform']==platform and
+            value['artworkPolicy']==native_webp.POLICY and
+            value.get('receiptSha256')==sha(source.stable({k:v for k,v in value.items() if k!='receiptSha256'})),
+            'previous view art requires native-resolution receipt')
+    result={}
+    for row in value['rows']:
+        icon=row[field]
+        if icon['kind']!='sprite':continue
+        key=icon['sourceSha256'];asset=icon['asset']
+        require(source.SHA.fullmatch(key) and (key not in result or result[key]==asset),'conflicting previous source')
+        result[key]=asset
+    return result
+
+def crop_tile(image, logical, rect, offset):
+    # Legacy production transport only. New candidates use original_canvas.
+    from PIL import Image
+    canvas = original_canvas(image, logical, rect, offset)
     scale = 84/max(canvas.size)
     size = tuple(max(1,round(v*scale)) for v in canvas.size)
     tile = Image.new('RGBA',(96,96))
@@ -230,7 +307,7 @@ def read_previous(folder, row, sheets, cache=None):
     require(visible_hash(tile)==row['pixelSha256'],'previous tile identity mismatch')
     return tile
 
-def stage(snapshot, manifest_path, out, prior_dir=None):
+def stage(snapshot, manifest_path, out, prior_dir=None, native_resolution=False):
     rows = source.validate_snapshot(snapshot)
     manifest = source.read_json(manifest_path)
     require(manifest.get('schema')=='HKIA.NativeIconAtlasInput.1' and
@@ -256,7 +333,17 @@ def stage(snapshot, manifest_path, out, prior_dir=None):
     definitions = loaded['definitions']
     require(out.resolve()!=source.ROOT and source.ROOT not in out.resolve().parents and not out.exists(),
             'new staging directory outside repository required')
-    old,old_sheets = previous_tiles(prior_dir)
+    if native_resolution:
+        old,old_sheets={},[]
+        if prior_dir:
+            prior=source.read_json(prior_dir/'index.json')
+            require(prior.get('schema')=='HKIA.NativeResolutionIconStage.1' and
+                    prior.get('renderer')==native_webp.POLICY and prior.get('platform')==snapshot['platform'] and
+                    prior.get('receiptSha256')==sha(source.stable({k:v for k,v in prior.items() if k!='receiptSha256'})),
+                    'native previous stage must not contain resized legacy assets')
+            old=prior['sprites']
+    else:
+        old,old_sheets = previous_tiles(prior_dir)
     # Group by complete source pointer, not by name or per-item variants.
     groups = collections.defaultdict(list)
     for i,row in rows.items():
@@ -296,13 +383,26 @@ def stage(snapshot, manifest_path, out, prior_dir=None):
                 sprite_key=sb['cab']+':'+sp
                 if sprite_key in sprites:
                     existing=sprites[sprite_key]
-                    items.extend([i,existing['sheet'],existing['cell'],sp] for i in ids)
+                    if native_resolution:items.extend([i,sprite_key] for i in ids)
+                    else:items.extend([i,existing['sheet'],existing['cell'],sp] for i in ids)
                     continue
                 identity={'spriteCab':sb['cab'],'spritePathId':sp,'spriteSha256':sha(raw),
                           'logicalSize':logical,'rect':rect,'offset':offset,**binding,**tex}
                 identity=json.loads(source.stable(identity))
                 previous=old.get(sprite_key)
                 try:
+                    if native_resolution:
+                        if previous and previous['binding']==identity:
+                            meta=native_webp.reuse(folder,prior_dir,previous['asset'])
+                            require((meta['width'],meta['height'])==(round(logical[0]),round(logical[1])),
+                                    'prior original dimensions mismatch')
+                            reused+=1
+                        else:
+                            canvas=original_canvas(image,logical,rect,offset)
+                            meta=native_webp.store(folder,canvas)
+                        sprites[sprite_key]={'binding':identity,'asset':meta}
+                        items.extend([i,sprite_key] for i in ids)
+                        continue
                     if previous and previous['binding']==identity:
                         tile=read_previous(prior_dir,previous,old_sheets,previous_sheet_cache)
                         reused+=1
@@ -330,6 +430,12 @@ def stage(snapshot, manifest_path, out, prior_dir=None):
                 'reusedSpriteCount':reused,'definitionCount':len(rows),
                 'dynamicReviewItemIds':sorted(i for i,row in rows.items() if row['dynamicColor']),
                 'automaticReleaseActivationAuthorized':False}
+        if native_resolution:
+            result.update(schema='HKIA.NativeResolutionIconStage.1',renderer=native_webp.POLICY)
+            for field in ('size','columns','sheets'):del result[field]
+            unique={r['asset']['sha256']:r['asset'] for r in sprites.values()}
+            result['uniqueAssetCount']=len(unique)
+            result['imageBytes']=sum(r['bytes'] for r in unique.values())
         result['receiptSha256']=sha(source.stable(result))
         source.write_new(folder/'index.json',result)
         require(not out.exists(),'staging output already exists')
@@ -337,6 +443,9 @@ def stage(snapshot, manifest_path, out, prior_dir=None):
     return result
 
 def self_test():
+    # Steam anniversary cards: BC1 512px, complete ten-level chain.
+    assert sum(texture_level_bytes(max(1,512>>i),max(1,512>>i),10) for i in range(10))==174776
+    assert texture_level_bytes(512,512,10)==131072
     # No game bundles or Pillow dependency in the CI schema check.
     key=bytes(range(24))
     rd=struct.pack('<iqiq4f2f2f4ffII',0,123,0,0,2,3,10,11,1,2,0,0,0,0,0,0,1,67,0)
@@ -366,12 +475,13 @@ if __name__=='__main__':
     p.add_argument('--snapshot',type=Path)
     p.add_argument('--bundles',type=Path)
     p.add_argument('--previous-stage',type=Path)
+    p.add_argument('--native-resolution',action='store_true',help='original-size lossless WebP candidate; no 96px sheets')
     p.add_argument('--out',type=Path)
     a=p.parse_args()
     if a.self_test:
         self_test()
     elif a.snapshot and a.bundles and a.out:
-        result=stage(source.read_json(a.snapshot),a.bundles,a.out,a.previous_stage)
+        result=stage(source.read_json(a.snapshot),a.bundles,a.out,a.previous_stage,a.native_resolution)
         print('HKIA_NATIVE_ICON_ATLAS_STAGE',len(result['records']),'of',result['definitionCount'],
               'sprites',len(result['sprites']),'reused',result['reusedSpriteCount'],
               'unresolved',len(result['unresolved']),'review-required')

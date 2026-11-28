@@ -39,7 +39,7 @@ test('generated local PNG preserves every straight-alpha RGB byte, including inv
 });
 test('all dynamic and original base images use the same lossless straight-alpha output path',()=>{
  const source=readFileSync(new URL('../src/dynamic-art-assets.ts',import.meta.url),'utf8');
- assert.ok(source.includes('encodeDynamicArtPng(rasterizeDynamicSprite(input))'));
+ assert.ok(source.includes('encodeDynamicArtPng(rasterizeDynamicSprite(input),geometry.width,geometry.height)'));
  assert.ok(source.includes("return renderCachedDynamicArt(JSON.stringify(['original-base-only',key])"));
  assert.ok(!source.includes('canvas.toBlob('));
  assert.ok(!source.includes('putImageData('));

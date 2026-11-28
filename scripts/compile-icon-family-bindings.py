@@ -37,6 +37,14 @@ def compile_bindings(dynamic,aux,assets,dynamic_hash,aux_hash):
     require({r['itemId'] for r in aux['flowerGrowth']}=={i for i,f in by_id.items() if f=='flower'} and
             {r['itemId'] for r in aux['wandTransforms']}=={i for i,f in by_id.items() if f=='wand'},
             'growth/wand definition coverage')
+    patterns={r['index'] for r in dynamic['flowerPatterns']}
+    pattern_refs=aux.get('flowerPatternSprites',[])
+    require(len(pattern_refs)==len(patterns) and {r['patternIndex'] for r in pattern_refs}==patterns,
+            'flower pattern decorator definition coverage')
+    ready={key for key in assets.get('records',{}) if key.startswith('pattern:')}
+    blocked=[r['key'] for r in assets.get('unresolved',[]) if r['key'].startswith('pattern:')]
+    require(len(blocked)==len(set(blocked)) and not ready&set(blocked) and
+            ready|set(blocked)=={'pattern:%d'%i for i in patterns},'flower pattern decorator source coverage')
     expected={i:s for i,s in aux['colorSwatchReferences']}
     resolved={r['characteristicId']:r['swatchId'] for r in assets['chefColors']}
     missing={r['characteristicId']:r['swatchId'] for r in assets['unresolvedSwatches']}
@@ -48,6 +56,7 @@ def compile_bindings(dynamic,aux,assets,dynamic_hash,aux_hash):
             'rows':sorted(rows,key=lambda r:r['itemId']),
             'flowerColors':[{'index':r['index'],'rgba':r['rgba']} for r in dynamic['flowerColors']],
             'flowerPatterns':[{'index':r['index'],'isEffect':r['isEffect']} for r in dynamic['flowerPatterns']],
+            'flowerPatternArtIndices':sorted(int(k.split(':')[1]) for k in ready),
             'knownCharacteristicIds':sorted(r[0] for r in aux['characteristics']),
             'chefMappedIds':sorted(expected),'chefColors':assets['chefColors'],
             'magic':aux['magic'],'flecks':aux['flecks'],'growthItemIds':sorted(r['itemId'] for r in aux['flowerGrowth']),
@@ -86,6 +95,14 @@ def self_test():
     try:compile_bindings(dynamic,aux,{**assets,'unresolvedSwatches':[]},'d'*64,'a'*64)
     except ValueError:pass
     else:raise AssertionError('accepted missing required swatch')
+    dynamic['flowerPatterns']=[{'index':1,'isEffect':False},{'index':2,'isEffect':True}]
+    aux['flowerPatternSprites']=[{'patternIndex':1,'sprite':{}},{'patternIndex':2,'sprite':None}]
+    assets['records']={'pattern:1':{}};assets['unresolved']=[{'key':'pattern:2','reason':'native null'}]
+    assert compile_bindings(dynamic,aux,assets,'d'*64,'a'*64)['flowerPatternArtIndices']==[1]
+    assets['unresolved']=[]
+    try:compile_bindings(dynamic,aux,assets,'d'*64,'a'*64)
+    except ValueError:pass
+    else:raise AssertionError('accepted incomplete pattern artwork census')
     print('HKIA_ICON_FAMILY_BINDINGS_SELF_TEST_OK')
 
 if __name__=='__main__':

@@ -69,7 +69,7 @@ def decode_texture(texture):
     image,binding=atlas.texture_data(texture,allowed_color_spaces=(0,1))
     return image,{**binding,'colorSpace':color,'filterMode':filter_mode,
                   'wrapModeU':wrap_u,'wrapModeV':wrap_v,'wrapModeW':wrap_w,
-                  'mipCount':1,'aniso':aniso,'mipBias':mip_bias}
+                  'mipCount':mesh.u(f['m_MipCount']),'aniso':aniso,'mipBias':mip_bias}
 
 def guarded_crop(image,rect):
     x,y,w,h=rect
@@ -97,6 +97,7 @@ def read_verified(path,meta):
     from PIL import Image
     require(path.stat().st_size==meta['bytes'] and 0<meta['bytes']<=MAX_FILE,'texture file size')
     raw=path.read_bytes()
+    atlas.native_webp.lossless_container(raw)
     require(sha(raw)==meta['sha256'],'texture file digest')
     with Image.open(io.BytesIO(raw)) as im:
         require(im.size==(meta['width'],meta['height']) and im.mode=='RGB',

@@ -14,15 +14,15 @@ function chunk(type:string,data:Uint8Array):Uint8Array<ArrayBuffer>{
  view.setUint32(result.length-4,(crc^0xffffffff)>>>0);
  return result;
 }
-/** Encode the 96px local icon without passing through a premultiplied canvas. */
-export async function encodeDynamicArtPng(rgba:Uint8ClampedArray):Promise<Blob>{
- const side=96,stride=side*4;
- if(rgba.length!==side*stride)throw Error('DYNAMIC_PNG_LENGTH');
+/** Encode local native-size artwork without passing through a premultiplied canvas. */
+export async function encodeDynamicArtPng(rgba:Uint8ClampedArray,width=96,height=96):Promise<Blob>{
+ const stride=width*4;
+ if(![width,height].every(v=>Number.isSafeInteger(v)&&v>0&&v<=4096)||rgba.length!==height*stride)throw Error('DYNAMIC_PNG_LENGTH');
  const header=new Uint8Array(13),view=new DataView(header.buffer);
- view.setUint32(0,side);view.setUint32(4,side);header[8]=8;header[9]=6;
- const scanlines=new Uint8Array(side*(stride+1));
+ view.setUint32(0,width);view.setUint32(4,height);header[8]=8;header[9]=6;
+ const scanlines=new Uint8Array(height*(stride+1));
  // PNG Sub filter (bytewise subtraction, independent for each scanline).
- for(let y=0;y<side;y++){
+ for(let y=0;y<height;y++){
   const from=y*stride,to=y*(stride+1);scanlines[to]=1;
   for(let x=0;x<stride;x++)scanlines[to+1+x]=rgba[from+x]-(x<4?0:rgba[from+x-4]);
  }

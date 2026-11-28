@@ -20,7 +20,7 @@ source=atlas.source
 require,sha=source.require,source.digest
 KEY=re.compile(r'[a-z][a-z0-9_-]{0,127}')
 PATH=re.compile(r'-?[1-9][0-9]{0,18}')
-SCHEMA='HKIA.CategoryArtCandidate.1'
+SCHEMA='HKIA.CategoryArtCandidate.2'
 
 
 def validate(census,scope):
@@ -60,7 +60,7 @@ def validate(census,scope):
     return rows
 
 
-def stage(census_path,scope_path,bundles_path,out):
+def stage(census_path,scope_path,bundles_path,out,prior_dir=None):
     census,scope,manifest=map(source.read_json,(census_path,scope_path,bundles_path))
     rows=validate(census,scope)
     require(source.file_digest(scope_path)==census['scopeFileSha256'] and
@@ -83,48 +83,21 @@ def stage(census_path,scope_path,bundles_path,out):
     routes={k:{'domain':r['domain'],'key':r['key'],'representativeItemId':r['representativeItemId'],
                'collectionFallback':r['collectionFallback'],
                'native':{'kind':'null' if r['nativePPtr']==[0,'0'] else 'unresolved'}} for k,r in rows.items()}
-    groups=collections.defaultdict(list)
-    cache={}
-    for k,r in rows.items():
-        if r['nativePPtr']==[0,'0'] or r['ownerBundle'] not in loaded:continue
-        try:
-            sprite=atlas.resolve(loaded[r['ownerBundle']],r['nativePPtr'],cabs,213)
-            logical,rect,offset,texture,binding=atlas.geometry(sprite,cabs,cache)
-            groups[texture[0]['cab'],texture[1]].append((k,sprite,logical,rect,offset,texture,binding))
-        except (atlas.Unsupported,KeyError,StopIteration,struct.error):
-            continue
+    prior=atlas.previous_original_sprites(prior_dir,'category-art.json',SCHEMA,census['platform'],'native')
     out.parent.mkdir(parents=True,exist_ok=True)
-    from PIL import Image
-    with tempfile.TemporaryDirectory(prefix='hkia-category-art-',dir=out.parent) as temp:
-        folder=Path(temp)/'candidate';folder.mkdir()
-        resolved={}
-        for jobs in groups.values():
-            try:image,tex=atlas.texture_data(jobs[0][5])
-            except (atlas.Unsupported,KeyError,StopIteration,struct.error):continue
-            for k,sprite,logical,rect,offset,texture,binding in jobs:
-                sb,pid,_,raw=sprite;identity=(sb['cab'],pid)
-                if identity not in resolved:
-                    try:tile=atlas.crop_tile(image,logical,rect,offset)
-                    except atlas.Unsupported:continue
-                    buf=io.BytesIO();tile.save(buf,format='WEBP',lossless=True,method=6,exact=True)
-                    data=buf.getvalue()
-                    require(len(data)<=200000,'category artwork delivery bound')
-                    with Image.open(io.BytesIO(data)) as decoded:
-                        require(decoded.size==tile.size and atlas.visible_hash(decoded.convert('RGBA'))==atlas.visible_hash(tile),
-                                'lossless category image mismatch')
-                    digest=sha(data);file=digest+'.webp'
-                    if not (folder/file).exists():(folder/file).write_bytes(data)
-                    resolved[identity]={'kind':'sprite','file':file,'sha256':digest,'bytes':len(data),
-                        'sourceBundleSha256':hashes[sb['cab']],'spritePathId':pid,
-                        'sourceSha256':sha(source.stable({'spriteSha256':sha(raw),'logicalSize':logical,
-                           'rect':rect,'offset':offset,**binding,**tex,'renderer':atlas.RENDERER}))}
-                routes[k]['native']=resolved[identity]
-            del image
+    with tempfile.TemporaryDirectory(prefix='hkia-category-art-',dir=out.parent) as tmp:
+        folder=Path(tmp)/'candidate';folder.mkdir()
+        resolved=atlas.stage_original_sprites(folder,[(k,r['ownerBundle'],r['nativePPtr']) for k,r in rows.items()],loaded,cabs,hashes,prior_dir,prior)
+        for k,record in resolved.items():
+            routes[k]['native']=record
+        assets={r['asset']['sha256']:r['asset'] for r in resolved.values()}
         result={'schema':SCHEMA,'version':census['version'],'platform':census['platform'],
                 'definitionsSha256':census['definitionsSha256'],'sourceBundles':{e['name']:e['sha256'] for e in entries},
                 'sourceCensusFileSha256':source.file_digest(census_path),'rows':[routes[k] for k in sorted(routes)],
                 'unresolvedCount':sum(r['native']['kind']=='unresolved' for r in routes.values()),
-                'automaticReleaseActivationAuthorized':False}
+                'artworkPolicy':atlas.native_webp.POLICY,'uniqueAssetCount':len(assets),
+                'imageBytes':sum(a['bytes'] for a in assets.values()),'automaticReleaseActivationAuthorized':False}
+        result['receiptSha256']=sha(source.stable(result))
         source.write_new(folder/'category-art.json',result)
         require(not out.exists(),'candidate already exists');folder.rename(out)
     return result
@@ -154,9 +127,10 @@ if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--self-test',action='store_true')
     for name in ('census','scope','bundles','out'):p.add_argument('--'+name,type=Path)
+    p.add_argument('--previous-stage',type=Path)
     a=p.parse_args()
     if a.self_test:self_test()
     elif all(getattr(a,k) for k in ('census','scope','bundles','out')):
-        r=stage(a.census,a.scope,a.bundles,a.out)
+        r=stage(a.census,a.scope,a.bundles,a.out,a.previous_stage)
         print('HKIA_CATEGORY_ART_CANDIDATE',len(r['rows']),'routes',r['unresolvedCount'],'unresolved')
     else:p.error('provide --census, --scope, --bundles, --out')
