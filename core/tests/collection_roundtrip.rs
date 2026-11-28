@@ -6014,7 +6014,9 @@ fn all_verified_extra_nil_furniture_can_refill_without_removal_authority(){
  // An unresolved native reference context prevents last-copy removal,
  // but the already persisted complete nil rows can be replenished.
  p.extend(doc(10,arr(vec![u(4+ids.len() as u32),guid([0;4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([0;4]),vec![0xc3],vec![0xc0]])));
- p.extend(doc(22,arr(vec![u(5+ids.len() as u32)])));
+ // A present but truncated Mermaidifier record lacks its source identity;
+ // unlike an omitted general-settings tail it is genuinely unresolved.
+ p.extend(doc(22,arr(vec![u(5+ids.len() as u32),arr(vec![arr(vec![u(0)])]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
  let raw=slot_from_payload("3.0.1",p);
  for zipped in [false,true]{
   let input=if zipped{zip(&raw)}else{raw.clone()};
