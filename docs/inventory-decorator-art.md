@@ -21,3 +21,8 @@ The authenticated Steam definitions bundle was redecoded: all 5,383 named dyeabl
 ### Contextual decorators
 
 InventoryViewModel.UpdateDecorator (0x2D20340–0x2D20CC0, SHA256 9698b73408d3d990a789514fd9299e9e73221ef65f73167670a990ea7f7c746a) calls UiMissionAccess.IsRequiredForMission before appending type 2 (at 0x2D20A14), restricted by its active mission-access context and LimitedMissionDecoratorCategories; type 5 or 10 is selected only after AvatarBuilderClientTrait.IsWearingOutfit succeeds and IsMermaidifierOutfit determines which worn state applies. Ordinary ownership or outfit category alone does not establish these badges. Type 8 has a native type-check branch at 0x2D20898; the exact type identity must be resolved before use. Other types remain withheld until their display context is confirmed. Do not infer quest or equipped states in the icon renderer.
+
+
+### Dye badge clipping
+
+The original diagonal dye-color Sprite supplies the secondary-color mask, but is not by itself the circular plate silhouette. Clip its tinted layer with the same original plate alpha and centered 18px geometry as the primary-color layer, inside the unchanged 22px outer plate. The white rim, native RGB values and diagonal split remain unchanged. This shared type-14 fix applies to all 5,383 source-verified dye definitions; no source image or save changes. Chromium checks matching mask geometry and actual pixels with a high-contrast temporary test palette.

@@ -2559,6 +2559,46 @@ async function inventoryOriginalArtSmoke(){
   await dyeBadge.waitFor({timeout:30_000});
   const colors=await dyeBadge.evaluate(el=>({primary:getComputedStyle(el.querySelector('.plate-inner')).backgroundColor,secondary:getComputedStyle(el.querySelector('.native-dye-icon-tint')).backgroundColor,mask:getComputedStyle(el.querySelector('.native-dye-icon-tint')).maskImage}));
   assert.equal(colors.primary,'rgb(255, 187, 250)');assert.equal(colors.secondary,'rgb(194, 254, 255)');assert.match(colors.mask,/decorator-14\.webp/);
+  const clip=await dyeBadge.evaluate(el=>{
+   const primary=el.querySelector('.plate-inner'),outer=el.querySelector('.native-dye-icon-clip'),tint=outer?.querySelector('.native-dye-icon-tint');
+   if(!primary||!outer||!tint)return null;
+   const a=getComputedStyle(primary),b=getComputedStyle(outer),c=getComputedStyle(tint);
+   const bounds=e=>{const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height];};
+   return {sameMask:a.maskImage===b.maskImage&&a.maskImage.includes('plate.webp'),sameGeometry:JSON.stringify(bounds(primary))===JSON.stringify(bounds(outer))&&JSON.stringify(bounds(outer))===JSON.stringify(bounds(tint)),
+    sameSize:a.maskSize===b.maskSize,position:a.maskPosition===b.maskPosition,alpha:b.maskMode==='alpha',size:[b.width,b.height,c.width,c.height]};
+  });
+  assert.deepEqual(clip,{sameMask:true,sameGeometry:true,sameSize:true,position:true,alpha:true,size:['18px','18px','18px','18px']});
+  // Compare actual Chromium pixels against the same plate without the
+  // secondary color. Use temporary high-contrast colors only in the test.
+  const saved=await dyeBadge.evaluate(el=>{
+   const tint=el.querySelector('.native-dye-icon-tint'),old=[el.getAttribute('style'),tint.getAttribute('style')];
+   el.style.setProperty('--primary','#ffffff');el.style.setProperty('--accent','transparent');el.style.backgroundColor='#000000';
+   tint.style.backgroundColor='#ff0000';tint.style.visibility='hidden';return old;
+  });
+  try{
+   await page.waitForLoadState('networkidle');
+   const plain=await dyeBadge.screenshot({scale:'css'});
+   await dyeBadge.locator('.native-dye-icon-tint').evaluate(el=>el.style.visibility='visible');
+   const tinted=await dyeBadge.screenshot({scale:'css'});
+   const pixelResult=await page.evaluate(async ([a,b])=>{
+    async function pixels(s){
+     const image=new Image();image.src='data:image/png;base64,'+s;await image.decode();
+     const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;
+     const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);
+     return ctx.getImageData(0,0,canvas.width,canvas.height).data;
+    }
+    const [plain,tinted]=await Promise.all([pixels(a),pixels(b)]);let outside=0,changed=0;
+    for(let i=0;i<plain.length;i+=4){
+     if(plain[i]===0&&plain[i+1]===0&&plain[i+2]===0&&Math.max(tinted[i],tinted[i+1],tinted[i+2])>5)outside++;
+     if(plain[i+1]>200&&tinted[i+1]<100&&tinted[i]>200)changed++;
+    }
+    return {outside,changed};
+   },[plain.toString('base64'),tinted.toString('base64')]);
+   assert.equal(pixelResult.outside,0,'secondary color must not escape the original inner plate');
+   assert.ok(pixelResult.changed>0,'secondary color must still render inside the plate');
+  }finally{
+   await dyeBadge.evaluate((el,[badge,tint])=>{el.setAttribute('style',badge);el.querySelector('.native-dye-icon-tint').setAttribute('style',tint);},saved);
+  }
   const inventoryUrl=await original.evaluate(el=>getComputedStyle(el).backgroundImage);
   assert.match(inventoryUrl,/\/(?:dynamic-colorways|source-colorways)\/1286846063\.webp/);
   await chooseTab(page,'collections');
