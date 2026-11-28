@@ -5540,6 +5540,7 @@ fn mermaidifier_flower_copy_protects_exact_item_without_blocking_unrelated_inven
   assert!(original[0].editable&&original[0].quantity_minimum==1);
   assert!(original[1].editable&&original[1].quantity_minimum==0);
   assert!(original[2].editable&&original[2].quantity_minimum==0);
+  assert!(!e.inventory_entry_removable(4));assert!(e.inventory_entry_removable(5));assert!(e.inventory_entry_removable(6));
   assert!(e.change_inventory_quantity(4,2,0).is_err());assert!(!e.dirty());
   e.change_inventory_quantities(&[(5,2,0),(6,2,0)]).unwrap();
   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
@@ -5551,9 +5552,17 @@ fn mermaidifier_flower_copy_protects_exact_item_without_blocking_unrelated_inven
   saved.change_inventory_quantities(&[(5,0,2),(6,0,2)]).unwrap();
   assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),original);
  }
- let mut unknown=Editor::open(make([u32::MAX;4])).unwrap();
- assert_ne!(unknown.inventory()[2].quantity_minimum,0);
- assert!(unknown.change_inventory_quantity(6,2,0).is_err());assert!(!unknown.dirty());
+ for zipped in [false,true]{
+  let raw=make([u32::MAX;4]);let mut e=Editor::open(if zipped{zip(&raw)}else{raw}).unwrap();
+  assert_eq!(e.inventory()[2].quantity_minimum,0);assert!(e.inventory_entry_removable(6));
+  e.remove_inventory_entries(&[(6,2)]).unwrap();
+  let saved=Editor::open(e.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory().len(),2);
+  for id in [4,5]{assert_eq!(saved.inventory_original_unique_payload(id),Some(flower.as_slice()));}
+  let raw=make([0;4]);let mut e=Editor::open(if zipped{zip(&raw)}else{raw}).unwrap();
+  assert_eq!(e.inventory()[2].quantity_minimum,1);assert!(!e.inventory_entry_removable(6));
+  assert!(e.remove_inventory_entries(&[(6,2)]).is_err());assert!(!e.dirty());
+ }
 }
 
 #[allow(dead_code)]
@@ -5580,7 +5589,10 @@ fn all_source_ordinary_bag_definitions_share_native_zero_refill_and_reference_sc
   let av=if context==1{arr(vec![u(4+batch.len() as u32),guid([0;4]),arr(vec![])])}
    else{arr(vec![u(4+batch.len() as u32),guid([0;4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([0;4]),vec![0xc3],vec![0xc0]])};
   let ge=if context==2{arr(vec![u(5+batch.len() as u32)])}
-   else{arr(vec![u(5+batch.len() as u32),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])};
+   else{
+    let copies=if context==3{vec![arr(vec![u(0),guid([u32::MAX;4]),plain_flower(6)])]}else{vec![]};
+    arr(vec![u(5+batch.len() as u32),arr(copies),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])
+   };
   p.extend(doc(10,av));p.extend(doc(22,ge));slot_from_payload("3.0.1",p)
  };
  for batch in defs.chunks(200){
@@ -5601,6 +5613,11 @@ fn all_source_ordinary_bag_definitions_share_native_zero_refill_and_reference_sc
   }
   let unknown=Editor::open(make(batch,2)).unwrap();
   assert!(unknown.inventory().iter().all(|row|row.quantity_minimum==1));
+  let mut scoped=Editor::open(make(batch,3)).unwrap();
+  let rows=scoped.inventory();
+  assert!(rows.iter().all(|r|r.quantity_minimum==0&&scoped.inventory_entry_removable(r.document_id)));
+  scoped.remove_inventory_entries(&rows.iter().map(|r|(r.document_id,r.quantity)).collect::<Vec<_>>()).unwrap();
+  assert!(Editor::open(scoped.export().unwrap()).unwrap().inventory().is_empty());
  }
 }
 
