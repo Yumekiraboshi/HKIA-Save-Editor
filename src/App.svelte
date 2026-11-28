@@ -28,7 +28,7 @@ import {searchAchievementRows} from './achievement-search';
  import {loadAchievementGroups,groupRows,ungroupedRows,nativeAchievementOrder,groupSummaries as summarizeAchievementGroups,type AchievementHierarchy} from './achievement-groups';
  import {achievementGroupCopy} from './achievement-group-ui';
  import {loadAchievementCategoryAtlas,resolveAchievementDetailCategoryArt,type CategoryIconAtlas} from './achievement-category-icons';
- import {loadAchievementIndividualAtlas,type IndividualAchievementAtlas} from './achievement-individual-icons';
+ import {loadAchievementIndividualAtlas,type IndividualAchievementAtlas,type IndividualAchievementIdentity} from './achievement-individual-icons';
  import {loadAchievementIndex,achievementGuid,readableSourceKey,type AchievementIndex} from './achievement-index';
  import {loadAchievementTitles,type AchievementTitles} from './achievement-localization';
  import {editorErrors} from './ui-copy';
@@ -97,17 +97,14 @@ import {verifiedFloorplanName} from './floorplan-names';
  let furnitureDialogEl:HTMLDialogElement|undefined=$state();
  let furnitureDisplay:FurnitureDisplay|null=$state(null);
  let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[];createOnly:boolean}|null>(null);
- let furnitureSelection=$state(-1);
  let furnitureDraft=$state<FurnitureVariant|null>(null);
  let furnitureDraftCreatable=$state(false);
  let paletteDialogEl:HTMLDialogElement|undefined=$state();
  let paletteEdit=$state<{documentId:number;itemId:number;revision:number;before:PaletteVariant;options:PaletteVariant[]}|null>(null);
  let cafeDialogEl:HTMLDialogElement|undefined=$state();
  let cafeEdit=$state<{documentId:number;itemId:number;revision:number;before:CafeVariant;options:CafeOption[];absent?:boolean}|null>(null);
- let cafeSelection=$state(-1);
  let cafeDraft=$state<CafeVariant|null>(null);
  let cafeDraftCreatable=$state(false);
- let cafeSlot=$state(0);
  let wandDialogEl:HTMLDialogElement|undefined=$state();
  let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[];absent?:boolean;sourceChoices?:number[];beforeSource?:number;nestedBefore?:WandNested;nestedOptions?:FurnitureVariant[];nestedCreationOptions?:FurnitureVariant[];ownedFurnitureChoices?:number[];ownedFurnitureSource?:number;ownedFurnitureWitness?:WandNested}|null>(null);
  let wandSelection=$state(-1);
@@ -167,6 +164,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let achievementGroupHierarchy:AchievementHierarchy|null=$state(null);
  let achievementCategoryAtlas:CategoryIconAtlas|null=$state(null);
  let achievementIndividualAtlas:IndividualAchievementAtlas|null=$state(null);
+ let achievementIndividualIdentity:IndividualAchievementIdentity|null=$state(null);
  let achievementIndividualFailed=$state(false),achievementCategoryFailed=$state(false);
  const achievementImagesFailed=$derived(achievementIndividualFailed||achievementCategoryFailed);
  let achievementIndividualPending=false,achievementCategoryPending=false,achievementImagesDisposed=false;
@@ -175,7 +173,9 @@ import {verifiedFloorplanName} from './floorplan-names';
   const index=achievementIndex,groups=achievementGroupHierarchy;
   if(!achievementIndividualAtlas&&!achievementIndividualPending){
    achievementIndividualPending=true;
-   void loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index).then(atlas=>{
+   void loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index,identity=>{
+    if(!achievementImagesDisposed)achievementIndividualIdentity=identity;
+   }).then(atlas=>{
     if(achievementImagesDisposed){atlas.dispose?.();return;}
     achievementIndividualAtlas=atlas;achievementIndividualFailed=false;
    }).catch(()=>{if(!achievementImagesDisposed)achievementIndividualFailed=true;}).finally(()=>{achievementIndividualPending=false;});
@@ -903,7 +903,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(!snapshot||snapshot.revision!==revision)return;
    furnitureDisplay=display;
    furnitureEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:preview.options,createOnly};
-   furnitureSelection=-1;furnitureDraft=[...before];furnitureDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
+   furnitureDraft=[...before];furnitureDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
    if(furnitureDialogEl&&!furnitureDialogEl.open)furnitureDialogEl.showModal();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -914,7 +914,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   try{
    const preview=await requestCafePreview(row.documentId,before,before);
    if(!snapshot||snapshot.revision!==revision)return;
-   cafeEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:preview.options,absent:row.cafe.creationOnly};cafeSlot=0;cafeSelection=-1;cafeDraft=[...before];cafeDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
+   cafeEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:preview.options,absent:row.cafe.creationOnly};cafeDraft=[...before];cafeDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
    if(cafeDialogEl&&!cafeDialogEl.open)cafeDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
  }
@@ -926,17 +926,16 @@ import {verifiedFloorplanName} from './floorplan-names';
   try{update(await createInventoryCafeVariant(edit.documentId,edit.before,next,quantity));closeCafeEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
  }
- async function selectCafeSlot(index:number){
+ async function selectCafeSlot(index:number,slot:number){
   const edit=cafeEdit;if(!snapshot||busy||!edit||!cafeDraft||snapshot.revision!==edit.revision)return;
-  const option=edit.options[index];if(!option||option.slot!==cafeSlot){cafeSelection=-1;return}
+  const option=edit.options[index];if(!option||option.slot!==slot){return}
   busy=true;error='';
   try{
    const preview=await requestCafePreview(edit.documentId,edit.before,option.variant);
    if(!snapshot||snapshot.revision!==edit.revision||cafeEdit?.documentId!==edit.documentId)return;
    cafeDraft=[...option.variant];cafeDraftCreatable=preview.creatable;cafeEdit={...edit,options:preview.options};
-  }catch(e){error=describeError(e)}finally{cafeSelection=-1;busy=false}
+  }catch(e){error=describeError(e)}finally{busy=false}
  }
- function openCafeSlot(slot:number){cafeSlot=slot;cafeSelection=-1}
  function closeCafeEditor(){if(cafeDialogEl?.open)cafeDialogEl.close()}
  async function applyInventoryCafeVariant(event:SubmitEvent){
   event.preventDefault();if(inventoryAddMode)return;const edit=cafeEdit;
@@ -1000,15 +999,31 @@ import {verifiedFloorplanName} from './floorplan-names';
   const edit=wandEdit;if(!edit?.nestedBefore){wandMaterialSelection=-1;return}
   if(busy||!snapshot||snapshot.revision!==edit.revision)return;
   const pair=edit.options[Number(value)]??edit.before;
-  const previous=edit.nestedOptions?.[wandMaterialSelection]??edit.nestedBefore.slice(3);
+  const previous: FurnitureVariant=edit.nestedOptions?.[wandMaterialSelection]??[edit.nestedBefore[3],edit.nestedBefore[4],edit.nestedBefore[5]];
   busy=true;error='';
   try{
-   const [options,creation]=await Promise.all([inventoryAddMode?Promise.resolve([]):requestWandNestedMaterials(edit.documentId,false,pair),requestWandNestedMaterials(edit.documentId,true,pair)]);
+   let [options,creation]=await Promise.all([inventoryAddMode?Promise.resolve([]):requestWandNestedMaterials(edit.documentId,false,pair,previous),requestWandNestedMaterials(edit.documentId,true,pair,previous)]);
+   if(!(inventoryAddMode?creation:options).length){[options,creation]=await Promise.all([inventoryAddMode?Promise.resolve([]):requestWandNestedMaterials(edit.documentId,false,pair),requestWandNestedMaterials(edit.documentId,true,pair)]);}
    if(wandEdit!==edit||snapshot?.revision!==edit.revision)return;
    const available=inventoryAddMode?creation:options;
    wandEdit={...edit,nestedOptions:available,nestedCreationOptions:creation};
    wandMaterialSelection=available.findIndex(v=>v.every((n,i)=>n===previous[i]));
   }catch(e){error=describeError(e);if(wandEdit===edit){wandEdit={...edit,nestedOptions:[],nestedCreationOptions:[]};wandMaterialSelection=-1}}finally{busy=false}
+ }
+ async function chooseWandNestedMaterial(index:number){
+  const edit=wandEdit;
+  if(busy||!snapshot||!edit?.nestedBefore||snapshot.revision!==edit.revision)return;
+  const draft=edit.nestedOptions?.[index];if(!draft)return;
+  const pair=edit.options[wandSelection]??edit.before;
+  busy=true;error='';
+  try{
+   const [options,creation]=await Promise.all([inventoryAddMode?Promise.resolve([]):requestWandNestedMaterials(edit.documentId,false,pair,draft),requestWandNestedMaterials(edit.documentId,true,pair,draft)]);
+   if(wandEdit!==edit||snapshot?.revision!==edit.revision)return;
+   const available=inventoryAddMode?creation:options;
+   const selection=available.findIndex(v=>v.every((n,i)=>n===draft[i]));
+   if(selection<0)throw Error('INVENTORY_CONFLICT');
+   wandEdit={...edit,nestedOptions:available,nestedCreationOptions:creation};wandMaterialSelection=selection;
+  }catch(e){error=describeError(e)}finally{busy=false}
  }
  function canAddWandVariant():boolean{
   const edit=wandEdit;if(!edit)return false;
@@ -1115,7 +1130,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const preview=await requestFurniturePreview(edit.documentId,edit.before,next);
    if(!snapshot||snapshot.revision!==edit.revision||furnitureEdit?.documentId!==edit.documentId)return;
    furnitureDraft=[...next];furnitureDraftCreatable=preview.creatable;furnitureEdit={...edit,options:preview.options};
-  }catch(e){error=describeError(e)}finally{furnitureSelection=-1;busy=false}
+  }catch(e){error=describeError(e)}finally{busy=false}
  }
  async function selectFurniturePart(index:number){
   const option=furnitureEdit?.options[index];if(option)await refreshFurnitureDraft(option)
@@ -1659,7 +1674,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#if editingAchievement}
      {@const editingSaveGuid=achievementGuid(editingAchievement.guid)}
      {@const dialogIndividualArt=achievementIndividualAtlas?.bySaveGuid.get(editingSaveGuid)}
-     {@const dialogCategoryArt=resolveAchievementDetailCategoryArt(editingSaveGuid,snapshot.version,achievementCategoryAtlas,achievementIndividualAtlas,achievementGroupHierarchy)}
+     {@const dialogCategoryArt=resolveAchievementDetailCategoryArt(editingSaveGuid,snapshot.version,achievementCategoryAtlas,achievementIndividualIdentity,achievementGroupHierarchy)}
      <form class="achievement-form" onsubmit={e=>{e.preventDefault();void saveAchievement()}}>
       <div class="date-dialog-heading">
        <h2>{compactCopy.date}</h2>
@@ -2060,7 +2075,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    {/if}
   {/if}
  </main>
- <dialog class="date-dialog" bind:this={cafeDialogEl} aria-labelledby="cafe-editor-title" onclose={()=>{cafeEdit=null;cafeSelection=-1;cafeDraft=null;cafeDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
+ <dialog class="date-dialog" bind:this={cafeDialogEl} aria-labelledby="cafe-editor-title" onclose={()=>{cafeEdit=null;cafeDraft=null;cafeDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if cafeEdit}
    {@const edit=cafeEdit}
    {@const selected=cafeDraft??edit.before}
@@ -2072,21 +2087,18 @@ import {verifiedFloorplanName} from './floorplan-names';
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeCafeEditor}>×</button>
     </div>
     <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'cafe',colors:selected.slice(3).filter(n=>n>0)}} fallback={inventoryOriginalSprite(edit.itemId)}/></div>
-    <div class="date-dialog-field">
-     <div style="display:flex;gap:6px;flex-wrap:wrap">
-      {#each [0,1,2].filter(i=>edit.before[i]>0||edit.options.some(v=>v.slot===i)) as slot}
-       <button type="button" class="inventory-cafe-slot" data-cafe-slot={slot} aria-pressed={cafeSlot===slot} disabled={busy} onclick={()=>openCafeSlot(slot)}>{slot+1} · {cafeSlotLabel(selected,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</button>
-      {/each}
-     </div>
-     <select name="cafe-variant" aria-label={inventoryName(edit.itemId)} bind:value={cafeSelection} onchange={e=>void selectCafeSlot(Number(e.currentTarget.value))} disabled={busy}>
-      <option value={-1}>{cafeSlotLabel(selected,cafeSlot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
-      {#each edit.options as option,i}
-       {#if option.slot===cafeSlot}
-        <option value={i} data-ingredient-id={option.ingredientId}>{option.ingredientId?sourceNames[String(option.ingredientId)]??cafeSlotLabel(option.variant,cafeSlot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??''):cafeSlotLabel(option.variant,cafeSlot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
-       {/if}
-      {/each}
-     </select>
-    </div>
+    {#each [0,1,2].filter(i=>selected[i]>0||edit.before[i]>0||edit.options.some(v=>v.slot===i)) as slot}
+     {@const choices=edit.options.map((option,index)=>({option,index})).filter(({option})=>option.slot===slot)}
+     <label class="date-dialog-field" data-cafe-slot={slot}>
+      <span>{slot+1} · {cafeSlotLabel(selected,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</span>
+      <select name={'cafe-slot-'+slot} aria-label={inventoryName(edit.itemId)+' '+(slot+1)} value={-1} onchange={e=>{const index=Number(e.currentTarget.value);e.currentTarget.value='-1';void selectCafeSlot(index,slot)}} disabled={busy||!choices.length}>
+       <option value={-1} disabled>{cafeSlotLabel(selected,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
+       {#each choices as {option,index} (index)}
+        <option value={index} data-ingredient-id={option.ingredientId}>{option.ingredientId?sourceNames[String(option.ingredientId)]??cafeSlotLabel(option.variant,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??''):cafeSlotLabel(option.variant,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
+       {/each}
+      </select>
+     </label>
+    {/each}
     {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
     {#if canCreate}
      <label class="date-dialog-field">
@@ -2117,18 +2129,24 @@ import {verifiedFloorplanName} from './floorplan-names';
     </div>
     <div style="display:flex;justify-content:center"><DynamicWandSprite itemId={edit.itemId} appearance={{...edit.appearance,magicCharacteristicId:selected[0],fleckCharacteristicId:selected[1]}} originalCell={wandOriginalCell(edit.appearance.sourceItemId)} fallback={inventoryOriginalSprite(edit.itemId)}/></div>
     {#if edit.nestedBefore}
-     <div class="compact-hint">{inventoryName(edit.nestedBefore[0])} · {furnitureVariantTitle(furnitureDisplay,edit.nestedBefore[0],edit.nestedBefore.slice(3),furnitureCopy.defaultMaterial)}</div>
-     {#if edit.nestedOptions?.length}
-      <label class="date-dialog-field">
-       <span>{furnitureCopy.material}</span>
-       <select name="wand-nested-material" bind:value={wandMaterialSelection} disabled={busy}>
-        <option value={-1}>{wandSelection<0?furnitureVariantTitle(furnitureDisplay,edit.nestedBefore[0],edit.nestedBefore.slice(3),furnitureCopy.defaultMaterial):'—'}</option>
-        {#each edit.nestedOptions as variant,i}
-         <option value={i} data-wand-material={variant.join(':')}>{furnitureVariantTitle(furnitureDisplay,edit.nestedBefore[0],variant,furnitureCopy.defaultMaterial)}</option>
-        {/each}
-       </select>
-      </label>
-     {/if}
+     {@const materials=edit.nestedOptions?.[wandMaterialSelection]??edit.nestedBefore.slice(3)}
+     <div class="compact-hint">{inventoryName(edit.nestedBefore[0])}</div>
+     <div data-wand-material-selected={materials.join(':')} data-wand-material-busy={busy}>
+      {#each [0,1,2] as slot}
+       {@const choices=(edit.nestedOptions??[]).map((variant,index)=>({variant,index})).filter(({variant})=>variant[slot]!==materials[slot])}
+       {#if materials[slot]!==0||choices.length}
+        <label class="date-dialog-field">
+         <span>{furnitureCopy.part} {String.fromCharCode(65+slot)}</span>
+         <select name={'wand-nested-part-'+slot} value={-1} disabled={busy||!choices.length} onchange={e=>{const index=Number(e.currentTarget.value);e.currentTarget.value='-1';void chooseWandNestedMaterial(index)}}>
+          <option value={-1} disabled>{materialLabel(furnitureDisplay,materials[slot],furnitureCopy.defaultMaterial)}</option>
+          {#each choices as choice (choice.index)}
+           <option value={choice.index} data-wand-material={choice.variant.join(':')} data-material-index={choice.variant[slot]}>{materialLabel(furnitureDisplay,choice.variant[slot],furnitureCopy.defaultMaterial)}</option>
+          {/each}
+         </select>
+        </label>
+       {/if}
+      {/each}
+     </div>
     {/if}
     {#if edit.sourceChoices}
      <label class="date-dialog-field">
@@ -2285,7 +2303,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   {/if}
  </dialog>
 
- <dialog class="date-dialog" bind:this={furnitureDialogEl} aria-labelledby="furniture-editor-title" onclose={()=>{furnitureEdit=null;furnitureSelection=-1;furnitureDraft=null;furnitureDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
+ <dialog class="date-dialog" bind:this={furnitureDialogEl} aria-labelledby="furniture-editor-title" onclose={()=>{furnitureEdit=null;furnitureDraft=null;furnitureDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if furnitureEdit}
    {@const edit=furnitureEdit}
    {@const selected=furnitureDraft??edit.before}
@@ -2312,42 +2330,28 @@ import {verifiedFloorplanName} from './floorplan-names';
       {#if customized}<span class="inventory-native-decorators"><InventoryDecorator type={9}/></span>{/if}
      </span>
     </div>
-    <div class="date-dialog-field">
-     <span>{furnitureCopy.title}</span>
-     {#each [0,1,2] as slot}
-      {#if selected[slot]!==0||edit.before[slot]!==0||edit.options.some(v=>v[slot]!==selected[slot])}
-       <div style="display:flex;align-items:center;gap:8px;margin:4px 0">
-        <span>{furnitureCopy.part} {String.fromCharCode(65+slot)}</span>
-        <span style:background={materialSwatch(furnitureDisplay,edit.itemId,slot,selected[slot])} style="width:24px;height:24px;border:1px solid currentColor;border-radius:4px;flex-shrink:0" aria-hidden="true"></span>
-        <span>{materialLabel(furnitureDisplay,selected[slot],furnitureCopy.defaultMaterial)}</span>
-        {#if selected[slot]!==edit.before[slot]}
-         <button type="button" class="inventory-furniture-reset" data-furniture-reset={slot} disabled={busy} aria-label={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} title={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} onclick={()=>void resetFurniturePart(slot)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>
-        {/if}
-       </div>
-      {/if}
-     {/each}
-    </div>
-    {#if edit.options.length}
-     <label class="date-dialog-field">
-      <span>{furnitureCopy.material}</span>
-      <select bind:value={furnitureSelection} onchange={e=>void selectFurniturePart(Number(e.currentTarget.value))} disabled={busy}>
-       <option value={-1} disabled>{furnitureCopy.title}</option>
-       {#each [0,1,2] as slot}
-        {#if edit.options.some(v=>v[slot]!==selected[slot])}
-         <optgroup label={furnitureCopy.part+' '+String.fromCharCode(65+slot)}>
-          {#each edit.options as v,i}
-           {#if v[slot]!==selected[slot]}
-            <option value={i} data-material-index={v[slot]}>{materialLabel(furnitureDisplay,v[slot],furnitureCopy.defaultMaterial)}</option>
-           {/if}
-          {/each}
-         </optgroup>
-        {/if}
-       {/each}
-      </select>
-     </label>
-    {:else}
-     <p class="compact-hint">{iCopy.readonly}</p>
-    {/if}
+    {#each [0,1,2] as slot}
+     {@const choices=edit.options.map((variant,index)=>({variant,index})).filter(({variant})=>variant[slot]!==selected[slot])}
+     {#if selected[slot]!==0||edit.before[slot]!==0||choices.length}
+      <div class="date-dialog-field" data-furniture-part={slot}>
+       <label class="date-dialog-field">
+        <span style="display:flex;align-items:center;gap:8px">{furnitureCopy.part} {String.fromCharCode(65+slot)}
+         <span style:background={materialSwatch(furnitureDisplay,edit.itemId,slot,selected[slot])} style="width:24px;height:24px;border:1px solid currentColor;border-radius:4px;flex-shrink:0" aria-hidden="true"></span>
+        </span>
+        <select name={'furniture-part-'+slot} value={-1} disabled={busy||!choices.length} onchange={e=>{const index=Number(e.currentTarget.value);e.currentTarget.value='-1';void selectFurniturePart(index)}}>
+         <option value={-1} disabled>{materialLabel(furnitureDisplay,selected[slot],furnitureCopy.defaultMaterial)}</option>
+         {#each choices as choice (choice.index)}
+          <option value={choice.index} data-material-index={choice.variant[slot]}>{materialLabel(furnitureDisplay,choice.variant[slot],furnitureCopy.defaultMaterial)}</option>
+         {/each}
+        </select>
+       </label>
+       {#if selected[slot]!==edit.before[slot]}
+        <button type="button" class="inventory-furniture-reset" data-furniture-reset={slot} disabled={busy} aria-label={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} title={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} onclick={()=>void resetFurniturePart(slot)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>
+       {/if}
+      </div>
+     {/if}
+    {/each}
+    {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
     {#if canCreate}
      <label class="date-dialog-field">
       <span>{inventoryAddCopy(locale)} · {iCopy.quantity}</span>

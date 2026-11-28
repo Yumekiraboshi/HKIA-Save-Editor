@@ -1,4 +1,5 @@
 import type {SpriteCell} from './icon-packs';
+import {resolveVerifiedInventorySprite} from './inventory-sheet-art';
 import type {PixelBuffer,SpriteOverlay} from './dynamic-sprite-raster';
 
 /** The original collection pack contains the actual definition UiIcon,
@@ -22,7 +23,7 @@ export function selectWandOriginalCell(itemId:number,group:string|undefined,entr
 export function selectInventoryWandOriginalCell(itemId:number,entries:ReadonlyMap<number,SpriteCell>|undefined):WandOriginalCell|undefined{
  if(!Number.isInteger(itemId)||itemId<=0||itemId>0x7fffffff||NON_SQUARE.has(itemId))return undefined;
  const cell=entries?.get(itemId);
- if(!cell||cell.group!==undefined||!Number.isInteger(cell.sheet)||cell.sheet!<0||cell.sheet!>=10||
+ if(!cell||!cell.nativeSheet||cell.nativeSheet.root+cell.nativeSheet.file!==cell.url||cell.group!==undefined||!Number.isInteger(cell.sheet)||cell.sheet!<0||cell.sheet!>=10||
   !Number.isInteger(cell.cell)||cell.cell!<0||cell.cell!>=144||
   cell.x!==cell.cell!%12*96||cell.y!==Math.floor(cell.cell!/12)*96||
   !cell.url.startsWith('/')||cell.url.startsWith('//')||cell.url.includes('..')||cell.url.includes('\\')||
@@ -43,10 +44,10 @@ export function normalizedWandOverlayPixels(rgba:Uint8ClampedArray,side=84):Pixe
 // an entire decoded sheet per material or generated wand combination.
 const cache=new Map<string,Promise<PixelBuffer>>();
 export function originalWandCellKey(source:WandOriginalCell){
- const c=source.cell;return JSON.stringify([source.itemId,source.kind??'collection',c.group,c.sheet,c.cell,c.url]);
+ const c=source.cell;return JSON.stringify([source.itemId,source.kind??'collection',c.group,c.sheet,c.cell,c.url,c.nativeSheet?.sha256,c.nativeSheet?.bytes]);
 }
 async function loadCell(source:WandOriginalCell):Promise<PixelBuffer>{
- const c=source.cell,side=source.kind==='inventory'?96:84,pad=(96-side)/2,img=new Image();img.src=c.url;await img.decode();
+ const c=source.kind==='inventory'?await resolveVerifiedInventorySprite(source.cell):source.cell,side=source.kind==='inventory'?96:84,pad=(96-side)/2,img=new Image();img.src=c.url;await img.decode();
  if(c.x<0||c.y<0||c.x+96>img.naturalWidth||c.y+96>img.naturalHeight)throw Error('WAND_SOURCE_CELL_BOUNDS');
  const canvas=document.createElement('canvas');canvas.width=side;canvas.height=side;
  try{

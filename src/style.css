@@ -300,7 +300,7 @@
 .inventory-group-option.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 .inventory-group-option:hover:not(.active){background:var(--hover)}
 .inventory-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(136px,100%),1fr));gap:6px;align-items:stretch}
-.inventory-card{position:relative;padding:7px;display:flex;flex-direction:column;gap:5px;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.inventory-card{--inventory-control-size:30px;position:relative;padding:7px;display:flex;flex-direction:column;gap:5px;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px}
 .inventory-card-heading{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;flex:1}
 .inventory-item-art{display:flex;align-items:center;justify-content:center;flex:none;width:64px;height:64px;overflow:hidden}
  /* Scale the entire original sprite cell, not its background coordinates. */
@@ -313,19 +313,22 @@
 .inventory-blueprint-pattern{position:absolute;inset:0;z-index:0;pointer-events:none;background-size:136.7965% auto;background-position:left bottom;background-repeat:repeat;opacity:0.392156869}
 .inventory-blueprint>.item-sprite,.inventory-blueprint>.item-art-empty{position:relative;z-index:1}
 .inventory-name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;overflow-wrap:anywhere;text-align:center;font-size:11px;line-height:1.35;min-height:2.7em;width:100%}
-.inventory-quantity-form{display:flex;align-items:center;gap:4px}
-.inventory-quantity-form label{display:flex;flex:1;min-width:0;color:var(--muted)}
-.inventory-quantity-form input{width:100%;min-width:0;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:4px 5px;font-size:13px;min-height:30px;font-variant-numeric:tabular-nums}
-.inventory-quantity-form .primary{flex:none;display:grid;place-items:center;width:30px;height:30px;min-height:30px;padding:0;border-radius:6px}
-.inventory-quantity-form .primary svg{width:16px;height:16px}
+/* All inventory footers use the same border-box height. Explicit tracks
+ * keep the number field from pushing either action outside a narrow card. */
+.inventory-quantity-form{display:grid;grid-template-columns:minmax(0,1fr);grid-auto-flow:column;grid-auto-columns:var(--inventory-control-size);align-items:center;gap:4px;min-width:0;width:100%;margin:0}
+.inventory-quantity-form label{display:block;min-width:0;margin:0;color:var(--muted)}
+.inventory-quantity-form input{display:block;appearance:textfield;width:100%;min-width:0;height:var(--inventory-control-size);min-height:0;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:0 4px;font-size:13px;line-height:normal;font-variant-numeric:tabular-nums}
+.inventory-quantity-form input::-webkit-inner-spin-button,.inventory-quantity-form input::-webkit-outer-spin-button{appearance:none;margin:0}
+.inventory-quantity-form .primary,.inventory-quantity-form .inventory-compact-variant{appearance:none;display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:var(--inventory-control-size);height:var(--inventory-control-size);min-width:0;min-height:0;max-width:100%;padding:0;margin:0;border-radius:6px;line-height:1}
+.inventory-quantity-form .primary svg,.inventory-quantity-form .inventory-compact-variant svg{display:block;flex:none;width:16px;height:16px;margin:0}
 .inventory-readonly{opacity:.85}
-.inventory-readonly-quantity{display:flex;align-items:center;justify-content:center;gap:5px;min-height:30px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.inventory-readonly-quantity{display:flex;align-items:center;justify-content:center;gap:5px;height:var(--inventory-control-size);min-height:0;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 .inventory-readonly-quantity svg{width:13px;height:13px;flex:none}
 @media(max-width:730px){
  .inventory-grid{grid-template-columns:repeat(auto-fill,minmax(min(120px,100%),1fr));gap:5px}
- .inventory-card{padding:5px}
- .inventory-quantity-form input,.inventory-quantity-form .primary{min-height:34px}
- .inventory-quantity-form .primary{width:34px}
+ .inventory-card{--inventory-control-size:34px;padding:5px}
+ .inventory-quantity-form{gap:3px}
+ .inventory-quantity-form input{padding-inline:3px}
 }
 
 .inventory-item-art.flower-variant{position:relative;padding-top:22px;box-sizing:content-box}
@@ -333,7 +336,9 @@
 .inventory-native-decorators{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;gap:2px;z-index:1;pointer-events:none}
 .inventory-flower-variant-name{font-size:10px;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-.inventory-unique-edit-button{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:30px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;background:var(--accent-soft);color:var(--accent);cursor:pointer;font-size:13px;font-variant-numeric:tabular-nums}
+.inventory-unique-edit-button{appearance:none;display:flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box;width:100%;min-width:0;height:var(--inventory-control-size);min-height:0;margin:0;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--accent-soft);color:var(--accent);cursor:pointer;font-size:13px;line-height:1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.inventory-unique-edit-button:has(>span){justify-content:space-between}
+.inventory-unique-edit-button>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:start}
 .inventory-unique-edit-button:hover:not(:disabled){background:var(--hover);border-color:var(--accent)}
 .inventory-unique-edit-button svg{display:block;flex:none;width:16px;height:16px}
 .date-dialog-field select{width:100%;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;font-size:14px;min-height:36px;padding:6px}
@@ -344,8 +349,7 @@
 .inventory-batch-checkbox{position:absolute;inset-block-start:6px;inset-inline-start:6px;width:18px;height:18px;z-index:3;accent-color:var(--accent);cursor:pointer}
 .inventory-card.inventory-batch-selected{border-color:var(--accent);background:var(--accent-soft)}
 
-.inventory-quantity-form .inventory-compact-variant{flex:none;display:grid;place-items:center;place-content:center;width:30px;height:30px;min-height:30px;padding:0}
-@media(max-width:730px){.inventory-quantity-form .inventory-compact-variant{width:34px;height:34px;min-height:34px}}
+
 .inventory-flower-growth{min-height:34px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
 .inventory-flower-growth[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 

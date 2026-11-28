@@ -102,7 +102,7 @@ test('individual cards use exact sprites and missing rows retain placeholder; ca
  const app=read('../src/App.svelte').toString('utf8');
  const css=read('../src/style.css').toString('utf8');
  for(const part of [
-  'loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index)',
+  'loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index,identity=>{',
   'achievementIndividualAtlas?.bySaveGuid.get(item.guid)',
   '{#if individualArt}', '<span class="achievement-individual-sprite"',
   '{:else if art}', '<span class="achievement-category-sprite"',
@@ -123,7 +123,7 @@ test('achievement edit dialog uses native detail-only parent fallback; list stil
  const modal=app.slice(app.indexOf('<dialog class="achievement-dialog"'),app.indexOf('</dialog>',app.indexOf('<dialog class="achievement-dialog"')));
  assert.ok(modal.includes('editingSaveGuid=achievementGuid(editingAchievement.guid)'));
  assert.ok(modal.includes('achievementIndividualAtlas?.bySaveGuid.get(editingSaveGuid)'));
- assert.ok(modal.includes('resolveAchievementDetailCategoryArt(editingSaveGuid,snapshot.version,achievementCategoryAtlas,achievementIndividualAtlas,achievementGroupHierarchy)'));
+ assert.ok(modal.includes('resolveAchievementDetailCategoryArt(editingSaveGuid,snapshot.version,achievementCategoryAtlas,achievementIndividualIdentity,achievementGroupHierarchy)'));
  assert.ok(modal.includes("'native-parent'"));
  assert.ok(modal.includes('{#if dialogIndividualArt}'));
  assert.ok(modal.includes('{:else if dialogCategoryArt}'));
@@ -160,4 +160,37 @@ test('all 559 original null leaf icons resolve their direct parent in the detail
  }
  assert.deepEqual([own,individualCount,inherited],[63,198,559]);
  assert.equal(icons.resolveAchievementDetailCategoryArt('unknown','3.0.1',category,individual,hierarchy),undefined);
+});
+
+test('verified individual identities allow all 559 null detail images to use their native parents even when individual pixels fail',async()=>{
+ const previous=globalThis.fetch;
+ const base='/HKIA-Save-Editor/';
+ const hierarchy=icons.decodeAchievementGroups(JSON.parse(read('../public/achievement-groups.json')),index);
+ const category=icons.decodeAchievementCategoryAtlas(categoryManifest,index,hierarchy,base);
+ let identity=null,requests=[],corrupt=false;
+ try{
+  globalThis.fetch=async url=>{
+   requests.push(url);
+   if(url.endsWith('achievement-individual-atlas.json')){
+    const bytes=read('../public/achievement-individual-atlas.json');
+    if(corrupt)bytes[0]^=1;
+    return new Response(bytes);
+   }
+   return new Response('temporary image failure',{status:503});
+  };
+  await assert.rejects(icons.loadAchievementIndividualAtlas(base,index,value=>identity=value),/ACH_ATLAS_FETCH_FAILED/);
+  assert.ok(identity);assert.equal(identity.bySaveGuid.size,198);assert.equal(Object.hasOwn(identity,'url'),false);
+  let parents=0,individuals=0;
+  for(const guid of index.keys()){
+   if(category.bySaveGuid.has(guid))continue;
+   const parent=icons.resolveAchievementDetailCategoryArt(guid,'3.0.1',category,identity,hierarchy);
+   if(identity.bySaveGuid.has(guid)){assert.equal(parent,undefined);individuals++;}
+   else{assert.equal(parent?.saveGuid,hierarchy.owner.get(guid));parents++;}
+  }
+  assert.deepEqual([parents,individuals],[559,198]);
+  assert.equal(requests.length,2);
+  identity=null;corrupt=true;requests=[];
+  await assert.rejects(icons.loadAchievementIndividualAtlas(base,index,value=>identity=value),/ACH_ATLAS_MANIFEST_HASH_MISMATCH/);
+  assert.equal(identity,null);assert.equal(requests.length,1);
+ }finally{globalThis.fetch=previous;}
 });

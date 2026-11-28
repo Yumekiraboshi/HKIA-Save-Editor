@@ -186,12 +186,15 @@ async function inventoryDynamicPaletteArtSmoke(){
   })));
   for(const im of images){assert.equal(im.width,96);assert.equal(im.height,96);assert.ok(im.alpha.some(a=>a>200));}
   assert.deepEqual(images[0].alpha,images[1].alpha);assert.notDeepEqual(images[0].rgb,images[1].rgb);
+  const originalUrls=await sprites.evaluateAll(els=>els.map(e=>getComputedStyle(e).backgroundImage).sort());
   const inputs=page.locator('.inventory-card input[name="quantity"]');
   assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.min)),['1','1']);
   await inputs.first().fill('4');await page.locator('.inventory-card button[type="submit"]').first().click();
   await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
   await inputs.nth(1).fill('7');await page.locator('.inventory-card button[type="submit"]').nth(1).click();
   await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await sprites.nth(1).waitFor({timeout:30_000});
+  assert.deepEqual(await sprites.evaluateAll(els=>els.map(e=>getComputedStyle(e).backgroundImage).sort()),originalUrls,'quantity-only snapshot refresh retains dynamic artwork URLs');
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();
   const editor=page.locator('dialog[aria-labelledby="palette-editor-title"]');
   await editor.waitFor();await editor.locator('.inventory-palette-option').first().click();
@@ -280,6 +283,7 @@ async function inventoryFirstPaletteSmoke(){
   const search=page.locator('.inventory-controls input[type="search"]');await search.fill('1835273963');
   const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="palette-editor-title"]');
   await card.locator('.item-sprite[data-dynamic-art-source="native-palette"][data-icon-fidelity="source-derived-base-only"]').waitFor({timeout:30_000});
+  await assertInventoryControlGeometry(page,card.locator('.inventory-unique-edit-button'),true);
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
   assert.equal(await dialog.locator('button[type="submit"]').count(),0);
   await dialog.locator('.inventory-palette-option:not([disabled])').first().click();
@@ -317,6 +321,7 @@ async function inventoryPaletteCreationSmoke(){
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
   const rows=page.locator('.inventory-card input[name="quantity"]'),dialog=page.locator('dialog[aria-labelledby="palette-editor-title"]');
   await rows.first().waitFor();assert.equal(await rows.count(),1);
+  await assertInventoryControlGeometry(page,page.locator('.inventory-card .inventory-compact-variant').first());
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();
   await dialog.waitFor();await dialog.locator('.inventory-palette-option').first().click();
   await dialog.locator('[data-palette-slot="1"]').click();await dialog.locator('.inventory-palette-option').first().click();
@@ -511,27 +516,36 @@ async function inventoryNestedWandSmoke(){
   await chooseTab(page,'inventory');const search=page.locator('.inventory-controls input[type="search"]');await search.fill('384749651');
   const card=page.locator('.inventory-card'),dialog=page.locator('dialog[aria-labelledby="wand-editor-title"]');
   await card.locator('.inventory-unique-edit-button:not([disabled])').click();await dialog.waitFor();
-  const materials=dialog.locator('select[name="wand-nested-material"]');
+  const materials=dialog.locator('select[name="wand-nested-part-1"]');
   const material=await materials.locator('option[data-wand-material="13:3:0"]').getAttribute('value');assert.ok(material!==null);
   await materials.selectOption(material);
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await card.locator('.inventory-unique-edit-button:not([disabled])').click();await dialog.waitFor();
   const pair=dialog.locator('[data-wand-option-count]');
   await chooseWandFields(dialog,106,127);
-  const combinedOption=dialog.locator('select[name="wand-nested-material"]:not([disabled]) option[data-wand-material="502:3:0"]');
+  const firstPart=dialog.locator('select[name="wand-nested-part-0"]');
+  const combinedOption=firstPart.locator('option[data-wand-material="502:3:0"]');
   await page.waitForFunction(()=>{const dialog=document.querySelector('dialog[aria-labelledby="wand-editor-title"]');return Boolean(dialog?.querySelector('select[name="wand-magic"]:not([disabled])'))});
   assert.equal(await dialog.locator('[role="alert"]').count(),0,await dialog.locator('[role="alert"]').allTextContents().then(v=>v.join(' ')));
   await combinedOption.waitFor({state:'attached'});
   const combinedChoice=await combinedOption.getAttribute('value');assert.ok(combinedChoice!==null);
-  await materials.selectOption(combinedChoice);
+  await firstPart.selectOption(combinedChoice);
+  await dialog.locator('[data-wand-material-selected="502:3:0"][data-wand-material-busy="false"]').waitFor();
+  const otherPart=dialog.locator('select[name="wand-nested-part-1"]');
+  const alternate=await otherPart.locator('option[data-wand-material="502:2:0"]').getAttribute('value');assert.ok(alternate!==null);
+  await otherPart.selectOption(alternate);
+  await dialog.locator('[data-wand-material-selected="502:2:0"][data-wand-material-busy="false"]').waitFor();
+  const restore=await otherPart.locator('option[data-wand-material="502:3:0"]').getAttribute('value');assert.ok(restore!==null);
+  await otherPart.selectOption(restore);
+  await dialog.locator('[data-wand-material-selected="502:3:0"][data-wand-material-busy="false"]').waitFor();
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-wand:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('384749651');
   await card.locator('.inventory-add-source:not([disabled])').first().click();await dialog.waitFor();
-  const materialOnly=materials.locator('option[data-wand-material]').first();
+  const materialOnly=dialog.locator('select[name^="wand-nested-part-"] option[data-wand-material]').first();
   const materialOnlyKey=await materialOnly.getAttribute('data-wand-material'),materialOnlyValue=await materialOnly.getAttribute('value');
   assert.ok(materialOnlyKey&&materialOnlyValue!==null);
-  await materials.selectOption(materialOnlyValue);
+  await dialog.locator('select[name^="wand-nested-part-"]').filter({has:page.locator('option[data-wand-material="'+materialOnlyKey+'"]')}).first().selectOption(materialOnlyValue);
   assert.equal(await pair.getAttribute('data-wand-selection'),'-1');
   await dialog.locator('input[name="variant-add-quantity"]').fill('4');
   assert.equal(await dialog.locator('button[type="submit"]').count(),0);
@@ -611,6 +625,7 @@ async function inventoryWandEditSmoke(){
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-show-zero-toggle[aria-pressed="false"]').click();await page.locator('.inventory-controls input[type="search"]').fill('1429161083');
   const card=page.locator('.inventory-card').first(),dialog=page.locator('dialog[aria-labelledby="wand-editor-title"]');
+  await assertInventoryControlGeometry(page,card.locator('.inventory-compact-variant'));
   await card.locator('.inventory-stack-delete:not([disabled])').click();await confirmInventoryRemoval(page,false);
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'1');
   await card.locator('.inventory-stack-delete:not([disabled])').click();await confirmInventoryRemoval(page);
@@ -666,6 +681,7 @@ async function inventoryBobaEditSmoke(){
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1798633565');
   const card=page.locator('.inventory-card').first(),dialog=page.locator('dialog[aria-labelledby="boba-editor-title"]');
+  await assertInventoryControlGeometry(page,card.locator('.inventory-compact-variant'));
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
   await dialog.locator('select[name="boba-pearls"]').selectOption({label:'Without tapioca'});
   await dialog.locator('select[name="boba-sweetness"]').selectOption({label:'Unsweetened'});
@@ -720,12 +736,13 @@ async function inventoryFirstChefSmoke(){
   await search.fill('1338995084');await card.locator('.inventory-unique-edit-button').click();
   const cafe=page.locator('dialog[aria-labelledby="cafe-editor-title"]');await cafe.waitFor();
   assert.equal(await cafe.locator('button[type="submit"]').count(),0);
-  assert.equal(await cafe.locator('.inventory-cafe-slot').count(),3);
-  const select=cafe.locator('select[name="cafe-variant"]');
+  assert.equal(await cafe.locator('[data-cafe-slot]').count(),3);
+  const select=cafe.locator('select[name="cafe-slot-0"]');
   const ingredient=await select.locator('option[data-ingredient-id]').first().getAttribute('value');assert.ok(ingredient!==null);
-  await select.selectOption(ingredient);await cafe.locator('[data-cafe-slot="1"]').click();
-  const next=await select.locator('option[data-ingredient-id]').last().getAttribute('value');assert.ok(next!==null);
-  await select.selectOption(next);
+  await select.selectOption(ingredient);
+  const second=cafe.locator('select[name="cafe-slot-1"]:not([disabled])');
+  const next=await second.locator('option[data-ingredient-id]').last().getAttribute('value');assert.ok(next!==null);
+  await second.selectOption(next);
   await cafe.locator('input[name="variant-add-quantity"]').fill('3');
   await cafe.locator('.inventory-create-cafe:not([disabled])').click();await cafe.waitFor({state:'hidden'});
   await card.locator('.inventory-add-source').waitFor();
@@ -807,17 +824,17 @@ async function inventoryCafeEditSmoke(){
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('203331651');
   const card=page.locator('.inventory-card').first(),dialog=page.locator('dialog[aria-labelledby="cafe-editor-title"]');
+  await assertInventoryControlGeometry(page,card.locator('.inventory-compact-variant'));
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
-  const select=dialog.locator('select[name="cafe-variant"]');
+  const select=dialog.locator('select[name="cafe-slot-0"]');
   const option=select.locator('option[data-ingredient-id="1622861092"]');
   const value=await option.getAttribute('value');assert.ok(value!==null);
-  const firstSlot=dialog.locator('[data-cafe-slot="0"]'),beforeLabel=await firstSlot.innerText();
+  const firstSlot=dialog.locator('[data-cafe-slot="0"] > span'),beforeLabel=await firstSlot.innerText();
   await select.selectOption(value);
-  await dialog.locator('[data-cafe-slot="1"]').click();
+  const secondSelect=dialog.locator('select[name="cafe-slot-1"]:not([disabled])');await secondSelect.waitFor();
   const changedLabel=await firstSlot.innerText();assert.notEqual(changedLabel,beforeLabel);
-  const second=await select.locator('option[data-ingredient-id]:not([data-ingredient-id="0"])').first().getAttribute('value');assert.ok(second!==null);
-  await select.selectOption(second);
-  await firstSlot.click();
+  const second=await secondSelect.locator('option[data-ingredient-id]:not([data-ingredient-id="0"])').first().getAttribute('value');assert.ok(second!==null);
+  await secondSelect.selectOption(second);await dialog.locator('select[name="cafe-slot-0"]:not([disabled])').waitFor();
   assert.equal(await firstSlot.innerText(),changedLabel);
   assert.equal(await select.inputValue(),'-1');
   assert.equal(await select.locator('option:checked').innerText(),changedLabel.replace(/^1 · /,''));
@@ -853,7 +870,7 @@ async function inventoryCafeCreationAndOptionalSideSmoke(){
   const rows=page.locator('.inventory-card input[name="quantity"]'),dialog=page.locator('dialog[aria-labelledby="cafe-editor-title"]');
   await rows.first().waitFor();assert.equal(await rows.count(),1);
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();await dialog.waitFor();
-  const select=dialog.locator('select[name="cafe-variant"]');
+  const select=dialog.locator('select[name="cafe-slot-0"]');
   await select.selectOption(await select.locator('option[data-ingredient-id="1240730051"]').getAttribute('value'));
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-cafe:not([disabled])').click();await dialog.waitFor({state:'hidden'});
@@ -861,9 +878,9 @@ async function inventoryCafeCreationAndOptionalSideSmoke(){
   await page.locator('button[title="Undo"]:not([disabled])').click();await rows.nth(1).waitFor({state:'detached'});
   await page.locator('button[title="Redo"]:not([disabled])').click();await rows.nth(1).waitFor();
   await search.fill('1932639321');await page.locator('.inventory-card .inventory-unique-edit-button').first().click();await dialog.waitFor();
-  await dialog.locator('[data-cafe-slot="1"]').click();
-  const none=select.locator('option[data-ingredient-id="0"]');
-  await select.selectOption(await none.getAttribute('value'));
+  const side=dialog.locator('select[name="cafe-slot-1"]');
+  const none=side.locator('option[data-ingredient-id="0"]');
+  await side.selectOption(await none.getAttribute('value'));
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-card button[type="submit"]:not([disabled])').first().waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
@@ -1530,6 +1547,54 @@ async function inventoryCreateMaterialSmoke(){
   console.log('CHROMIUM INVENTORY CREATE PASS: individual/batch add, local recovery, undo/redo, native ID allocation and export reparse');
  }finally{await context.close()}
 }
+async function assertNativeFlowerPatternClip(badge){
+ const image=badge.locator('img');
+ const original=await image.getAttribute('src');
+ assert.ok(original?.endsWith('.webp'));
+ const geometry=await badge.evaluate(el=>{
+  const primary=el.querySelector('.plate-inner'),clip=el.querySelector('.native-decorator-icon-clip'),img=clip?.querySelector('img');
+  if(!primary||!clip||!img)return null;
+  const a=getComputedStyle(primary),b=getComputedStyle(clip);
+  const bounds=e=>{const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height];};
+  return {mask:a.maskImage===b.maskImage&&a.maskImage.includes('plate.webp'),sameGeometry:JSON.stringify(bounds(primary))===JSON.stringify(bounds(clip))&&JSON.stringify(bounds(clip))===JSON.stringify(bounds(img)),alpha:b.maskMode==='alpha',size:b.width+' '+b.height};
+ });
+ assert.deepEqual(geometry,{mask:true,sameGeometry:true,alpha:true,size:'18px 18px'});
+ const saved=await badge.evaluate(el=>{
+  const img=el.querySelector('img'),saved=[el.getAttribute('style'),img.getAttribute('style')];
+  // A black outside region and a green inner plate make leakage observable.
+  el.style.setProperty('--primary','#00ff00');el.style.setProperty('--accent','transparent');
+  el.style.backgroundColor='#000000';img.style.visibility='hidden';return saved;
+ });
+ try{
+  await badge.page().waitForLoadState('networkidle');
+  const baseline=await badge.screenshot({scale:'css'});
+  for(let id=1;id<=16;id++){
+   await image.evaluate(async (img,src)=>{img.src=src;await img.decode();img.style.visibility='visible';},original.replace(/pattern-\d+\.webp$/,'pattern-'+id+'.webp'));
+   const actual=await badge.screenshot({scale:'css'});
+   const result=await badge.page().evaluate(async ([a,b])=>{
+    async function pixels(s){
+     const img=new Image();img.src='data:image/png;base64,'+s;await img.decode();
+     const canvas=document.createElement('canvas');canvas.width=img.width;canvas.height=img.height;
+     const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0);return ctx.getImageData(0,0,canvas.width,canvas.height).data;
+    }
+    const [before,after]=await Promise.all([pixels(a),pixels(b)]);let outside=0,inside=0;
+    for(let i=0;i<before.length;i+=4){
+     const diff=Math.max(...[0,1,2].map(c=>Math.abs(before[i+c]-after[i+c])));
+     if(before[i]===0&&before[i+1]===0&&before[i+2]===0&&diff>5)outside++;
+     if(before[i]<5&&before[i+1]>240&&before[i+2]<5&&diff>20)inside++;
+    }
+    return {outside,inside};
+   },[baseline.toString('base64'),actual.toString('base64')]);
+   assert.equal(result.outside,0,'pattern '+id+' escapes the inner plate');
+   assert.ok(result.inside>0,'pattern '+id+' must remain visible');
+  }
+ }finally{
+  await badge.evaluate((el,[style,imgStyle,src])=>{
+   const img=el.querySelector('img');el.setAttribute('style',style);img.src=src;
+   if(imgStyle===null)img.removeAttribute('style');else img.setAttribute('style',imgStyle);
+  },[...saved,original]);
+ }
+}
 async function inventoryDynamicFlowerArtSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -1550,6 +1615,11 @@ async function inventoryDynamicFlowerArtSmoke(){
   await page.locator('.inventory-card [data-native-decorator="11"] img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
   const effectCard=page.locator('.inventory-card').filter({has:page.locator('[data-native-decorator="11"] img[src$="pattern-3.webp"]')});
   assert.deepEqual(await effectCard.locator('[data-native-decorator]').evaluateAll(els=>els.map(e=>e.getAttribute('data-native-decorator'))),['12','11']);
+  // The helper changes img.src for all sixteen patterns; a locator filtered
+  // by that same attribute would disappear after the first replacement.
+  const effectIndex=await effectCard.evaluate(el=>Array.from(document.querySelectorAll('.inventory-card')).indexOf(el));
+  assert.ok(effectIndex>=0);
+  await assertNativeFlowerPatternClip(page.locator('.inventory-card').nth(effectIndex).locator('[data-native-decorator="11"]'));
   await page.locator('.inventory-card [data-native-decorator="12"] img[src$="decorator-12.webp"]').first().waitFor({timeout:30_000});
   const images=await sprites.evaluateAll(async els=>Promise.all(els.map(async el=>{
    const url=getComputedStyle(el).backgroundImage.slice(5,-2);
@@ -1728,6 +1798,43 @@ async function inventoryFlowerGrowthDisplaySmoke(){
   console.log('CHROMIUM FLOWER GROWTH PASS: native seed/troweled art, localized search, zero and Undo/Redo');
  }finally{await context.close();}
 }
+// Verify real rendered controls rather than only matching their classes.
+async function assertInventoryControlGeometry(page,button,standalone=false){
+ await button.waitFor({timeout:30_000});
+ const initial=page.viewportSize(),theme=page.locator('.theme-select select'),initialTheme=await theme.inputValue();
+ try{
+  for(const [width,mode,dir] of [[1280,'light','ltr'],[768,'dark','ltr'],[390,'light','ltr'],[320,'dark','rtl']]){
+   await page.setViewportSize({width,height:800});
+   await theme.selectOption(mode);
+   await page.evaluate(dir=>{document.documentElement.dir=dir},dir);
+   const geometry=await button.evaluate(el=>{
+    const box=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,right:r.right,bottom:r.bottom}};
+    const card=el.closest('.inventory-card'),r=box(el),c=box(card),form=el.closest('.inventory-quantity-form');
+    const svg=el.querySelector('svg'),s=svg?box(svg):null;
+    const controls=form?[...form.querySelectorAll('input,button')].map(box):[r];
+    const center=(a,b)=>Math.abs(a.y+a.h/2-b.y-b.h/2)<1;
+    return {inside:controls.every(a=>a.x>=c.x&&a.right<=c.right&&a.y>=c.y&&a.bottom<=c.bottom),
+     height:r.h,aligned:controls.every(a=>Math.abs(a.h-r.h)<1&&center(a,r)),
+     nonOverlapping:controls.every((a,i)=>controls.every((b,j)=>i===j||a.right<=b.x+.5||b.right<=a.x+.5)),
+     square:Math.abs(r.w-r.h)<1,svgCentered:!s||(center(s,r)&&Math.abs(s.x+s.w/2-r.x-r.w/2)<1),
+     svgVerticallyCentered:!s||center(s,r),background:getComputedStyle(el).backgroundColor,
+     accent:getComputedStyle(el).color};
+   });
+   const label=width+'px '+mode+' '+dir+' '+JSON.stringify(geometry);
+   assert.equal(geometry.inside,true,label);assert.equal(geometry.aligned,true,label);
+   assert.equal(geometry.nonOverlapping,true,label);
+   assert.equal(geometry.height,width<=730?34:30,label);
+   assert.notEqual(geometry.background,'rgba(0, 0, 0, 0)',label);
+   assert.notEqual(geometry.background,'rgb(239, 239, 239)',label);
+   if(standalone)assert.equal(geometry.svgVerticallyCentered,true,label);
+   else{assert.equal(geometry.square,true,label);assert.equal(geometry.svgCentered,true,label);}
+  }
+ }finally{
+  await page.evaluate(()=>{document.documentElement.dir='ltr'});
+  await theme.selectOption(initialTheme);
+  if(initial)await page.setViewportSize(initial);
+ }
+}
 async function inventoryFlowerVariantEditSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -1743,8 +1850,7 @@ async function inventoryFlowerVariantEditSmoke(){
   await page.locator('.inventory-controls input[type="search"]').fill('43114910');
   const button=page.locator('.inventory-card .inventory-unique-edit-button');
   await button.waitFor({timeout:30_000});
-  const geometry=await button.evaluate(el=>{const r=el.getBoundingClientRect(),svg=el.querySelector('svg').getBoundingClientRect(),apply=el.parentElement.querySelector('.primary').getBoundingClientRect();return {centered:Math.abs(r.x+r.width/2-svg.x-svg.width/2)<1&&Math.abs(r.y+r.height/2-svg.y-svg.height/2)<1,aligned:Math.abs(r.height-apply.height)<1,background:getComputedStyle(el).backgroundColor,expected:getComputedStyle(document.documentElement).getPropertyValue('--accent-soft').trim()}});
-  assert.equal(geometry.centered,true);assert.equal(geometry.aligned,true);assert.notEqual(geometry.background,'rgb(239, 239, 239)');
+  await assertInventoryControlGeometry(page,button);
   await button.click();
   const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');
   await dialog.waitFor();
@@ -2089,11 +2195,12 @@ async function inventoryDefaultFurnitureCreationSmoke(){
   await page.locator('.inventory-batch-toggle').click();
   assert.equal(await card.locator('.inventory-batch-checkbox').count(),0);
   await page.locator('.inventory-batch-toggle').click();
+  await assertInventoryControlGeometry(page,card.locator('.inventory-add-source'),true);
   await card.locator('.inventory-add-source').click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"]');
   await dialog.waitFor();
   const value=await dialog.locator('select option').filter({hasText:'Antique Lamp 2'}).getAttribute('value');assert.ok(value!==null);
-  await dialog.locator('select').selectOption(value);
+  await dialog.locator('select').filter({has:page.locator('option[value="'+value+'"]')}).first().selectOption(value);
   await dialog.locator('.inventory-create-furniture:not([disabled])').click();
   await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();
@@ -2104,7 +2211,7 @@ async function inventoryDefaultFurnitureCreationSmoke(){
   await card.nth(customIndex).locator('.inventory-unique-edit-button').click();
   await dialog.waitFor();
   const next=await dialog.locator('select option').filter({hasText:'Antique Lamp 3'}).getAttribute('value');assert.ok(next!==null);
-  await dialog.locator('select').selectOption(next);
+  await dialog.locator('select').filter({has:page.locator('option[value="'+next+'"]')}).first().selectOption(next);
   await dialog.locator('.inventory-create-furniture:not([disabled])').click();
   await dialog.waitFor({state:'hidden'});
   await card.nth(2).locator('.inventory-unique-edit-button:not([disabled])').waitFor();
@@ -2142,7 +2249,7 @@ async function inventoryAbsentFurnitureCreationSmoke(){
   await card.locator('.inventory-unique-edit-button').click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"]');await dialog.waitFor();
   const value=await dialog.locator('select option').filter({hasText:'Antique Lamp 2'}).getAttribute('value');assert.ok(value!==null);
-  await dialog.locator('select').selectOption(value);
+  await dialog.locator('select').filter({has:page.locator('option[value="'+value+'"]')}).first().selectOption(value);
   await dialog.locator('.inventory-create-furniture:not([disabled])').click();
   await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();
@@ -2199,8 +2306,8 @@ async function inventoryFurnitureCreationSmoke(){
   const cards=page.locator('.inventory-card');
   await cards.first().locator('.inventory-unique-edit-button').click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"]');await dialog.waitFor();
-  const value=await dialog.locator('select optgroup option').first().getAttribute('value');assert.ok(value!==null);
-  await dialog.locator('select').selectOption(value);
+  const value=await dialog.locator('select option[data-material-index]').first().getAttribute('value');assert.ok(value!==null);
+  await dialog.locator('select').filter({has:page.locator('option[value="'+value+'"]')}).first().selectOption(value);
   const create=dialog.locator('.inventory-create-furniture');
   const addQuantity=dialog.locator('input[name="variant-add-quantity"]');
   assert.equal(await addQuantity.inputValue(),'1');
@@ -2213,8 +2320,8 @@ async function inventoryFurnitureCreationSmoke(){
   await added.waitFor();assert.equal(await added.inputValue(),'4');
   assert.equal(await cards.first().locator('input[name="quantity"]').inputValue(),'93');
   await cards.nth(1).locator('.inventory-unique-edit-button').click();await dialog.waitFor();
-  const next=await dialog.locator('select optgroup option').first().getAttribute('value');assert.ok(next!==null);
-  await dialog.locator('select').selectOption(next);
+  const next=await dialog.locator('select option[data-material-index]').first().getAttribute('value');assert.ok(next!==null);
+  await dialog.locator('select').filter({has:page.locator('option[value="'+next+'"]')}).first().selectOption(next);
   await dialog.locator('button[type="submit"]').click();await dialog.waitFor({state:'hidden'});
   await added.fill('7');await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]').click();
   await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
@@ -2287,6 +2394,7 @@ async function inventoryFurnitureVariantEditSmoke(){
   const quantity=page.locator('.inventory-card input[name="quantity"]');
   await quantity.waitFor();assert.equal(await quantity.inputValue(),'93');
   assert.equal(await quantity.getAttribute('min'),'0');
+  await assertInventoryControlGeometry(page,button);
   await button.click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"][open]');
   await dialog.waitFor();
@@ -2297,13 +2405,14 @@ async function inventoryFurnitureVariantEditSmoke(){
   const art=el=>{const c=getComputedStyle(el);return [c.backgroundImage,c.backgroundPosition];};
   const source=await preview.evaluate(art);
   assert.deepEqual(source,await mainIcon.evaluate(art),'furniture preview must retain the same original icon as the card');
-  const select=dialog.locator('select');
-  const value=await select.locator('optgroup').first().locator('option[data-material-index="502"]').getAttribute('value');
+  const select=dialog.locator('select[name="furniture-part-0"]');
+  const value=await select.locator('option[data-material-index="502"]').getAttribute('value');
   assert.ok(value!==null);
   await select.selectOption(value);
   await dialog.locator('[data-furniture-reset="0"]:not([disabled])').waitFor();
-  const second=await select.locator('optgroup').nth(1).locator('option[data-material-index="3"]').getAttribute('value');assert.ok(second!==null);
-  await select.selectOption(second);
+  const part1=dialog.locator('select[name="furniture-part-1"]');
+  const second=await part1.locator('option[data-material-index="3"]').getAttribute('value');assert.ok(second!==null);
+  await part1.selectOption(second);
   await dialog.locator('[data-furniture-reset="1"]:not([disabled])').waitFor();
   assert.equal(await dialog.locator('.inventory-furniture-reset').count(),2);
   await dialog.locator('[data-furniture-icon-preview] [data-native-decorator="9"]').waitFor({timeout:30_000});
