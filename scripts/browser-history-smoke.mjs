@@ -1547,22 +1547,25 @@ async function inventoryCreateMaterialSmoke(){
   console.log('CHROMIUM INVENTORY CREATE PASS: individual/batch add, local recovery, undo/redo, native ID allocation and export reparse');
  }finally{await context.close()}
 }
-async function assertNativeFlowerPatternClip(badge){
- const image=badge.locator('img');
- const original=await image.getAttribute('src');
- assert.ok(original?.endsWith('.webp'));
+async function assertNativeFlowerPatternGeometry(badge){
  const geometry=await badge.evaluate(el=>{
   const primary=el.querySelector('.plate-inner'),clip=el.querySelector('.native-decorator-icon-clip'),img=clip?.querySelector('img');
   if(!primary||!clip||!img)return null;
   const a=getComputedStyle(primary),b=getComputedStyle(clip);
   const bounds=e=>{const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height];};
-  return {circle:getComputedStyle(el).clipPath.startsWith('circle(50%'),noInset:JSON.stringify(bounds(el))===JSON.stringify(bounds(primary))&&JSON.stringify(bounds(el))===JSON.stringify(bounds(clip))&&img.offsetWidth===el.offsetWidth&&img.offsetHeight===el.offsetHeight,noRim:getComputedStyle(el,'::before').display==='none',noInnerMask:a.maskImage==='none'&&b.maskImage==='none',size:b.width+' '+b.height};
+  return {mask:a.maskImage===b.maskImage&&a.maskImage.includes('plate.webp'),sameGeometry:JSON.stringify(bounds(primary))===JSON.stringify(bounds(clip))&&img.offsetWidth===clip.offsetWidth&&img.offsetHeight===clip.offsetHeight,alpha:b.maskMode==='alpha',size:b.width+' '+b.height,outer:el.offsetWidth+' '+el.offsetHeight,rim:getComputedStyle(el,'::before').backgroundColor,rimMask:getComputedStyle(el,'::before').maskImage===a.maskImage};
  });
- assert.deepEqual(geometry,{circle:true,noInset:true,noRim:true,noInnerMask:true,size:'22px 22px'});
+ assert.deepEqual(geometry,{mask:true,sameGeometry:true,alpha:true,size:'18px 18px',outer:'22 22',rim:'rgb(255, 255, 255)',rimMask:true});
+}
+async function assertNativeFlowerPatternClip(badge){
+ await assertNativeFlowerPatternGeometry(badge);
+ const image=badge.locator('img');
+ const original=await image.getAttribute('src');
+ assert.ok(original?.endsWith('.webp'));
  const saved=await badge.evaluate(el=>{
   const img=el.querySelector('img'),saved=[el.getAttribute('style'),img.getAttribute('style')];
-  // A black outside region and a green inner plate make leakage observable.
-  el.style.setProperty('--primary','#00ff00');el.style.setProperty('--accent','transparent');
+  // Preserve the white outer rim and make the inner plate high contrast.
+  el.style.setProperty('--primary','#00ff00');
   el.style.backgroundColor='#000000';img.style.visibility='hidden';return saved;
  });
  try{
@@ -1587,7 +1590,9 @@ async function assertNativeFlowerPatternClip(badge){
    // Bounds measured from original RGBA32 definition textures, not the screenshot.
    const expected=[[2,2,48,50],[2,2,52,52],[0,0,54,54],[0,0,54,54],[2,2,52,52],[0,0,54,54],[4,4,49,49],[2,2,52,52],[2,2,52,52],[2,2,52,51],[2,2,52,52],[2,2,52,52],[2,2,52,52],[2,2,52,52],[0,0,54,54],[10,10,44,44]];
    const padded=[1,2,5,8,9,10,11,12,13,14].includes(id);
-   assert.deepEqual(fit,{size:[54,54],bounds:expected[id-1],scale:padded?1.08:1,centered:true},'native pattern padding fit '+id);
+   const scale=id===7?54/44:id===16?54/34:padded?54/50:1;
+   assert.deepEqual({size:fit.size,bounds:fit.bounds,centered:fit.centered},{size:[54,54],bounds:expected[id-1],centered:true},'native pattern padding fit '+id);
+   assert.ok(Math.abs(fit.scale-scale)<.00001,'centered source crop '+id);
    const actual=await badge.screenshot({scale:'css'});
    const result=await badge.page().evaluate(async ([a,b])=>{
     async function pixels(s){
@@ -1595,15 +1600,17 @@ async function assertNativeFlowerPatternClip(badge){
      const canvas=document.createElement('canvas');canvas.width=img.width;canvas.height=img.height;
      const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0);return ctx.getImageData(0,0,canvas.width,canvas.height).data;
     }
-    const [before,after]=await Promise.all([pixels(a),pixels(b)]);let outside=0,inside=0;
+    const [before,after]=await Promise.all([pixels(a),pixels(b)]);let outside=0,inside=0,rim=0;
     for(let i=0;i<before.length;i+=4){
      const diff=Math.max(...[0,1,2].map(c=>Math.abs(before[i+c]-after[i+c])));
      if(before[i]===0&&before[i+1]===0&&before[i+2]===0&&diff>5)outside++;
+     if(before[i]>250&&before[i+1]>250&&before[i+2]>250&&diff>5)rim++;
      if(before[i]<5&&before[i+1]>240&&before[i+2]<5&&diff>20)inside++;
     }
-    return {outside,inside};
+    return {outside,inside,rim};
    },[baseline.toString('base64'),actual.toString('base64')]);
-   assert.equal(result.outside,0,'pattern '+id+' escapes the circular crop');
+   assert.equal(result.outside,0,'pattern '+id+' escapes the inner plate');
+   assert.equal(result.rim,0,'pattern '+id+' covers the white rim');
    assert.ok(result.inside>0,'pattern '+id+' must remain visible');
   }
  }finally{
@@ -2065,6 +2072,7 @@ async function inventoryAbsentFlowerCreationSmoke(){
   const firstPattern=await dialog.locator('option[data-flower-variant="6,2,1,16"]').getAttribute('value');assert.ok(firstPattern!==null);
   await dialog.locator('select[name="flower-pattern"]').selectOption(firstPattern);
   await dialog.locator('[data-native-decorator="11"] img[src$="pattern-1.webp"]').waitFor({timeout:30_000});
+  await assertNativeFlowerPatternGeometry(dialog.locator('[data-native-decorator="11"]'));
   assert.deepEqual(await dialog.locator('[data-native-decorator]').evaluateAll(els=>els.map(e=>e.getAttribute('data-native-decorator'))),['12','11']);
   const reset=dialog.locator('.inventory-flower-reset:not([disabled])');
   await reset.waitFor();
@@ -2129,6 +2137,7 @@ async function inventoryRareCandleSmoke(){
   const value=await dialog.locator('option[data-flower-variant="'+target.join(',')+'"]').getAttribute('value');assert.ok(value!==null);
   await dialog.locator('select[name="flower-effect"]').selectOption(value);
   await dialog.locator('[data-native-decorator="11"] img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
+  await assertNativeFlowerPatternGeometry(dialog.locator('[data-native-decorator="11"]'));
   await dialog.locator('[data-inventory-art="native-static-route"].item-sprite').waitFor({timeout:30_000});
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-flower:not([disabled])').click();await dialog.waitFor({state:'hidden'});
@@ -2416,6 +2425,13 @@ async function inventoryFurnitureVariantEditSmoke(){
   await button.click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"][open]');
   await dialog.waitFor();
+  const preview=dialog.locator('[data-furniture-icon-preview] .item-sprite');
+  await preview.waitFor({timeout:30_000});
+  const mainIcon=page.locator('.inventory-card .inventory-item-art .item-sprite');
+  await mainIcon.waitFor({timeout:30_000});
+  const art=el=>{const c=getComputedStyle(el);return [c.backgroundImage,c.backgroundPosition];};
+  const source=await preview.evaluate(art);
+  assert.deepEqual(source,await mainIcon.evaluate(art),'furniture preview must retain the same original icon as the card');
   const select=dialog.locator('select[name="furniture-part-0"]');
   const value=await select.locator('option[data-material-index="502"]').getAttribute('value');
   assert.ok(value!==null);
@@ -2426,6 +2442,8 @@ async function inventoryFurnitureVariantEditSmoke(){
   await part1.selectOption(second);
   await dialog.locator('[data-furniture-reset="1"]:not([disabled])').waitFor();
   assert.equal(await dialog.locator('.inventory-furniture-reset').count(),2);
+  await dialog.locator('[data-furniture-icon-preview] [data-native-decorator="9"]').waitFor({timeout:30_000});
+  assert.deepEqual(await preview.evaluate(art),source,'material editing must not recolor the native main icon');
   await dialog.locator('button[type="submit"]').click();
   await dialog.waitFor({state:'hidden'});
   await page.locator('.state-dot.changed').waitFor();
@@ -2669,7 +2687,7 @@ async function inventoryNativeResultArtSmoke(){
  }
  console.log('CHROMIUM NATIVE RESULT ICON PASS: original result Sprite, original placeholder, Plan decorator independent of target availability');
 }
-async function originalArtIndexRetrySmoke(){
+async function originalArtIndexRetrySmoke(trigger='tab'){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
   const page=await context.newPage();let online=false,sourceRequests=0,dynamicRequests=0;
@@ -2687,16 +2705,59 @@ async function originalArtIndexRetrySmoke(){
   await page.waitForLoadState('networkidle');
   const failedRequests=dynamicRequests;assert.ok(failedRequests>=1);
   online=true;
-  await chooseTab(page,'collections');
-  await chooseTab(page,'inventory');
-  await search.fill('315822');
+  if(trigger==='online'){
+   await page.evaluate(()=>{window.dispatchEvent(new Event('online'));window.dispatchEvent(new Event('online'));});
+  }else{
+   await chooseTab(page,'collections');
+   await chooseTab(page,'inventory');
+   await search.fill('315822');
+  }
   await page.waitForFunction(()=>Array.from(document.querySelectorAll('.inventory-card .item-sprite')).some(el=>getComputedStyle(el).backgroundImage.includes('/dynamic-colorways/315822.webp?v=')));
+  assert.equal(await search.inputValue(),'315822');
   assert.equal(sourceRequests,1,'validated original index is not fetched again');
   assert.equal(dynamicRequests,failedRequests+1,'missing dynamic index is retried once');
   await search.fill('54272482');
   await page.waitForFunction(()=>Array.from(document.querySelectorAll('.inventory-card .item-sprite')).some(el=>getComputedStyle(el).backgroundImage.includes('/dynamic-colorways/54272482.webp?v=')));
  }finally{await context.close();}
  console.log('CHROMIUM ORIGINAL ART INDEX RETRY PASS: cached source index, recovered dynamic originals without reload');
+}
+async function inventoryPackOnlineRetrySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  const catalog=JSON.parse(readFileSync('public/catalog.json','utf8'));
+  const row=catalog.items.find(item=>item[0]===2064380032);
+  assert.ok(row,'original fish collection record');
+  const group=row[3];
+  let online=false,attempts=0;
+  await page.route('**/item-packs/'+group+'.zip',route=>{
+   attempts++;return online?route.continue():route.fulfill({status:503,body:'unavailable'});
+  });
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-pack-recovery.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({scaleInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('2064380032');
+  const card=page.locator('.inventory-card');
+  await card.locator('.inventory-item-art .item-art-empty').waitFor({timeout:30_000});
+  await page.waitForLoadState('networkidle');
+  const failed=attempts;assert.ok(failed>=1);
+  online=true;
+  await page.evaluate(()=>{window.dispatchEvent(new Event('online'));window.dispatchEvent(new Event('online'));});
+  const art=card.locator('.inventory-item-art .item-sprite');
+  await art.waitFor({timeout:30_000});
+  const url=await art.evaluate(el=>getComputedStyle(el).backgroundImage);
+  assert.match(url,/blob:/);
+  assert.equal(attempts,failed+1);
+  assert.equal(await search.inputValue(),'2064380032');
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'3');
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForLoadState('networkidle');
+  assert.equal(attempts,failed+1);
+  assert.equal(await art.evaluate(el=>getComputedStyle(el).backgroundImage),url);
+ }finally{await context.close();}
+ console.log('CHROMIUM ORIGINAL PACK ONLINE RETRY PASS: same card, verified cached art, no redundant fetch');
 }
 async function originalArtworkFileRecoverySmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
@@ -3560,6 +3621,8 @@ async function run(){
  await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
  await originalArtIndexRetrySmoke();
+ await originalArtIndexRetrySmoke('online');
+ await inventoryPackOnlineRetrySmoke();
  await originalArtworkFileRecoverySmoke();
  await inventoryNativeResultArtSmoke();
  await inventoryNativeArtRetrySmoke();
