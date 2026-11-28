@@ -2292,7 +2292,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      </div>
      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(32px,1fr));gap:5px;margin-top:8px">
       {#each edit.options as option,i}
-       {#if !paletteChannelEqual(option,selected,paletteSlot)&&!paletteChannelEqual(option,edit.before,paletteSlot)}
+       {#if [0,1,2].filter(slot=>!paletteChannelEqual(option,selected,slot)).length===1&&!paletteChannelEqual(option,selected,paletteSlot)&&!paletteChannelEqual(option,edit.before,paletteSlot)}
         <button class="inventory-palette-option" type="button" data-palette-option={i} aria-label={paletteColorHex(option,paletteSlot)} title={paletteColorHex(option,paletteSlot)} aria-pressed={paletteChannelEqual(option,selected,paletteSlot)} disabled={busy} onclick={()=>void refreshPaletteDraft(paletteSelectChannel(selected,option,paletteSlot))} style:background-color={paletteColorHex(option,paletteSlot)} style="width:32px;height:32px;border:1px solid currentColor;border-radius:5px" style:outline={paletteChannelEqual(option,selected,paletteSlot)?'2px solid currentColor':'none'}></button>
        {/if}
       {/each}
@@ -2300,6 +2300,13 @@ import {verifiedFloorplanName} from './floorplan-names';
        <button class="inventory-palette-reset" type="button" title={paletteColorHex(edit.before,paletteSlot)} aria-label={paletteColorHex(edit.before,paletteSlot)} disabled={busy} onclick={()=>void refreshPaletteDraft(paletteSelectChannel(selected,edit.before,paletteSlot))} style:background-color={paletteColorHex(edit.before,paletteSlot)} style="width:32px;height:32px;border:1px dashed currentColor;border-radius:5px"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>
       {/if}
      </div>
+     {#each edit.options.filter(option=>[0,1,2].filter(slot=>!paletteChannelEqual(option,selected,slot)).length>1) as option}
+      <button class="inventory-palette-combination" type="button" disabled={busy} aria-label={[0,1,2].map(slot=>flowerCopy.color+' '+(slot+1)+': '+paletteColorHex(option,slot)).join(', ')} onclick={()=>void refreshPaletteDraft(option)} style="display:flex;gap:8px;align-items:center;margin-top:8px">
+       {#each [0,1,2] as slot}
+        <span style="display:flex;align-items:center;gap:4px">{slot+1}<span style:background-color={paletteColorHex(option,slot)} style="width:22px;height:22px;border:1px solid currentColor;border-radius:4px" aria-hidden="true"></span></span>
+       {/each}
+      </button>
+     {/each}
      {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
     </div>
     {#if canCreate}
