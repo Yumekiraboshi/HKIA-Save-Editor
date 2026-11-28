@@ -15,21 +15,22 @@
   style:--primary={(type===12||dyeTint)&&primaryColor?primaryColor:rgba(row.primary)} style:--accent={rgba(row.accent)}
   style:width={art.geometry.outer+'px'} style:height={art.geometry.outer+'px'}>
   <span class="plate-inner" style:width={art.geometry.inner+'px'} style:height={art.geometry.inner+'px'}></span>
-  {#if dyeTint}
-   <span class="native-dye-icon-clip" style:width={art.geometry.inner+'px'} style:height={art.geometry.inner+'px'}>
+  <span class="native-decorator-icon-clip" class:native-dye-icon-clip={dyeTint} style:width={art.geometry.inner+'px'} style:height={art.geometry.inner+'px'}>
+   {#if dyeTint}
     <span class="native-dye-icon-tint" style:background-color={iconColor} style:mask-image={'url("'+icon+'")' }></span>
-   </span>
-  {:else}
-   <img src={icon} alt="" width={art.geometry.inner} height={art.geometry.inner}/>
-  {/if}
+   {:else}
+    <img src={icon} alt="" width={art.geometry.inner} height={art.geometry.inner}/>
+   {/if}
+  </span>
  </span>
 {/if}
 <style>
  .native-inventory-decorator{position:relative;flex:none;display:grid;place-items:center;isolation:isolate;pointer-events:none}
  .native-inventory-decorator::before{content:'';position:absolute;inset:0;background:var(--accent);mask-image:var(--plate);mask-size:100% 100%;mask-repeat:no-repeat;z-index:-2}
- /* Primary and secondary colors occupy exactly the same original plate.
-    The original diagonal sprite alone is not the circular silhouette. */
- .plate-inner,.native-dye-icon-clip{position:absolute;mask-image:var(--plate);mask-size:100% 100%;mask-position:center;mask-repeat:no-repeat;mask-mode:alpha}
+ /* All foreground artwork shares the primary plate silhouette. Neither
+    the diagonal dye Sprite nor the square flower pattern/effect Sprite
+    may cover the rim or protrude beyond the circular inner area. */
+ .plate-inner,.native-decorator-icon-clip{position:absolute;mask-image:var(--plate);mask-size:100% 100%;mask-position:center;mask-repeat:no-repeat;mask-mode:alpha}
  .plate-inner{background:var(--primary);z-index:-1}
  .native-dye-icon-tint{display:block;width:100%;height:100%;mask-size:100% 100%;mask-position:center;mask-repeat:no-repeat;mask-mode:alpha}
  img{display:block;object-fit:contain}

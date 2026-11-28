@@ -6380,3 +6380,100 @@ fn physical_removal_protects_exact_referenced_uid_not_independent_ordinary_base(
 
 
 
+
+
+#[test]
+fn empty_flower_families_offer_distinct_source_defined_starters(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=43114910i32;let candidate=0x80000000|item as u32;
+ let make=|duplicate:bool|{
+  let mut p=synthetic_payload("3.0.1");p[2]=5;p[3]=0x97;
+  for (id,uid,color) in [(4,21,2),(5,22,if duplicate{2}else{5})]{
+   p.extend(doc(1,arr(vec![u(id),u(item as u32),u(uid),u(2),plain_flower(color)])));
+  }
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(false);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(!e.inventory_absent_flower_ids().contains(&item));
+  e.change_inventory_quantity(4,2,0).unwrap();
+  assert!(!e.inventory_absent_flower_ids().contains(&item));
+  e.change_inventory_quantity(5,2,0).unwrap();
+  assert!(e.inventory_absent_flower_ids().contains(&item));
+  assert_eq!(e.inventory_flower_creation_variants(candidate),vec![[6,10,0,0]]);
+  assert!(e.create_inventory_flower_variant(candidate,[0;4],[6,2,0,0],1).is_err());
+  let witness=[6,10,0,0];let target=[6,8,10,16];
+  assert!(e.inventory_flower_preview(candidate,witness,[6,5,0,0]).is_err());
+  assert!(e.inventory_flower_preview(candidate,witness,target).unwrap().1);
+  let id=e.create_inventory_flower_variant(candidate,witness,target,3).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+  restored.restore_history(&cp).unwrap();assert_eq!(restored.inventory(),e.inventory());
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].quantity,0);assert_eq!(saved.inventory()[1].quantity,0);
+  assert_eq!(saved.inventory_original_unique_payload(4),Some(plain_flower(2).as_slice()));
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(plain_flower(5).as_slice()));
+  assert!(saved.inventory().iter().any(|r|r.quantity==3&&saved.inventory_unique_data(r.document_id)==e.inventory_unique_data(id)));
+ }
+ let duplicate=Editor::open(make(true)).unwrap();
+ assert!(!duplicate.inventory_absent_flower_ids().contains(&item));
+}
+
+#[test]
+fn large_palette_families_use_native_approximate_equality_not_row_count(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=1835273963u32;
+ let rgba=|r:f32|{let mut a=vec![0x94];for x in [r,0.5f32,0.25f32,1.0f32]{a.push(0xca);a.extend(x.to_bits().to_be_bytes());}a};
+ let encode=|r:f32|arr(vec![vec![6],arr(vec![rgba(r),rgba(0.5),rgba(0.25)])]);
+ let make=|duplicate:bool|{
+  let base=synthetic_payload("3.0.1");let mut p=vec![0x93,0];p.extend(u(300));p.push(0xdc);p.extend(262u16.to_be_bytes());p.extend(&base[4..]);
+  for i in 0..257u32{
+   let r=if duplicate&&i==256{0.0}else{i as f32/512.0};
+   p.extend(doc(1,arr(vec![u(4+i),u(item),u(301+i),u(2),encode(r)])));
+  }
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(false);let input=if zipped{zip(&raw)}else{raw};let mut e=Editor::open(input.clone()).unwrap();let before=e.inventory();
+  assert_eq!(before.iter().filter(|r|r.editable).count(),257);
+  assert_eq!(e.inventory_palette_edit_hints().count(),257);
+  let original=e.inventory_palette_variants(4);assert!(!original.is_empty());
+  e.change_inventory_quantity(4,2,9).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),before);assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();assert_eq!(saved.inventory()[0].quantity,9);assert_eq!(saved.inventory_original_unique_payload(4),Some(encode(0.0).as_slice()));
+  let mut collision=Editor::open(make(true)).unwrap();assert_eq!(collision.inventory_palette_edit_hints().count(),255);
+  assert!(collision.inventory_palette_variants(4).is_empty());assert!(collision.inventory_palette_variants(260).is_empty());
+  assert!(!collision.inventory_palette_variants(5).is_empty());assert!(!collision.dirty());
+  collision.change_inventory_quantity(5,2,9).unwrap();
+ }
+}
+
+
+#[test]
+fn large_boba_families_keep_verified_variant_edit_and_creation(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let encode=|v:[u32;5]|arr(vec![vec![4],arr(v.into_iter().map(u).collect())]);
+ let first=[6,44,76,75,73];let target=[6,44,79,75,71];
+ let mut variants=vec![first];
+ // The other complete saved identities are unsupported recipe values;
+ // preserve their bytes, never offer them for creation or editing.
+ for i in 0..256u32{variants.push([6,44,76,75,1000+i]);}
+ for zipped in [false,true]{
+  let base=synthetic_payload("3.0.1");let mut p=vec![0x93,0];p.extend(u(300));p.push(0xdc);p.extend(262u16.to_be_bytes());p.extend(&base[4..]);
+  for (i,&v) in variants.iter().enumerate(){p.extend(doc(1,arr(vec![u(4+i as u32),u(1798633565),u(301+i as u32),u(2),encode(v)])));}
+  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};let mut e=Editor::open(input.clone()).unwrap();
+  let before=e.inventory();assert_eq!(e.inventory_boba_rows().filter(|(_,_,editable)|*editable).count(),1);
+  assert!(e.inventory_boba_variants(5).is_empty());
+  assert!(e.inventory_boba_creation_variants(4).contains(&target.map(|x|x as i32)));
+  e.create_inventory_boba_variant(4,first.map(|x|x as i32),target.map(|x|x as i32),3).unwrap();
+  e.change_inventory_quantity(4,2,0).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),before);
+  assert!(restored.redo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();assert_eq!(saved.inventory().len(),258);
+  for (i,&v) in variants.iter().enumerate().skip(1){assert_eq!(saved.inventory_original_unique_payload(4+i as u32),Some(encode(v).as_slice()));}
+  assert!(saved.inventory_boba_rows().any(|(_,v,editable)|v==target.map(|x|x as i32)&&editable));
+ }
+}
