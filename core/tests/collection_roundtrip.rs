@@ -6543,11 +6543,11 @@ fn all_ordinary_duplicate_families_recompute_membership_after_exact_deletion(){
   assert!(!e.dirty());
   let requests:Vec<_>=original.iter().map(|r|(r.document_id,1,0)).collect();
   e.change_inventory_quantities(&requests).unwrap();
-  let saved=Editor::open(e.export().unwrap()).unwrap();
+  let zero_raw=e.export().unwrap();
+  let saved=Editor::open(zero_raw.clone()).unwrap();
   assert!(saved.inventory().iter().all(|r|r.quantity==0));assert_eq!(saved.inventory().len(),original.len());
   // Reopen all-zero families, replenish only one row per family and
   // verify that every source definition exposes the individual zero route.
-  let zero_raw=saved.export().unwrap();
   let mut single=Editor::open(zero_raw).unwrap();
   let refill:Vec<_>=original.chunks_exact(2).map(|pair|(pair[0].document_id,0,1)).collect();
   single.change_inventory_quantities(&refill).unwrap();
