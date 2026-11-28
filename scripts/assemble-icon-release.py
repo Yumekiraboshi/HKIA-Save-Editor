@@ -14,6 +14,7 @@ import io
 import json
 import math
 import re
+import shutil
 import struct
 import tempfile
 import zipfile
@@ -652,6 +653,77 @@ def assemble(args):
         require(not args.out.exists(),'candidate output already exists')
         folder.rename(args.out)
     return report
+
+def assemble_native_distribution(out,release_dir,family_path,auxiliary_stage,views=()):
+    """Combine already verified stages without re-encoding any original image.
+    Call inside the update runner's atomic stage or a fresh local output.
+    """
+    native=module('native-raster-webp')
+    release=receipt(release_dir/'release-candidate.json',SCHEMA)
+    version,platform=release['version'],release['platform']
+    require(release['artworkPolicy']==native.POLICY and release['automaticReleaseActivationAuthorized'] is False,
+            'native candidate required')
+    require(out.is_dir() and not any(out.iterdir()) and out.resolve()!=source.ROOT and
+            source.ROOT not in out.resolve().parents,'empty output outside repository required')
+    def copy_verified(src,dst,meta):
+        require(not src.is_symlink() and src.is_file() and source.SHA.fullmatch(meta['sha256']) and
+                type(meta['bytes']) is int and meta['bytes']>0 and src.stat().st_size==meta['bytes'] and
+                source.file_digest(src)==meta['sha256'],'distribution file fingerprint: '+src.name)
+        dst.parent.mkdir(parents=True,exist_ok=True)
+        if dst.exists():
+            require(dst.stat().st_size==meta['bytes'] and source.file_digest(dst)==meta['sha256'],'conflicting shared artwork')
+        else:shutil.copyfile(src,dst)
+    paths=release['outputFiles']
+    require(set(paths)=={p.relative_to(release_dir).as_posix() for p in release_dir.rglob('*') if p.is_file()}-{'release-candidate.json'},
+            'release output census')
+    for name,meta in paths.items():
+        require(re.fullmatch(r'(?:collection-catalog\\.json|native-art/(?:index\\.json|[a-f0-9]{64}\\.webp)|dynamic-source-pages/(?:index\\.json|source-[a-f0-9]{64}\\.webp))',name),
+                'unexpected native delivery path: '+name)
+        copy_verified(release_dir/name,out/name,meta)
+    shutil.copyfile(release_dir/'release-candidate.json',out/'release-candidate.json')
+    aux=receipt(auxiliary_stage/'index.json','HKIA.IconAuxiliaryAssetStage.1')
+    family=source.read_json(family_path)
+    rel='dynamic-source-pages/index.json'
+    require(aux['version']==family['version']==version and aux['platform']==family['platform']==platform and
+            aux['definitionSnapshotSha256']==family['definitionSnapshotSha256']==release['snapshotSha256'] and
+            family['schema']=='HKIA.IconFamilyBindingsCandidate.1' and family['automaticReleaseActivationAuthorized'] is False and
+            family['dynamicIndexSha256']==paths[rel]['sha256'] and
+            family['auxiliaryIndexSha256']==aux['pageIndexSha256']==source.file_digest(auxiliary_stage/rel),
+            'distribution dynamic/auxiliary source binding')
+    shutil.copyfile(family_path,out/'family-bindings.json')
+    auxiliary=source.read_json(auxiliary_stage/rel)
+    require(auxiliary['version']==version and auxiliary['schema']=='HKIA.DynamicSourcePageCandidate.1','auxiliary page identity')
+    target=out/'auxiliary-source-pages';target.mkdir()
+    shutil.copyfile(auxiliary_stage/rel,target/'index.json')
+    for page in auxiliary['pages']:
+        name=page['file']
+        require(name=='source-'+page['sha256']+'.webp','auxiliary page filename')
+        copy_verified(auxiliary_stage/'dynamic-source-pages'/name,target/name,page)
+    require({p.name for p in (auxiliary_stage/'dynamic-source-pages').iterdir()}=={p.name for p in target.iterdir()},'auxiliary page census')
+    for manifest in views:
+        value=source.read_json(manifest)
+        schema,field={'achievement-art.json':('HKIA.AchievementArtCandidate.2','icon'),
+                      'category-art.json':('HKIA.CategoryArtCandidate.2','native')}[manifest.name]
+        require(value['schema']==schema and value['version']==version and value['platform']==platform and
+                value['definitionsSha256']==release['sourceBundles']['definitions'] and
+                value['artworkPolicy']==native.POLICY and value['automaticReleaseActivationAuthorized'] is False and
+                value['receiptSha256']==sha(source.stable({k:v for k,v in value.items() if k!='receiptSha256'})),
+                'view artwork receipt identity')
+        assets={row[field]['asset']['file']:row[field]['asset'] for row in value['rows'] if row[field]['kind']=='sprite'}
+        require(len(assets)==value['uniqueAssetCount'] and sum(a['bytes'] for a in assets.values())==value['imageBytes'],'view artwork asset census')
+        for name,a in assets.items():
+            require(source.SHA.fullmatch(a['sha256']) and name==a['sha256']+'.webp' and a['conversion']==native.POLICY,'original view asset policy')
+            copy_verified(manifest.parent/name,out/'native-art'/name,a)
+        shutil.copyfile(manifest,out/manifest.name)
+    files={p.relative_to(out).as_posix():{'bytes':p.stat().st_size,'sha256':source.file_digest(p)}
+           for p in sorted(out.rglob('*')) if p.is_file()}
+    result={'schema':'HKIA.NativeArtDistribution.1','version':version,'platform':platform,
+            'artworkPolicy':native.POLICY,'files':files,'totalBytes':sum(a['bytes'] for a in files.values()),
+            'staticImageCount':sum(k.startswith('native-art/') and k.endswith('.webp') for k in files),
+            'staticImageBytes':sum(a['bytes'] for k,a in files.items() if k.startswith('native-art/') and k.endswith('.webp')),
+            'automaticReleaseActivationAuthorized':False}
+    source.write_new(out/'distribution.json',result)
+    return result
 
 def self_test():
     sprite={'fileId':0,'pathId':'7','objectSha256':'a'*64}
