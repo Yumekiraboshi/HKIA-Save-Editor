@@ -959,6 +959,7 @@ impl Editor {
  pub fn create_inventory_furniture_variant(&mut self,source_id:u32,expected:FurnitureVariant,next:FurnitureVariant,quantity:i32)->Result<u32,Error>{
   if quantity<=0{return Err(Error::Schema)}
   let item_id=self.furniture_creation_item(source_id,expected,next).ok_or(Error::Schema)?;
+  Self::validate_new_inventory_quantity(item_id,quantity)?;
   let document_id=self.allocate_staged_unique_handle()?;
   let revision=self.next_edit_revision()?;
   let change=Change::FurnitureCreated{document_id,source_id,expected,furniture:PendingFurniture{item_id,variant:next},quantity};
@@ -1075,6 +1076,7 @@ impl Editor {
  pub fn replace_inventory_flower_species(&mut self,id:u32,source_item:i32,expected:FlowerVariant,target_item:i32,draft:FlowerVariant,quantity:i32)->Result<u32,Error>{
   if self.flower_species_source(id,expected,draft)!=Some((source_item,quantity))||
    self.flower_species_destination(source_item,target_item,draft).is_none(){return Err(Error::Schema)}
+  Self::validate_new_inventory_quantity(target_item,quantity)?;
   let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
   let change=Change::FlowerSpeciesReplaced{document_id,source_id:id,source_item,expected,flower:PendingFlower{item_id:target_item,variant:draft},quantity};
   self.restore_change(&change,false);self.undo.push(change);self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);
@@ -1310,6 +1312,7 @@ impl Editor {
    !crate::inventory_source::ordinary_bag_creation_item((id&!PENDING_ITEM) as i32)&&flower_item_patterns((id&!PENDING_ITEM) as i32,6).is_none()).ok_or(Error::Budget)
  }
  fn stage_new_flower(&mut self,source_id:u32,item_id:i32,expected:FlowerVariant,next:FlowerVariant,quantity:i32)->Result<u32,Error>{
+  Self::validate_new_inventory_quantity(item_id,quantity)?;
   let document_id=self.allocate_staged_unique_handle()?;
   let revision=self.next_edit_revision()?;
   let change=Change::FlowerCreated{document_id,source_id,expected,flower:PendingFlower{item_id,variant:next},quantity};
@@ -1909,6 +1912,7 @@ impl Editor {
   }).collect()
  }
  fn stage_wand(&mut self,source_id:u32,item_id:i32,expected:WandVariant,expected_nested:Option<WandData>,identity:WandData,quantity:i32)->Result<u32,Error>{
+  Self::validate_new_inventory_quantity(item_id,quantity)?;
   let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
   let change=Change::WandCreated{document_id,source_id,item_id,expected,expected_nested,identity,quantity};
   self.restore_change(&change,false);self.undo.push(change);
@@ -2193,6 +2197,7 @@ impl Editor {
    if current!=expected{return Err(Error::Schema)}
   }
   let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
+  Self::validate_new_inventory_quantity(crate::inventory_source::BOBA_ID,quantity)?;
   let change=Change::BobaCreated{document_id,source_id,expected,variant:next,quantity};
   self.restore_change(&change,false);self.undo.push(change);
   self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);self.revision=revision;Ok(document_id)
@@ -2431,6 +2436,7 @@ impl Editor {
  pub fn create_inventory_cafe_variant(&mut self,source_id:u32,expected:CafeVariant,next:CafeVariant,quantity:i32)->Result<u32,Error>{
   if quantity<=0{return Err(Error::Schema)}
   let item=self.cafe_creation_item(source_id,expected,next).ok_or(Error::Schema)?;
+  Self::validate_new_inventory_quantity(item,quantity)?;
   let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
   let change=Change::CafeCreated{document_id,source_id,item_id:item,expected,variant:next,quantity};
   self.restore_change(&change,false);self.undo.push(change);
@@ -2641,6 +2647,7 @@ impl Editor {
   }
   let document_id=self.allocate_staged_unique_handle()?;
   let revision=self.next_edit_revision()?;
+  Self::validate_new_inventory_quantity(crate::inventory_source::CUSTOM_PALETTE_ID,quantity)?;
   let change=Change::PaletteCreated{document_id,source_id,expected,variant:next,quantity};
   self.restore_change(&change,false);self.undo.push(change);
   self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);self.revision=revision;Ok(document_id)
@@ -2867,12 +2874,20 @@ impl Editor {
    self.ordinary_creation_payload_safe(item_id)&&
    !self.slot.index.inventory_referenced_items.contains(&item_id)
  }
+ // Resolve staged identity once for display, CAS and source-bound validation.
+ fn validate_new_inventory_quantity(item_id:i32,quantity:i32)->Result<(),Error>{
+  if quantity<=0||!crate::inventory_source::definition_quantity_limit(item_id).is_some_and(|cap|quantity<=cap){return Err(Error::Schema)}
+  Ok(())
+ }
+ fn pending_inventory_item_id(&self,document_id:u32)->i32{
+  self.pending_flowers.get(&document_id).map(|f|f.item_id).or_else(||self.pending_furniture.get(&document_id).map(|f|f.item_id)).or_else(||self.pending_palettes.contains_key(&document_id).then_some(crate::inventory_source::CUSTOM_PALETTE_ID)).or_else(||self.pending_bobas.contains_key(&document_id).then_some(crate::inventory_source::BOBA_ID)).or_else(||self.pending_cafes.get(&document_id).map(|&(item,_)|item)).or_else(||self.pending_wands.get(&document_id).map(|&(item,_)|item)).unwrap_or((document_id&!PENDING_ITEM) as i32)
+ }
  fn pending_inventory_rows(&self)->Vec<InventoryEntry>{
   let mut rows:Vec<_>=self.inventory_changes.iter().filter(|(&id,_)|id&PENDING_ITEM!=0)
    .map(|(&document_id,&quantity)|{
-    let item_id=self.pending_flowers.get(&document_id).map(|f|f.item_id).or_else(||self.pending_furniture.get(&document_id).map(|f|f.item_id)).or_else(||self.pending_palettes.contains_key(&document_id).then_some(crate::inventory_source::CUSTOM_PALETTE_ID)).or_else(||self.pending_bobas.contains_key(&document_id).then_some(crate::inventory_source::BOBA_ID)).or_else(||self.pending_cafes.get(&document_id).map(|&(item,_)|item)).or_else(||self.pending_wands.get(&document_id).map(|&(item,_)|item)).unwrap_or((document_id&!PENDING_ITEM) as i32);
-    InventoryEntry{document_id,item_id,quantity,editable:true,
-     quantity_limit:Some(crate::inventory_source::ordinary_quantity_limit(item_id).unwrap_or(i32::MAX)),quantity_minimum:0}
+    let item_id=self.pending_inventory_item_id(document_id);
+    let quantity_limit=crate::inventory_source::definition_quantity_limit(item_id);
+    InventoryEntry{document_id,item_id,quantity,editable:quantity_limit.is_some(),quantity_limit,quantity_minimum:0}
    }).collect();
   rows.sort_by_key(|r|(r.item_id,r.document_id));rows
  }
@@ -2990,7 +3005,8 @@ impl Editor {
   if id&PENDING_ITEM!=0{
    if self.pending_flowers.contains_key(&id)||self.pending_furniture.contains_key(&id)||self.pending_palettes.contains_key(&id)||self.pending_bobas.contains_key(&id)||self.pending_cafes.contains_key(&id)||self.pending_wands.contains_key(&id){
     let before=self.inventory_changes.get(&id).copied();
-    if next<0||expected<=0||before!=Some(expected){return Err(Error::Schema)}
+    let cap=crate::inventory_source::definition_quantity_limit(self.pending_inventory_item_id(id)).ok_or(Error::Schema)?;
+    if next<0||next>cap||expected<=0||before!=Some(expected){return Err(Error::Schema)}
     return Ok(InventoryQuantityDelta{document_id:id,before,after:(next>0).then_some(next)})
    }
    let item_id=(id&!PENDING_ITEM) as i32;
@@ -3815,7 +3831,7 @@ impl Editor {
    }.into_iter();
    let mut records=Vec::with_capacity(pending.len());
    for (row,id) in pending.iter().zip(ids){
-    if row.quantity<=0{return Err(Error::Schema)}
+    Self::validate_new_inventory_quantity(row.item_id,row.quantity)?;
     let mut bytes=vec![0x92,1,0x95];mp_u32(id,&mut bytes);mp_u32(row.item_id as u32,&mut bytes);
     let (uid,variant)=if let Some(f)=self.pending_flowers.get(&row.document_id){
      let (patterns,variant,reserved)=self.flower_context(row.document_id).ok_or(Error::Schema)?;
@@ -4240,6 +4256,31 @@ mod tests {
   slot.extend([0x92,0xc8,0,3,98,0xcd]);slot.extend((payload.len() as u16).to_be_bytes());
   slot.push(0xc6);slot.extend((compressed.len() as u32).to_be_bytes());slot.extend(compressed);
   slot
+ }
+
+ #[test]
+ fn pending_quantity_bounds_use_native_definition_not_payload_family(){
+  let mut editor=Editor::open(revision_test_slot()).unwrap();
+  let item=crate::inventory_source_data::RULES.iter().find_map(|&(id,_)|
+   (crate::inventory_source::definition_quantity_limit(id)==Some(1)).then_some(id)).unwrap();
+  let id=PENDING_ITEM|1;
+  // Inject a synthetic staged payload to isolate quantity authority from
+  // creation-family eligibility. This is not a valid flower creation.
+  editor.pending_flowers.insert(id,PendingFlower{item_id:item,variant:[6,1,0,0]});
+  editor.inventory_changes.insert(id,1);
+  let row=editor.pending_inventory_rows().into_iter().find(|r|r.document_id==id).unwrap();
+  assert_eq!(row.quantity_limit,Some(1));
+  assert!(row.editable);
+  assert!(Editor::validate_new_inventory_quantity(item,1).is_ok());
+  assert!(Editor::validate_new_inventory_quantity(item,2).is_err());
+  assert!(editor.plan_inventory_quantity(id,1,2,None).is_err());
+  assert!(editor.plan_inventory_quantity(id,1,0,None).is_ok());
+  editor.pending_flowers.get_mut(&id).unwrap().item_id=-1;
+  let row=editor.pending_inventory_rows().into_iter().find(|r|r.document_id==id).unwrap();
+  assert_eq!(row.quantity_limit,None);
+  assert!(!row.editable);
+  assert!(editor.plan_inventory_quantity(id,1,2,None).is_err());
+  assert!(Editor::validate_new_inventory_quantity(-1,1).is_err());
  }
 
  #[test]
