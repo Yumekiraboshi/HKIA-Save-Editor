@@ -40,6 +40,7 @@ import {searchAchievementRows} from './achievement-search';
  import {loadNativeDyePalettes,dyeDecoratorFor,type NativeDyePalettes} from './native-dye-palettes';
  import {createVariantArtSourceLoader} from './variant-art';
  import DyeSprite from './DyeSprite.svelte';
+ import InventoryAtlasSprite from './InventoryAtlasSprite.svelte';
  import DynamicFlowerSprite from './DynamicFlowerSprite.svelte';
  import DynamicPaletteSprite from './DynamicPaletteSprite.svelte';
  import DynamicChefSprite from './DynamicChefSprite.svelte';
@@ -1743,7 +1744,7 @@ import {verifiedFloorplanName} from './floorplan-names';
           <DyeSprite sprite={representativeSprite} palette={nativeDyePalettes[String(representative)]}
            sourceKey={representativeSource?.[1]??''} exactArtUrl={exactVariantArt[String(representative)]} originalArtUrl={originalVariantArt[String(representative)]}/>
          {:else if representativeSprite}
-          <span style:background-image={'url("'+representativeSprite.url+'")'} style:background-position={'-'+representativeSprite.x+'px -'+representativeSprite.y+'px'}></span>
+          <InventoryAtlasSprite sprite={representativeSprite}/>
          {/if}
         </span>
        {:else if t.art}
@@ -1810,8 +1811,7 @@ import {verifiedFloorplanName} from './floorplan-names';
         {:else if resultId!==undefined&&resultOriginal}
          <DyeSprite sprite={resultSprite} sourceKey={inventorySourceItems.get(resultId)?.[1]??''} originalArtUrl={resultOriginal}/>
         {:else if resultId!==undefined&&resultSprite}
-         <span class="item-sprite" data-inventory-art="native-result" data-result-icon-target={resultId} style:background-image={'url("'+resultSprite.url+'")'}
-          style:background-position={'-'+resultSprite.x+'px -'+resultSprite.y+'px'}></span>
+         <InventoryAtlasSprite sprite={resultSprite} source="native-result" target={resultId}/>
         {:else if resultPlaceholder}
          <DynamicArtSprite source="native-placeholder" render={renderNativePlaceholderArt}/>
         {:else if resultId!==undefined}
@@ -1822,8 +1822,7 @@ import {verifiedFloorplanName} from './floorplan-names';
         {:else if inventoryNativeArt?.placeholders.has(item.itemId)}
          <DynamicArtSprite source="native-placeholder" render={renderNativePlaceholderArt}/>
         {:else if nativeSprite}
-         <span class="item-sprite" data-inventory-art="native" style:background-image={'url("'+nativeSprite.url+'")'}
-          style:background-position={'-'+nativeSprite.x+'px -'+nativeSprite.y+'px'}></span>
+         <InventoryAtlasSprite sprite={nativeSprite} source="native"/>
         {:else if sprite}
          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'}
           style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>

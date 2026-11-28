@@ -2400,7 +2400,7 @@ async function inventoryNativeArtRetrySmoke(){
   await result.waitFor({timeout:30_000});
   assert.ok(await result.evaluate(async el=>{
    const url=getComputedStyle(el).backgroundImage.match(/^url\("(.+)"\)$/)?.[1];
-   if(!url||!url.includes('/inventory-art/sheet-008.webp'))return false;
+   if(!url?.startsWith('blob:')||el.getAttribute('data-native-sheet')!=='sheet-008.webp')return false;
    const image=new Image();image.src=url;await image.decode();return image.naturalWidth===1152;
   }));
   await chooseTab(page,'collections');
@@ -2410,6 +2410,31 @@ async function inventoryNativeArtRetrySmoke(){
  }finally{await context.close();}
  }
  console.log('CHROMIUM NATIVE INVENTORY ART RETRY PASS: exact target recovered by tab or online event without page reload, withheld route retained');
+}
+async function inventoryNativeSheetRetrySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();let available=false,requests=0;
+  await page.route('**/inventory-art/sheet-008.webp',r=>{requests++;return available?r.continue():r.fulfill({status:503,body:'unavailable'});});
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-native-sheet-retry.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({resultArtInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');await search.fill('10455890');
+  const art=page.locator('.inventory-card [data-result-icon-target="357184380"]');
+  await art.and(page.locator('[data-inventory-art="native-result-unavailable"]')).waitFor({timeout:30_000});
+  await page.waitForLoadState('networkidle');assert.ok(requests>=1);
+  assert.equal(await art.evaluate(el=>getComputedStyle(el).backgroundImage),'none');
+  available=true;await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await art.and(page.locator('[data-inventory-art="native-result"]')).waitFor({timeout:30_000});
+  const url=await art.evaluate(el=>getComputedStyle(el).backgroundImage);
+  assert.ok(url.includes('blob:'));assert.equal(await art.getAttribute('data-native-sheet'),'sheet-008.webp');
+  const recovered=requests;
+  await search.fill('1217231008');await search.fill('10455890');
+  await art.and(page.locator('[data-inventory-art="native-result"]')).waitFor({timeout:30_000});
+  assert.equal(await art.evaluate(el=>getComputedStyle(el).backgroundImage),url);assert.equal(requests,recovered);
+ }finally{await context.close();}
+ console.log('CHROMIUM NATIVE INVENTORY SHEET RETRY PASS: verified independent sheet recovery and reuse');
 }
 async function inventoryNativeResultArtSmoke(){
  // The first recipe/schematic result is in the original inventory atlas,
@@ -2440,7 +2465,7 @@ async function inventoryNativeResultArtSmoke(){
     const art=card.locator('[data-result-icon-target="357184380"]');
     assert.ok(await art.evaluate(async el=>{
      const css=getComputedStyle(el),url=css.backgroundImage.match(/^url\("(.+)"\)$/)?.[1];
-     if(!url||!url.includes('/inventory-art/sheet-008.webp')||css.backgroundPosition!=='-672px -672px')return false;
+     if(!url?.startsWith('blob:')||el.getAttribute('data-native-sheet')!=='sheet-008.webp'||css.backgroundPosition!=='-672px -672px')return false;
      const image=new Image();image.src=url;await image.decode();return image.naturalWidth===1152&&image.naturalHeight===1152;
     }));
    }
@@ -2560,7 +2585,7 @@ async function inventoryOriginalArtSmoke(){
   assert.ok(await extra.evaluate(async el=>{
    const bg=getComputedStyle(el).backgroundImage;
    const url=bg.match(/^url\("(.+)"\)$/)?.[1];
-   if(!url||!url.includes('/inventory-art/sheet-005.webp'))return false;
+   if(!url?.startsWith('blob:')||el.getAttribute('data-native-sheet')!=='sheet-005.webp')return false;
    const img=new Image();img.src=url;await img.decode();
    return img.naturalWidth===1152&&img.naturalHeight===1152;
   }),'original non-collection item atlas must be loaded');
@@ -3305,6 +3330,7 @@ async function run(){
  await originalArtworkFileRecoverySmoke();
  await inventoryNativeResultArtSmoke();
  await inventoryNativeArtRetrySmoke();
+ await inventoryNativeSheetRetrySmoke();
  await inventoryIconScaleSmoke();
  await inventoryDynamicFlowerArtSmoke();
  await flowerDefinitionRecoverySmoke();
