@@ -854,6 +854,13 @@ async function inventoryCafeEditSmoke(){
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
   assert.equal(v.getUint32(0,true),1);const final=Array.from({length:6},(_,i)=>v.getInt32(12+i*4,true));
   assert.equal(final[0],48);assert.equal(final[3],9);assert.notDeepEqual([final[1],final[4]],[49,46]);assert.equal(final[2],48);assert.equal(final[5],9);
+  const badges=card.locator('.ingredient-badge');
+  await badges.nth(2).waitFor();
+  assert.deepEqual(await badges.evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-ingredient-slots'))),['1','2','3']);
+  assert.deepEqual(await badges.evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-ingredient-count'))),['1','1','1']);
+  assert.equal(await badges.first().getAttribute('data-ingredient-candidates'),'1622861092');
+  assert.equal(await badges.nth(2).getAttribute('data-ingredient-candidates'),'1622861092');
+  assert.equal(await card.locator('.ingredient-count').count(),0);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM CAFE VARIANT PASS: native ingredient pair, history, recovery and export');
  }finally{await context.close()}
