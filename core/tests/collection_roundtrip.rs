@@ -5971,3 +5971,41 @@ fn all_verified_extra_nil_furniture_can_refill_without_removal_authority(){
  assert!(absent.inventory_creatable().iter().all(|r|!ids.contains(&r.item_id)));
 }
 
+
+#[test]
+fn physical_removal_protects_exact_referenced_uid_not_independent_ordinary_base(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=61381969u32;
+ let make=|uid:u32,duplicate:bool,bare:bool|{
+  let mut p=synthetic_payload("3.0.1");p[2]=20;p[3]=0x99+u8::from(duplicate)+u8::from(bare);
+  p.extend(doc(1,arr(vec![u(4),u(item),u(0),u(5),vec![0xc0]])));
+  p.extend(doc(1,arr(vec![u(5),u(item),u(21),u(2),furniture_payload([0,2,0])])));
+  p.extend(doc(1,arr(vec![u(6),u(item),u(22),u(3),furniture_payload([502,2,0])])));
+  if duplicate{p.extend(doc(1,arr(vec![u(7),u(427689),u(21),u(2),furniture_payload([0,2,0])])));}
+  let cafe=arr(vec![vec![0xc2],vec![0x80],u(0),u(0),guid([0;4]),arr(vec![arr(vec![u(item),u(uid)])]),u(0),u(0),u(0),l(0)]);
+  p.extend(doc(32,arr(vec![u(9),guid([7,0,0,0]),u(0),arr(vec![doc(38,cafe)])])));
+  if bare{
+   let home=arr(vec![guid([41,42,43,44]),arr(vec![]),u(item),u(0),guid([0;4]),l(0),
+    vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])]);
+   p.extend(doc(32,arr(vec![u(10),guid([8,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![home])]))])])));}
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(21,false,false);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert!(e.inventory_entry_removable(4));assert!(!e.inventory_entry_removable(5));assert!(e.inventory_entry_removable(6));
+  assert!(e.remove_inventory_entries(&[(4,5),(5,2)]).is_err());assert!(!e.dirty());
+  e.remove_inventory_entries(&[(4,5),(6,3)]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory().len(),1);assert_eq!(saved.inventory()[0].document_id,5);
+  assert_eq!(saved.inventory_original_unique_payload(5),e.inventory_original_unique_payload(5));
+  assert!(!saved.inventory_entry_removable(5));
+ }
+ for raw in [make(0,false,false),make(99,false,false),make(21,true,false),make(21,false,true)]{
+  let mut e=Editor::open(raw).unwrap();let original=e.inventory();
+  assert!(!e.inventory_entry_removable(4));assert!(!e.inventory_entry_removable(6));
+  assert!(e.remove_inventory_entries(&[(4,5),(6,3)]).is_err());assert_eq!(e.inventory(),original);assert!(!e.dirty());
+ }
+}
