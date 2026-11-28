@@ -2164,6 +2164,18 @@ impl Editor {
    let mut next=current;next[i]=original[i];next[i+3]=original[i+3];
    if next!=current&&Self::valid_cafe_saved(item,next)&&!reserved.contains(&next)&&seen.insert(next){out.push((next,0,i))}
   }
+  // A free complete recipe can remain when every single-slot neighbor
+  // is occupied. Reuse the same source-bounded starter and commit gate.
+  if out.is_empty(){
+   let mut blocked=reserved.clone();blocked.insert(current);
+   if let Some(next)=self.cafe_starter(item,&blocked){
+    if self.valid_cafe_target(item,original,next){
+     if let Some(slot)=(0..slots).find(|&i|(next[i],next[i+3])!=(current[i],current[i+3])){
+      out.push((next,0,slot));
+     }
+    }
+   }
+  }
   out
  }
  fn cafe_creation_context(&self,id:u32)->Option<(i32,CafeVariant,CafeVariant,HashSet<CafeVariant>)>{

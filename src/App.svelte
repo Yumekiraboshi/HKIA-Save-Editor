@@ -53,7 +53,7 @@ import {searchAchievementRows} from './achievement-search';
  import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
  import {nativeChefInstructionBase} from './native-icon-route';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
- import {cafeSlotLabel,cafeVariantLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
+ import {cafeSlotLabel,cafeVariantLabel,cafeOptionLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
  import {bobaFieldOptions,bobaFieldLabel,bobaFieldValue,fullBobaLabel,type BobaVariant,type BobaField} from './inventory-boba-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {toAchievementDateTimeValue,fromAchievementDateTimeValue} from './achievement-date';
@@ -2094,7 +2094,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <select name={'cafe-slot-'+slot} aria-label={inventoryName(edit.itemId)+' '+(slot+1)} value={-1} onchange={e=>{const index=Number(e.currentTarget.value);e.currentTarget.value='-1';void selectCafeSlot(index,slot)}} disabled={busy||!choices.length}>
        <option value={-1} disabled>{cafeSlotLabel(selected,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
        {#each choices as {option,index} (index)}
-        <option value={index} data-ingredient-id={option.ingredientId}>{option.ingredientId?sourceNames[String(option.ingredientId)]??cafeSlotLabel(option.variant,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??''):cafeSlotLabel(option.variant,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
+        <option value={index} data-ingredient-id={option.ingredientId}>{cafeOptionLabel(option,selected,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
        {/each}
       </select>
      </label>

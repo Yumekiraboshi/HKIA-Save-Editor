@@ -2246,6 +2246,47 @@ fn cafe_draft_preview_recomputes_complete_ordered_identity_and_creation(){
 }
 
 #[test]
+fn all_three_slot_cafe_outputs_reach_free_complete_recipes_after_neighbor_exhaustion(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let source=Editor::open(slot("3.0.1")).unwrap();
+ let encode=|v:[i32;6]|arr(vec![vec![3],arr(vec![arr(v[..3].iter().map(|&w|u(w as u32)).collect()),arr(v[3..].iter().map(|&w|u(w as u32)).collect())])]);
+ for item in [203331651,905853141,1061947263,1338995084]{
+  let original=source.inventory_absent_cafe_defaults().into_iter().find(|r|r.0==item).unwrap().1;
+  let candidate=0x80000000|item as u32;
+  let mut variants=vec![original];
+  for (v,_,_) in source.inventory_cafe_creation_variants(candidate){
+   if !variants.contains(&v){variants.push(v)}
+  }
+  assert!(variants.len()>3);
+  let base=synthetic_payload("3.0.1");let mut p=vec![0x93,0];p.extend(u(300));p.push(0xdc);
+  p.extend(((5+variants.len()) as u16).to_be_bytes());p.extend(&base[4..]);
+  for (i,&v) in variants.iter().enumerate(){
+   p.extend(doc(1,arr(vec![u(4+i as u32),u(item as u32),u(301+i as u32),u(2),encode(v)])));
+  }
+  let raw=slot_from_payload("3.0.1",p);
+  for zipped in [false,true]{
+   let input=if zipped{zip(&raw)}else{raw.clone()};
+   let mut e=Editor::open(input.clone()).unwrap();
+   let (options,can)=e.inventory_cafe_preview(4,original,original).unwrap();
+   assert!(!can);assert_eq!(options.len(),1,"item {item}");
+   let (target,_,slot)=options[0];
+   assert!(!variants.contains(&target));
+   assert!((0..3).filter(|&i|(target[i],target[i+3])!=(original[i],original[i+3])).count()>=2);
+   assert!((target[slot],target[slot+3])!=(original[slot],original[slot+3]));
+   assert!(e.inventory_cafe_preview(4,original,target).unwrap().1);
+   assert!(e.change_inventory_cafe_variant(4,original,variants[1]).is_err());
+   e.change_inventory_cafe_variant(4,original,target).unwrap();
+   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+   assert!(restored.undo_scope(Inventory));assert!(!restored.dirty());assert!(restored.redo_scope(Inventory));
+   let saved=Editor::open(restored.export().unwrap()).unwrap();
+   assert!(saved.inventory_cafe_rows().any(|(id,v,editable)|id==4&&v==target&&editable));
+   assert_eq!(saved.inventory()[0].quantity,2);
+   for (i,&v) in variants.iter().enumerate().skip(1){assert_eq!(saved.inventory_original_unique_payload(4+i as u32),Some(encode(v).as_slice()));}
+  }
+ }
+}
+
+#[test]
 fn emptied_chef_families_allow_new_source_variants_without_reusing_saved_identity(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let cafe_item=203331651u32;let boba_item=1798633565u32;
