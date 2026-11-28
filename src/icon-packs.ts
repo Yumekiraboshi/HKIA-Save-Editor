@@ -1,4 +1,5 @@
-export type SpriteCell={url:string;x:number;y:number;group?:string;sheet?:number;cell?:number};
+export type NativeSheetAsset={root:string;file:string;sha256:string;bytes:number};
+export type SpriteCell={url:string;x:number;y:number;group?:string;sheet?:number;cell?:number;nativeSheet?:NativeSheetAsset};
 export type IconPack={group:string;entries:Record<string,SpriteCell>;dispose():void};
 type PackIndex={schema:string;group:string;size:number;columns:number;records:Array<[number,number,number]>};
 const NAME=/^(?:index\.json|sheet-\d{3}\.webp)$/;

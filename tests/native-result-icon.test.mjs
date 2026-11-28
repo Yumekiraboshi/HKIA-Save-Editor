@@ -42,7 +42,7 @@ test('inventory loads result source groups before skipping the original row and 
  assert.ok(app.includes('inventoryOriginalSprite(resultId)'));
  assert.ok(app.includes('originalVariantArt[String(resultId)]'));
  assert.ok(app.includes('inventoryNativeArt?.placeholders.has(resultId)'));
- assert.ok(app.includes('data-inventory-art="native-result"'));
+ assert.ok(app.includes('<InventoryAtlasSprite sprite={resultSprite} source="native-result" target={resultId}/>'));
  assert.ok(app.includes('inventoryName(item.itemId)'));
  assert.ok(app.includes('requestInventoryDelete([item],false'));
 });

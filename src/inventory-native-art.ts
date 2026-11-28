@@ -43,7 +43,8 @@ export function decodeInventoryNativeArt(value:unknown,base:string):NativeArt{
   if(sourceCells.has(pathId)&&sourceCells.get(pathId)!==key||
    cellSources.has(key)&&cellSources.get(key)!==pathId)throw Error('INVENTORY_ART_INVALID');
   sourceCells.set(pathId,key);cellSources.set(key,pathId);
-  entries.set(id,{url:base+'inventory-art/'+v.sheets[sheet].name,x:(cell%12)*96,y:Math.floor(cell/12)*96,sheet,cell});
+  const descriptor=v.sheets[sheet];
+  entries.set(id,{url:base+'inventory-art/'+descriptor.name,x:(cell%12)*96,y:Math.floor(cell/12)*96,sheet,cell,nativeSheet:{root:base+'inventory-art/',file:descriptor.name,sha256:descriptor.sha256,bytes:descriptor.bytes}});
  }
  for(const row of v.withheld){
   if(!Array.isArray(row)||row.length!==3||!validId(row[0])||!validPath(row[1])||
