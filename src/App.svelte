@@ -228,7 +228,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(snapshot)for(const row of inventoryBrowseRows){
    if(inventoryBatchSelected.has(row.documentId))cap=Math.min(cap,row.quantityLimit??0);
   }
-  return Math.max(1,cap);
+  // A Rust-issued zero-only bound is a real upper bound, not a positive refill.
+  return Math.max(0,cap);
  });
  function resetInventoryBatchSelection(){inventoryBatchSelected=new Set();inventoryBatchQuantity=undefined}
  function clearInventoryBatch(){inventoryBatchMode=false;resetInventoryBatchSelection()}
@@ -1940,8 +1941,8 @@ import {verifiedFloorplanName} from './floorplan-names';
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 12h10"/></svg>
        </button>
        <span class="inventory-total" aria-live="polite">{inventoryBatchSelected.size.toLocaleString(locale)} / {snapshot.inventoryBatchLimit.toLocaleString(locale)}</span>
-      <input type="number" min={inventoryBatchMinimum} max={inventoryBatchMaximum} step="1" required bind:value={inventoryBatchQuantity} placeholder={iCopy.quantity} aria-label={iCopy.quantity} disabled={busy||!inventoryBatchCanQuantity}/>
-      <button type="submit" class="primary" disabled={busy||!inventoryBatchCanQuantity||inventoryBatchQuantity===undefined}>{iCopy.apply}</button>
+      <input type="number" min={inventoryBatchMinimum} max={inventoryBatchMaximum} step="1" required bind:value={inventoryBatchQuantity} placeholder={iCopy.quantity} aria-label={iCopy.quantity} disabled={busy||!inventoryBatchCanQuantity||inventoryBatchMaximum<inventoryBatchMinimum}/>
+      <button type="submit" class="primary" disabled={busy||!inventoryBatchCanQuantity||inventoryBatchMaximum<inventoryBatchMinimum||inventoryBatchQuantity===undefined}>{iCopy.apply}</button>
       {#if !inventoryAddMode}<button type="button" class="inventory-editable-filter inventory-batch-delete" disabled={busy||!inventoryBatchCanDelete} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)} onclick={e=>requestInventoryBatchDelete(e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>{/if}
       <button type="button" class="inventory-editable-filter" disabled={busy} onclick={clearInventoryBatch}>{copy.cancel}</button>
      </form>
