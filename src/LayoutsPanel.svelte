@@ -70,8 +70,7 @@
   finally{if(alive)exporting=false}
  }
 </script>
-<section class="layouts-panel">
- <div class="section-heading"><h1>Layouts</h1></div>
+<section class="layouts-panel" aria-label="Layouts">
  {#if loading}<p role="status">{copy.loading}</p>
  {:else}
   {#if navigation==='root'}
@@ -143,7 +142,11 @@
  {/if}
 </section>
 <style>
- .layouts-panel{display:grid;gap:1rem;align-content:start}
+ .layouts-panel{flex:1 0 auto;min-width:0;display:flex;flex-direction:column;gap:.75rem;padding:8px}
+ .space-grid{flex:1 0 auto;align-content:center}
+ .layout-actions{align-items:center}
+ .layout-warning{margin-top:auto}
+
  .space-grid,.building-grid,.room-grid{display:grid;gap:.65rem;grid-template-columns:repeat(auto-fill,minmax(9rem,1fr))}
  .space-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
  .space-card{display:grid;justify-items:center;align-content:center;gap:.45rem;min-height:7.5rem;padding:.65rem;border:1px solid currentColor;border-radius:.8rem;font:inherit;background:transparent;color:inherit;cursor:pointer;text-align:center}

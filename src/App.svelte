@@ -1650,7 +1650,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  <meta name="description" content="HKIA Save Editor — edit local collection history and achievements"/>
 </svelte:head>
 
-<div class="site-shell">
+<div class="site-shell" class:layouts-shell={!!snapshot&&activeTool==='layouts'}>
  <header class="topbar" bind:this={topbarElement}>
   <div class="bar-inner">
    <button class="brand" type="button" onclick={goHome} aria-label={copy.brand}>
@@ -1722,7 +1722,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  </header>
  <input class="visually-hidden" type="file" accept=".zip,.save,.dat,application/zip" bind:this={fileInput}
   onchange={e=>{const f=e.currentTarget.files?.[0];if(f)void load(f);e.currentTarget.value=''}}/>
- <main class="content" class:workspace-wide={!!snapshot}>
+ <main class="content" class:workspace-wide={!!snapshot} class:layouts-workspace={!!snapshot&&activeTool==='layouts'}>
   {#if error}<div class="message error" role="alert">{error}<button type="button" aria-label={copy.collapse} onclick={()=>error=''}>×</button></div>{/if}
   {#if snapshot && draftWarning}<div class="message error" role="alert">{copy.autosaveFailed}</div>{/if}
   {#if !snapshot}
