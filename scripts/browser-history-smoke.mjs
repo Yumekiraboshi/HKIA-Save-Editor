@@ -1114,10 +1114,25 @@ async function inventoryCategoryProtectionSmoke(){
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');
   const search=page.locator('.inventory-controls input[type="search"]'),card=page.locator('.inventory-card');
+  // Independent unsubmitted inputs survive a commit to another row.
   await search.fill('1877756618');
+  await card.locator('input[name="quantity"]').fill('12');
+  await search.fill('627013240');
+  await card.locator('input[name="quantity"]').fill('10');
+  await card.locator('button[type="submit"]').click();
+  await card.locator('.inventory-quantity-form[data-quantity-ready="true"][data-quantity-committed="10"]').waitFor();
+  await search.fill('1877756618');
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'12');
+  assert.equal(await card.locator('.inventory-quantity-form').getAttribute('data-quantity-pending'),'true');
+  // History clears stale uncommitted inputs, and restores the fixture.
+  await page.locator('button[title="Undo"]').click();
+  await card.locator('.inventory-quantity-form[data-quantity-ready="true"][data-quantity-pending="false"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
+  await card.locator('input[name="quantity"]').fill('13');
   await card.locator('.inventory-lock-button').click();
   await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').isDisabled(),true);
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
   assert.equal(await card.locator('.inventory-quantity-form button[type="submit"]').isDisabled(),true);
   assert.equal(await card.locator('.inventory-quantity-form').getAttribute('data-quantity-ready'),'false');
   assert.equal(await card.locator('.inventory-stack-delete').isDisabled(),true);
