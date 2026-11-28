@@ -1,9 +1,23 @@
+import packSource from '../data/collection-icon-pack-digests-v3.0.1.json';
 export type NativeSheetAsset={root:string;file:string;sha256:string;bytes:number};
 export type SpriteCell={url:string;x:number;y:number;group?:string;sheet?:number;cell?:number;nativeSheet?:NativeSheetAsset};
 export type IconPack={group:string;entries:Record<string,SpriteCell>;dispose():void};
 type PackIndex={schema:string;group:string;size:number;columns:number;records:Array<[number,number,number]>};
 const NAME=/^(?:index\.json|sheet-\d{3}\.webp)$/;
 const PART_COUNTS:Record<string,number>={collections_group_events:6};
+const packDigests=new Map(packSource.rows.map(([name,bytes,sha])=>[String(name),{bytes:Number(bytes),sha:String(sha)}]));
+/** Verify the exact committed ZIP bytes, using Git's blob object digest.
+ * This detects accidental stale, damaged or substituted delivery, not a
+ * signature or independent authentication of the origin. */
+export async function verifyIconPackBytes(name:string,data:ArrayBuffer):Promise<void>{
+ const source=packDigests.get(name);
+ if(!source||data.byteLength!==source.bytes)throw Error('ICON_PACK_SOURCE_SIZE');
+ const prefix=new TextEncoder().encode('blob '+data.byteLength+'\0');
+ const input=new Uint8Array(prefix.length+data.byteLength);
+ input.set(prefix);input.set(new Uint8Array(data),prefix.length);
+ const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-1',input)),v=>v.toString(16).padStart(2,'0')).join('');
+ if(hash!==source.sha)throw Error('ICON_PACK_SOURCE_HASH');
+}
 
 function readStoredZip(data:ArrayBuffer):Map<string,Uint8Array>{
  const bytes=new Uint8Array(data);
@@ -51,9 +65,10 @@ export async function loadIconPack(group:string,base:string):Promise<IconPack>{
    fetch(base+'item-packs/'+group+(i?'-'+i:'')+'.zip')));
   if(response.some(r=>!r.ok))throw Error('ICON_FETCH_FAILED');
   let total=0;
-  for(const r of response){
+  for(const [i,r] of response.entries()){
    const data=await r.arrayBuffer();
    total+=data.byteLength;if(total>20*1024*1024)throw Error('ICON_PACK_BUDGET');
+   await verifyIconPackBytes(group+(i?'-'+i:'')+'.zip',data);
    for(const [k,v] of readStoredZip(data)){
     if(indexed.has(k))throw Error('ICON_DUPLICATE');
     indexed.set(k,v);
