@@ -2,12 +2,13 @@
  * No synthetic save decoder, no exported game captures, no production test UI. */
 import assert from 'node:assert/strict';
 import {wandNonSquareSmoke} from './wand-nonsquare-smoke.mjs';
+import {dynamicArtPixelCoverage} from './dynamic-art-pixel-coverage.mjs';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 export async function wandRuntimeSmoke(browser,origin,base){
  await wandNonSquareSmoke(browser,origin,base);
  const {outputFiles}=await build({
-  stdin:{contents:"export * from './wand-runtime-art'; export * from './wand-original-subicon'; export {initialInventoryNativeArt} from './inventory-native-art'; export {loadChefOriginalOverlay} from './chef-runtime-art'; export {loadPaletteOriginalOverlay} from './palette-runtime-art'; export {loadFlowerOriginalOverlay} from './flower-runtime-art'; export {loadIconPack} from './icon-packs'; export {loadInventoryNativeArt} from './inventory-native-art';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
+  stdin:{contents:"export * from './wand-runtime-art'; export * from './wand-original-subicon'; export {initialInventoryNativeArt} from './inventory-native-art'; export {loadChefOriginalOverlay,renderChefArt,renderChefBaseArt} from './chef-runtime-art'; export {loadPaletteOriginalOverlay,renderPaletteArt,renderPaletteBaseArt} from './palette-runtime-art'; export {loadFlowerOriginalOverlay} from './flower-runtime-art'; export {loadIconPack} from './icon-packs'; export {loadInventoryNativeArt} from './inventory-native-art';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
   bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env.BASE_URL':JSON.stringify(base)}
  });
  const context=await browser.newContext();
@@ -137,6 +138,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
    return {rows,composed,itemRows,added,inv,directSources,placeholders,outside,allShapes,templateRows,sharedAliases,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315823,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
   },base);
   assert.equal(out.rows.length,9);assert.ok(out.unknown&&out.unknownOriginal);
+  await dynamicArtPixelCoverage(page,base);
   for(const row of out.rows){assert.equal(row.neutral.rgba,row.original.rgba);assert.ok(row.neutralCache&&row.neutralFull.visible&&row.neutralNoSource&&row.neutralColored);}
   assert.equal(out.composed.length,13);assert.ok(out.unsupportedSource);
   assert.equal(out.templateRows.length,18);
