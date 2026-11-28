@@ -1,4 +1,8 @@
 <script lang="ts">
+ import NativeArtwork from './NativeArtwork.svelte';
+ import {useNativeArt} from './native-art-context';
+ const getNativeSession=useNativeArt();
+ const nativeSession=$derived(getNativeSession());
  import art from '../data/inventory-decorator-art-v3.0.1.json';
  let {type,primaryColor,secondaryColor,patternUrl,iconColor}:{type:number;primaryColor?:string;secondaryColor?:string;patternUrl?:string;iconColor?:string}=$props();
  const base=import.meta.env.BASE_URL;
@@ -6,6 +10,9 @@
  const rgba=(c:number[])=>'rgba('+c.slice(0,3).map(v=>Math.round(v*255)).join(',')+','+c[3]+')';
  let row=$derived(art.rows.find(r=>r.type===type));
  const hex=/^#[0-9a-f]{6}$/;
+ const patternIndex=$derived(type===11&&patternUrl?Number(/^pattern-([1-9]|1[0-6])\.webp$/.exec(patternUrl)?.[1]??0):0);
+ const patternScale=$derived(patternIndex===7?1.2272727273:patternIndex===16?1.5882352941:[1,2,5,8,9,10,11,12,13,14].includes(patternIndex)?1.08:1);
+ const patternRender=$derived.by(()=>{const s=nativeSession,i=patternIndex;return ()=>s?s.service.item.flowerPattern(i,s.version):Promise.resolve(null);});
  let dyeTint=$derived(type===14&&!!primaryColor&&hex.test(primaryColor)&&!!iconColor&&hex.test(iconColor));
  let icon=$derived(type===11&&patternUrl&&/^pattern-(?:[1-9]|1[0-6])\.webp$/.test(patternUrl)?base+'inventory-ui/'+patternUrl:row?.sprite?root+row.sprite.file:undefined);
 </script>
@@ -20,6 +27,8 @@
   <span class="native-decorator-icon-clip" class:native-dye-icon-clip={dyeTint} style:width={art.geometry.inner+'px'} style:height={art.geometry.inner+'px'}>
    {#if dyeTint}
     <span class="native-dye-icon-tint" style:background-color={iconColor} style:mask-image={'url("'+icon+'")' }></span>
+   {:else if nativeSession&&patternIndex}
+    <span class="native-pattern" style:transform={`scale(${patternScale})`}><NativeArtwork render={patternRender} renderKey={nativeSession.version+':pattern:'+patternIndex} source="flower-pattern" empty={false}/></span>
    {:else}
     <img class:flower-pattern={type===11} src={icon} alt="" width={art.geometry.inner} height={art.geometry.inner}/>
    {/if}
@@ -35,6 +44,7 @@
  .plate-inner,.native-decorator-icon-clip{position:absolute;mask-image:var(--plate);mask-size:100% 100%;mask-position:center;mask-repeat:no-repeat;mask-mode:alpha}
  .plate-inner{background:var(--primary);z-index:-1}
  .native-dye-icon-tint{display:block;width:100%;height:100%;mask-size:100% 100%;mask-position:center;mask-repeat:no-repeat;mask-mode:alpha}
+ .native-pattern{display:block;width:100%;height:100%;transform-origin:center}
  img{display:block;object-fit:contain}
  /* Crop the original square into the same circular interior as FlowerColor.
     Remove the source's transparent outer padding, not the white accent rim.

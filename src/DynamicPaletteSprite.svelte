@@ -1,4 +1,8 @@
 <script lang="ts">
+ import {useNativeArt,inventoryArtworkAppearance} from './native-art-context';
+ import NativeItemArtwork from './NativeItemArtwork.svelte';
+ const getNativeSession=useNativeArt();
+ const nativeSession=$derived(getNativeSession());
  import type {SpriteCell} from './icon-packs';
  import {paletteArtKey,type InventoryPalette} from './inventory-palette-display';
  import {renderPaletteArt,renderPaletteBaseArt} from './palette-runtime-art';
@@ -12,4 +16,8 @@
  });
  let renderPartial=$derived.by(()=>{const id=itemId;return ()=>renderPaletteBaseArt(id);});
 </script>
-<DynamicArtSprite {renderKey} {render} {renderPartial} source="native-palette" {fallback}/>
+{#if nativeSession}
+ <NativeItemArtwork {itemId} appearance={inventoryArtworkAppearance(undefined,undefined,undefined,palette)}/>
+{:else}
+ <DynamicArtSprite {renderKey} {render} {renderPartial} source="native-palette" {fallback}/>
+{/if}

@@ -1,4 +1,8 @@
 <script lang="ts">
+ import {useNativeArt,inventoryArtworkAppearance} from './native-art-context';
+ import NativeItemArtwork from './NativeItemArtwork.svelte';
+ const getNativeSession=useNativeArt();
+ const nativeSession=$derived(getNativeSession());
  import DynamicArtSprite from './DynamicArtSprite.svelte';
  import {renderWandArt,renderWandBaseArt,renderWandOriginalBaseArt} from './wand-runtime-art';
  import type {WandInventoryAppearance} from './inventory-wand-display';
@@ -10,4 +14,8 @@
  let renderIntermediate=$derived.by(()=>{const id=itemId,a=appearance?{magicCharacteristicId:appearance.magicCharacteristicId,fleckCharacteristicId:appearance.fleckCharacteristicId}:null;return ()=>a?renderWandBaseArt(id,a):Promise.resolve(null);});
  let renderPartial=$derived.by(()=>{const id=itemId;return ()=>renderWandOriginalBaseArt(id);});
 </script>
-<DynamicArtSprite {renderKey} {render} {renderPartial} {renderIntermediate} source="native-wand" {fallback}/>
+{#if nativeSession}
+ <NativeItemArtwork {itemId} appearance={inventoryArtworkAppearance(undefined,undefined,appearance)}/>
+{:else}
+ <DynamicArtSprite {renderKey} {render} {renderPartial} {renderIntermediate} source="native-wand" {fallback}/>
+{/if}

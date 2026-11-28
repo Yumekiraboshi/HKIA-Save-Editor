@@ -1,4 +1,8 @@
 <script lang="ts">
+ import {useNativeArt,inventoryArtworkAppearance} from './native-art-context';
+ import NativeItemArtwork from './NativeItemArtwork.svelte';
+ const getNativeSession=useNativeArt();
+ const nativeSession=$derived(getNativeSession());
  import type {ChefAppearance} from './chef-appearance';
  import {renderChefArt,renderChefBaseArt} from './chef-runtime-art';
  import type {SpriteCell} from './icon-packs';
@@ -13,4 +17,8 @@
  });
  let renderPartial=$derived.by(()=>{const id=itemId;return ()=>renderChefBaseArt(id);});
 </script>
-<DynamicArtSprite {renderKey} {render} {renderPartial} source="native-chef" {fallback}/>
+{#if nativeSession}
+ <NativeItemArtwork {itemId} appearance={originalOnly?undefined:inventoryArtworkAppearance(undefined,appearance)}/>
+{:else}
+ <DynamicArtSprite {renderKey} {render} {renderPartial} source="native-chef" {fallback}/>
+{/if}

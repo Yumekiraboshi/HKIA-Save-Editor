@@ -120,6 +120,7 @@ export function createVersionedItemArtService(
     return {itemId:i,sourceItemId:i,kind:route.kind==='original-base-only'?'original-base':route.kind,fidelity:route.kind==='source-placeholder'?'source-placeholder':route.kind==='original-base-only'?'original-base-only':'original',art};
    }catch{return null;}
   },
+  async definition(i:number,v:string){try{return await get(i,v,'base');}catch{return null;}},
   async flowerPattern(i:number,v:string){if(disposed||v!==pin.version)return null;try{const image=await (await context()).family.flowerPattern(i,v);return disposed?null:image;}catch{return null;}},
   dispose(){disposed=true;if(!options.sharedImages)images.dispose();}
  };

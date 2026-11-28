@@ -66,10 +66,12 @@ test('original blueprint pattern is used only for version-gated native result ro
  assert.equal(createHash('sha256').update(bytes).digest('hex'),'529cb6869d62df33e19d72a376fe472e882b6edb35901ba0042904aec0c1e63f');
  const app=read('src/App.svelte'),css=read('src/style.css');
  const start=app.indexOf('class:inventory-blueprint={resultId!==undefined}');
- const end=app.indexOf('{#if hasNativeWandArt',start);
+ const end=app.indexOf('{#if nativeArtEnabled}',start);
  assert.ok(start>=0&&end>start);
  assert.ok(app.slice(start,end).includes('{#if resultId!==undefined}'));
  assert.ok(app.slice(start,end).includes('data-native-blueprint-pattern="bp_grid"'));
+ assert.ok(app.slice(end,end+900).includes('<NativeItemArtwork itemId={item.itemId}'));
+ assert.ok(app.slice(end,end+900).includes('{:else if hasNativeWandArt'));
  assert.equal(app.match(/data-native-blueprint-pattern=/g)?.length,1);
  assert.match(css,/\.inventory-blueprint-pattern\{[^}]*opacity:0\.392156869/);
 });
