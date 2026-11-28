@@ -1311,6 +1311,20 @@ async function ordinaryFurnitureRemovalSmoke(){
   await page.locator('.inventory-card').waitFor({state:'hidden'});
   await page.locator('button[title="Redo"]:not([disabled])').click();
   await input.waitFor();assert.equal(await input.inputValue(),'3');
+  // Newly staged additions expose the same removal action. Cancelling them
+  // never creates a native record and survives history/draft reload.
+  await remove.click();await modal.waitFor({state:'visible'});
+  await modal.locator('.inventory-remove-entry-action').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await input.waitFor();assert.equal(await input.inputValue(),'3');
+  await page.locator('button[title="Redo"]:not([disabled])').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('427689');await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await input.waitFor();assert.equal(await input.inputValue(),'3');
   await search.fill('3202680');await input.waitFor();assert.equal(await remove.isDisabled(),true);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: zero, physical removal, re-add, draft reload, undo/redo and placed stack protection');

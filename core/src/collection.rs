@@ -2742,7 +2742,9 @@ impl Editor {
   }
  }
  pub fn inventory_entry_removable(&self,id:u32)->bool{
-  self.slot.envelope.version==Version::V301&&!self.inventory_removed.contains(&id)&&
+  if self.slot.envelope.version!=Version::V301{return false}
+  if id&PENDING_ITEM!=0{return self.inventory_changes.get(&id).is_some_and(|q|*q>0)}
+  !self.inventory_removed.contains(&id)&&
    self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|Self::physical_inventory_reference_safe(&self.slot.index,r,self.slot.index.inventory.iter().filter(|p|p.unique_id==r.unique_id).count()==1))
  }
  pub fn inventory_removable_ids(&self)->Vec<u32>{
@@ -2750,9 +2752,10 @@ impl Editor {
   let mut uids=HashMap::<i32,usize>::new();
   for row in &self.slot.index.inventory{if let Some(uid)=row.unique_id{*uids.entry(uid).or_default()+=1;}}
   self.slot.index.inventory.iter().filter_map(|r|(!self.inventory_removed.contains(&r.id)&&
-   Self::physical_inventory_reference_safe(&self.slot.index,r,r.unique_id.is_some_and(|uid|uids.get(&uid)==Some(&1)))).then_some(r.id)).collect()
+   Self::physical_inventory_reference_safe(&self.slot.index,r,r.unique_id.is_some_and(|uid|uids.get(&uid)==Some(&1)))).then_some(r.id))
+   .chain(self.inventory_changes.iter().filter_map(|(&id,&q)|(id&PENDING_ITEM!=0&&q>0).then_some(id))).collect()
  }
- /// Exact persisted document removal; quantity zero is a separate operation.
+ /// Exact persisted document removal and cancellation of staged additions in one transaction.
  pub fn remove_inventory_entries(&mut self,requests:&[(u32,i32)])->Result<(),Error>{
   if requests.is_empty()||requests.len()>MAX_INVENTORY_BATCH{return Err(Error::Budget)}
   let mut seen=HashSet::new();
@@ -3157,7 +3160,11 @@ impl Editor {
     }
    }
    Change::InventoryRemoved{ref rows}=>{
-    for &(id,_) in rows{if reverse{self.inventory_removed.remove(&id);}else{self.inventory_removed.insert(id);}}
+    for &(id,quantity) in rows{
+     if id&PENDING_ITEM!=0{
+      if reverse{self.inventory_changes.insert(id,quantity);}else{self.inventory_changes.remove(&id);}
+     }else if reverse{self.inventory_removed.remove(&id);}else{self.inventory_removed.insert(id);}
+    }
    }
    Change::FlowerCreated{document_id,flower,quantity,..}=>{
     if reverse{self.pending_flowers.remove(&document_id);self.inventory_changes.remove(&document_id);}

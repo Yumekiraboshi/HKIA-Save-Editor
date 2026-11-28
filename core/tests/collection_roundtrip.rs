@@ -6023,3 +6023,43 @@ fn removed_unique_rows_release_effective_variant_keys_without_reusing_native_ids
   assert!(saved.inventory_unique_rows().all(|r|r.1.is_some_and(|uid|!original_uids.contains(&uid))));
  }
 }
+
+#[test]
+fn ordinary_staged_and_saved_removal_is_one_atomic_replayable_transaction(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let original_item=7285157u32;
+ let added_item=427689u32;
+ let added=0x80000000|added_item;
+ for zipped in [false,true]{
+  let mut p=synthetic_payload("3.0.1");p[2]=5;p[3]=0x96;
+  p.extend(doc(1,arr(vec![u(4),u(original_item),u(0),u(7),vec![0xc0]])));
+  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let original=e.inventory();
+  e.change_inventory_quantity(added,0,3).unwrap();
+  let both=e.inventory();
+  assert!(e.inventory_entry_removable(4)&&e.inventory_entry_removable(added));
+  assert!(e.inventory_removable_ids().contains(&added));
+  let history=e.history().len();
+  assert!(e.remove_inventory_entries(&[(4,7),(added,2)]).is_err());
+  assert!(e.remove_inventory_entries(&[(4,7),(added,3),(added,3)]).is_err());
+  assert_eq!(e.inventory(),both);assert_eq!(e.history().len(),history);
+  e.remove_inventory_entries(&[(4,7),(added,3)]).unwrap();
+  assert_eq!(e.history().len(),history+1);assert!(e.inventory().is_empty());
+  assert!(!e.inventory_entry_removable(added));assert!(!e.inventory_entry_removable(4));
+  assert!(e.inventory_creatable().iter().any(|r|r.document_id==added));
+  let checkpoint=e.history_checkpoint().unwrap();
+  let mut restored=Editor::open(input.clone()).unwrap();restored.restore_history(&checkpoint).unwrap();
+  assert!(restored.inventory().is_empty());
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),both);
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);
+  assert!(restored.redo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  assert!(restored.inventory().is_empty());
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert!(saved.inventory().is_empty());assert_eq!(saved.entries(),restored.entries());assert_eq!(saved.achievements(),restored.achievements());
+  // The cancelled ordinary handle can be staged again, independently of the old transaction.
+  restored.change_inventory_quantity(added,0,4).unwrap();
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory().len(),1);assert_eq!(saved.inventory()[0].item_id,added_item as i32);assert_eq!(saved.inventory()[0].quantity,4);
+ }
+}
