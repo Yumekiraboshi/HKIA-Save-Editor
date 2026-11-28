@@ -28,7 +28,7 @@ import {searchAchievementRows} from './achievement-search';
  import {loadAchievementGroups,groupRows,ungroupedRows,nativeAchievementOrder,groupSummaries as summarizeAchievementGroups,type AchievementHierarchy} from './achievement-groups';
  import {achievementGroupCopy} from './achievement-group-ui';
  import {loadAchievementCategoryAtlas,resolveAchievementDetailCategoryArt,type CategoryIconAtlas} from './achievement-category-icons';
- import {loadAchievementIndividualAtlas,type IndividualAchievementAtlas} from './achievement-individual-icons';
+ import {loadAchievementIndividualAtlas,type IndividualAchievementAtlas,type IndividualAchievementIdentity} from './achievement-individual-icons';
  import {loadAchievementIndex,achievementGuid,readableSourceKey,type AchievementIndex} from './achievement-index';
  import {loadAchievementTitles,type AchievementTitles} from './achievement-localization';
  import {editorErrors} from './ui-copy';
@@ -164,6 +164,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let achievementGroupHierarchy:AchievementHierarchy|null=$state(null);
  let achievementCategoryAtlas:CategoryIconAtlas|null=$state(null);
  let achievementIndividualAtlas:IndividualAchievementAtlas|null=$state(null);
+ let achievementIndividualIdentity:IndividualAchievementIdentity|null=$state(null);
  let achievementIndividualFailed=$state(false),achievementCategoryFailed=$state(false);
  const achievementImagesFailed=$derived(achievementIndividualFailed||achievementCategoryFailed);
  let achievementIndividualPending=false,achievementCategoryPending=false,achievementImagesDisposed=false;
@@ -172,7 +173,9 @@ import {verifiedFloorplanName} from './floorplan-names';
   const index=achievementIndex,groups=achievementGroupHierarchy;
   if(!achievementIndividualAtlas&&!achievementIndividualPending){
    achievementIndividualPending=true;
-   void loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index).then(atlas=>{
+   void loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index,identity=>{
+    if(!achievementImagesDisposed)achievementIndividualIdentity=identity;
+   }).then(atlas=>{
     if(achievementImagesDisposed){atlas.dispose?.();return;}
     achievementIndividualAtlas=atlas;achievementIndividualFailed=false;
    }).catch(()=>{if(!achievementImagesDisposed)achievementIndividualFailed=true;}).finally(()=>{achievementIndividualPending=false;});
@@ -1671,7 +1674,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {#if editingAchievement}
      {@const editingSaveGuid=achievementGuid(editingAchievement.guid)}
      {@const dialogIndividualArt=achievementIndividualAtlas?.bySaveGuid.get(editingSaveGuid)}
-     {@const dialogCategoryArt=resolveAchievementDetailCategoryArt(editingSaveGuid,snapshot.version,achievementCategoryAtlas,achievementIndividualAtlas,achievementGroupHierarchy)}
+     {@const dialogCategoryArt=resolveAchievementDetailCategoryArt(editingSaveGuid,snapshot.version,achievementCategoryAtlas,achievementIndividualIdentity,achievementGroupHierarchy)}
      <form class="achievement-form" onsubmit={e=>{e.preventDefault();void saveAchievement()}}>
       <div class="date-dialog-heading">
        <h2>{compactCopy.date}</h2>

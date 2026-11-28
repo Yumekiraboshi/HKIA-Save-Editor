@@ -61,10 +61,11 @@ export async function loadAchievementCategoryAtlas(
 
 /** Native LocalAchievementDetailsViewModel uses alwaysShowIcon=true; the
  * list uses false. Only the direct parent may supply a missing detail icon.
- * Both verified atlases must be loaded before absence implies a null PPtr. */
+ * The individual identity manifest and category image must be verified
+ * before absence implies a null PPtr; individual pixels are not required. */
 export function resolveAchievementDetailCategoryArt(
  guid:string,version:string,categories:CategoryIconAtlas|null,
- individual:import('./achievement-individual-icons').IndividualAchievementAtlas|null,
+ individual:import('./achievement-individual-icons').IndividualAchievementIdentity|null,
  hierarchy:AchievementHierarchy|null
 ):CategorySprite|undefined{
  const own=categories?.bySaveGuid.get(guid);
