@@ -86,12 +86,13 @@ def geometry(sprite, cabs, atlas_cache):
     bundle, sid, tree, raw = sprite
     f = helpers.fields(tree, raw, mesh)
     logical = struct.unpack('<4f', f['m_Rect'])
-    supported(all(math.isfinite(v) for v in logical) and logical[:2] == (0.,0.) and
+    supported(all(math.isfinite(v) for v in logical) and min(logical[:2]) >= 0 and
               0 < min(logical[2:]) <= max(logical[2:]) <= 4096 and
               f['m_Border'] == bytes(16) and struct.unpack('<2f',f['m_Pivot']) == (.5,.5),
               'unsupported sprite logical geometry')
     atlas_ref = mesh.ptr(f['m_SpriteAtlas'])
     if atlas_ref != [0,'0']:
+        supported(logical[:2] == (0.,0.), 'unsupported packed Sprite origin')
         ab, aid, at, ar = resolve(bundle, atlas_ref, cabs, 687078895)
         cache_key = (ab['cab'], aid)
         if cache_key not in atlas_cache:
@@ -118,6 +119,11 @@ def geometry(sprite, cabs, atlas_cache):
         offset = struct.unpack('<2f', rd['textureRectOffset'])
         texture = resolve(bundle, mesh.ptr(rd['texture']), cabs, 28)
         binding = {'renderDataSha256': sha(f['m_RD'])}
+        if logical[:2] != (0.,0.):
+            # Direct texture subrect: verify trim is relative to authored rect.
+            supported(all(abs(rect[i]-logical[i]-offset[i]) <= .001 for i in range(2)),
+                      'standalone subrect origin/trim mismatch')
+            binding['originalRectOrigin'] = logical[:2]
     supported(all(math.isfinite(v) for v in [*rect,*offset]), 'invalid crop coordinates')
     return logical[2:], tuple(rect), tuple(offset), texture, binding
 
