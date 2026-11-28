@@ -332,8 +332,9 @@
 .inventory-native-decorators{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;gap:2px;z-index:1;pointer-events:none}
 .inventory-flower-variant-name{font-size:10px;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-.inventory-unique-edit-button{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:30px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-size:13px;font-variant-numeric:tabular-nums}
-.inventory-unique-edit-button svg{width:16px;height:16px}
+.inventory-unique-edit-button{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:30px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;background:var(--accent-soft);color:var(--accent);cursor:pointer;font-size:13px;font-variant-numeric:tabular-nums}
+.inventory-unique-edit-button:hover:not(:disabled){background:var(--hover);border-color:var(--accent)}
+.inventory-unique-edit-button svg{display:block;flex:none;width:16px;height:16px}
 .date-dialog-field select{width:100%;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;font-size:14px;min-height:36px;padding:6px}
 
 /* Selection is an explicit, temporary inventory mode; tile dimensions stay unchanged. */
@@ -342,7 +343,10 @@
 .inventory-batch-checkbox{position:absolute;inset-block-start:6px;inset-inline-start:6px;width:18px;height:18px;z-index:3;accent-color:var(--accent);cursor:pointer}
 .inventory-card.inventory-batch-selected{border-color:var(--accent);background:var(--accent-soft)}
 
-.inventory-quantity-form .inventory-compact-variant{flex:none;display:grid;place-items:center;width:30px;height:30px;padding:0}
+.inventory-quantity-form .inventory-compact-variant{flex:none;display:grid;place-items:center;place-content:center;width:30px;height:30px;min-height:30px;padding:0}
+@media(max-width:730px){.inventory-quantity-form .inventory-compact-variant{width:34px;height:34px;min-height:34px}}
+.inventory-flower-growth{min-height:34px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
+.inventory-flower-growth[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 
 .inventory-stack-delete{position:absolute;inset-block-start:5px;inset-inline-end:5px;z-index:2;display:grid;place-items:center;width:25px;height:25px;padding:0;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--danger)}
 .inventory-stack-delete:disabled{opacity:.35;cursor:default}
