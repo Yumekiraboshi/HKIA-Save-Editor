@@ -7162,10 +7162,14 @@ fn dense_ordinary_family_membership_after_removal(){
  let mut e=Editor::open(input.clone()).unwrap();
  let original=e.inventory();
  assert_eq!(original.len(),n);
+ assert_eq!(e.inventory_removable_ids().len(),n);
+ assert!(original.iter().all(|r|e.inventory_entry_removable(r.document_id)));
  assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==1));
  e.remove_inventory_entries(&[(4,1)]).unwrap();
  let survivors=e.inventory();
  assert_eq!(survivors.len(),n-1);
+ assert!(!e.inventory_entry_removable(4));
+ assert_eq!(e.inventory_removable_ids().len(),n-1);
  assert!(survivors.iter().all(|r|r.editable&&r.quantity_minimum==1));
  assert_eq!(e.inventory_batch_zero_only_ids().len(),n-1);
  let rest:Vec<_>=survivors.iter().skip(1).map(|r|(r.document_id,1)).collect();
@@ -7174,6 +7178,8 @@ fn dense_ordinary_family_membership_after_removal(){
  assert_eq!(last.len(),1);
  assert_eq!(last[0].document_id,5);
  assert_eq!(last[0].quantity_minimum,0);
+ assert_eq!(e.inventory_removable_ids(),vec![5]);
+ assert!(e.inventory_entry_removable(5));
  e.change_inventory_quantity(5,1,0).unwrap();
  let checkpoint=e.history_checkpoint().unwrap();
  let mut recovered=Editor::open(input).unwrap();
@@ -7185,9 +7191,12 @@ fn dense_ordinary_family_membership_after_removal(){
  assert_eq!(recovered.inventory(),survivors);
  assert!(recovered.undo_scope(Inventory));
  assert_eq!(recovered.inventory(),original);
+ assert_eq!(recovered.inventory_removable_ids().len(),n);
+ assert!(original.iter().all(|r|recovered.inventory_entry_removable(r.document_id)));
  for _ in 0..3{assert!(recovered.redo_scope(Inventory));}
  let reopened=Editor::open(recovered.export().unwrap()).unwrap();
  assert_eq!(reopened.inventory().len(),1);
  assert_eq!(reopened.inventory()[0].quantity,0);
+ assert_eq!(reopened.inventory_removable_ids(),vec![5]);
  assert_eq!(reopened.inventory_original_unique_payload(5),Some([0xc0].as_slice()));
 }
