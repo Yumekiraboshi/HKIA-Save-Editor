@@ -105,9 +105,10 @@ test('Collection and Inventory select original images without inferred recolorin
  assert.match(app,/function selectCategory\(key:string\)\{\s*refreshVariantArtwork\(\)/);
  assert.match(app,/function goHome\(\)\{\s*refreshVariantArtwork\(\)/);
  assert.match(app,/<DyeSprite sprite=\{resultSprite\}[^>]*originalArtUrl=\{resultOriginal\}/);
- assert.equal((app.match(/exactArtUrl=\{/g)||[]).length,6);
+ assert.match(app,/<DyeSprite sprite=\{original\} originalArtUrl=\{originalVariantArt\[String\(edit.itemId\)\]\} exactArtUrl=\{exactVariantArt\[String\(edit.itemId\)\]\}/);
+ assert.equal((app.match(/exactArtUrl=\{/g)||[]).length,7);
  assert.match(app,/exactArtUrl=\{exactVariantArt\[String\(representative\)\]\}/);
- assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,7);
+ assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,8);
  assert.match(app,/originalArtUrl=\{originalVariantArt\[String\(representative\)\]\}/);
  const view=read('../src/original-art-view.ts');
  assert.match(sprite,/return startOriginalArtRequest\(original,exact,/);

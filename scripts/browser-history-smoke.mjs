@@ -2398,6 +2398,13 @@ async function inventoryFurnitureVariantEditSmoke(){
   await button.click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"][open]');
   await dialog.waitFor();
+  const preview=dialog.locator('[data-furniture-icon-preview] .item-sprite');
+  await preview.waitFor({timeout:30_000});
+  const mainIcon=page.locator('.inventory-card .inventory-item-art .item-sprite');
+  await mainIcon.waitFor({timeout:30_000});
+  const art=el=>{const c=getComputedStyle(el);return [c.backgroundImage,c.backgroundPosition];};
+  const source=await preview.evaluate(art);
+  assert.deepEqual(source,await mainIcon.evaluate(art),'furniture preview must retain the same original icon as the card');
   const select=dialog.locator('select[name="furniture-part-0"]');
   const value=await select.locator('option[data-material-index="502"]').getAttribute('value');
   assert.ok(value!==null);
@@ -2408,6 +2415,8 @@ async function inventoryFurnitureVariantEditSmoke(){
   await part1.selectOption(second);
   await dialog.locator('[data-furniture-reset="1"]:not([disabled])').waitFor();
   assert.equal(await dialog.locator('.inventory-furniture-reset').count(),2);
+  await dialog.locator('[data-furniture-icon-preview] [data-native-decorator="9"]').waitFor({timeout:30_000});
+  assert.deepEqual(await preview.evaluate(art),source,'material editing must not recolor the native main icon');
   await dialog.locator('button[type="submit"]').click();
   await dialog.waitFor({state:'hidden'});
   await page.locator('.state-dot.changed').waitFor();
@@ -2545,6 +2554,37 @@ async function inventoryNativeArtRetrySmoke(){
  }
  console.log('CHROMIUM NATIVE INVENTORY ART RETRY PASS: exact target recovered by tab or online event without page reload, withheld route retained');
 }
+async function inventoryCategoryFallbackSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.route('**/item-packs/*.zip',r=>r.fulfill({status:503,body:'unavailable'}));
+  await page.route('**/inventory-art/index.json',r=>r.fulfill({status:503,body:'unavailable'}));
+  await page.route('**/source-colorways/index.json',r=>r.fulfill({status:503,body:'unavailable'}));
+  await page.route('**/dynamic-colorways/index.json',r=>r.fulfill({status:503,body:'unavailable'}));
+  // Original collection navigation images also may be temporarily absent.
+  await page.route('**/icons/collections_group_*.webp',r=>r.fulfill({status:503,body:'unavailable'}));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-category-fallback.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({emptyMaterialInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const tabs=page.locator('.inventory-group-option[data-inventory-group]');
+  await tabs.last().waitFor({timeout:30_000});
+  assert.equal(await tabs.count(),13);
+  for(const tab of await tabs.all()){
+   await tab.scrollIntoViewIfNeeded();
+   const key=await tab.getAttribute('data-inventory-group');
+   const image=tab.locator('.inventory-category-fallback');
+   await image.waitFor({timeout:30_000});
+   await page.waitForFunction(key=>{
+    const img=document.querySelector('[data-inventory-group="'+key+'"] .inventory-category-fallback');
+    return img?.src.endsWith('/inventory-ui/category-'+key+'.webp')&&img.complete&&img.naturalWidth>0;
+   },key,{timeout:30_000});
+   assert.ok(await image.isVisible(),key);
+  }
+ }finally{await context.close();}
+ console.log('CHROMIUM INVENTORY CATEGORY FALLBACK PASS: all 13 native tab Sprites independently available');
+}
 async function inventoryNativeSheetRetrySmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -2620,7 +2660,7 @@ async function inventoryNativeResultArtSmoke(){
  }
  console.log('CHROMIUM NATIVE RESULT ICON PASS: original result Sprite, original placeholder, Plan decorator independent of target availability');
 }
-async function originalArtIndexRetrySmoke(){
+async function originalArtIndexRetrySmoke(trigger='tab'){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
   const page=await context.newPage();let online=false,sourceRequests=0,dynamicRequests=0;
@@ -2638,16 +2678,59 @@ async function originalArtIndexRetrySmoke(){
   await page.waitForLoadState('networkidle');
   const failedRequests=dynamicRequests;assert.ok(failedRequests>=1);
   online=true;
-  await chooseTab(page,'collections');
-  await chooseTab(page,'inventory');
-  await search.fill('315822');
+  if(trigger==='online'){
+   await page.evaluate(()=>{window.dispatchEvent(new Event('online'));window.dispatchEvent(new Event('online'));});
+  }else{
+   await chooseTab(page,'collections');
+   await chooseTab(page,'inventory');
+   await search.fill('315822');
+  }
   await page.waitForFunction(()=>Array.from(document.querySelectorAll('.inventory-card .item-sprite')).some(el=>getComputedStyle(el).backgroundImage.includes('/dynamic-colorways/315822.webp?v=')));
+  assert.equal(await search.inputValue(),'315822');
   assert.equal(sourceRequests,1,'validated original index is not fetched again');
   assert.equal(dynamicRequests,failedRequests+1,'missing dynamic index is retried once');
   await search.fill('54272482');
   await page.waitForFunction(()=>Array.from(document.querySelectorAll('.inventory-card .item-sprite')).some(el=>getComputedStyle(el).backgroundImage.includes('/dynamic-colorways/54272482.webp?v=')));
  }finally{await context.close();}
  console.log('CHROMIUM ORIGINAL ART INDEX RETRY PASS: cached source index, recovered dynamic originals without reload');
+}
+async function inventoryPackOnlineRetrySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  const catalog=JSON.parse(readFileSync('public/catalog.json','utf8'));
+  const row=catalog.items.find(item=>item[0]===2064380032);
+  assert.ok(row,'original fish collection record');
+  const group=row[3];
+  let online=false,attempts=0;
+  await page.route('**/item-packs/'+group+'.zip',route=>{
+   attempts++;return online?route.continue():route.fulfill({status:503,body:'unavailable'});
+  });
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-pack-recovery.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({scaleInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('2064380032');
+  const card=page.locator('.inventory-card');
+  await card.locator('.inventory-item-art .item-art-empty').waitFor({timeout:30_000});
+  await page.waitForLoadState('networkidle');
+  const failed=attempts;assert.ok(failed>=1);
+  online=true;
+  await page.evaluate(()=>{window.dispatchEvent(new Event('online'));window.dispatchEvent(new Event('online'));});
+  const art=card.locator('.inventory-item-art .item-sprite');
+  await art.waitFor({timeout:30_000});
+  const url=await art.evaluate(el=>getComputedStyle(el).backgroundImage);
+  assert.match(url,/blob:/);
+  assert.equal(attempts,failed+1);
+  assert.equal(await search.inputValue(),'2064380032');
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'3');
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForLoadState('networkidle');
+  assert.equal(attempts,failed+1);
+  assert.equal(await art.evaluate(el=>getComputedStyle(el).backgroundImage),url);
+ }finally{await context.close();}
+ console.log('CHROMIUM ORIGINAL PACK ONLINE RETRY PASS: same card, verified cached art, no redundant fetch');
 }
 async function originalArtworkFileRecoverySmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
@@ -3511,9 +3594,12 @@ async function run(){
  await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
  await originalArtIndexRetrySmoke();
+ await originalArtIndexRetrySmoke('online');
+ await inventoryPackOnlineRetrySmoke();
  await originalArtworkFileRecoverySmoke();
  await inventoryNativeResultArtSmoke();
  await inventoryNativeArtRetrySmoke();
+ await inventoryCategoryFallbackSmoke();
  await inventoryNativeSheetRetrySmoke();
  await inventoryIconScaleSmoke();
  await inventoryDynamicFlowerArtSmoke();

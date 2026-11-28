@@ -53,7 +53,7 @@ import {searchAchievementRows} from './achievement-search';
  import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
  import {nativeChefInstructionBase} from './native-icon-route';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
- import {cafeSlotLabel,cafeVariantLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
+ import {cafeSlotLabel,cafeVariantLabel,cafeOptionLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
  import {bobaFieldOptions,bobaFieldLabel,bobaFieldValue,bobaNeedsTupleChoice,fullBobaLabel,type BobaVariant,type BobaField} from './inventory-boba-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {toAchievementDateTimeValue,fromAchievementDateTimeValue} from './achievement-date';
@@ -323,6 +323,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   void loadFurnitureDisplay().then(data=>furnitureDisplay=data).catch(()=>{});
   refreshInventoryNativeArt();
   window.addEventListener('online',refreshInventoryNativeArt);
+  window.addEventListener('online',recoverSharedItemArtwork);
   window.addEventListener('online',refreshAchievementImages);
   // Exact game dye palettes, used exclusively for recoloring item image pixels.
   void loadNativeDyePalettes(import.meta.env.BASE_URL)
@@ -360,6 +361,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    media.removeEventListener?.('change',listener);
    window.removeEventListener('beforeunload',beforeUnload);
    window.removeEventListener('online',refreshInventoryNativeArt);
+   window.removeEventListener('online',recoverSharedItemArtwork);
    window.removeEventListener('online',refreshFlowerDisplay);
    flowerDisplayDisposed=true;
    inventoryNativeArtDisposed=true;
@@ -507,7 +509,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(wandEdit&&hasNativeWandArt(wandEdit.itemId))addWandSource(wandEdit.appearance.sourceItemId);
   // A dialog may outlive its visible inventory row or be opened from Add.
   // Load its own original definition group using the same bounded pack queue.
-  for(const edit of [flowerEdit,paletteEdit,cafeEdit,bobaEdit,wandEdit]){
+  for(const edit of [flowerEdit,paletteEdit,cafeEdit,bobaEdit,wandEdit,furnitureEdit]){
    if(!edit||inventoryNativeArt?.entries.has(edit.itemId)||inventoryNativeArt?.withheld.has(edit.itemId))continue;
    const item=inventorySourceItems.get(edit.itemId);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
@@ -618,6 +620,15 @@ import {verifiedFloorplanName} from './floorplan-names';
   })();
   inventoryIconRequests.set(group,task);
   return task;
+ }
+ // Reconnection restores the current view without resetting its search,
+ // selection, dialog or already verified image packs.
+ function recoverSharedItemArtwork(){
+  refreshVariantArtwork();
+  if(inventoryIconFailed.size){
+   inventoryIconFailed.clear();inventoryIconPulse++;
+  }
+  if(activeTool==='collections'&&selectedGroup&&iconError)void fetchImages(selectedGroup);
  }
  function openInventoryTab(){
   refreshVariantArtwork();
@@ -1767,18 +1778,18 @@ import {verifiedFloorplanName} from './floorplan-names';
       {@const representativeSprite=representativeNative??(representativeSource&&representative!==undefined?inventoryIconPacks[representativeSource[3]]?.entries[String(representative)]:undefined)}
       <button type="button" class="inventory-group-option" data-inventory-group={t.key} class:active={activeInventoryGroup===t.key}
        aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;inventoryLimit=BATCH_SIZE}}>
-       {#if representative!==undefined&&(representativeSprite||originalVariantArt[String(representative)]||exactVariantArt[String(representative)])}
-        <span class="inventory-category-representative" aria-hidden="true">
+       <span class="inventory-category-representative" aria-hidden="true">
+        <img class="inventory-category-fallback" src={t.art?ICONS+t.art:INVENTORY_UI+'category-'+t.key+'.webp'} alt="" loading="lazy"
+         onerror={e=>{const image=e.currentTarget as HTMLImageElement,native=INVENTORY_UI+'category-'+t.key+'.webp';if(image.getAttribute('src')!==native)image.src=native;else image.style.visibility='hidden';}}/>
+        {#if representative!==undefined&&(representativeSprite||originalVariantArt[String(representative)]||exactVariantArt[String(representative)])}
          {#if originalVariantArt[String(representative)]||exactVariantArt[String(representative)]||(!representativeNative&&representativeSprite&&nativeDyePalettes[String(representative)])}
           <DyeSprite sprite={representativeSprite} palette={nativeDyePalettes[String(representative)]}
            sourceKey={representativeSource?.[1]??''} exactArtUrl={exactVariantArt[String(representative)]} originalArtUrl={originalVariantArt[String(representative)]}/>
          {:else if representativeSprite}
           <InventoryAtlasSprite sprite={representativeSprite}/>
          {/if}
-        </span>
-       {:else if t.art}
-        <img src={ICONS+t.art} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>
-       {/if}
+        {/if}
+       </span>
        <span>{inventoryGroupLabel(locale,t.key)}</span><small>{(inventoryMatchTotals.get(t.key)??0).toLocaleString(locale)}</small>
       </button>
      {/each}
@@ -1823,7 +1834,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          <button type="button" class="inventory-stack-delete" disabled={busy||!item.removable&&(!item.editable||item.quantityMinimum!==0||item.quantity<=0)} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)+': '+inventoryName(item.itemId)} onclick={e=>requestInventoryDelete([item],false,e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
         {/if}
       <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
-       <span class="inventory-item-art" class:inventory-blueprint={resultId!==undefined} class:flower-variant={flowerBadges.length>0||!!dyeBadge||resultId!==undefined} style:position="relative" style:--inventory-icon-scale={nativeInventoryIconScale(item.itemId,snapshot.version)} aria-hidden="true">
+       <span class="inventory-item-art" class:inventory-blueprint={resultId!==undefined} class:flower-variant={customized||flowerBadges.length>0||!!dyeBadge||resultId!==undefined} style:position="relative" style:--inventory-icon-scale={nativeInventoryIconScale(item.itemId,snapshot.version)} aria-hidden="true">
         {#if resultId!==undefined}
          <span class="inventory-blueprint-pattern" data-native-blueprint-pattern="bp_grid" style:background-image={'url("'+INVENTORY_UI+'bp-grid.webp")'}></span>
         {/if}
@@ -2095,7 +2106,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <select name={'cafe-slot-'+slot} aria-label={inventoryName(edit.itemId)+' '+(slot+1)} value={-1} onchange={e=>{const index=Number(e.currentTarget.value);e.currentTarget.value='-1';void selectCafeSlot(index,slot)}} disabled={busy||!choices.length}>
        <option value={-1} disabled>{cafeSlotLabel(selected,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
        {#each choices as {option,index} (index)}
-        <option value={index} data-ingredient-id={option.ingredientId}>{option.ingredientId?sourceNames[String(option.ingredientId)]??cafeSlotLabel(option.variant,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??''):cafeSlotLabel(option.variant,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
+        <option value={index} data-ingredient-id={option.ingredientId}>{cafeOptionLabel(option,selected,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
        {/each}
       </select>
      </label>
@@ -2319,10 +2330,26 @@ import {verifiedFloorplanName} from './floorplan-names';
    {@const selected=furnitureDraft??edit.before}
    {@const changed=selected.some((v,i)=>v!==edit.before[i])}
    {@const canCreate=furnitureDraftCreatable}
+   {@const original=inventoryOriginalSprite(edit.itemId)}
+   {@const customized=snapshot?.version==='3.0.1'&&furnitureHasCustomizedAppearance(furnitureDisplay,selected)}
    <form class="date-dialog-inner" onsubmit={e=>{if(edit.createOnly){e.preventDefault();void addInventoryFurnitureVariant()}else void applyInventoryFurnitureVariant(e)}}>
     <div class="date-dialog-heading">
      <h2 id="furniture-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFurnitureEditor}>×</button>
+    </div>
+    <div style="display:flex;justify-content:center" aria-hidden="true">
+     <span class="inventory-item-art" class:flower-variant={customized} style:position="relative" data-furniture-icon-preview>
+      {#if originalVariantArt[String(edit.itemId)]||exactVariantArt[String(edit.itemId)]}
+       <DyeSprite sprite={original} originalArtUrl={originalVariantArt[String(edit.itemId)]} exactArtUrl={exactVariantArt[String(edit.itemId)]}/>
+      {:else if inventoryNativeArt?.placeholders.has(edit.itemId)}
+       <DynamicArtSprite source="native-placeholder" render={renderNativePlaceholderArt}/>
+      {:else if original}
+       <InventoryAtlasSprite sprite={original}/>
+      {:else}
+       <span class="item-art-empty">✧</span>
+      {/if}
+      {#if customized}<span class="inventory-native-decorators"><InventoryDecorator type={9}/></span>{/if}
+     </span>
     </div>
     {#each [0,1,2] as slot}
      {@const choices=edit.options.map((variant,index)=>({variant,index})).filter(({variant})=>variant[slot]!==selected[slot])}

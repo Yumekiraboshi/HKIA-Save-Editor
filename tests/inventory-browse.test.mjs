@@ -192,8 +192,15 @@ test('category representatives use source item IDs chosen by visual motif, not c
  assert.match(app,/inventoryCategoryRepresentative\(t\.key,nativeInventoryIndex\)/);
  assert.match(app,/inventoryNativeArt\?\.entries\.get\(representative\)/);
  assert.match(app,/inventoryIconPacks\[representativeSource\[3\]\]/);
- assert.match(app,/src=\{ICONS\+t\.art\}/);
- assert.doesNotMatch(app,/src=\{INVENTORY_UI\+t\.art\}/);
+ assert.match(app,/src=\{t\.art\?ICONS\+t\.art:INVENTORY_UI\+'category-'\+t\.key\+'\.webp'\}/);
+ const native=readJson('../public/inventory-ui/index.json');
+ for(const tab of NATIVE_INVENTORY_TABS){
+  const file='category-'+tab.key+'.webp';
+  assert.equal(createHash('sha256').update(readFileSync(new URL('../public/inventory-ui/'+file,import.meta.url))).digest('hex'),native.files[file],tab.key);
+ }
+ const css=readFileSync(new URL('../src/style.css',import.meta.url),'utf8');
+ assert.ok(css.includes('.inventory-category-representative>.item-art-empty{visibility:hidden}'));
+ assert.ok(css.includes('.inventory-category-representative:has(>.item-sprite)>.inventory-category-fallback{display:none}'));
 });
 
 test('zero stacks are hidden by default and explicitly revealed independently of refill eligibility',()=>{
