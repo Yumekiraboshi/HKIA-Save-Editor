@@ -5495,9 +5495,22 @@ fn exact_legacy_copy_reference_protects_only_its_native_item(){
   assert_eq!(saved.inventory_original_unique_payload(4),Some(cafe.as_slice()));
   assert_eq!(saved.inventory_original_unique_payload(5),Some(other.as_slice()));
  }
- let mut unknown=Editor::open(make([u32::MAX;4])).unwrap();
- assert!(unknown.inventory()[1].editable&&unknown.inventory()[1].quantity_minimum==1);assert_ne!(unknown.inventory()[2].quantity_minimum,0);
- assert!(unknown.change_inventory_quantity(6,2,0).is_err());assert!(!unknown.dirty());
+ for zipped in [false,true]{
+  let raw=make([u32::MAX;4]);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert!(original[1].editable&&original[1].quantity_minimum==1);
+  assert_eq!(original[2].quantity_minimum,0);assert!(e.inventory_entry_removable(6));
+  assert!(!e.inventory_entry_removable(5));assert!(e.change_inventory_quantity(5,2,0).is_err());
+  assert!(e.inventory_creatable().is_empty());
+  e.change_inventory_quantity(6,2,0).unwrap();e.remove_inventory_entries(&[(6,0)]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();recovered.restore_history(&cp).unwrap();
+  assert!(recovered.undo_scope(Inventory));assert!(recovered.undo_scope(Inventory));assert_eq!(recovered.inventory(),original);
+  assert!(recovered.redo_scope(Inventory));assert!(recovered.redo_scope(Inventory));
+  let saved=Editor::open(recovered.export().unwrap()).unwrap();assert_eq!(saved.inventory().len(),3);
+  for id in [4,5,7]{assert_eq!(saved.inventory_original_unique_payload(id),e.inventory_original_unique_payload(id));}
+  let raw=make([0;4]);let mut blocked=Editor::open(if zipped{zip(&raw)}else{raw}).unwrap();
+  assert_eq!(blocked.inventory()[2].quantity_minimum,1);assert!(blocked.remove_inventory_entries(&[(6,2)]).is_err());assert!(!blocked.dirty());
+ }
 }
 
 #[test]
@@ -5554,9 +5567,17 @@ fn mermaidifier_flower_copy_protects_exact_item_without_blocking_unrelated_inven
   saved.change_inventory_quantities(&[(5,0,2),(6,0,2)]).unwrap();
   assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),original);
  }
- let mut unknown=Editor::open(make([u32::MAX;4])).unwrap();
- assert_ne!(unknown.inventory()[2].quantity_minimum,0);
- assert!(unknown.change_inventory_quantity(6,2,0).is_err());assert!(!unknown.dirty());
+ for zipped in [false,true]{
+  let raw=make([u32::MAX;4]);let mut e=Editor::open(if zipped{zip(&raw)}else{raw}).unwrap();
+  assert_eq!(e.inventory()[2].quantity_minimum,0);assert!(e.inventory_entry_removable(6));
+  assert!(!e.inventory_entry_removable(4));assert!(!e.inventory_entry_removable(5));
+  assert!(e.inventory_flower_variants(4).is_empty());assert!(e.inventory_flower_creation_variants(5).is_empty());
+  e.remove_inventory_entries(&[(6,2)]).unwrap();
+  let saved=Editor::open(e.export().unwrap()).unwrap();assert_eq!(saved.inventory().len(),2);
+  for id in [4,5]{assert_eq!(saved.inventory_original_unique_payload(id),Some(flower.as_slice()));}
+  let raw=make([0;4]);let mut blocked=Editor::open(if zipped{zip(&raw)}else{raw}).unwrap();
+  assert_eq!(blocked.inventory()[2].quantity_minimum,1);assert!(blocked.remove_inventory_entries(&[(6,2)]).is_err());assert!(!blocked.dirty());
+ }
 }
 
 #[allow(dead_code)]
@@ -6281,3 +6302,44 @@ fn macos_v301_platform_reference_preserved_through_inventory_roundtrip(){
  let mut older=slot("3.0.0");let marker=read_slot(&older).unwrap().envelope.marker;older[marker-1]=7;
  assert!(Editor::open(older).is_err());
 }
+
+#[test]
+fn physical_removal_protects_exact_referenced_uid_not_independent_ordinary_base(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=61381969u32;
+ let make=|uid:u32,duplicate:bool,bare:bool|{
+  let mut p=synthetic_payload("3.0.1");p[2]=20;p[3]=0x99+u8::from(duplicate)+u8::from(bare);
+  p.extend(doc(1,arr(vec![u(4),u(item),u(0),u(5),vec![0xc0]])));
+  p.extend(doc(1,arr(vec![u(5),u(item),u(21),u(2),furniture_payload([0,2,0])])));
+  p.extend(doc(1,arr(vec![u(6),u(item),u(22),u(3),furniture_payload([502,2,0])])));
+  if duplicate{p.extend(doc(1,arr(vec![u(7),u(427689),u(21),u(2),furniture_payload([0,2,0])])));}
+  let cafe=arr(vec![vec![0xc2],vec![0x80],u(0),u(0),guid([0;4]),arr(vec![arr(vec![u(item),u(uid)])]),u(0),u(0),u(0),l(0)]);
+  p.extend(doc(32,arr(vec![u(9),guid([7,0,0,0]),u(0),arr(vec![doc(38,cafe)])])));
+  if bare{
+   let home=arr(vec![guid([41,42,43,44]),arr(vec![]),u(item),u(0),guid([0;4]),l(0),
+    vec![0xc0],vec![0xc2],vec![0xc0],arr(vec![]),vec![0xc0],vec![0xc0],u(0),u(0),arr(vec![])]);
+   p.extend(doc(32,arr(vec![u(10),guid([8,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![home])]))])])));}
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(21,false,false);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert!(e.inventory_entry_removable(4));assert!(!e.inventory_entry_removable(5));assert!(!e.inventory_entry_removable(6));
+  assert!(e.remove_inventory_entries(&[(4,5),(5,2)]).is_err());assert!(!e.dirty());
+  e.remove_inventory_entries(&[(4,5)]).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory().len(),2);assert_eq!(saved.inventory()[0].document_id,5);
+  assert_eq!(saved.inventory_original_unique_payload(5),e.inventory_original_unique_payload(5));
+  assert!(!saved.inventory_entry_removable(5));
+ }
+ for raw in [make(0,false,false),make(99,false,false),make(21,true,false),make(21,false,true)]{
+  let mut e=Editor::open(raw).unwrap();let original=e.inventory();
+  assert!(!e.inventory_entry_removable(4));assert!(!e.inventory_entry_removable(6));
+  assert!(e.remove_inventory_entries(&[(4,5),(6,3)]).is_err());assert_eq!(e.inventory(),original);assert!(!e.dirty());
+ }
+}
+
+
+
