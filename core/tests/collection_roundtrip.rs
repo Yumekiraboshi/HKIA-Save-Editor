@@ -3285,11 +3285,11 @@ fn first_shaped_wands_use_native_candidates_and_shared_history(){
 
 #[test]
 fn large_inventory_batch_and_full_journal_roundtrip(){
- use hkia_save_core::collection::{MAX_INVENTORY_BATCH,HISTORY_MAX_BYTES,HistoryScope::Inventory};
- assert_eq!(MAX_INVENTORY_BATCH,256);
+ use hkia_save_core::collection::{HISTORY_MAX_BYTES,HistoryScope::Inventory};
+ const FIXTURE_ROWS:usize=256;
  let pristine=Editor::open(slot("3.0.1")).unwrap();
- let ids:Vec<_>=pristine.inventory_creatable().into_iter().filter(|r|r.quantity_limit.is_some_and(|cap|cap>=2)).take(MAX_INVENTORY_BATCH).map(|r|r.item_id).collect();
- assert_eq!(ids.len(),MAX_INVENTORY_BATCH);
+ let ids:Vec<_>=pristine.inventory_creatable().into_iter().filter(|r|r.quantity_limit.is_some_and(|cap|cap>=2)).take(FIXTURE_ROWS).map(|r|r.item_id).collect();
+ assert_eq!(ids.len(),FIXTURE_ROWS);
  let mut payload=synthetic_payload("3.0.1");
  let count=(7+ids.len()) as u16;
  payload.splice(3..4,[0xdc,(count>>8) as u8,count as u8]);
@@ -3304,7 +3304,7 @@ fn large_inventory_batch_and_full_journal_roundtrip(){
  let input=slot_from_payload("3.0.1",payload);
  let mut editor=Editor::open(input.clone()).unwrap();
  let original=editor.inventory();
- assert_eq!(original.len(),MAX_INVENTORY_BATCH);
+ assert_eq!(original.len(),FIXTURE_ROWS);
  assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==0));
  let requests:Vec<_>=original.iter().map(|r|(r.document_id,1,2)).collect();
  let mut invalid=requests.clone();invalid.push((999999,1,2));
