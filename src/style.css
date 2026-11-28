@@ -364,3 +364,10 @@
 
 .inventory-removal-palette{display:flex;gap:4px;margin-top:3px;align-items:center}
 .inventory-removal-swatch{width:19px;height:19px;border:1px solid var(--line);border-radius:4px;flex:none}
+
+/* Keep search, edit actions and category navigation reachable during long
+   inventory lists. The measured global header height also covers wrapping
+   languages and the mobile two-row header. Workspace width is unchanged. */
+.inventory-sticky-tools{position:sticky;top:var(--inventory-sticky-top,64px);z-index:10;background:var(--bg);padding:8px 0 6px;margin:-8px 0 12px;box-shadow:0 5px 0 var(--bg);max-height:max(100px,calc((100dvh - var(--inventory-sticky-top,64px)) * .55));overflow-y:auto;scrollbar-width:thin}
+.inventory-sticky-tools .inventory-controls{margin-bottom:8px}
+.inventory-sticky-tools .inventory-group-strip{margin-bottom:0}
