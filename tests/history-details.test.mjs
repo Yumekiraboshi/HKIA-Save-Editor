@@ -303,3 +303,12 @@ test('source-witness first flower additions and growth conversions retain native
  const ops=[create(handle,source,[6,2,0,0],[6,2,0,0]),create(handle+1,handle,[6,2,0,0],[7,2,0,0])];
  assert.equal(decodeHistoryDetails(log(ops,2),[meta('inventory',source,null),meta('inventory',handle,null)]).length,2);
 });
+
+test('native pin history is a distinct inventory operation, not a quantity change',()=>{
+ const op=bytes([u8(26),u32(4),u32(1),u32(2),u32(3),u32(4),u8(0),u8(1)]);
+ const records=[meta('inventory',4,null)];
+ assert.deepEqual(decodeHistoryDetails(log([op],1),records),[{scope:'inventory',documentId:4,pinBefore:false,pinAfter:true}]);
+ const wrong=op.slice();wrong[wrong.length-1]=2;
+ assert.deepEqual(decodeHistoryDetails(log([wrong],1),records),[]);
+ assert.deepEqual(decodeHistoryDetails(log([op],1),[meta('inventory',5,null)]),[]);
+});

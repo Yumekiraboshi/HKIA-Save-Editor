@@ -69,7 +69,7 @@ test('local native history checkpoints are cloned losslessly and invalid payload
   }else assert.equal(result,null);
  }
  assert.match(source,/safeHistoryCheckpoint\(state\?\.historyCheckpoint\)/);
- assert.match(source,/if\(historyCheckpoint!==null&&!savedHistory\)throw Error\('HISTORY_CHECKPOINT_INVALID'\)/);
+ assert.match(source,/if\(\(historyCheckpoint!==null\|\|ui.nativePinHistory===true\)&&!savedHistory\)throw Error\('HISTORY_CHECKPOINT_INVALID'\)/);
 });
 
 test('staged unique flower patches preserve identity, appearance and quantity only as recovery comparison',()=>{

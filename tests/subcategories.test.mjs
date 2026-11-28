@@ -69,7 +69,7 @@ test('UI implements subgroup navigation and does not hide individual variation c
  assert.match(component,/selectedSubgroup=draft\.ui\.subgroup/);
  const store=readFileSync(new URL('../src/draft-store.ts',import.meta.url),'utf8');
  assert.match(store,/const subgroup=typeof state\?\.ui\?\.subgroup/);
- assert.match(store,/return \{file:actualFile,patches,achievementPatches:achievementPatches as StoredPatch\[\],inventoryPatches:safeInventoryPatches\(state\?\.inventoryPatches\?\?\[\]\),ui:\{group,subgroup,\.\.\.\(state\?\.ui\?\.inventoryLocks!==undefined\?\{inventoryLocks:safeInventoryLocks\(state\.ui\.inventoryLocks\)\}:\{\}\)\},historyCheckpoint:safeHistoryCheckpoint\(state\?\.historyCheckpoint\)\}/);
+ assert.match(store,/return \{file:actualFile,patches,achievementPatches:achievementPatches as StoredPatch\[\],inventoryPatches:safeInventoryPatches\(state\?\.inventoryPatches\?\?\[\]\),ui:\{group,subgroup,\.\.\.\(state\?\.ui\?\.nativePinHistory===true\?\{nativePinHistory:true\}:\{\}\)\},historyCheckpoint:safeHistoryCheckpoint\(state\?\.historyCheckpoint\)\}/);
 });
 
 test('each subcategory has an actual representative parent image in its group',()=>{

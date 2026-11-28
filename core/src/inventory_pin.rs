@@ -1,0 +1,228 @@
+//! v3.0.1 original inventory pin identity and bounded existing-set transaction.
+//! Hash128Extensions.Append at 0x2E52A60/BF0/D20 and Unity short hash at
+//! 0x7595EA0. Explicit little-endian word order; no platform-dependent hash.
+use crate::{native::{InventoryRow,InventoryUniqueData},wire::{Cursor,Token}};
+use std::collections::HashMap;
+pub(crate) type Guid=[u32;4];
+const C:u64=0xdeadbeefdeadbeef;
+fn words(g:Guid)->[u64;2]{[u64::from(g[0])|(u64::from(g[1])<<32),u64::from(g[2])|(u64::from(g[3])<<32)]}
+fn guid(v:[u64;2])->Guid{[v[0] as u32,(v[0]>>32) as u32,v[1] as u32,(v[1]>>32) as u32]}
+fn short_end(mut v:[u64;4])->Guid{
+ for (i,j,n) in [(3,2,15),(0,3,52),(1,0,26),(2,1,51),(3,2,28),(0,3,9),(1,0,47),(2,1,54),(3,2,32),(0,3,25),(1,0,63)]{
+  v[i]^=v[j];v[j]=v[j].rotate_left(n);v[i]=v[i].wrapping_add(v[j]);
+ }
+ guid([v[0],v[1]])
+}
+pub(crate) fn append_int(h:Guid,n:i32)->Guid{
+ let [a,b]=words(h);short_end([a,b,C.wrapping_add(u64::from(n as u32)),C.wrapping_add(4u64<<56)])
+}
+fn append_long(h:Guid,n:i64)->Guid{
+ let [a,b]=words(h);short_end([a,b,C.wrapping_add(n as u64),C.wrapping_add(8u64<<56)])
+}
+pub(crate) fn append_guid(h:Guid,g:Guid)->Guid{
+ if g==[0;4]{return h}
+ let [a,b]=words(h);let [c,d]=words(g);
+ let mut v=[a,b,C.wrapping_add(c),C.wrapping_add(d)];
+ // Unity short hash's 16-byte block and final empty tail.
+ for (i,j,k,n) in [(2,3,0,50),(3,0,1,52),(0,1,2,30),(1,2,3,41),
+  (2,3,0,54),(3,0,1,48),(0,1,2,38),(1,2,3,37),
+  (2,3,0,62),(3,0,1,34),(0,1,2,5),(1,2,3,36)]{
+  v[i]=v[i].rotate_left(n);v[i]=v[i].wrapping_add(v[j]);v[k]^=v[i];
+ }
+ v[2]=v[2].wrapping_add(C);v[3]=v[3].wrapping_add(16u64<<56).wrapping_add(C);
+ short_end(v)
+}
+fn read_int(b:&[u8])->Option<i32>{
+ let mut c=Cursor::new(b);let n=c.int(i32::MIN as i128,i32::MAX as i128).ok()? as i32;
+ (c.pos==b.len()).then_some(n)
+}
+fn read_guid(b:&[u8])->Option<Guid>{
+ let mut c=Cursor::new(b);let mut g=[0;4];for w in &mut g{*w=c.int(0,u32::MAX as i128).ok()? as u32;}
+ (c.pos==b.len()).then_some(g)
+}
+fn read_int_list(b:&[u8],mut h:Guid)->Option<Guid>{
+ let mut c=Cursor::new(b);let n=c.array().ok()?;
+ for _ in 0..n{h=append_int(h,c.int(i32::MIN as i128,i32::MAX as i128).ok()? as i32);}
+ (c.pos==b.len()).then_some(h)
+}
+pub(crate) fn color_code(bits:[u32;4])->i32{
+ let [r,g,b,a]=bits.map(|w|if w&0x7fffffff==0{0}else{w as i32});
+ r^g.wrapping_shl(2)^(b>>2)^(a>>1)
+}
+pub(crate) fn flower_guid(v:[i32;4])->Option<Guid>{
+ use crate::collection::{LEGACY_FLOWER_COLOR_GUIDS as C,LEGACY_FLOWER_PATTERN_GUIDS as P};
+ let [grow,base,pattern,accent]=v;let mut h=[0;4];
+ for key in [*C.get(usize::try_from(base).ok()?)?,*P.get(usize::try_from(pattern).ok()?)?,*C.get(usize::try_from(accent).ok()?)?]{h=append_guid(h,key);}
+ Some(append_int(h,grow))
+}
+pub(crate) fn furniture_guid(materials:[i32;3])->Option<Guid>{
+ let mut h=[0;4];
+ for index in materials{
+  let key=if index==0{[0;4]}else{crate::furniture_source::MATERIAL_GUID_INDEX.iter().find(|r|r.1==index)?.0};
+  h=append_guid(h,key);
+ }
+ Some(h)
+}
+pub(crate) fn int_guid(values:impl IntoIterator<Item=i32>)->Guid{
+ values.into_iter().fold([0;4],append_int)
+}
+pub(crate) fn palette_guid(values:[[u32;4];3])->Guid{int_guid(values.map(color_code))}
+fn unique_guid(row:&InventoryRow,raw:&[u8])->Option<Guid>{
+ let data=row.unique_data?;let field=|i:usize|raw.get(row.unique_fields.get(i)?.clone());
+ let int=|i|read_int(field(i)?);let g=|i|read_guid(field(i)?);
+ let mut h=[0;4];
+ match data{
+  InventoryUniqueData::Flower{grow_state,base_color,pattern,pattern_color} if row.unique_fields.len()==4=>{
+   h=flower_guid([i32::from(grow_state),base_color,pattern,pattern_color])?;
+  }
+  InventoryUniqueData::Furniture{materials} if row.unique_fields.len()==3=>{
+   h=furniture_guid(materials)?;
+  }
+  InventoryUniqueData::Palette{rgba_bits} if row.unique_fields.len()==3=>{h=palette_guid(rgba_bits);}
+  InventoryUniqueData::CafeAppearance{..} if row.unique_fields.len()==2=>{
+   // Native Guid hashes both full lists in serialized order, not just the display colors.
+   h=read_int_list(field(0)?,h)?;h=read_int_list(field(1)?,h)?;
+  }
+  InventoryUniqueData::BobaAppearance{..} if row.unique_fields.len()==5=>{for i in 0..5{h=append_int(h,int(i)?);}}
+  InventoryUniqueData::WandAppearance{source_item_id,magic,fleck,style,..} if row.unique_fields.len()==5=>{
+   // Native WandUniqueData.get_Guid does NOT hash the copied source payload.
+   // Different source appearances can intentionally share a pin identity.
+   for n in [source_item_id,magic,fleck,style]{h=append_int(h,n);}
+  }
+  InventoryUniqueData::Opaque{tag:0} if row.unique_fields.len()==1=>{h=g(0)?;}
+  InventoryUniqueData::Opaque{tag:1} if row.unique_fields.len()==3=>{for i in 0..3{h=append_guid(h,g(i)?);}}
+  InventoryUniqueData::Opaque{tag:2} if row.unique_fields.len()==4=>{
+   for i in 1..4{h=append_guid(h,g(i)?);}h=append_int(h,int(0)?);
+  }
+  InventoryUniqueData::Opaque{tag:5} if row.unique_fields.len()==5=>{
+   h=append_guid(h,g(0)?);for i in 2..5{h=append_int(h,int(i)?);}
+  }
+  InventoryUniqueData::Opaque{tag:10} if row.unique_fields.len()==1=>{
+   let bytes=field(0)?;let mut c=Cursor::new(bytes);
+   if c.array().ok()?!=3||!matches!(c.token().ok()?,Token::Str(_)){return None}
+   let id=c.int(i64::MIN as i128,i64::MAX as i128).ok()? as i64;
+   if !matches!(c.token().ok()?,Token::Bool(_))||c.pos!=bytes.len(){return None}
+   h=append_long(h,id);
+  }
+  InventoryUniqueData::Opaque{tag:11} if row.unique_fields.len()==2=>{h=append_int(h,int(0)?);}
+  _=>return None,
+ }
+ Some(h)
+}
+/// One exact source definition crosswalk, shared by original and edited identities.
+pub(crate) fn definitions()->&'static HashMap<i32,Guid>{
+ use crate::inventory_legacy_wand_guid_data::{LEGACY_WAND_SOURCE_GUIDS,OTHER_NATIVE_ITEM_GUIDS};
+ static DEFINITIONS:std::sync::OnceLock<HashMap<i32,Guid>>=std::sync::OnceLock::new();
+ DEFINITIONS.get_or_init(||LEGACY_WAND_SOURCE_GUIDS.iter().chain(OTHER_NATIVE_ITEM_GUIDS).map(|&(g,id)|(id,g)).collect())
+}
+/// Build source identities once per opened save. Missing identities stay absent.
+pub(crate) fn source_identities(rows:&[InventoryRow],raw:&[u8])->HashMap<u32,Guid>{
+ let definitions=definitions();
+ rows.iter().filter_map(|r|{
+  if r.id==0||r.fields.iter().any(Option::is_none){return None}
+  let definition=*definitions.get(&r.item_id?)?;
+  let key=match r.unique_is_nil?{true=>definition,false=>append_guid(definition,unique_guid(r,raw)?)};
+  Some((r.id,key))
+ }).collect()
+}
+#[cfg(test)]
+mod tests{
+ use super::*;
+ #[test]fn original_int_append_instruction_vectors(){
+  // Independent transcription of the native straight-line integer append
+  // at 0x2E52C50..0x2E52D04, including negative integer and nonzero seed.
+  assert_eq!(words(append_int([0;4],0)),[0xacfc557d99b85644,0x14e6f10ef5c69b08]);
+  assert_eq!(words(append_int([0;4],1)),[0xda1bf81db640f023,0x9bdbd1f5c5efad25]);
+  assert_eq!(words(append_int(guid([0x1122334455667788,0x99aabbccddeeff00]),-1)),[0x46f78d50f3f7cc73,0xd72ff70de0c54cd4]);
+  assert_eq!(words(append_int([0;4],12345)),[0xfbd2282a91426ddd,0x187378ce2207ab2f]);
+  assert_eq!(append_guid([1,2,3,4],[0;4]),[1,2,3,4]);
+ }
+ #[test]fn ordered_native_payloads_and_shared_wand_identity(){
+  let fields=std::array::from_fn(|_|Some(0..1));
+  let row=|source_tag,source_words|InventoryRow{id:1,item_id:Some(315822),unique_id:Some(1),quantity:Some(1),fields:fields.clone(),unique_is_nil:Some(false),unique_data:Some(InventoryUniqueData::WandAppearance{source_item_id:123,magic:45,fleck:67,style:89,source_tag,source_count:1,source_words}),unique_fields:vec![0..1;5]};
+  let mut variant=[0;12];variant[0]=1;
+  assert_eq!(unique_guid(&row(7,variant),&[0]),unique_guid(&row(8,[0;12]),&[0]));
+  assert_ne!(append_int(append_int([0;4],1),2),append_int(append_int([0;4],2),1));
+  assert_eq!(color_code([0,0,0,0]),color_code([0x80000000,0x80000000,0x80000000,0x80000000]));
+ }
+}
+
+/// Logical persisted pin row; order is global across saved sets.
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub(crate) struct PinRow{pub set_id:i16,pub item_guid:Guid,pub order:i16}
+pub(crate) fn source_rows(source:&crate::native::PinnedItemsSource)->Vec<PinRow>{
+ source.items.iter().map(|p|PinRow{set_id:p.set_id,item_guid:p.item_guid,order:p.order}).collect()
+}
+/// Create/remove in a previously authenticated set. Existing unrelated GUIDs
+/// remain opaque. The original global order is closed after removal; the
+/// least recent row is evicted only at the verified native capacity of 200.
+pub(crate) fn plan(rows:&[PinRow],set_id:i16,key:Guid,before:bool,after:bool)->Result<Vec<PinRow>,crate::Error>{
+ use crate::Error;
+ if before==after||key==[0;4]||rows.len()>200{return Err(Error::Schema)}
+ let found=rows.iter().position(|p|p.set_id==set_id&&p.item_guid==key);
+ if found.is_some()!=before{return Err(Error::Schema)}
+ let mut next=rows.to_vec();
+ if let Some(index)=found{
+  let removed=next.remove(index);
+  for p in &mut next{if p.order>removed.order{p.order-=1;}}
+ }else{
+  if next.len()==200{let i=next.iter().position(|p|p.order==199).ok_or(Error::Schema)?;next.remove(i);}
+  for p in &mut next{p.order=p.order.checked_add(1).ok_or(Error::Overflow)?;}
+  next.insert(0,PinRow{set_id,item_guid:key,order:0});
+ }
+ Ok(next)
+}
+/// Preserve original retained row bytes except the explicitly changed order.
+pub(crate) fn encode_rows(raw:&[u8],source:&crate::native::PinnedItemsSource,rows:&[PinRow])->Result<Vec<u8>,crate::Error>{
+ use crate::Error;
+ if rows.len()>200{return Err(Error::Budget)}
+ let old=raw.get(source.items_span.clone()).ok_or(Error::Schema)?;
+ let mut c=Cursor::new(old);if c.array()?!=source.items.len(){return Err(Error::Schema)}
+ let mut out=Vec::new();
+ if rows.len()==source.items.len(){out.extend(&old[..c.pos]);}
+ else if rows.len()<16{out.push(0x90|rows.len() as u8)}
+ else{out.push(0xdc);out.extend((rows.len() as u16).to_be_bytes());}
+ for p in rows{
+  if let Some(s)=source.items.iter().find(|s|s.set_id==p.set_id&&s.item_guid==p.item_guid){
+   if p.order==s.order{out.extend(raw.get(s.whole.clone()).ok_or(Error::Schema)?);}
+   else{
+    out.extend(raw.get(s.whole.start..s.order_span.start).ok_or(Error::Schema)?);
+    out.push(0xd1);out.extend(p.order.to_be_bytes());
+    out.extend(raw.get(s.order_span.end..s.whole.end).ok_or(Error::Schema)?);
+   }
+  }else{
+   out.extend([0x93,0xd1]);out.extend(p.set_id.to_be_bytes());
+   for w in p.item_guid{out.push(0xce);out.extend(w.to_be_bytes());}
+   out.push(0xd1);out.extend(p.order.to_be_bytes());
+  }
+ }
+ Ok(out)
+}
+
+#[cfg(test)]
+mod writer_tests{
+ use super::*;
+ #[test]
+ fn native_global_order_capacity_and_cas(){
+  let rows:Vec<_>=(0..200i16).map(|order|PinRow{set_id:order%2,item_guid:[u32::from(order as u16)+1,2,3,4],order}).rev().collect();
+  let key=[900,2,3,4];
+  let next=plan(&rows,0,key,false,true).unwrap();
+  assert_eq!(next.len(),200);
+  assert_eq!(next[0],PinRow{set_id:0,item_guid:key,order:0});
+  assert!(!next.iter().any(|p|p.item_guid==[200,2,3,4]));
+  for row in rows.iter().filter(|p|p.order!=199){
+   assert!(next.contains(&PinRow{order:row.order+1,..*row}));
+  }
+  assert!(plan(&next,0,key,false,true).is_err());
+  let after=plan(&next,0,key,true,false).unwrap();
+  assert_eq!(after,rows.into_iter().filter(|p|p.order!=199).collect::<Vec<_>>());
+ }
+ #[test]
+ fn same_guid_in_different_sets_is_not_the_same_pin(){
+  let key=[1,2,3,4];
+  let old=[PinRow{set_id:1,item_guid:key,order:0}];
+  let next=plan(&old,0,key,false,true).unwrap();
+  assert_eq!(next,[PinRow{set_id:0,item_guid:key,order:0},PinRow{order:1,..old[0]}]);
+  assert_eq!(plan(&next,0,key,true,false).unwrap(),old);
+ }
+}

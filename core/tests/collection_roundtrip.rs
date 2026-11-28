@@ -7191,3 +7191,116 @@ fn dense_ordinary_family_membership_after_removal(){
  assert_eq!(reopened.inventory()[0].quantity,0);
  assert_eq!(reopened.inventory_original_unique_payload(5),Some([0xc0].as_slice()));
 }
+
+
+#[test]
+fn native_pin_source_joins_exact_screen_and_preserves_other_settings(){
+ use hkia_save_core::native::INVENTORY_PIN_SCREEN;
+ for malformed in [false,true]{
+  let mut payload=synthetic_payload("3.0.1");payload[3]=0x96;
+  let sets=arr(vec![arr(vec![u(0),guid(INVENTORY_PIN_SCREEN)]),arr(vec![u(1),guid([4,5,6,7])])]);
+  let items=arr(vec![arr(vec![u(0),guid([10,20,30,40]),u(0)]),arr(vec![u(if malformed{9}else{1}),guid([10,20,30,40]),u(1)])]);
+  payload.extend(doc(23,arr(vec![u(4),vec![0xc0],vec![0xc0],arr(vec![sets,items])])));
+  let input=slot_from_payload("3.0.1",payload);
+  let slot=read_slot(&input).unwrap();
+  assert_eq!(slot.index.pin_settings_seen,1);
+  assert_eq!(slot.index.pin_settings_incomplete,malformed);
+  if malformed{assert!(slot.index.pinned_items_source.is_none());continue}
+  let pins=slot.index.pinned_items_source.as_ref().unwrap();
+  assert_eq!(pins.document_id,4);
+  assert_eq!(pins.for_screen(INVENTORY_PIN_SCREEN).map(|p|p.item_guid).collect::<Vec<_>>(),vec![[10,20,30,40]]);
+  assert_eq!(pins.for_screen([4,5,6,7]).count(),1);
+  let original=slot.envelope.decoded[pins.whole.clone()].to_vec();
+  let mut e=Editor::open(input).unwrap();
+  e.change(2,Some(638000000000000001),Some(638000000000000002)).unwrap();
+  let reopened=read_slot(&e.export().unwrap()).unwrap();
+  let next=reopened.index.pinned_items_source.unwrap();
+  assert_eq!(reopened.envelope.decoded[next.whole],original);
+ }
+}
+
+#[test]
+fn native_inventory_pin_rank_survives_quantity_history_and_export(){
+ use hkia_save_core::{native::INVENTORY_PIN_SCREEN,collection::HistoryScope::Inventory};
+ let mut payload=synthetic_payload("3.0.1");payload[2]=9;payload[3]=0x99;
+ let material=[0x7539b33a,0x40c88e66,0xff582cb7,0x469faae7];
+ let clothing=[0xcee4c4b9,0x4e24e182,0xace9279e,0x455eeb37];
+ payload.extend(doc(1,arr(vec![u(4),u(1877756618),u(0),u(6),vec![0xc0]])));
+ payload.extend(doc(1,arr(vec![u(5),u(315822),u(0),u(1),vec![0xc0]])));
+ payload.extend(doc(1,arr(vec![u(6),u(1877756618),u(0),u(0),vec![0xc0]])));
+ let sets=arr(vec![arr(vec![u(0),guid(INVENTORY_PIN_SCREEN)]),arr(vec![u(1),guid([4,5,6,7])])]);
+ let items=arr(vec![arr(vec![u(1),guid(clothing),u(0)]),arr(vec![u(0),guid(material),u(1)])]);
+ payload.extend(doc(23,arr(vec![u(7),vec![0xc0],vec![0xc0],arr(vec![sets,items])])));
+ let input=slot_from_payload("3.0.1",payload);
+ let mut e=Editor::open(input).unwrap();
+ assert_eq!(e.inventory_pin_orders(),vec![(4,1),(6,1)]);
+ assert_eq!(e.inventory_pin_projection(),vec![(4,Some(1)),(5,None),(6,Some(1))]);
+ e.change_inventory_quantity(5,1,2).unwrap();
+ assert_eq!(e.inventory_pin_orders(),vec![(4,1),(6,1)]);
+ assert!(e.undo_scope(Inventory));assert_eq!(e.inventory_pin_orders(),vec![(4,1),(6,1)]);
+ assert!(e.redo_scope(Inventory));assert_eq!(e.inventory_pin_orders(),vec![(4,1),(6,1)]);
+ let reopened=Editor::open(e.export().unwrap()).unwrap();
+ assert_eq!(reopened.inventory_pin_orders(),vec![(4,1),(6,1)]);
+}
+
+#[test]
+fn native_pin_projection_distinguishes_empty_screen_from_missing_or_unresolved(){
+ use hkia_save_core::native::INVENTORY_PIN_SCREEN;
+ for mode in 0..4{
+  let mut payload=synthetic_payload("3.0.1");payload[2]=9;payload[3]=if mode==0{0x97}else{0x98};
+  payload.extend(doc(1,arr(vec![u(4),u(1877756618),u(0),u(6),vec![0xc0]])));
+  // Item 1 is absent from the authenticated v3.0.1 GUID crosswalk (Int32::MAX is not).
+  payload.extend(doc(1,arr(vec![u(5),u(1),u(0),u(1),vec![0xc0]])));
+  if mode!=0{
+   let key=if mode==1{[4,5,6,7]}else{INVENTORY_PIN_SCREEN};
+   let sets=arr(vec![arr(vec![u(0),guid(key)])]);
+   let items=if mode==3{arr(vec![arr(vec![u(9),guid([10,20,30,40]),u(0)])])}else{arr(vec![])};
+   payload.extend(doc(23,arr(vec![u(6),vec![0xc0],vec![0xc0],arr(vec![sets,items])])));
+  }
+  let e=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
+  assert!(e.inventory_pin_orders().is_empty());
+  assert_eq!(e.inventory_pin_projection(),if mode==2{vec![(4,None)]}else{vec![]});
+ }
+}
+
+#[test]
+fn existing_native_pin_set_cas_history_and_export_preserve_other_sets(){
+ use hkia_save_core::{native::INVENTORY_PIN_SCREEN,collection::HistoryScope::Inventory};
+ let material=[0x7539b33a,0x40c88e66,0xff582cb7,0x469faae7];
+ let other=[10,20,30,40];
+ for zipped in [false,true]{
+  let mut payload=synthetic_payload("3.0.1");payload[2]=9;payload[3]=0x98;
+  payload.extend(doc(1,arr(vec![u(4),u(1877756618),u(0),u(6),vec![0xc0]])));
+  payload.extend(doc(1,arr(vec![u(5),u(1877756618),u(0),u(1),vec![0xc0]])));
+  let sets=arr(vec![arr(vec![u(0),guid(INVENTORY_PIN_SCREEN)]),arr(vec![u(1),guid([4,5,6,7])])]);
+  let items=arr(vec![arr(vec![u(1),guid(other),u(0)])]);
+  payload.extend(doc(23,arr(vec![u(6),vec![0xc0],vec![0xc0],arr(vec![sets,items])])));
+  let raw=slot_from_payload("3.0.1",payload);let input=if zipped{zip(&raw)}else{raw.clone()};
+  let original=read_slot(&raw).unwrap();let source=original.index.pinned_items_source.as_ref().unwrap();
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.change_inventory_pin(4,other,false,true).is_err());
+  assert!(e.change_inventory_pin(4,material,true,false).is_err());
+  assert!(!e.dirty());
+  e.change_inventory_pin(4,material,false,true).unwrap();
+  assert_eq!(e.inventory_pin_orders(),vec![(4,0),(5,0)]);
+  assert!(e.change_inventory_pin(5,material,false,true).is_err());
+  assert_eq!(e.inventory_pin_edit_keys(),vec![(4,material),(5,material)]);
+  assert_eq!(e.inventory_pin_bulk_protected_ids(),vec![4,5]);
+  let revision=e.revision();let history=e.history_checkpoint().unwrap();
+  assert!(e.change_inventory_quantities_protected(&[(4,6,0),(5,1,0)]).is_err());
+  assert!(e.remove_inventory_entries_protected(&[(4,6)]).is_err());
+  assert_eq!(e.revision(),revision);assert_eq!(e.history_checkpoint().unwrap(),history);
+  let checkpoint=e.history_checkpoint().unwrap();
+  let mut restored=Editor::open(input.clone()).unwrap();restored.restore_history(&checkpoint).unwrap();
+  assert_eq!(restored.history_checkpoint().unwrap(),checkpoint);
+  let export=e.export().unwrap();
+  let opened=Editor::open(export.clone()).unwrap();assert_eq!(opened.inventory_pin_orders(),vec![(4,0),(5,0)]);
+  let exported_slot=if zipped{let z=ZipIndex::parse(&export).unwrap();z.targets(&export).unwrap().0.unwrap()}else{export};
+  let parsed=read_slot(&exported_slot).unwrap();let pins=parsed.index.pinned_items_source.as_ref().unwrap();
+  assert_eq!(pins.items.iter().map(|p|(p.set_id,p.item_guid,p.order)).collect::<Vec<_>>(),vec![(0,material,0),(1,other,1)]);
+  assert_eq!(original.envelope.decoded[source.sets_span.clone()],parsed.envelope.decoded[pins.sets_span.clone()]);
+  assert!(e.undo_scope(Inventory));assert!(!e.dirty());assert!(e.redo_scope(Inventory));
+  e.change_inventory_pin(5,material,true,false).unwrap();assert!(e.inventory_pin_orders().is_empty());assert!(!e.dirty());
+  assert!(e.undo_scope(Inventory));assert_eq!(e.inventory_pin_orders(),vec![(4,0),(5,0)]);
+ }
+}

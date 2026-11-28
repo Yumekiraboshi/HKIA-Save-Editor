@@ -59,7 +59,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
    paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
    doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(batchInventory==='repair'?203331651:517031),[0],u32(9),[0xc0]))]:[]),
-  ...(categoryProtectionInventory?[doc(1,arr([8],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([9],u32(627013240),[0],u32(9),[0xc0]))]:[]),
+  ...(categoryProtectionInventory?[doc(1,arr([8],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([9],u32(627013240),[0],u32(9),[0xc0])),doc(23,arr([10],[0xc0],[0xc0],arr(arr(arr([0],hash(0x38ece9f0,0xc8447a3f,0x10ac28fb,0x75f094e8))),arr())))]:[]),
   ...(duplicateZeroInventory?[doc(1,arr([8],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([9],u32(1877756618),[0],u32(duplicatePeerQuantity),[0xc0]))]:[]),
   ...(missingUniqueZero?[doc(1,arr([10],u32(203331651),[0],u32(0),[0xc0]))]:[]),
   ...(largeInventory?Array.from({length:480},(_,i)=>doc(1,arr(u32(20+i),u32(1877756618),[0],u32(i+1),[0xc0]))):[]),
@@ -724,7 +724,7 @@ async function inventoryBobaEditSmoke(){
    await page.setViewportSize({width,height:800});
    const box=await lane.boundingBox(),del=await card.locator('.inventory-stack-delete').boundingBox();
    assert.ok(box&&del&&(box.x+box.width<=del.x||del.x+del.width<=box.x||box.y+box.height<=del.y||del.y+del.height<=box.y),'ingredient lane must not cover delete control');
-   const lock=await card.locator('.inventory-lock-button').boundingBox();
+   const lock=await card.locator('.inventory-pin-button').boundingBox();
    assert.ok(box&&lock&&(box.x+box.width<=lock.x||lock.x+lock.width<=box.x||box.y+box.height<=lock.y||lock.y+lock.height<=box.y),'ingredient lane must not cover lock control');
    assert.equal(await lane.locator('.ingredient-badge').count(),4);
   }
@@ -1218,26 +1218,59 @@ async function inventoryCategoryProtectionSmoke(){
   await card.locator('.inventory-quantity-form[data-quantity-ready="true"][data-quantity-pending="false"]').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
   await card.locator('input[name="quantity"]').fill('13');
-  await card.locator('.inventory-lock-button').click();
-  await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
-  assert.equal(await card.locator('input[name="quantity"]').isDisabled(),true);
-  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
-  assert.equal(await card.locator('.inventory-quantity-form button[type="submit"]').isDisabled(),true);
-  assert.equal(await card.locator('.inventory-quantity-form').getAttribute('data-quantity-ready'),'false');
-  assert.equal(await card.locator('.inventory-stack-delete').isDisabled(),true);
+  await card.locator('.inventory-pin-button').click();
+  await card.locator('.inventory-pin-button[aria-pressed="true"]:not([disabled])').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').isDisabled(),false);
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'13');
+  assert.equal(await card.locator('.inventory-stack-delete').isDisabled(),false);
   await page.locator('.inventory-batch-toggle').click();
-  assert.equal(await card.locator('.inventory-batch-checkbox').count(),0);
+  assert.equal(await card.locator('.inventory-batch-checkbox').count(),1);
   await page.locator('.inventory-batch-toggle').click();
   await page.waitForFunction(async()=>new Promise(resolve=>{
    const req=indexedDB.open('hkia-editor-local-session',1);
-   req.onsuccess=()=>{const db=req.result;const get=db.transaction('unsaved-changes','readonly').objectStore('unsaved-changes').get('current');get.onsuccess=()=>{db.close();resolve(get.result?.ui?.inventoryLocks?.length===1)};get.onerror=()=>{db.close();resolve(false)}};
+   req.onsuccess=()=>{const db=req.result;const get=db.transaction('unsaved-changes','readonly').objectStore('unsaved-changes').get('current');get.onsuccess=()=>{db.close();resolve(get.result?.ui?.nativePinHistory===true&&get.result?.historyCheckpoint?.length>16)};get.onerror=()=>{db.close();resolve(false)}};
    req.onerror=()=>resolve(false);
   }));
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('1877756618');
-  await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
+  await card.locator('.inventory-pin-button[aria-pressed="true"]').waitFor();
+  await page.locator('.inventory-pinned-only').click();
+  await search.fill('627013240');await card.waitFor({state:'hidden'});
+  await page.locator('.inventory-pinned-only').click();
+  await search.fill('1877756618');await card.waitFor();
   const modal=page.locator('.removal-confirm-dialog');
+  // Pinning does not prevent a positive quantity batch. A destructive
+  // batch with both rows selected excludes only the pinned row.
+  await page.locator('.inventory-batch-toggle').click();
+  await card.locator('.inventory-batch-checkbox').check();
+  const batchQuantity=page.locator('.inventory-batch-form input[type="number"]');
+  assert.equal(await batchQuantity.getAttribute('min'),'1','only pinned rows cannot be batch-zeroed');
+  await search.fill('627013240');
+  await card.locator('.inventory-batch-checkbox').check();
+  assert.equal(await batchQuantity.getAttribute('min'),'0','unprotected positive row permits batch zero');
+  await batchQuantity.fill('8');
+  await page.locator('.inventory-batch-form button[type="submit"]').click();
+  await card.locator('.inventory-quantity-form[data-quantity-committed="8"]').waitFor();
+  await search.fill('1877756618');
+  await card.locator('.inventory-quantity-form[data-quantity-committed="8"]').waitFor();
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await card.locator('.inventory-quantity-form[data-quantity-committed="6"]').waitFor();
+  // Re-select both and zero through the quantity form. The pin remains.
+  await card.locator('.inventory-batch-checkbox').check();
+  await search.fill('627013240');
+  await card.locator('.inventory-batch-checkbox').check();
+  await batchQuantity.fill('0');
+  await page.locator('.inventory-batch-form button[type="submit"]').click();
+  await modal.locator('.removal-confirm-action').waitFor({state:'visible'});
+  assert.equal(await modal.locator('.inventory-removal-targets li').count(),1);
+  assert.equal(await modal.locator('.inventory-remove-entry-action').count(),0);
+  await modal.locator('.removal-confirm-action').click();
+  await card.waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await card.locator('.inventory-quantity-form[data-quantity-committed="9"]').waitFor();
+  await page.locator('.inventory-batch-toggle').click();
+  await search.fill('1877756618');await card.waitFor();
   // Both ordinary material rows have verified zero/removal eligibility.
   // Search deliberately hides the only unlocked row. Category operation
   // still targets it, never the locked visible row.
@@ -1252,9 +1285,6 @@ async function inventoryCategoryProtectionSmoke(){
   await page.locator('.inventory-show-zero-toggle').click();
   await card.locator('input[name="quantity"]').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'0');
-  await card.locator('.inventory-lock-button').click();
-  assert.equal(await page.locator('button[title="Undo"]').isDisabled(),true,'history cannot change a locked row');
-  await card.locator('.inventory-lock-button').click();
   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
   await page.locator('.inventory-show-zero-toggle').click();
   await search.fill('1877756618');
@@ -1268,9 +1298,9 @@ async function inventoryCategoryProtectionSmoke(){
   await page.locator('button[title="Undo"]').click();
   await card.locator('input[name="quantity"]').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'0');
-  await search.fill('1877756618');await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
+  await search.fill('1877756618');await card.locator('.inventory-pin-button[aria-pressed="true"]').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
-  console.log('CHROMIUM CATEGORY PROTECTION PASS: persisted lock, filtered category zero, hidden physical deletion, protected history');
+  console.log('CHROMIUM CATEGORY PROTECTION PASS: persisted native pin, filtered category zero, hidden physical deletion, unrestricted history');
  }finally{await context.close()}
 }
 async function inventoryRepairZeroOnlySmoke(){
@@ -1373,6 +1403,9 @@ async function inventoryDuplicateBatchZeroInputSmoke(){
   await card.nth(1).waitFor();
   assert.equal(await card.count(),2,'both native records remain');
   await page.locator('button[title="Undo"]:not([disabled])').click();
+  // Undo crosses the Worker asynchronously; wait for both committed rows, not a click completion.
+  await card.locator('.inventory-quantity-form[data-quantity-committed="3"]').waitFor();
+  await card.locator('.inventory-quantity-form[data-quantity-committed="6"]').waitFor();
   assert.deepEqual((await card.locator('input[name="quantity"]').evaluateAll(inputs=>inputs.map(x=>Number(x.value)))).sort((a,b)=>a-b),[3,6]);
   console.log('CHROMIUM DUPLICATE BATCH ZERO INPUT PASS');
  }finally{await context.close()}

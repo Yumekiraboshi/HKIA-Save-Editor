@@ -133,6 +133,25 @@ pub struct VisitorManagerScopedSourceLink{
 /// not a globally unique ID and not a player-item identity.
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub(crate) struct DocumentSpan{pub key:(i32,u32),pub bytes:Range<usize>}
+/// Original native favorite settings; source-only until the writer and UI are integrated.
+#[derive(Debug,Clone,PartialEq,Eq)]
+pub struct PinnedSetSource {pub set_id:i16,pub key:[u32;4],pub whole:Range<usize>}
+#[derive(Debug,Clone,PartialEq,Eq)]
+pub struct PinnedItemSource {pub set_id:i16,pub item_guid:[u32;4],pub order:i16,pub whole:Range<usize>,pub order_span:Range<usize>}
+#[derive(Debug,Clone,PartialEq,Eq)]
+pub struct PinnedItemsSource {
+ pub document_id:u32,pub whole:Range<usize>,pub sets_span:Range<usize>,pub items_span:Range<usize>,
+ pub sets:Vec<PinnedSetSource>,pub items:Vec<PinnedItemSource>,
+}
+/// ScreenId.Inventory, not a generic pin key for all screens.
+pub const INVENTORY_PIN_SCREEN:[u32;4]=[0x38ece9f0,0xc8447a3f,0x10ac28fb,0x75f094e8];
+impl PinnedItemsSource {
+ /// Exact set join; never infer a unique variant from its definition ID.
+ pub fn for_screen(&self,key:[u32;4])->impl Iterator<Item=&PinnedItemSource>{
+  let id=self.sets.iter().find(|s|s.key==key).map(|s|s.set_id);
+  self.items.iter().filter(move |p|Some(p.set_id)==id)
+ }
+}
 #[derive(Debug,Default)]
 pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievements:Vec<Model>,pub counters:Vec<Model>,pub collections:Vec<CollectionEntry>,pub deprecated_count:usize,pub dictionary_entries:usize,pub collection_map:Option<Range<usize>>,pub root_documents_span:Option<Range<usize>>,pub celebrations:Vec<CelebrationSpan>,pub inventory:Vec<InventoryRow>,pub inventory_item_refs:HashSet<(i32,i32)>,pub inventory_legacy_uid_refs:HashSet<i32>,pub inventory_item_refs_incomplete:bool,pub deprecated:Vec<DeprecatedEntry>,pub deprecated_map:Option<Range<usize>>,pub collection_version:Option<CollectionVersion>,
  /// A partial native ItemId/UID reference can name an exact ItemId without
@@ -177,6 +196,12 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
  pub inventory_palette_context_incomplete:bool,
  /// A legacy or modern wand payload outside the bag cannot be safely joined by UID.
  pub inventory_wand_copies:bool,
+ /// None means absent, unsupported or incomplete, not an empty pin list.
+ pub pinned_items_source:Option<PinnedItemsSource>,
+ /// Original record identity only; no mutation or implicit context selection.
+ pub inventory_pin_guids:HashMap<u32,[u32;4]>,
+ pub pin_settings_seen:usize,
+ pub pin_settings_incomplete:bool,
  pub(crate) document_spans:Vec<DocumentSpan>,
  /// DbRoot.Key(1), native shared document allocation counter and exact token span.
  pub root_next_id:Option<(i32,Range<usize>)>,
@@ -223,7 +248,7 @@ impl NativeIndex{
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 enum Key<'a>{Int(i128),Str(&'a str),Guid([u32;4]),Shop([u32;4],[u32;4],i128)}
 #[derive(Clone,Debug)]
-enum Value<'a>{DocumentId(i128),Other,Nil,Bool(bool),Float(f32),Color([u32;4]),ChefColors{count:u8,colors:[i32;3]},InventoryUnique(InventoryUniqueData,Vec<Range<usize>>),Time(i64,u32),Int(i128),Str(&'a str),Guid([u32;4]),Count(usize),Fields(Vec<(Value<'a>,Range<usize>)>),Key(Key<'a>),CabinApartmentPairs(Vec<CabinApartmentSourcePair>)}
+enum Value<'a>{DocumentId(i128),Other,Nil,Bool(bool),Float(f32),Color([u32;4]),ChefColors{count:u8,colors:[i32;3]},InventoryUnique(InventoryUniqueData,Vec<Range<usize>>),Time(i64,u32),Int(i128),Str(&'a str),Guid([u32;4]),Count(usize),Fields(Vec<(Value<'a>,Range<usize>)>),Key(Key<'a>),CabinApartmentPairs(Vec<CabinApartmentSourcePair>),PinSets(Vec<PinnedSetSource>),PinItems(Vec<PinnedItemSource>)}
 impl<'a> Value<'a>{
  fn int(&self)->Result<i128,Error>{if let Self::Int(v)=self{Ok(*v)}else{Err(Error::Schema)}}
  fn guid(&self)->Result<[u32;4],Error>{if let Self::Guid(v)=self{Ok(*v)}else{Err(Error::Schema)}}
@@ -255,7 +280,22 @@ impl<'a> Walk<'a>{
    Spec::Primitive(s)=>self.primitive(s,depth),
    Spec::Nullable(inner)=>{if self.c.peek()?==0xc0{self.c.token()?;Ok(Value::Nil)}else{self.read(*inner,depth+1,ctx,collection)}},
    Spec::Seq(inner)=>{if self.c.peek()?==0xc0{self.c.token()?;return Ok(Value::Nil)}let n=self.c.array()?;
-    if ctx==Some(("chef-colors",0)){
+    if matches!(ctx,Some(("pins",0|1))){
+     // Keep the common schema/budget walk even for malformed or oversized lists.
+     let sets=ctx==Some(("pins",0));let mut valid=n<=if sets{4096}else{200};
+     let mut set_rows=Vec::new();let mut item_rows=Vec::new();
+     for _ in 0..n{
+      let start=self.c.pos;let value=self.read(*inner,depth+1,None,false)?;
+      if !valid{continue}
+      let Value::Fields(f)=value else{valid=false;continue};
+      if f.len()!=if sets{2}else{3}{valid=false;continue}
+      let id=i16::try_from(f[0].0.int()?).map_err(|_|Error::Schema)?;
+      let key=f[1].0.guid()?;
+      if sets{set_rows.push(PinnedSetSource{set_id:id,key,whole:start..self.c.pos});}
+      else{item_rows.push(PinnedItemSource{set_id:id,item_guid:key,order:i16::try_from(f[2].0.int()?).map_err(|_|Error::Schema)?,whole:start..self.c.pos,order_span:f[2].1.clone()});}
+     }
+     if !valid{Ok(Value::Other)}else if sets{Ok(Value::PinSets(set_rows))}else{Ok(Value::PinItems(item_rows))}
+    }else if ctx==Some(("chef-colors",0)){
      let mut colors=[0;3];
      for i in 0..n{let v=self.read(*inner,depth+1,None,false)?;if i<3{colors[i]=i32::try_from(v.int()?).map_err(|_|Error::Schema)?;}}
      Ok(Value::ChefColors{count:n.min(3) as u8,colors})
@@ -426,7 +466,7 @@ impl<'a> Walk<'a>{
       // copied UI representation or a caller-supplied digest.
       let source_start=self.c.pos;
       let n=self.c.array()?;if n>specs.len(){return Err(Error::Schema)}
-      let short=name.rsplit('.').next().unwrap_or(name);let is_doc=matches!(ctx,Some((DOC,_)));let capture_all=matches!(short,"AchievementData"|"GameCounterData"|"GameCollectionsTraitModel"|"CollectionVersion"|"AchievementModel"|"GameCounterModel")||name==ROOT||name==SHOP||name==CELEBRATION||(short=="InventoryItem"&&ctx==Some((DOC,1)))||name==HOME||name==CABIN||name==VISITOR_MANAGER||matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,_))|Some((WAND_SOURCE_CAPTURE,_)))||name=="Sunblink.UserData.UniqueItemIdModel"||name=="Sunblink.UserData.HomeObjectModelDeprecatedV71"||name=="Sunblink.Game.OwnedRemoteCabinHomeObjectClientModelDeprecatedV71";
+      let short=name.rsplit('.').next().unwrap_or(name);let is_doc=matches!(ctx,Some((DOC,_)));let capture_all=(self.version==Version::V301&&matches!(short,"PlayerStateSettingsModel"|"PinnedItemsData"|"PinnedItemsSetData"|"PinnedItemData"))||matches!(short,"AchievementData"|"GameCounterData"|"GameCollectionsTraitModel"|"CollectionVersion"|"AchievementModel"|"GameCounterModel")||name==ROOT||name==SHOP||name==CELEBRATION||(short=="InventoryItem"&&ctx==Some((DOC,1)))||name==HOME||name==CABIN||name==VISITOR_MANAGER||matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,_))|Some((WAND_SOURCE_CAPTURE,_)))||name=="Sunblink.UserData.UniqueItemIdModel"||name=="Sunblink.UserData.HomeObjectModelDeprecatedV71"||name=="Sunblink.Game.OwnedRemoteCabinHomeObjectClientModelDeprecatedV71";
       // Capture the typed ItemId fields even where the original unique
       // payload is copied instead of referenced by UID. Never scan arbitrary bytes.
       let payload_ref_keys:&[usize]=match name{
@@ -572,7 +612,7 @@ impl<'a> Walk<'a>{
        }
       }else{None};
       let mut placement_ids=[None;2];let mut placement_nil_count=0;
-      for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if clothing_guid_lists.contains(&i){Some(("clothing-guid-list",0))}else if clothing_preset_list==Some(i){Some(("clothing-preset-list",0))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else if short=="CafeCreationUniqueData"&&matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,3))|Some((WAND_SOURCE_CAPTURE,3)))&&i==1{Some(("chef-colors",0))}else if short=="WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&i==1{Some((WAND_SOURCE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
+      for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if self.version==Version::V301&&short=="PinnedItemsData"{Some(("pins",i as i32))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if clothing_guid_lists.contains(&i){Some(("clothing-guid-list",0))}else if clothing_preset_list==Some(i){Some(("clothing-preset-list",0))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else if short=="CafeCreationUniqueData"&&matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,3))|Some((WAND_SOURCE_CAPTURE,3)))&&i==1{Some(("chef-colors",0))}else if short=="WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&i==1{Some((WAND_SOURCE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
        if payload_ref_keys.contains(&i)&&!(self.version==Version::V301&&name=="Sunblink.Game.WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&n==5){
         let item=i32::try_from(value.int()?).map_err(|_|Error::Schema)?;
         if standalone_mailbox{stored_mail_item=Some(item)}else if placement_payload_start.is_some()&&i<2{placement_ids[i]=Some(item)}else{self.index.note_payload_reference(item,false);}
@@ -709,6 +749,22 @@ impl<'a> Walk<'a>{
         });
        }
       }
+      if self.version==Version::V301&&short=="PlayerStateSettingsModel"&&ctx==Some((DOC,23)){
+       self.index.pin_settings_seen+=1;
+       let source=(||{
+        if self.index.pin_settings_seen!=1||fields.len()!=4{return None}
+        let Value::Fields(pin_fields)=&fields[3].0 else{return None};
+        if pin_fields.len()!=2{return None}
+        let (Value::PinSets(sets),Value::PinItems(items))=(&pin_fields[0].0,&pin_fields[1].0) else{return None};
+        let mut ids=HashSet::new();let mut keys=HashSet::new();
+        if sets.iter().any(|s|s.set_id<0||!ids.insert(s.set_id)||!keys.insert(s.key)){return None}
+        let mut identities=HashSet::new();let mut orders=HashSet::new();
+        if items.iter().any(|p|!ids.contains(&p.set_id)||p.order<0||p.order as usize>=items.len()||!orders.insert(p.order)||!identities.insert((p.set_id,p.item_guid))){return None}
+        Some(PinnedItemsSource{document_id:u32::try_from(fields[0].0.int().ok()?).ok()?,whole:fields[3].1.clone(),sets_span:pin_fields[0].1.clone(),items_span:pin_fields[1].1.clone(),sets:sets.clone(),items:items.clone()})
+       })();
+       self.index.pin_settings_incomplete=source.is_none();
+       self.index.pinned_items_source=source;
+      }
       if name==ROOT{if n!=3||!matches!(&fields[2].0,Value::Count(x) if *x>0 && *x==self.index.documents){return Err(Error::Schema)}self.index.root_next_id=Some((i32::try_from(fields[1].0.int()?).map_err(|_|Error::Schema)?,fields[1].1.clone()));self.index.root_documents_span=Some(fields[2].1.clone());}
       if name==SHOP{if n!=3{return Err(Error::Schema)}return Ok(Value::Key(Key::Shop(fields[0].0.guid()?,fields[1].0.guid()?,fields[2].0.int()?)))}
       if short=="CollectionVersion"{if ctx!=Some((DOC,18))||n!=3||self.version_seen{return Err(Error::Schema)}if !matches!(&fields[2].0,Value::Str(v) if *v==self.version.as_str()){return Err(Error::Version)}self.version_seen=true;self.index.collection_version=Some(CollectionVersion{id:u32::try_from(fields[0].0.int()?).map_err(|_|Error::Schema)?,number:i32::try_from(fields[1].0.int()?).map_err(|_|Error::Schema)?,span:fields[1].1.clone()});}
@@ -843,6 +899,9 @@ pub fn index_native(bytes:&[u8],version:Version)->Result<NativeIndex,Error>{
  w.index.inventory_referenced_items=w.index.inventory_item_refs.iter().map(|&(item,_)|item).collect();
  w.index.inventory_unresolved_reference_items=w.index.inventory_item_refs.iter()
   .filter(|pair|!w.index.inventory_resolved_positive_item_refs.contains(pair)).map(|&(item,_)|item).collect();
+ if version==Version::V301&&w.index.pinned_items_source.is_some(){
+  w.index.inventory_pin_guids=crate::inventory_pin::source_identities(&w.index.inventory,bytes);
+ }
  correlate_source_only(&mut w.index);
  correlate_visitor_manager_source_only(&mut w.index);
  Ok(w.index)
