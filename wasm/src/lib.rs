@@ -115,6 +115,18 @@ pub extern "C" fn hkia_inventory_removable_snapshot()->u32{
  })
 }
 
+#[no_mangle]
+pub extern "C" fn hkia_inventory_batch_zero_only_snapshot()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let ids=editor.inventory_batch_zero_only_ids();
+  let mut b=Vec::with_capacity(4+ids.len()*4);
+  b.extend((ids.len() as u32).to_le_bytes());for id in ids{b.extend(id.to_le_bytes());}
+  a.reply=b;0
+ })
+}
+
 /// 4-byte count + N rows of (document id u32, item id i32, quantity i32,
 /// editable u32). Pending ingredient creation uses session-only handles.
 #[no_mangle]
