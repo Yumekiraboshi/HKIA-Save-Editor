@@ -18,6 +18,7 @@ spec=importlib.util.spec_from_file_location('icon_source_update',HERE/'icon-sour
 source=importlib.util.module_from_spec(spec);spec.loader.exec_module(source)
 require,sha=source.require,source.digest
 SCHEMA='HKIA.IconUpdateRun.1'
+ARTWORK_POLICY='native-resolution-lossless-webp-v1'
 LAYOUTS={'outfit':'outfit-icon-override-v1','atlas':'unity-v22-uiicon-v1',
          'dynamic':'native-dynamic-v1','auxiliary':'native-icon-auxiliary-v1',
          'result':'native-result-icon-v1'}
@@ -72,7 +73,8 @@ def load_input(path):
             set(overrides)<=set(bundles),'explicit original override bundle selection required')
     config={'version':v['version'],'platform':v['platform'],'reviewedLayouts':LAYOUTS,
             'bundles':[bundles[k] for k in sorted(bundles)],'overrideBundles':sorted(overrides),
-            'catalog':input_file(path.parent,v['catalog'])}
+            'catalog':input_file(path.parent,v['catalog']),'artworkPolicy':ARTWORK_POLICY}
+    require(v.get('artworkPolicy',ARTWORK_POLICY)==ARTWORK_POLICY,'obsolete resized artwork policy')
     if 'overrideDefinitions' in v:
         item=v['overrideDefinitions']
         source.checked_release(v['version'],item['platform'])
@@ -186,7 +188,13 @@ def run(input_path,root,previous=None,resume=False,execute=command):
         done[name]=(folder,digest)
         return folder
     def previous_stage(name,sub='output'):
-        return ['--previous-stage',stage_path(previous,name)/sub] if previous else []
+        if not previous:return []
+        if name in ('base-atlas','overrides'):
+            old=checked_record(previous/'run.json',SCHEMA)
+            if old['config'].get('artworkPolicy')!=ARTWORK_POLICY:
+                # A resized prior release is not a source for native artwork.
+                return []
+        return ['--previous-stage',stage_path(previous,name)/sub]
     def old_file(name,file):
         return stage_path(previous,name)/file
     bundles={b['name']:b for b in config['bundles']}
@@ -238,9 +246,9 @@ def run(input_path,root,previous=None,resume=False,execute=command):
         '--snapshot',snapshot_path,'--definitions',definition['file'],
         '--reviewed-layout',LAYOUTS['auxiliary'],'--out',out/'auxiliary.json']))
     b=step('base-atlas',['snapshot'],lambda out:execute('stage-native-icon-atlas.py',[
-        '--snapshot',snapshot_path,'--bundles',s/'atlas-input.json','--out',out/'output',*previous_stage('base-atlas')]))
+        '--snapshot',snapshot_path,'--bundles',s/'atlas-input.json','--native-resolution','--out',out/'output',*previous_stage('base-atlas')]))
     o=step('overrides',['snapshot'],lambda out:execute('stage-icon-overrides.py',[
-        '--snapshot',override_snapshot,'--bundles',s/'override-input.json','--out',out/'output',*previous_stage('overrides')]))
+        '--snapshot',override_snapshot,'--bundles',s/'override-input.json','--native-resolution','--out',out/'output',*previous_stage('overrides')]))
     t=step('dynamic-textures',['snapshot','dynamic-bindings'],lambda out:execute('stage-dynamic-icon-textures.py',[
         '--snapshot',snapshot_path,'--dynamic-receipt',d/'dynamic.json','--bundles',s/'atlas-input.json',
         '--out',out/'output',*previous_stage('dynamic-textures')]))
@@ -253,7 +261,7 @@ def run(input_path,root,previous=None,resume=False,execute=command):
         execute('assemble-icon-release.py',['--snapshot',snapshot_path,'--override-snapshot',override_snapshot,
         '--definitions',definition['file'],'--catalog',config['catalog']['file'],'--base-stage',b/'output',
         '--override-stage',o/'output','--dynamic-receipt',d/'dynamic.json','--dynamic-stage',t/'output',
-        '--reviewed-result-layout',LAYOUTS['result'],'--out',out/'output'])
+        '--reviewed-result-layout',LAYOUTS['result'],'--native-resolution','--out',out/'output'])
         require(source.file_digest(Path(config['catalog']['file']))==config['catalog']['sha256'],
                 'catalog changed during assembly')
     rel=step('release',['snapshot','base-atlas','overrides','dynamic-bindings','dynamic-textures'],assemble)
@@ -269,6 +277,7 @@ def run(input_path,root,previous=None,resume=False,execute=command):
                 families['dynamicIndexSha256']==source.file_digest(rel/'output'/'dynamic-source-pages'/'index.json') and
                 families['auxiliaryIndexSha256']==source.file_digest(x/'output'/'dynamic-source-pages'/'index.json'),
                 'candidate index binding mismatch')
+        require(release.get('artworkPolicy')==ARTWORK_POLICY,'resized candidate output forbidden')
         blockers={'inventorySourceItemIds':release['unresolvedInventorySourceItemIds'],
                   'collectionBaseItemIds':release['missingCollectionBaseItemIds'],
                   'collectionOwnImageItemIds':[i for i,_,missing in release['collectionOwnRoutes'] if missing],
@@ -277,6 +286,10 @@ def run(input_path,root,previous=None,resume=False,execute=command):
                   'auxiliarySpriteRoutes':aux['unresolved'],'chefSwatches':aux['unresolvedSwatches']}
         source.write_new(out/'candidate.json',{'schema':'HKIA.IconUpdateCandidate.1','version':version,'platform':platform,
             'runSha256':identity,'definitionCount':release['definitionCount'],'sourceBlockers':blockers,
+            'artworkPolicy':ARTWORK_POLICY,'nativeStaticAssetCount':release['nativeStaticAssetCount'],
+            'nativeStaticImageBytes':release['nativeStaticImageBytes'],
+            'candidateReleaseBytes':sum(x['bytes'] for x in release['outputFiles'].values())+ (rel/'output'/'release-candidate.json').stat().st_size,
+            'auxiliaryPageBytes':sum(p.stat().st_size for p in (x/'output'/'dynamic-source-pages').glob('*.webp')), 
             'releaseDirectory':(rel/'output').relative_to(root).as_posix(),
             'auxiliaryDirectory':(x/'output').relative_to(root).as_posix(),
             'familyBindings':(f/'family-bindings.json').relative_to(root).as_posix(),
@@ -284,6 +297,7 @@ def run(input_path,root,previous=None,resume=False,execute=command):
             'releaseReceiptFileSha256':source.file_digest(rel/'output'/'release-candidate.json'),
             'dynamicIndexSha256':families['dynamicIndexSha256'],
             'auxiliaryIndexSha256':families['auxiliaryIndexSha256'],
+            'dynamicRasterResolution':'native',
             'remainingReleaseChecks':release['remainingReleaseChecks'],
             'automaticReleaseActivationAuthorized':False})
     out=step('summary',['definition-delta','dynamic-delta','release','auxiliary-assets','families'],summary)
