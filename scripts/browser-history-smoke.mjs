@@ -1299,9 +1299,21 @@ async function ordinaryFurnitureRemovalSmoke(){
   await page.locator('.inventory-empty-stack').waitFor();assert.equal(await input.inputValue(),'0');
   await page.locator('button[title="Redo"]:not([disabled])').click();
   await page.locator('.inventory-card').waitFor({state:'hidden'});
+  // A deleted original row must be available in Add immediately, not just
+  // after writing a save and reimporting it.
+  await page.locator('.inventory-add-toggle').click();
+  await search.fill('427689');await input.waitFor();
+  assert.equal(await input.inputValue(),'1');
+  await input.fill('3');await page.locator('.inventory-card button[type="submit"]').click();
+  await page.locator('.inventory-add-toggle:not([disabled])').click();
+  await search.fill('427689');await input.waitFor();assert.equal(await input.inputValue(),'3');
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.locator('button[title="Redo"]:not([disabled])').click();
+  await input.waitFor();assert.equal(await input.inputValue(),'3');
   await search.fill('3202680');await input.waitFor();assert.equal(await remove.isDisabled(),true);
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: zero, physical removal, draft reload, undo/redo and placed stack protection');
+  console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: zero, physical removal, re-add, draft reload, undo/redo and placed stack protection');
  }finally{await context.close()}
 }
 async function inventoryEmptyBrowseSmoke(){
