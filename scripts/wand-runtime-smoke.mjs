@@ -339,6 +339,46 @@ export async function wandRuntimeSmoke(browser,origin,base){
    },base);
    assert.equal(result.rows.length,225);assert.ok(result.rows.every(r=>r.different&&r.cached));assert.ok(result.unknown);assert.equal(flowerMaskRequests,0);
   }finally{await flowerPage.close();}
+  // Every other dynamic definition and exact instruction alias uses its
+  // own guarded original base, even when all sampled packs/masks fail.
+  const directPage=await context.newPage();
+  try{
+   await directPage.route(root+'__wand_runtime_fixture__.html',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html><body></body></html>'}));
+   await directPage.route(root+'__wand_runtime_fixture__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
+   for(const pattern of ['**/wand-item-subicon-source-v3.0.1.json','**/dynamic-wand-art/candidate-source/index.json','**/dynamic-wand-art/remaining-source/index.json'])
+    await directPage.route(pattern,r=>r.fulfill({status:503,body:'unavailable'}));
+   const masks=[];
+   await directPage.route('**/*mask-rgb-v3.0.1.webp',r=>{masks.push(r.request().url());return r.fulfill({status:503,body:'unavailable'});});
+   await directPage.goto(root+'__wand_runtime_fixture__.html');
+   const result=await directPage.evaluate(async base=>{
+    const {renderWandArt,renderWandOriginalBaseArt,loadChefOriginalOverlay,loadWandOriginalOverlay,loadPaletteOriginalOverlay,wandOriginalTemplate}=await import(base+'__wand_runtime_fixture__.mjs');
+    const [chef,wands,palette]=await Promise.all(['dynamic-chef-art/chef-runtime-source-v3.0.1.json','dynamic-wand-art/wand-runtime-source-v3.0.1.json','dynamic-palette-art/palette-runtime-source-v3.0.1.json'].map(async p=>(await fetch(base+p)).json()));
+    const aliases=[[664242277,406277059],[697059779,1237708874],[906644716,1798633565],[1711005390,1338995084],[1946811711,1053426049],[964128772,1061947263]];
+    const transform={scale:Math.fround(.4),offsetPercent:[-.25,.25],rotation:0};
+    const a={magicCharacteristicId:1,fleckCharacteristicId:2},sha=async b=>b?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await b.arrayBuffer()))).join(','):null;
+    const sourceRows=[...chef.rows.map(r=>[r.itemId,r.base.spritePathId]),...wands.rows.map(r=>[r.itemId,r.base.spritePathId]),[palette.itemId,palette.rows.find(r=>r.kind==='base').spritePathId]];
+    for(const [id,expected] of sourceRows){
+     const route=wandOriginalTemplate(id),loader=route.kind==='chef'?loadChefOriginalOverlay:route.kind==='wand'?loadWandOriginalOverlay:loadPaletteOriginalOverlay;
+     if((await loader(id,transform))?.spritePathId!==expected)throw Error('ORIGINAL_DYNAMIC_SOURCE '+id);
+    }
+    for(const [id,source] of aliases.slice(0,5))if((await loadChefOriginalOverlay(id,transform))?.spritePathId!==(await loadChefOriginalOverlay(source,transform))?.spritePathId)throw Error('INSTRUCTION_SOURCE');
+    const rows=[],aliasRows=[];
+    for(const w of wands.rows){
+     const plain=await renderWandOriginalBaseArt(w.itemId),plainSha=await sha(plain);
+     for(const [id] of sourceRows){
+      const fields={...a,sourceItemId:id},full=await renderWandArt(w.itemId,fields);
+      rows.push(!!full&&!!plain&&await sha(full)!==plainSha&&full===await renderWandArt(w.itemId,{...fields,sourceUnique:{tag:9,words:[1,2,3]}}));
+     }
+     for(const [id,source] of aliases){
+      const full=await renderWandArt(w.itemId,{...a,sourceItemId:id});
+      aliasRows.push(!!full&&full===await renderWandArt(w.itemId,{...a,sourceItemId:source}));
+     }
+    }
+    return {rows,aliasRows,unknown:await loadWandOriginalOverlay(315823,transform)===null&&await renderWandArt(wands.rows[0].itemId,{...a,sourceItemId:315823})===null};
+   },base);
+   assert.equal(result.rows.length,180);assert.ok(result.rows.every(Boolean));
+   assert.equal(result.aliasRows.length,54);assert.ok(result.aliasRows.every(Boolean)&&result.unknown);assert.deepEqual(masks,[]);
+  }finally{await directPage.close();}
   console.log('CHROMIUM DYNAMIC WAND BASE PASS: 9 native wand base layers, color variants, alpha, shared cache and unknown-ID refusal');
  }finally{await context.close();}
 }

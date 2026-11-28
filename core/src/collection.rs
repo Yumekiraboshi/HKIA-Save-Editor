@@ -1245,10 +1245,10 @@ impl Editor {
    None=>match crate::inventory_source::custom_furniture_extra_reference(item){Some(k)=>(false,k),None=>return false},
   };
   if index.inventory_item_refs_unscoped||index.inventory_partial_item_refs.contains(&item)||
-   index.inventory_payload_refs_incomplete||index.inventory_furniture_refs_incomplete||
+   index.inventory_ordinary_payload_refs_incomplete||index.inventory_furniture_refs_incomplete||
    index.inventory_clothing_item_refs_incomplete||
-   index.inventory_ordinary_payload_item_refs.contains(&item)||index.inventory_furniture_item_refs.contains(&item)||
-   index.inventory_item_refs.iter().any(|&(i,_)|i==item)||
+   index.inventory_ordinary_payload_item_refs.contains(&item)||index.inventory_furniture_bare_item_refs.contains(&item)||
+   index.inventory_item_refs.iter().any(|&(i,u)|i==item&&!index.inventory_resolved_positive_item_refs.contains(&(i,u)))||
    index.inventory_ordinary_furniture_guid_refs.contains(&key)||index.inventory_clothing_guid_refs.contains(&key){return false}
   if !outfit{return true}
   if index.inventory_clothing_avatar_models==0||index.inventory_clothing_general_models!=1||

@@ -17,7 +17,7 @@ test('all additional original inventory definitions have a verified native 2D sp
  assert.equal(art.placeholders.has(1061947263),false);assert.equal(art.placeholders.has(1835273963),false);
  const wrong=structuredClone(manifest);wrong.withheld[0][1]='123';assert.throws(()=>decodeInventoryNativeArt(wrong,'/'));
  assert.deepEqual(new Set([...art.entries.keys(),...art.withheld].map(String)),new Set(Object.keys(names)));
- assert.deepEqual(art.entries.get(427689),{url:'/editor/inventory-art/sheet-005.webp',x:576,y:192,sheet:5,cell:30});
+ assert.deepEqual(art.entries.get(427689),{url:'/editor/inventory-art/sheet-005.webp',x:576,y:192,sheet:5,cell:30,nativeSheet:{root:'/editor/inventory-art/',file:manifest.sheets[5].name,sha256:manifest.sheets[5].sha256,bytes:manifest.sheets[5].bytes}});
  assert.equal(art.entries.has(7427895),false);assert.equal(art.withheld.has(7427895),true);
  assert.equal(art.withheld.has(1061947263),true);
  assert.equal(manifest.withheld.filter(x=>x[2]==='source-placeholder').length,152);

@@ -40,6 +40,7 @@ import {searchAchievementRows} from './achievement-search';
  import {loadNativeDyePalettes,dyeDecoratorFor,type NativeDyePalettes} from './native-dye-palettes';
  import {createVariantArtSourceLoader} from './variant-art';
  import DyeSprite from './DyeSprite.svelte';
+ import InventoryAtlasSprite from './InventoryAtlasSprite.svelte';
  import DynamicFlowerSprite from './DynamicFlowerSprite.svelte';
  import DynamicPaletteSprite from './DynamicPaletteSprite.svelte';
  import DynamicChefSprite from './DynamicChefSprite.svelte';
@@ -53,7 +54,7 @@ import {searchAchievementRows} from './achievement-search';
  import {nativeChefInstructionBase} from './native-icon-route';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
  import {cafeSlotLabel,cafeVariantLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
- import {bobaVariantLabel,bobaBaseKey,bobaBaseChoices,bobaBaseLabel,bobaSelectionForBase,fullBobaLabel,type BobaVariant} from './inventory-boba-display';
+ import {bobaFieldOptions,bobaFieldLabel,bobaFieldValue,fullBobaLabel,type BobaVariant,type BobaField} from './inventory-boba-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {toAchievementDateTimeValue,fromAchievementDateTimeValue} from './achievement-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
@@ -115,7 +116,6 @@ import {verifiedFloorplanName} from './floorplan-names';
  let bobaDialogEl:HTMLDialogElement|undefined=$state();
  let bobaEdit=$state<{documentId:number;itemId:number;revision:number;before:BobaVariant;options:BobaVariant[];creationOptions:BobaVariant[];absent?:boolean}|null>(null);
  let bobaSelection=$state(-1);
- let bobaBase=$state('');
  let paletteSlot=$state(0);
  let paletteDraft=$state<PaletteVariant|null>(null);
  let paletteDraftCreatable=$state(false);
@@ -1045,7 +1045,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   try{
    const [options,creationOptions]=await Promise.all([row.boba.creationOnly?Promise.resolve([] as BobaVariant[]):requestBobaVariants(row.documentId),requestBobaCreationVariants(row.documentId)]);
    if(!snapshot||snapshot.revision!==revision)return;
-   bobaEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:row.boba.creationOnly?creationOptions:options,creationOptions,absent:row.boba.creationOnly};bobaBase=bobaBaseKey(before);bobaSelection=row.boba.creationOnly?creationOptions.findIndex(v=>v.every((n,i)=>n===before[i])):-1;variantAddQuantity=1;await tick();
+   bobaEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:row.boba.creationOnly?creationOptions:options,creationOptions,absent:row.boba.creationOnly};bobaSelection=row.boba.creationOnly?creationOptions.findIndex(v=>v.every((n,i)=>n===before[i])):-1;variantAddQuantity=1;await tick();
    if(bobaDialogEl&&!bobaDialogEl.open)bobaDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
  }
@@ -1757,7 +1757,7 @@ import {verifiedFloorplanName} from './floorplan-names';
           <DyeSprite sprite={representativeSprite} palette={nativeDyePalettes[String(representative)]}
            sourceKey={representativeSource?.[1]??''} exactArtUrl={exactVariantArt[String(representative)]} originalArtUrl={originalVariantArt[String(representative)]}/>
          {:else if representativeSprite}
-          <span style:background-image={'url("'+representativeSprite.url+'")'} style:background-position={'-'+representativeSprite.x+'px -'+representativeSprite.y+'px'}></span>
+          <InventoryAtlasSprite sprite={representativeSprite}/>
          {/if}
         </span>
        {:else if t.art}
@@ -1824,8 +1824,7 @@ import {verifiedFloorplanName} from './floorplan-names';
         {:else if resultId!==undefined&&resultOriginal}
          <DyeSprite sprite={resultSprite} sourceKey={inventorySourceItems.get(resultId)?.[1]??''} originalArtUrl={resultOriginal}/>
         {:else if resultId!==undefined&&resultSprite}
-         <span class="item-sprite" data-inventory-art="native-result" data-result-icon-target={resultId} style:background-image={'url("'+resultSprite.url+'")'}
-          style:background-position={'-'+resultSprite.x+'px -'+resultSprite.y+'px'}></span>
+         <InventoryAtlasSprite sprite={resultSprite} source="native-result" target={resultId}/>
         {:else if resultPlaceholder}
          <DynamicArtSprite source="native-placeholder" render={renderNativePlaceholderArt}/>
         {:else if resultId!==undefined}
@@ -1836,8 +1835,7 @@ import {verifiedFloorplanName} from './floorplan-names';
         {:else if inventoryNativeArt?.placeholders.has(item.itemId)}
          <DynamicArtSprite source="native-placeholder" render={renderNativePlaceholderArt}/>
         {:else if nativeSprite}
-         <span class="item-sprite" data-inventory-art="native" style:background-image={'url("'+nativeSprite.url+'")'}
-          style:background-position={'-'+nativeSprite.x+'px -'+nativeSprite.y+'px'}></span>
+         <InventoryAtlasSprite sprite={nativeSprite} source="native"/>
         {:else if sprite}
          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'}
           style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
@@ -2185,26 +2183,25 @@ import {verifiedFloorplanName} from './floorplan-names';
  <dialog class="date-dialog" bind:this={bobaDialogEl} aria-labelledby="boba-editor-title" onclose={()=>{bobaEdit=null;bobaSelection=-1}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if bobaEdit}
    {@const edit=bobaEdit}
-   {@const selected=edit.options[bobaSelection]??bobaBaseChoices(edit.before,edit.options).find(v=>bobaBaseKey(v)===bobaBase)??edit.before}
+   {@const selected=edit.options[bobaSelection]??edit.before}
    <form class="date-dialog-inner" onsubmit={applyInventoryBobaVariant}>
     <div class="date-dialog-heading">
      <h2 id="boba-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeBobaEditor}>×</button>
     </div>
     <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}} fallback={inventoryOriginalSprite(edit.itemId)}/></div>
-    <div class="date-dialog-field">
-     <select name="boba-base" aria-label={inventoryName(edit.itemId)} bind:value={bobaBase} onchange={e=>{bobaSelection=bobaSelectionForBase(edit.before,edit.options,bobaSelection,e.currentTarget.value);if(edit.absent&&bobaSelection<0)bobaSelection=edit.options.findIndex(v=>bobaBaseKey(v)===e.currentTarget.value&&v[2]===edit.before[2]&&v[4]===edit.before[4]);error=''}} disabled={busy}>
-      {#each bobaBaseChoices(edit.before,edit.options) as base}
-       <option value={bobaBaseKey(base)}>{bobaBaseLabel(base,locale,snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
-      {/each}
-     </select>
-     <select name="boba-variant" aria-label={bobaVariantLabel(edit.before,locale)} bind:value={bobaSelection} disabled={busy}>
-      {#if !edit.absent}<option value={-1}>{bobaBase===bobaBaseKey(edit.before)?bobaVariantLabel(edit.before,locale):'—'}</option>{/if}
-      {#each edit.options as option,i}
-       {#if bobaBaseKey(option)===bobaBase}<option value={i}>{bobaVariantLabel(option,locale)}</option>{/if}
-      {/each}
-     </select>
-    </div>
+    {#each ([1,3,2,4] as BobaField[]) as field}
+     {@const choices=bobaFieldOptions(edit.before,edit.options,bobaSelection,field,edit.absent)}
+     <label class="date-dialog-field">
+      <span>{bobaFieldLabel(locale,field)}</span>
+      <select name={['','boba-flavor','boba-pearls','boba-milk','boba-sweetness'][field]} value={bobaSelection}
+       onchange={e=>{bobaSelection=Number(e.currentTarget.value);error=''}} disabled={busy||choices.length<=1}>
+       {#each choices as choice (choice.index)}
+        <option value={choice.index} data-boba-value={choice.variant[field]}>{bobaFieldValue(choice.variant,selected,field,locale,snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
+       {/each}
+      </select>
+     </label>
+    {/each}
     {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
     {#if edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[bobaSelection]?.[i]))}
      <label class="date-dialog-field">

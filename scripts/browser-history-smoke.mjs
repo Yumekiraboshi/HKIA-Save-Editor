@@ -659,7 +659,8 @@ async function inventoryBobaEditSmoke(){
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1798633565');
   const card=page.locator('.inventory-card').first(),dialog=page.locator('dialog[aria-labelledby="boba-editor-title"]');
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
-  await dialog.locator('select[name="boba-variant"]').selectOption({label:'Without tapioca · Unsweetened'});
+  await dialog.locator('select[name="boba-pearls"]').selectOption({label:'Without tapioca'});
+  await dialog.locator('select[name="boba-sweetness"]').selectOption({label:'Unsweetened'});
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await card.locator('.inventory-flower-variant-name').filter({hasText:'Without tapioca · Unsweetened'}).waitFor();
   await page.locator('button[title="Undo"]:not([disabled])').click();
@@ -697,10 +698,14 @@ async function inventoryFirstChefSmoke(){
   await card.locator('.inventory-unique-edit-button').click();
   const boba=page.locator('dialog[aria-labelledby="boba-editor-title"]');await boba.waitFor();
   assert.equal(await boba.locator('button[type="submit"]').count(),0);
-  const bs=boba.locator('select[name="boba-base"]'),vs=boba.locator('select[name="boba-variant"]');
-  assert.equal(await bs.locator('option').count(),19);
-  assert.equal(await vs.locator('option').count(),8);
-  await bs.selectOption('46:39:78');await vs.selectOption({label:'With tapioca · Semi-sweet'});
+  const bs=boba.locator('select[name="boba-flavor"]');
+  assert.equal(await bs.locator('option').count(),14);
+  await bs.selectOption(await bs.locator('option[data-boba-value="39"]').getAttribute('value'));
+  const milk=boba.locator('select[name="boba-milk"]');
+  if(await milk.isEnabled())await milk.selectOption({label:'Without milk'});
+  const pearls=boba.locator('select[name="boba-pearls"]');
+  if(await pearls.isEnabled())await pearls.selectOption({label:'With tapioca'});
+  await boba.locator('select[name="boba-sweetness"]').selectOption({label:'Semi-sweet'});
   await boba.locator('input[name="variant-add-quantity"]').fill('2');
   await boba.locator('.inventory-create-boba:not([disabled])').click();await boba.waitFor({state:'hidden'});
   await card.locator('.inventory-add-source').waitFor();
@@ -747,16 +752,21 @@ async function inventoryBobaFullCreationSmoke(){
   const rows=page.locator('.inventory-card input[name="quantity"]'),dialog=page.locator('dialog[aria-labelledby="boba-editor-title"]');
   await rows.first().waitFor();assert.equal(await rows.count(),1);
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();await dialog.waitFor();
-  const baseSelect=dialog.locator('select[name="boba-base"]'),select=dialog.locator('select[name="boba-variant"]');
-  assert.equal(await baseSelect.locator('option').count(),19);
-  await baseSelect.selectOption('46:39:78');
-  assert.equal(await select.locator('option:checked').textContent(),'With tapioca · Sweet');
-  await select.selectOption({label:'Without tapioca · Unsweetened'});
+  const baseSelect=dialog.locator('select[name="boba-flavor"]'),pearls=dialog.locator('select[name="boba-pearls"]'),sweet=dialog.locator('select[name="boba-sweetness"]'),milk=dialog.locator('select[name="boba-milk"]');
+  assert.equal(await baseSelect.locator('option').count(),14);
+  await baseSelect.selectOption(await baseSelect.locator('option[data-boba-value="39"]').getAttribute('value'));
+  if(await milk.isEnabled())await milk.selectOption({label:'Without milk'});
+  assert.equal(await pearls.locator('option:checked').textContent(),'With tapioca');
+  assert.equal(await sweet.locator('option:checked').textContent(),'Sweet');
+  await pearls.selectOption({label:'Without tapioca'});
+  await sweet.selectOption({label:'Unsweetened'});
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();await dialog.waitFor();
-  await baseSelect.selectOption('9:55:78');
-  assert.equal(await select.locator('option:checked').textContent(),'Without tapioca · Unsweetened');
-  await select.selectOption({label:'With tapioca · Semi-sweet'});
+  await baseSelect.selectOption(await baseSelect.locator('option[data-boba-value="55"]').getAttribute('value'));
+  assert.equal(await pearls.locator('option:checked').textContent(),'Without tapioca');
+  assert.equal(await sweet.locator('option:checked').textContent(),'Unsweetened');
+  await pearls.selectOption({label:'With tapioca'});
+  await sweet.selectOption({label:'Semi-sweet'});
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-boba:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
@@ -1313,7 +1323,7 @@ async function ordinaryFurnitureRemovalSmoke(){
   const input=page.locator('.inventory-card input[name="quantity"]');
   const remove=page.locator('.inventory-card .inventory-stack-delete');
   await search.fill('3202680');await input.waitFor();
-  assert.equal(await input.getAttribute('min'),'1');assert.equal(await remove.isDisabled(),true);
+  assert.equal(await input.getAttribute('min'),'0');assert.equal(await remove.isEnabled(),true);
   await search.fill('427689');await input.waitFor();
   assert.equal(await input.getAttribute('min'),'0');assert.equal(await remove.isEnabled(),true);
   await remove.click();
@@ -1368,9 +1378,13 @@ async function ordinaryFurnitureRemovalSmoke(){
   await chooseTab(page,'inventory');await search.fill('427689');await page.locator('.inventory-card').waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await input.waitFor();assert.equal(await input.inputValue(),'3');
-  await search.fill('3202680');await input.waitFor();assert.equal(await remove.isDisabled(),true);
+  await search.fill('3202680');await input.waitFor();assert.equal(await remove.isEnabled(),true);
+  await remove.click();await modal.waitFor({state:'visible'});await modal.locator('.inventory-remove-entry-action').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await input.waitFor();assert.equal(await input.inputValue(),'6');
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: zero, physical removal, re-add, draft reload, undo/redo and placed stack protection');
+  console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: zero, physical removal, re-add, draft reload, undo/redo and independent nil placement');
  }finally{await context.close()}
 }
 async function inventoryEmptyBrowseSmoke(){
@@ -2403,7 +2417,7 @@ async function inventoryNativeArtRetrySmoke(){
   await result.waitFor({timeout:30_000});
   assert.ok(await result.evaluate(async el=>{
    const url=getComputedStyle(el).backgroundImage.match(/^url\("(.+)"\)$/)?.[1];
-   if(!url||!url.includes('/inventory-art/sheet-008.webp'))return false;
+   if(!url?.startsWith('blob:')||el.getAttribute('data-native-sheet')!=='sheet-008.webp')return false;
    const image=new Image();image.src=url;await image.decode();return image.naturalWidth===1152;
   }));
   await chooseTab(page,'collections');
@@ -2413,6 +2427,31 @@ async function inventoryNativeArtRetrySmoke(){
  }finally{await context.close();}
  }
  console.log('CHROMIUM NATIVE INVENTORY ART RETRY PASS: exact target recovered by tab or online event without page reload, withheld route retained');
+}
+async function inventoryNativeSheetRetrySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();let available=false,requests=0;
+  await page.route('**/inventory-art/sheet-008.webp',r=>{requests++;return available?r.continue():r.fulfill({status:503,body:'unavailable'});});
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-native-sheet-retry.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({resultArtInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');await search.fill('10455890');
+  const art=page.locator('.inventory-card [data-result-icon-target="357184380"]');
+  await art.and(page.locator('[data-inventory-art="native-result-unavailable"]')).waitFor({timeout:30_000});
+  await page.waitForLoadState('networkidle');assert.ok(requests>=1);
+  assert.equal(await art.evaluate(el=>getComputedStyle(el).backgroundImage),'none');
+  available=true;await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await art.and(page.locator('[data-inventory-art="native-result"]')).waitFor({timeout:30_000});
+  const url=await art.evaluate(el=>getComputedStyle(el).backgroundImage);
+  assert.ok(url.includes('blob:'));assert.equal(await art.getAttribute('data-native-sheet'),'sheet-008.webp');
+  const recovered=requests;
+  await search.fill('1217231008');await search.fill('10455890');
+  await art.and(page.locator('[data-inventory-art="native-result"]')).waitFor({timeout:30_000});
+  assert.equal(await art.evaluate(el=>getComputedStyle(el).backgroundImage),url);assert.equal(requests,recovered);
+ }finally{await context.close();}
+ console.log('CHROMIUM NATIVE INVENTORY SHEET RETRY PASS: verified independent sheet recovery and reuse');
 }
 async function inventoryNativeResultArtSmoke(){
  // The first recipe/schematic result is in the original inventory atlas,
@@ -2443,7 +2482,7 @@ async function inventoryNativeResultArtSmoke(){
     const art=card.locator('[data-result-icon-target="357184380"]');
     assert.ok(await art.evaluate(async el=>{
      const css=getComputedStyle(el),url=css.backgroundImage.match(/^url\("(.+)"\)$/)?.[1];
-     if(!url||!url.includes('/inventory-art/sheet-008.webp')||css.backgroundPosition!=='-672px -672px')return false;
+     if(!url?.startsWith('blob:')||el.getAttribute('data-native-sheet')!=='sheet-008.webp'||css.backgroundPosition!=='-672px -672px')return false;
      const image=new Image();image.src=url;await image.decode();return image.naturalWidth===1152&&image.naturalHeight===1152;
     }));
    }
@@ -2527,6 +2566,46 @@ async function inventoryOriginalArtSmoke(){
   await dyeBadge.waitFor({timeout:30_000});
   const colors=await dyeBadge.evaluate(el=>({primary:getComputedStyle(el.querySelector('.plate-inner')).backgroundColor,secondary:getComputedStyle(el.querySelector('.native-dye-icon-tint')).backgroundColor,mask:getComputedStyle(el.querySelector('.native-dye-icon-tint')).maskImage}));
   assert.equal(colors.primary,'rgb(255, 187, 250)');assert.equal(colors.secondary,'rgb(194, 254, 255)');assert.match(colors.mask,/decorator-14\.webp/);
+  const clip=await dyeBadge.evaluate(el=>{
+   const primary=el.querySelector('.plate-inner'),outer=el.querySelector('.native-dye-icon-clip'),tint=outer?.querySelector('.native-dye-icon-tint');
+   if(!primary||!outer||!tint)return null;
+   const a=getComputedStyle(primary),b=getComputedStyle(outer),c=getComputedStyle(tint);
+   const bounds=e=>{const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height];};
+   return {sameMask:a.maskImage===b.maskImage&&a.maskImage.includes('plate.webp'),sameGeometry:JSON.stringify(bounds(primary))===JSON.stringify(bounds(outer))&&JSON.stringify(bounds(outer))===JSON.stringify(bounds(tint)),
+    sameSize:a.maskSize===b.maskSize,position:a.maskPosition===b.maskPosition,alpha:b.maskMode==='alpha',size:[b.width,b.height,c.width,c.height]};
+  });
+  assert.deepEqual(clip,{sameMask:true,sameGeometry:true,sameSize:true,position:true,alpha:true,size:['18px','18px','18px','18px']});
+  // Compare actual Chromium pixels against the same plate without the
+  // secondary color. Use temporary high-contrast colors only in the test.
+  const saved=await dyeBadge.evaluate(el=>{
+   const tint=el.querySelector('.native-dye-icon-tint'),old=[el.getAttribute('style'),tint.getAttribute('style')];
+   el.style.setProperty('--primary','#ffffff');el.style.setProperty('--accent','transparent');el.style.backgroundColor='#000000';
+   tint.style.backgroundColor='#ff0000';tint.style.visibility='hidden';return old;
+  });
+  try{
+   await page.waitForLoadState('networkidle');
+   const plain=await dyeBadge.screenshot({scale:'css'});
+   await dyeBadge.locator('.native-dye-icon-tint').evaluate(el=>el.style.visibility='visible');
+   const tinted=await dyeBadge.screenshot({scale:'css'});
+   const pixelResult=await page.evaluate(async ([a,b])=>{
+    async function pixels(s){
+     const image=new Image();image.src='data:image/png;base64,'+s;await image.decode();
+     const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;
+     const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);
+     return ctx.getImageData(0,0,canvas.width,canvas.height).data;
+    }
+    const [plain,tinted]=await Promise.all([pixels(a),pixels(b)]);let outside=0,changed=0;
+    for(let i=0;i<plain.length;i+=4){
+     if(plain[i]===0&&plain[i+1]===0&&plain[i+2]===0&&Math.max(tinted[i],tinted[i+1],tinted[i+2])>5)outside++;
+     if(plain[i+1]>200&&tinted[i+1]<100&&tinted[i]>200)changed++;
+    }
+    return {outside,changed};
+   },[plain.toString('base64'),tinted.toString('base64')]);
+   assert.equal(pixelResult.outside,0,'secondary color must not escape the original inner plate');
+   assert.ok(pixelResult.changed>0,'secondary color must still render inside the plate');
+  }finally{
+   await dyeBadge.evaluate((el,[badge,tint])=>{el.setAttribute('style',badge);el.querySelector('.native-dye-icon-tint').setAttribute('style',tint);},saved);
+  }
   const inventoryUrl=await original.evaluate(el=>getComputedStyle(el).backgroundImage);
   assert.match(inventoryUrl,/\/(?:dynamic-colorways|source-colorways)\/1286846063\.webp/);
   await chooseTab(page,'collections');
@@ -2563,7 +2642,7 @@ async function inventoryOriginalArtSmoke(){
   assert.ok(await extra.evaluate(async el=>{
    const bg=getComputedStyle(el).backgroundImage;
    const url=bg.match(/^url\("(.+)"\)$/)?.[1];
-   if(!url||!url.includes('/inventory-art/sheet-005.webp'))return false;
+   if(!url?.startsWith('blob:')||el.getAttribute('data-native-sheet')!=='sheet-005.webp')return false;
    const img=new Image();img.src=url;await img.decode();
    return img.naturalWidth===1152&&img.naturalHeight===1152;
   }),'original non-collection item atlas must be loaded');
@@ -3308,6 +3387,7 @@ async function run(){
  await originalArtworkFileRecoverySmoke();
  await inventoryNativeResultArtSmoke();
  await inventoryNativeArtRetrySmoke();
+ await inventoryNativeSheetRetrySmoke();
  await inventoryIconScaleSmoke();
  await inventoryDynamicFlowerArtSmoke();
  await flowerDefinitionRecoverySmoke();
