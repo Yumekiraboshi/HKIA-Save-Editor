@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/inventory-native-art.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
-const {decodeInventoryNativeArt,initialInventoryNativeArt,createInventoryNativeArtLoader}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {decodeInventoryNativeArt,initialInventoryNativeArt,createInventoryNativeArtLoader,decodeCandidateInventoryNativeArt,createVersionedInventoryNativeArtLoader}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const raw=readFileSync(new URL('../public/inventory-art/index.json',import.meta.url));
 const manifest=JSON.parse(raw);
 test('all additional original inventory definitions have a verified native 2D sprite or an explicit reason to withhold art',()=>{
@@ -96,4 +96,25 @@ test('native inventory index can recover from network and integrity failures wit
   assert.equal(await request(),recovered);
   assert.equal(attempt,3);
  }finally{globalThis.fetch=prev;}
+});
+
+test('candidate atlas supports changed sheet count and native placeholder PathID without changing production pins',async()=>{
+ const v={schema:'HKIA.InventoryNativeArt.1',version:'9.1.0',definitionsSha256:'a'.repeat(64),atlasSha256:'b'.repeat(64),size:96,columns:12,count:2,withheldCount:2,
+ sheets:Array.from({length:11},(_,i)=>({name:'sheet-'+String(i).padStart(3,'0')+'.webp',sha256:'c'.repeat(64),bytes:12})),
+ records:[[42,10,0,'123'],[43,10,0,'123']],withheld:[[44,'234','source-placeholder'],[45,'345','dynamic-color']]};
+ const data=Buffer.from(JSON.stringify(v)),pin={version:v.version,indexFileSha256:createHash('sha256').update(data).digest('hex'),definitionsSha256:v.definitionsSha256,atlasSha256:v.atlasSha256};
+ const art=decodeCandidateInventoryNativeArt(v,'/candidate/',pin);
+ assert.equal(art.entries.get(42).nativeSheet.file,'sheet-010.webp');assert.deepEqual([...art.placeholders],[44]);assert.deepEqual([...art.withheld],[44,45]);
+ assert.throws(()=>decodeInventoryNativeArt(v,'/'));
+ for(const mutate of [x=>{x.version='9.2.0'},x=>{x.records[1][2]=1},x=>{x.withheld[1][0]=42},x=>{x.sheets[10].name='../sheet.webp'},x=>{x.count=3}]){
+  const x=structuredClone(v);mutate(x);assert.throws(()=>decodeCandidateInventoryNativeArt(x,'/candidate/',pin),/INVENTORY_ART_INVALID/);
+ }
+ const old=globalThis.fetch;let calls=0;
+ globalThis.fetch=async url=>{assert.equal(url,'/candidate/inventory-art/index.json');return new Response(++calls===1?Buffer.from('{}'):data);};
+ try{
+  const load=createVersionedInventoryNativeArtLoader('/candidate/',pin);
+  await assert.rejects(load('9.2.0'),/INVENTORY_ART_INVALID/);assert.equal(calls,0);
+  await assert.rejects(load(v.version),/DYNAMIC_ART_HASH/);
+  const result=load(v.version);assert.equal(result,load(v.version));assert.deepEqual(await result,art);assert.equal(calls,2);
+ }finally{globalThis.fetch=old;}
 });

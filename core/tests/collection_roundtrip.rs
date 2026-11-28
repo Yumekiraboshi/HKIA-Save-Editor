@@ -6535,8 +6535,20 @@ fn all_ordinary_duplicate_families_recompute_membership_after_exact_deletion(){
   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
   assert_eq!(original.len(),2*batch.len());
   for (pair,&(_,cap)) in original.chunks_exact(2).zip(batch){
-   assert!(pair.iter().all(|r|r.quantity_minimum==1&&r.editable==(cap==i32::MAX)));
+   assert!(pair.iter().all(|r|r.quantity_minimum==1&&r.editable&&r.quantity_limit==Some(cap)));
   }
+  let zero=e.inventory_batch_zero_only_ids();assert_eq!(zero.len(),original.len());
+  assert!(e.change_inventory_quantity(original[0].document_id,1,0).is_err());
+  assert!(e.change_inventory_quantities(&[(original[0].document_id,1,0)]).is_err());
+  assert!(!e.dirty());
+  let requests:Vec<_>=original.iter().map(|r|(r.document_id,1,0)).collect();
+  e.change_inventory_quantities(&requests).unwrap();
+  let saved=Editor::open(e.export().unwrap()).unwrap();
+  assert!(saved.inventory().iter().all(|r|r.quantity==0));assert_eq!(saved.inventory().len(),original.len());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input.clone()).unwrap();
+  restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);
+  assert!(restored.redo_scope(Inventory));assert_eq!(restored.inventory(),e.inventory());
+  assert!(e.undo_scope(Inventory));assert_eq!(e.inventory(),original);
   let remove:Vec<_>=batch.iter().enumerate().map(|(i,_)|(5+2*i as u32,1)).collect();
   e.remove_inventory_entries(&remove).unwrap();
   let survivors=e.inventory();
@@ -7072,6 +7084,40 @@ fn indexed_reference_authority_matches_exact_pair_and_unresolved_family(){
    e.remove_inventory_entries(&[(id,quantity)]).unwrap();
    let saved=Editor::open(e.export().unwrap()).unwrap();
    assert!(saved.inventory_removable_ids().is_empty());
+  }
+ }
+}
+
+#[test]
+fn finite_peer_quantities_use_one_structural_cap_without_disabling_rows(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ // Exercise every finite ordinary source definition with capacity for a
+ // positive quantity change, not only the visible reset-consumable example.
+ let defs:Vec<_>=complete_quantity_source::CUSTOM_CAPS.iter().filter_map(|&(id,cap)|{
+  let i=complete_quantity_source::RULES.binary_search_by_key(&id,|r|r.0).ok()?;
+  (complete_bag_source::BAG_FLAGS[i]&1!=0&&cap>=3).then_some((id as u32,cap))
+ }).collect();
+ assert!(!defs.is_empty());
+ for (item,cap) in defs{
+  for zipped in [false,true]{
+   let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x97;
+   for id in [4,5]{p.extend(doc(1,arr(vec![u(id),u(item),u(0),u(1),vec![0xc0]])));}
+   let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
+   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+   assert!(original.iter().all(|r|r.editable&&r.quantity_limit==Some(cap)));
+   assert!(e.change_inventory_quantity(4,1,cap).is_err());assert!(!e.dirty());
+   e.change_inventory_quantity(4,1,cap-1).unwrap();
+   let before=e.inventory();
+   assert!(e.change_inventory_quantity(5,1,2).is_err());assert_eq!(e.inventory(),before);
+   e.change_inventory_quantities(&[(4,cap-1,1),(5,1,cap-1)]).unwrap();
+   e.change_inventory_quantities(&[(4,1,0),(5,cap-1,0)]).unwrap();
+   let cp=e.history_checkpoint().unwrap();let mut recovered=Editor::open(input).unwrap();recovered.restore_history(&cp).unwrap();
+   assert_eq!(recovered.inventory(),e.inventory());assert!(recovered.undo_scope(Inventory));assert!(recovered.redo_scope(Inventory));
+   let saved=Editor::open(recovered.export().unwrap()).unwrap();
+   assert_eq!(saved.inventory().iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![0,0]);
+   for id in [4,5]{assert_eq!(saved.inventory_original_unique_payload(id),Some([0xc0].as_slice()));}
+   recovered.remove_inventory_entries(&[(4,0),(5,0)]).unwrap();
+   assert!(Editor::open(recovered.export().unwrap()).unwrap().inventory().is_empty());
   }
  }
 }

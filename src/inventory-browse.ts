@@ -132,3 +132,13 @@ export function inventoryAddRows(owned:readonly InventoryEntry[],creatable:reado
 export function inventoryDisplayRows(rows:readonly InventoryEntry[],addMode:boolean,showZero:boolean):readonly InventoryEntry[]{
  return addMode||showZero?rows:rows.filter(row=>row.quantity!==0);
 }
+
+/** Presentation of Rust-issued batch-only zero candidates. Every positive
+ * member must be selected and unlocked; no individual permission is implied. */
+export function inventoryBatchZeroRows(all:readonly InventoryEntry[],selected:readonly InventoryEntry[],locked:(id:number)=>boolean):InventoryEntry[]{
+ const chosen=new Set(selected.map(row=>row.documentId));
+ const blocked=new Set<number>();
+ for(const row of all)if(row.batchZeroOnly&&row.quantity>0&&(!chosen.has(row.documentId)||locked(row.documentId)))blocked.add(row.itemId);
+ return selected.filter(row=>row.quantity>0&&!locked(row.documentId)&&
+  (row.editable&&row.quantityMinimum===0||row.batchZeroOnly&&!blocked.has(row.itemId)));
+}
