@@ -70,3 +70,13 @@ export async function loadInventoryNativeArt(base:string):Promise<NativeArt>{
  if(digest!==INDEX_SHA)throw Error('INVENTORY_ART_INVALID');
  return decodeInventoryNativeArt(JSON.parse(new TextDecoder().decode(data)),base);
 }
+
+/** Preserve the original withheld-route policy during transient failures.
+ * Successful immutable indices remain shared for the editor session. */
+export function createInventoryNativeArtLoader(base:string):()=>Promise<NativeArt>{
+ let pending:Promise<NativeArt>|undefined;
+ return ()=>{
+  if(!pending)pending=loadInventoryNativeArt(base).catch(error=>{pending=undefined;throw error});
+  return pending;
+ };
+}

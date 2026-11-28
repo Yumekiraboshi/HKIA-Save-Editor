@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/inventory-native-art.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
-const {decodeInventoryNativeArt,initialInventoryNativeArt}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {decodeInventoryNativeArt,initialInventoryNativeArt,createInventoryNativeArtLoader}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const raw=readFileSync(new URL('../public/inventory-art/index.json',import.meta.url));
 const manifest=JSON.parse(raw);
 test('all additional original inventory definitions have a verified native 2D sprite or an explicit reason to withhold art',()=>{
@@ -67,4 +67,31 @@ test('all 152 original placeholder routes work before or without the additional 
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  assert.ok(app.includes('$state(initialInventoryNativeArt())'));
  assert.ok(app.includes('then(art=>inventoryNativeArt=art).catch(()=>{})'));
+});
+
+test('native inventory index can recover from network and integrity failures without changing withheld policy',async()=>{
+ const prev=globalThis.fetch;
+ let attempt=0;
+ try{
+  globalThis.fetch=async url=>{
+   assert.equal(url,'/editor/inventory-art/index.json');
+   attempt++;
+   if(attempt===1)return {ok:false};
+   const bytes=attempt===2?Buffer.from(raw.toString('utf8').replace('1747','1748')):raw;
+   return {ok:true,arrayBuffer:async()=>bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)};
+  };
+  const initial=initialInventoryNativeArt();
+  const request=createInventoryNativeArtLoader('/editor/');
+  const first=request();assert.equal(request(),first);
+  await assert.rejects(first,/INVENTORY_ART_UNAVAILABLE/);
+  await assert.rejects(request(),/INVENTORY_ART_INVALID/);
+  assert.equal(initial.entries.size,0);
+  const third=request();assert.equal(request(),third);
+  const recovered=await third;
+  assert.equal(recovered.entries.size,1747);
+  assert.deepEqual(recovered.withheld,initial.withheld);
+  assert.deepEqual(recovered.placeholders,initial.placeholders);
+  assert.equal(await request(),recovered);
+  assert.equal(attempt,3);
+ }finally{globalThis.fetch=prev;}
 });
