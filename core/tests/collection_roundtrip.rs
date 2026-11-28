@@ -6557,6 +6557,28 @@ fn all_unrestricted_flower_species_can_replace_a_stack_atomically(){
 }
 
 #[test]
+fn flower_species_preview_uses_destination_pattern_and_reserves_target_peers(){
+ let item=43114910;let target=183701770;let before=[6,6,0,0];let draft=[6,6,12,16];
+ let mut p=synthetic_payload("3.0.1");p[2]=5;p[3]=0x96;
+ p.extend(doc(1,arr(vec![u(4),u(item as u32),u(21),u(3),plain_flower(6)])));
+ let raw=slot_from_payload("3.0.1",p);
+ for zipped in [false,true]{
+  let mut e=Editor::open(if zipped{zip(&raw)}else{raw.clone()}).unwrap();
+  assert!(e.inventory_flower_preview(4,before,draft).is_err());
+  let options=e.inventory_flower_species_preview(4,before,target,before).unwrap();
+  assert!(options.contains(&draft));
+  assert!(e.inventory_flower_species_preview(4,before,target,draft).is_ok());
+  assert!(e.inventory_flower_species_preview(4,before,item,draft).is_err());
+  assert!(!e.dirty());
+  let id=e.replace_inventory_flower_species(4,item,before,target,draft,3).unwrap();
+  assert_eq!(e.inventory()[0].document_id,id);
+  let saved=Editor::open(e.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].item_id,target);
+  assert_eq!(saved.inventory_unique_data(saved.inventory()[0].document_id),e.inventory_unique_data(id));
+ }
+}
+
+#[test]
 fn exhausted_flower_defaults_keep_verified_free_starters_after_zero_and_creation(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let item=43114910u32;let candidate=0x80000000|item;

@@ -1172,15 +1172,15 @@ import {verifiedFloorplanName} from './floorplan-names';
   const next=edit.options[index];if(!next)return;
   await refreshFlowerDraft(next);
  }
- async function refreshFlowerDraft(next:FlowerVariant){
+ async function refreshFlowerDraft(next:FlowerVariant,target:number|null=flowerTargetSpecies){
   const edit=flowerEdit;
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
   busy=true;error='';
   try{
-   const [preview,speciesOptions]=await Promise.all([requestFlowerPreview(edit.documentId,edit.before,next),edit.absent?Promise.resolve([]):requestFlowerSpeciesOptions(edit.documentId,edit.before,next)]);
+   const [preview,speciesOptions]=await Promise.all([requestFlowerPreview(edit.documentId,edit.before,next,target??undefined),edit.absent?Promise.resolve([]):requestFlowerSpeciesOptions(edit.documentId,edit.before,next)]);
    if(!snapshot||snapshot.revision!==edit.revision||flowerEdit?.documentId!==edit.documentId)return;
    flowerDraft=[...next];flowerDraftCreatable=preview.creatable;
-   flowerEdit={...edit,options:preview.options,speciesOptions};if(flowerTargetSpecies!==null&&!speciesOptions.includes(flowerTargetSpecies))flowerTargetSpecies=null;
+   flowerEdit={...edit,options:preview.options,speciesOptions};flowerTargetSpecies=target;
   }catch(e){error=describeError(e)}
   finally{busy=false}
  }
@@ -2384,14 +2384,14 @@ import {verifiedFloorplanName} from './floorplan-names';
        {/if}
       </span>
      </span>
-     <div class="date-dialog-detail"><strong>{flowerVariantName(current)}</strong>{#if changed}<button type="button" class="inventory-flower-reset" disabled={busy} aria-label={flowerVariantName(edit.before)} title={flowerVariantName(edit.before)} onclick={()=>void refreshFlowerDraft(edit.before)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>{/if}</div>
+     <div class="date-dialog-detail"><strong>{flowerVariantName(current)}</strong>{#if changed}<button type="button" class="inventory-flower-reset" disabled={busy} aria-label={flowerVariantName(edit.before)} title={flowerVariantName(edit.before)} onclick={()=>void refreshFlowerDraft(edit.before,null)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>{/if}</div>
     </div>
-    {#if !edit.absent&&edit.speciesOptions?.length}
+    {#if !edit.absent&&(flowerTargetSpecies!==null||edit.speciesOptions?.length)}
      <label class="date-dialog-field">
       <span>{flowerCopy.species}</span>
-      <select name="flower-species" value={displaySpecies} disabled={busy} onchange={e=>{const id=Number(e.currentTarget.value);flowerTargetSpecies=id===edit.itemId?null:id}}>
+      <select name="flower-species" value={displaySpecies} disabled={busy} onchange={e=>{const id=Number(e.currentTarget.value);void refreshFlowerDraft(id===edit.itemId?edit.before:current,id===edit.itemId?null:id)}}>
        <option value={edit.itemId}>{inventoryName(edit.itemId)}</option>
-       {#each edit.speciesOptions as id}<option value={id}>{inventoryName(id)}</option>{/each}
+       {#each edit.speciesOptions??[] as id}<option value={id}>{inventoryName(id)}</option>{/each}
       </select>
      </label>
     {/if}

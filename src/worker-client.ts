@@ -92,8 +92,8 @@ export function requestFlowerVariants(documentId:number):Promise<FlowerVariant[]
  return rpc('flower-variants',{documentId}) as Promise<FlowerVariant[]>;
 }
 export type FlowerPreview={options:FlowerVariant[];creatable:boolean};
-export function requestFlowerPreview(documentId:number,beforeVariant:FlowerVariant,nextVariant:FlowerVariant):Promise<FlowerPreview>{
- return rpc('flower-preview',{documentId,beforeVariant:[...beforeVariant],nextVariant:[...nextVariant]}) as Promise<FlowerPreview>;
+export function requestFlowerPreview(documentId:number,beforeVariant:FlowerVariant,nextVariant:FlowerVariant,targetItemId?:number):Promise<FlowerPreview>{
+ return rpc('flower-preview',{documentId,beforeVariant:[...beforeVariant],nextVariant:[...nextVariant],targetItemId}) as Promise<FlowerPreview>;
 }
 export function requestFlowerCreationVariants(documentId:number):Promise<FlowerVariant[]>{
  return rpc('flower-create-variants',{documentId}) as Promise<FlowerVariant[]>;

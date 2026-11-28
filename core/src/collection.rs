@@ -994,39 +994,52 @@ impl Editor {
   };
   if quantity<=0||!Self::absent_flower_growth_supported(item,0)||!self.inventory_creation_payload_safe(item)||
    self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||restricted_flower_appearance(draft){return None}
-  let (policy,current,_)=self.flower_context(id)?;
-  if expected!=current||!valid_flower_variant(policy,draft)||
+  let (_,current,_)=self.flower_context(id)?;
+  if expected!=current||
    (draft[0]!=current[0]&&!self.flower_growth_change_allowed(id)){return None}
   Some((item,quantity))
+ }
+ // Shared destination policy for candidate listing, draft preview and commit.
+ fn flower_species_destination(&self,source:i32,item:i32,draft:FlowerVariant)->Option<(FlowerPolicy,HashSet<FlowerVariant>)>{
+  let index=&self.slot.index;
+  if item==source||!Self::absent_flower_growth_supported(item,0)||
+   !crate::inventory_source::is_uncapped_required_unique_stack(item)||
+   index.inventory_furniture_refs_incomplete||index.inventory_clothing_item_refs_incomplete||
+   !self.inventory_creation_payload_safe(item)||index.inventory_furniture_item_refs.contains(&item)||
+   index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
+  let key=crate::inventory_source::inventory_item_denial_key(item)?;
+  let policy=flower_item_patterns(item,draft[0])?;
+  if index.inventory_furniture_guid_refs.contains(&key)||index.inventory_clothing_guid_refs.contains(&key)||
+   !valid_flower_variant(policy,draft){return None}
+  let mut reserved=HashSet::new();
+  for row in self.active_saved_inventory().filter(|r|r.item_id==Some(item)){
+   if !self.unique_quantity_ids.contains(&row.id){return None}
+   let before=self.original_flower_variant(row.id)?;
+   reserved.insert(before);reserved.insert(self.flower_variant_changes.get(&row.id).copied().unwrap_or(before));
+  }
+  for (&other,f) in &self.pending_flowers{
+   if f.item_id==item&&self.inventory_changes.contains_key(&other){
+    reserved.insert(f.variant);reserved.insert(self.flower_variant_changes.get(&other).copied().unwrap_or(f.variant));
+   }
+  }
+  (!reserved.contains(&draft)).then_some((policy,reserved))
  }
  /// Explicit whole-stack replacement, never an in-place mutation of a native reference key.
  pub fn inventory_flower_species_options(&self,id:u32,expected:FlowerVariant,draft:FlowerVariant)->Vec<i32>{
   let Some((source,_))=self.flower_species_source(id,expected,draft)else{return Vec::new()};
-  let index=&self.slot.index;
-  if index.inventory_furniture_refs_incomplete||index.inventory_clothing_item_refs_incomplete{return Vec::new()}
-  ABSENT_FLOWER_DEFAULTS.iter().filter_map(|&(item,_)|{
-   if item==source||!crate::inventory_source::is_uncapped_required_unique_stack(item)||
-    !self.inventory_creation_payload_safe(item)||index.inventory_furniture_item_refs.contains(&item)||
-    index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
-   let key=crate::inventory_source::inventory_item_denial_key(item)?;
-   if index.inventory_furniture_guid_refs.contains(&key)||index.inventory_clothing_guid_refs.contains(&key)||
-    !valid_flower_variant(flower_item_patterns(item,draft[0])?,draft){return None}
-   for row in self.active_saved_inventory().filter(|r|r.item_id==Some(item)){
-    if !self.unique_quantity_ids.contains(&row.id){return None}
-    let before=self.original_flower_variant(row.id)?;
-    let after=self.flower_variant_changes.get(&row.id).copied().unwrap_or(before);
-    if before==draft||after==draft{return None}
-   }
-   for (&other,f) in &self.pending_flowers{
-    if f.item_id==item&&self.inventory_changes.contains_key(&other)&&
-     (f.variant==draft||self.flower_variant_changes.get(&other)==Some(&draft)){return None}
-   }
-   Some(item)
-  }).collect()
+  ABSENT_FLOWER_DEFAULTS.iter().filter_map(|&(item,_)|
+   self.flower_species_destination(source,item,draft).map(|_|item)).collect()
+ }
+ pub fn inventory_flower_species_preview(&self,id:u32,expected:FlowerVariant,target:i32,draft:FlowerVariant)->Result<Vec<FlowerVariant>,Error>{
+  let (source,_)=self.flower_species_source(id,expected,draft).ok_or(Error::Schema)?;
+  let (policy,reserved)=self.flower_species_destination(source,target,draft).ok_or(Error::Schema)?;
+  let mut choices=Self::flower_choices(policy,draft,&reserved);
+  Self::flower_growth_options(draft,&reserved,&mut choices);
+  Ok(choices)
  }
  pub fn replace_inventory_flower_species(&mut self,id:u32,source_item:i32,expected:FlowerVariant,target_item:i32,draft:FlowerVariant,quantity:i32)->Result<u32,Error>{
   if self.flower_species_source(id,expected,draft)!=Some((source_item,quantity))||
-   !self.inventory_flower_species_options(id,expected,draft).contains(&target_item){return Err(Error::Schema)}
+   self.flower_species_destination(source_item,target_item,draft).is_none(){return Err(Error::Schema)}
   let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
   let change=Change::FlowerSpeciesReplaced{document_id,source_id:id,source_item,expected,flower:PendingFlower{item_id:target_item,variant:draft},quantity};
   self.restore_change(&change,false);self.undo.push(change);self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);
