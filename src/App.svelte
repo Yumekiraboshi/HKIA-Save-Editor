@@ -49,7 +49,7 @@ import {searchAchievementRows} from './achievement-search';
  import {renderNativePlaceholderArt} from './native-placeholder-art';
  import {nativeResultIconTarget} from './native-result-icon';
  import {selectWandOriginalCell,selectInventoryWandOriginalCell} from './wand-original-subicon';
- import {inventoryWandAppearance,hasNativeWandArt,wandVariantOf,wandVariantLabel,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
+ import {inventoryWandAppearance,hasNativeWandArt,wandVariantOf,wandVariantLabel,wandMaterialLabel,wandFieldOptions,wandFieldLabels,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
  import {nativeChefInstructionBase} from './native-icon-route';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
@@ -2154,13 +2154,24 @@ import {verifiedFloorplanName} from './floorplan-names';
       </select>
      </label>
     {/if}
-    <label class="date-dialog-field">
-     <span>{edit.absent?inventoryName(edit.itemId):wandName(edit.before)}</span>
-     <select name="wand-variant" aria-label={inventoryName(edit.itemId)} bind:value={wandSelection} onchange={e=>void chooseWandPair(e.currentTarget.value)} disabled={busy||Boolean(edit.sourceChoices&&!edit.appearance.sourceItemId)}>
-      {#if !edit.absent&&edit.appearance.sourceItemId===edit.beforeSource}<option value={-1}>{wandName(edit.before)}</option>{/if}
-      {#each edit.options as option,i}<option value={i} data-wand-variant={option.join(':')}>{wandName(option)}</option>{/each}
-     </select>
-    </label>
+    <div class="date-dialog-field" data-wand-option-count={edit.options.length} data-wand-selected={selected.join(':')} data-wand-selection={wandSelection} data-wand-busy={busy}>
+     {#each wandFieldLabels(locale) as label, i}
+      {@const field=i===0?0:1}
+      {@const other=field===0?1:0}
+      {@const allowReset=!edit.absent&&edit.appearance.sourceItemId===edit.beforeSource}
+      {@const pairs=allowReset?[...edit.options,edit.before]:edit.options}
+      {@const choices=wandFieldOptions(pairs,selected,field)}
+      <label class="date-dialog-field">
+       <span>{label}</span>
+       <select name={field===0?'wand-magic':'wand-fleck'} value={''} onchange={e=>{const value=e.currentTarget.value;e.currentTarget.value='';wandSelection=Number(value);void chooseWandPair(value)}} disabled={busy||!choices.length||Boolean(edit.sourceChoices&&!edit.appearance.sourceItemId)}>
+        <option value={''} disabled>{wandMaterialLabel(selected[field],id=>sourceNames[String(id)]??'—')}</option>
+        {#each choices as choice (choice.index)}
+         <option value={choice.index===edit.options.length?-1:choice.index} data-wand-variant={choice.pair.join(':')} data-wand-field-value={choice.pair[field]}>{wandMaterialLabel(choice.pair[field],id=>sourceNames[String(id)]??'—')}{choice.pair[other]!==selected[other]?' · '+wandFieldLabels(locale)[other]+': '+wandMaterialLabel(choice.pair[other],id=>sourceNames[String(id)]??'—'):''}</option>
+        {/each}
+       </select>
+      </label>
+     {/each}
+    </div>
     {#if !edit.options.length&&!edit.nestedOptions?.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
     {#if canAddWandVariant()}
      <label class="date-dialog-field">
