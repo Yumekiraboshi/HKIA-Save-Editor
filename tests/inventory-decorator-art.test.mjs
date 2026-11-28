@@ -24,10 +24,14 @@ test('15 native decorator definitions, 14 original sprites and one original plat
 });
 test('known material GUID references, not a unique row alone, select the customized decoration',async()=>{
  const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/inventory-furniture-display.ts',import.meta.url))],bundle:true,write:false,format:'esm',platform:'node',logLevel:'silent'});
- const {furnitureHasCustomizedAppearance:f}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+ const {furnitureHasCustomizedAppearance:f,furnitureAppearanceSwatches:swatches}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
  const d={materials:new Map([[524,{sourceName:'native',rgba:[1,1,1,1]}]]),defaults:new Map()};
  assert.equal(f(d,[0,0,0]),false);assert.equal(f(d,[524,0,0]),true);assert.equal(f(d,[0,0,524]),true);
  assert.equal(f(d,[999999,0,0]),false);assert.equal(f(d,[-1,0,0]),false);assert.equal(f(d,[524]),false);assert.equal(f(null,[524,0,0]),false);
+ const display={materials:new Map([[1,{rgba:[1,0,0,1]}],[2,{rgba:[0,1,0,1]}]]),defaults:new Map([[10,new Map([[0,1],[2,2]])]])};
+ assert.deepEqual(swatches(display,10,[0,0,0]),['rgba(255,0,0,1)','rgba(0,255,0,1)']);
+ assert.deepEqual(swatches(display,10,[2,0,1]),['rgba(0,255,0,1)','rgba(255,0,0,1)']);
+ assert.deepEqual(swatches(display,10,[99,0,1]),[]);
  const app=read('src/App.svelte').toString();assert.match(app,/furnitureHasCustomizedAppearance\(furnitureDisplay,furnitureVariantOf\(item.unique\)\)/);assert.match(app,/<InventoryDecorator type=\{9\}/);
 });
 test('all five flagged chef instruction definitions have a normal original source pack route',()=>{
@@ -49,7 +53,11 @@ test('all five flagged chef instruction definitions have a normal original sourc
   for(const pattern of Object.keys(defs.patterns).map(Number)){
    const file='pattern-'+pattern+'.webp';
    assert.equal(sha(read('public/inventory-ui/'+file)),index.files[file]);
-   assert.deepEqual(f({...flower,growState,pattern,patternColor:2},defs),[{type:12,primaryColor:'rgba(193,41,61,1)'},{type:11,patternUrl:file}]);
+   const [r,g,b,a]=defs.colors['2'].rgba;
+   const accent='rgba('+[r,g,b].map(v=>Math.round(v*255)).join(',')+','+a+')';
+   const primary={type:12,primaryColor:'rgba(193,41,61,1)',...(!defs.patterns[String(pattern)].effect?{secondaryColor:accent}:{})};
+   assert.deepEqual(f({...flower,growState,pattern,patternColor:2},defs),[primary,{type:11,patternUrl:file}]);
+   assert.deepEqual(f({...flower,growState,pattern,patternColor:0},defs),[{type:12,primaryColor:'rgba(193,41,61,1)'},{type:11,patternUrl:file}]);
   }
  }
  for(const baseColor of Object.keys(defs.colors).map(Number)){

@@ -178,6 +178,9 @@ async function inventoryDynamicPaletteArtSmoke(){
   const sprites=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-palette"]');
   await sprites.nth(1).waitFor({timeout:30_000});
   assert.equal(await sprites.count(),2);
+  const paletteSwatches=page.locator('.inventory-card [data-unique-swatches="palette"]');
+  assert.equal(await paletteSwatches.count(),2);
+  assert.deepEqual(await paletteSwatches.evaluateAll(els=>els.map(el=>el.children.length)),[3,3]);
   const images=await sprites.evaluateAll(async els=>Promise.all(els.map(async el=>{
    const url=getComputedStyle(el).backgroundImage.slice(5,-2);
    if(!url.startsWith('blob:'))throw Error('expected local generated blob');
@@ -1815,6 +1818,9 @@ async function inventoryDynamicFlowerArtSmoke(){
   await sprites.nth(3).waitFor({timeout:30_000});
   assert.equal(await sprites.count(),4);
   await page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"][data-icon-fidelity="source-derived-base-only"]').waitFor({timeout:30_000});
+  const twoTone=page.locator('.inventory-card [data-native-decorator="12"] [data-flower-two-tone="true"]');
+  await twoTone.first().waitFor({timeout:30_000});
+  assert.match(await twoTone.first().evaluate(el=>getComputedStyle(el).backgroundImage),/linear-gradient\(135deg/);
   await page.locator('.inventory-card [data-native-decorator="11"] img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
   const effectCard=page.locator('.inventory-card').filter({has:page.locator('[data-native-decorator="11"] img[src$="pattern-3.webp"]')});
   assert.deepEqual(await effectCard.locator('[data-native-decorator]').evaluateAll(els=>els.map(e=>e.getAttribute('data-native-decorator'))),['12','11']);
@@ -2302,6 +2308,7 @@ async function inventoryAbsentFlowerCreationSmoke(){
   const firstPattern=await dialog.locator('option[data-flower-variant="6,2,1,16"]').getAttribute('value');assert.ok(firstPattern!==null);
   await dialog.locator('select[name="flower-pattern"]').selectOption(firstPattern);
   await dialog.locator('[data-native-decorator="11"] img[src$="pattern-1.webp"]').waitFor({timeout:30_000});
+  await dialog.locator('[data-flower-two-tone="true"]').waitFor();
   await assertNativeFlowerPatternGeometry(dialog.locator('[data-native-decorator="11"]'));
   assert.deepEqual(await dialog.locator('[data-native-decorator]').evaluateAll(els=>els.map(e=>e.getAttribute('data-native-decorator'))),['12','11']);
   const reset=dialog.locator('.inventory-flower-reset:not([disabled])');
@@ -2309,6 +2316,7 @@ async function inventoryAbsentFlowerCreationSmoke(){
   await reset.click();
   await dialog.locator('.inventory-flower-reset').waitFor({state:'hidden'});
   await dialog.locator('[data-native-decorator="11"]').waitFor({state:'detached'});
+  await dialog.locator('[data-flower-two-tone="true"]').waitFor({state:'detached'});
   await dialog.locator('[data-native-decorator="12"]').waitFor();
   const restoredPattern=await dialog.locator('option[data-flower-variant="6,2,1,16"]').getAttribute('value');
   assert.ok(restoredPattern!==null);

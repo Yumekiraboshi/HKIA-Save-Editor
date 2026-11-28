@@ -42,3 +42,12 @@ export function furnitureChoiceLabel(display:FurnitureDisplay|null,current:reado
  const coupled=target.flatMap((value,index)=>index!==slot&&value!==current[index]?[partLabel+' '+String.fromCharCode(65+index)+': '+materialLabel(display,value,defaultLabel)]:[]);
  return coupled.length?primary+' · '+coupled.join(' · '):primary;
 }
+
+/** Ordered editor swatches for the actual saved material slots. Keep the
+ * original item icon and textual material names; colors do not encode patterns. */
+export function furnitureAppearanceSwatches(display:FurnitureDisplay|null,itemId:number,variant:readonly number[]|null):string[]{
+ const slots=display?.defaults.get(itemId);
+ if(!display||!slots||!variant||variant.length!==3)return [];
+ const colors=[0,1,2].filter(slot=>slots.has(slot)).map(slot=>materialSwatch(display,itemId,slot,variant[slot]));
+ return colors.length&&colors.every(c=>c!=='transparent')?colors:[];
+}
