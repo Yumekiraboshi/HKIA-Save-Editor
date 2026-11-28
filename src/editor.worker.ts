@@ -136,7 +136,7 @@ function snapshot(e:Engine){
  for(let i=0;i<boundCount;i++){
   const p=4+i*12,id=bv.getUint32(p,true),minimum=bv.getInt32(p+4,true),cap=bv.getInt32(p+8,true);
   const row=editableRows.get(id);
-  if(!row||(minimum!==0&&minimum!==1)||cap<1)throw Error('INVENTORY_SNAPSHOT_INVALID');
+  if(!row||(minimum!==0&&minimum!==1)||cap<minimum)throw Error('INVENTORY_SNAPSHOT_INVALID');
   row.quantityLimit=cap;row.quantityMinimum=minimum;editableRows.delete(id);
  }
  if(editableRows.size!==0)throw Error('INVENTORY_SNAPSHOT_INVALID');
