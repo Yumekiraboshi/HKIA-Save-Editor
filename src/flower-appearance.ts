@@ -8,7 +8,8 @@ export type FlowerMaskItem={itemId:number;baseSpritePathId:string;patterns:Reado
 export type FlowerMaskIndex={items:ReadonlyArray<FlowerMaskItem>;masks:Readonly<Record<string,unknown>>};
 export type FlowerAppearance={maskGuid:string;baseSpritePathId:string;tints:TintSet;cacheKey:string};
 const WHITE:Rgba=[1,1,1,1];
-function flowerTintInputs(flower:InventoryFlower,defs:FlowerDisplayDefinitions):TintSet|null{
+export type FlowerTintDefinitions={colors:Readonly<Record<string,{rgba:Rgba}>>;patterns:Readonly<Record<string,unknown>>};
+function flowerTintInputs(flower:InventoryFlower,defs:FlowerTintDefinitions):TintSet|null{
  if(flower.growState!==6)return null;
  const primary=defs.colors[String(flower.baseColor)]?.rgba;
  const valid=(c:Rgba|undefined):c is Rgba=>!!c&&c.length===4&&c.every(v=>Number.isFinite(v)&&v>=0&&v<=1);
@@ -32,7 +33,7 @@ export function flowerArtKey(itemId:number,flower:InventoryFlower|undefined,defs
  const tints=flower&&defs&&hasNativeFlowerArt(itemId)?flowerTintInputs(flower,defs):null;
  return JSON.stringify(tints&&flower?[itemId,'plucked',flower.pattern,tints]:[itemId,'reference']);
 }
-export function resolveFlowerAppearance(itemId:number,flower:InventoryFlower,defs:FlowerDisplayDefinitions,index:FlowerMaskIndex):FlowerAppearance|null{
+export function resolveFlowerAppearance(itemId:number,flower:InventoryFlower,defs:FlowerTintDefinitions,index:FlowerMaskIndex,version='3.0.1'):FlowerAppearance|null{
  const tints=flowerTintInputs(flower,defs);
  if(!tints)return null;
  const item=index.items.find(i=>i.itemId===itemId);
@@ -42,5 +43,5 @@ export function resolveFlowerAppearance(itemId:number,flower:InventoryFlower,def
  const chosen=item.patterns.find(p=>p.patternIndex===flower.pattern)??item.patterns.find(p=>p.patternIndex===0);
  if(!chosen||!Object.hasOwn(index.masks,chosen.maskGuid))return null;
  return {maskGuid:chosen.maskGuid,baseSpritePathId:item.baseSpritePathId,tints,
-  cacheKey:JSON.stringify(['3.0.1','dynamic-sprite-color-1',itemId,item.baseSpritePathId,chosen.maskGuid,tints])};
+  cacheKey:JSON.stringify([version,'dynamic-sprite-color-1',itemId,item.baseSpritePathId,chosen.maskGuid,tints])};
 }
