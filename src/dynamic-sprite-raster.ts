@@ -16,7 +16,7 @@ export function sampleLinearRgb(p:PixelBuffer,x:number,y:number):Rgba{
  return [sample(p,x,y,0,true),sample(p,x,y,1,true),sample(p,x,y,2,true),1];
 }
 export type SpriteOverlay={texture:PixelBuffer;sampleRect:Rect;trim:Rect;alphaOffsetY:number;logicalWidth:number;logicalHeight:number;scale:number;offsetPercent:readonly [number,number];rotation:number;sampleClamp:Rect};
-export type RasterInput={base:PixelBuffer;mask:PixelBuffer;baseRect:Rect;maskRect:Rect;trim:Rect;alphaOffsetY:number;logicalSize:number;tints:TintSet;maskColorSpace?:'srgb'|'linear';overlay?:SpriteOverlay};
+export type RasterInput={base:PixelBuffer;mask:PixelBuffer;baseRect:Rect;maskRect:Rect;trim:Rect;alphaOffsetY:number;logicalSize:number;logicalHeight?:number;resolution?:'native';tints:TintSet;maskColorSpace?:'srgb'|'linear';overlay?:SpriteOverlay};
 /** Native zero-border, non-rotated Sprite geometry, sRGB base texture, source-selected mask color space, bilinear
  * clamp sampling and non-clipped white UI shader. Source crops retain
  * one original texel of guard on every side. Alpha is separate, linear data.
@@ -50,6 +50,18 @@ function overlaySample(overlay:SpriteOverlay,placement:ReturnType<typeof overlay
  const p=overlay.texture;
  return [sample(p,bx,by,0,true),sample(p,bx,by,1,true),sample(p,bx,by,2,true),sample(p,bx,by+overlay.alphaOffsetY,0,false)];
 }
+/** New candidate output has the native logical pixel dimensions. The
+ * legacy layout remains isolated until its existing deployed callers migrate. */
+export function rasterGeometry(input:Pick<RasterInput,'logicalSize'|'logicalHeight'|'resolution'>){
+ const logicalHeight=input.logicalHeight??input.logicalSize;
+ if(![input.logicalSize,logicalHeight].every(v=>Number.isFinite(v)&&v>0&&v<=4096))throw Error('DYNAMIC_RASTER_GEOMETRY');
+ if(input.resolution==='native'){
+  const width=Math.round(input.logicalSize),height=Math.round(logicalHeight);
+  if(width<1||height<1||width*height>16_777_216)throw Error('DYNAMIC_RASTER_GEOMETRY');
+  return {width,height,contentWidth:width,contentHeight:height,left:0,top:0,logicalHeight};
+ }
+ return {width:96,height:96,contentWidth:84,contentHeight:84,left:6,top:6,logicalHeight};
+}
 export function rasterizeDynamicSprite(input:RasterInput):Uint8ClampedArray{
  const {base,mask,baseRect,maskRect,trim,alphaOffsetY,logicalSize,tints}=input;
  const [l,t,r,b]=trim;
@@ -59,11 +71,12 @@ export function rasterizeDynamicSprite(input:RasterInput):Uint8ClampedArray{
   !tints.every(c=>c.length===4&&c.every(v=>Number.isFinite(v)&&v>=0&&v<=1)))throw Error('DYNAMIC_RASTER_INPUT');
  const tint=(c:Rgba):Rgba=>[srgbToLinear(c[0]),srgbToLinear(c[1]),srgbToLinear(c[2]),c[3]];
  const linearTints:TintSet=[tint(tints[0]),tint(tints[1]),tint(tints[2])];
- const out=new Uint8ClampedArray(96*96*4);
- const overlay=input.overlay,placement=overlay?overlayPlacement(84,84,overlay):null;
+ const {width,height,contentWidth,contentHeight,left,top,logicalHeight}=rasterGeometry(input);
+ const out=new Uint8ClampedArray(width*height*4);
+ const overlay=input.overlay,placement=overlay?overlayPlacement(contentWidth,contentHeight,overlay):null;
  if(overlay&&(![...overlay.sampleRect,...overlay.trim,...overlay.sampleClamp,overlay.alphaOffsetY].every(Number.isFinite)||overlay.texture.rgba.length!==overlay.texture.width*overlay.texture.height*4||overlay.trim[2]<=overlay.trim[0]||overlay.trim[3]<=overlay.trim[1]||overlay.sampleRect[2]<=0||overlay.sampleRect[3]<=0||overlay.alphaOffsetY<=0))throw Error('OVERLAY_INPUT');
- for(let y=6;y<90;y++)for(let x=6;x<90;x++){
-  const sx=(x+.5-6)*logicalSize/84,sy=(y+.5-6)*logicalSize/84;
+ for(let y=top;y<top+contentHeight;y++)for(let x=left;x<left+contentWidth;x++){
+  const sx=(x+.5-left)*logicalSize/contentWidth,sy=(y+.5-top)*logicalHeight/contentHeight;
   let result:Rgba=[0,0,0,0];
   if(sx>=l&&sx<r&&sy>=t&&sy<b){
   const u=(sx-l)/(r-l),v=(sy-t)/(b-t);
@@ -75,8 +88,8 @@ export function rasterizeDynamicSprite(input:RasterInput):Uint8ClampedArray{
   const m:Rgba=input.maskColorSpace==='linear'?[sample(mask,mx,my,0,false),sample(mask,mx,my,1,false),sample(mask,mx,my,2,false),1]:sampleLinearRgb(mask,mx,my);
   result=dynamicSpritePixel(rgba,m,linearTints);
   }
-  if(overlay&&placement){const layer=overlaySample(overlay,placement,x+.5-6,y+.5-6);if(layer)result=sourceOver(result,layer);}
-  const p=(y*96+x)*4;
+  if(overlay&&placement){const layer=overlaySample(overlay,placement,x+.5-left,y+.5-top);if(layer)result=sourceOver(result,layer);}
+  const p=(y*width+x)*4;
   for(let c=0;c<3;c++)out[p+c]=Math.round(clamp(linearToSrgb(clamp(result[c],1)),1)*255);
   out[p+3]=Math.round(clamp(result[3],1)*255);
  }
