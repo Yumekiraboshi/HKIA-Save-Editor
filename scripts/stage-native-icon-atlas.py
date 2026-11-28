@@ -204,7 +204,7 @@ def previous_tiles(folder):
             receipt.get('receiptSha256')==sha(source.stable(payload)), 'invalid previous atlas receipt')
     return receipt['sprites'],receipt['sheets']
 
-def read_previous(folder, row, sheets):
+def read_previous(folder, row, sheets, cache=None):
     from PIL import Image
     sheet,cell = row['sheet'],row['cell']
     require(type(sheet) is int and 0<=sheet<len(sheets) and type(cell) is int and 0<=cell<PER,
@@ -212,13 +212,21 @@ def read_previous(folder, row, sheets):
     record = sheets[sheet]
     filename = 'sheet-%03d.webp' % sheet
     require(record['name']==filename, 'invalid previous sheet path')
-    raw = (folder/filename).read_bytes()
-    require(len(raw)==record['bytes'] and len(raw)<=2000000 and sha(raw)==record['sha256'],
-            'previous sheet integrity mismatch')
-    with Image.open(io.BytesIO(raw)) as im:
-        x,y = cell%COLS*SIDE,cell//COLS*SIDE
-        require(im.width==COLS*SIDE and y+SIDE<=im.height,'previous cell bounds')
-        tile = im.convert('RGBA').crop((x,y,x+SIDE,y+SIDE))
+    im = cache.get(sheet) if cache is not None else None
+    if im is None:
+        raw = (folder/filename).read_bytes()
+        require(len(raw)==record['bytes'] and len(raw)<=2000000 and sha(raw)==record['sha256'],
+                'previous sheet integrity mismatch')
+        with Image.open(io.BytesIO(raw)) as decoded:
+            require(decoded.width==COLS*SIDE and 0<decoded.height<=COLS*SIDE and
+                    decoded.height%SIDE==0, 'previous sheet dimensions')
+            im=decoded.convert('RGBA')
+        if cache is not None:
+            cache.clear()
+            cache[sheet]=im
+    x,y = cell%COLS*SIDE,cell//COLS*SIDE
+    require(y+SIDE<=im.height,'previous cell bounds')
+    tile = im.crop((x,y,x+SIDE,y+SIDE))
     require(visible_hash(tile)==row['pixelSha256'],'previous tile identity mismatch')
     return tile
 
@@ -254,49 +262,63 @@ def stage(snapshot, manifest_path, out, prior_dir=None):
     for i,row in rows.items():
         ref = row['sprite']
         groups[(ref['fileId'],ref['pathId'])].append(i)
-    atlas_cache,texture_cache={},collections.OrderedDict()
+    atlas_cache,previous_sheet_cache={},{}
     sprites,items,unresolved,sheets={},[],[],[]
     reused=0
+    # Plan original crops first; process each source texture once. Thousands
+    # of shared sprites must not repeatedly decompress the same large atlas.
+    by_texture=collections.defaultdict(list)
+    for (fi,sid),ids in sorted(groups.items(),key=lambda pair:(pair[0][0],int(pair[0][1]))):
+        try:
+            sprite=resolve(definitions,[fi,sid],cabs,213)
+            sb,sp,_,raw=sprite
+            require(all(rows[i]['sprite']['objectSha256'] in (None,sha(raw)) for i in ids),
+                    'snapshot Sprite identity mismatch')
+            logical,rect,offset,texture,binding=geometry(sprite,cabs,atlas_cache)
+            tb,tid,_,_=texture
+            by_texture[(tb['cab'],tid)].append((ids,sprite,logical,rect,offset,texture,binding))
+        except (Unsupported,KeyError,StopIteration,struct.error) as exc:
+            unresolved.extend({'itemId':i,'reason':str(exc) or type(exc).__name__} for i in ids)
     out.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='hkia-native-atlas-',dir=out.parent) as temp:
         folder=Path(temp)/'result'
         folder.mkdir()
         pending=[]
-        for (fi,sid),ids in sorted(groups.items(),key=lambda pair:(pair[0][0],int(pair[0][1]))):
+        for key, jobs in sorted(by_texture.items()):
             try:
-                sprite=resolve(definitions,[fi,sid],cabs,213)
+                image,tex=texture_data(jobs[0][5])
+            except (Unsupported,KeyError,StopIteration,struct.error) as exc:
+                unresolved.extend({'itemId':i,'reason':str(exc) or type(exc).__name__}
+                                  for job in jobs for i in job[0])
+                continue
+            for ids,sprite,logical,rect,offset,texture,binding in jobs:
                 sb,sp,_,raw=sprite
-                require(all(rows[i]['sprite']['objectSha256'] in (None,sha(raw)) for i in ids),
-                        'snapshot Sprite identity mismatch')
-                logical,rect,offset,texture,binding=geometry(sprite,cabs,atlas_cache)
-                tb,tid,_,_=texture
-                key=(tb['cab'],tid)
-                if key not in texture_cache:
-                    texture_cache[key]=texture_data(texture)
-                    if len(texture_cache)>4:
-                        texture_cache.popitem(last=False)
-                texture_cache.move_to_end(key)
-                image,tex=texture_cache[key]
+                sprite_key=sb['cab']+':'+sp
+                if sprite_key in sprites:
+                    existing=sprites[sprite_key]
+                    items.extend([i,existing['sheet'],existing['cell'],sp] for i in ids)
+                    continue
                 identity={'spriteCab':sb['cab'],'spritePathId':sp,'spriteSha256':sha(raw),
                           'logicalSize':logical,'rect':rect,'offset':offset,**binding,**tex}
                 identity=json.loads(source.stable(identity))
-                sprite_key=sb['cab']+':'+sp
                 previous=old.get(sprite_key)
-                if previous and previous['binding']==identity:
-                    tile=read_previous(prior_dir,previous,old_sheets)
-                    reused+=1
-                else:
-                    tile=crop_tile(image,logical,rect,offset)
-            except (Unsupported,KeyError,StopIteration,struct.error) as exc:
-                unresolved.extend({'itemId':i,'reason':str(exc) or type(exc).__name__} for i in ids)
-                continue
-            sheet,cell=len(sheets),len(pending)
-            sprites[sprite_key]={'binding':identity,'sheet':sheet,'cell':cell,'pixelSha256':visible_hash(tile)}
-            items.extend([i,sheet,cell,sp] for i in ids)
-            pending.append(tile)
-            if len(pending)==PER:
-                sheets.append(write_sheet(folder,len(sheets),pending))
-                pending=[]
+                try:
+                    if previous and previous['binding']==identity:
+                        tile=read_previous(prior_dir,previous,old_sheets,previous_sheet_cache)
+                        reused+=1
+                    else:
+                        tile=crop_tile(image,logical,rect,offset)
+                except Unsupported as exc:
+                    unresolved.extend({'itemId':i,'reason':str(exc)} for i in ids)
+                    continue
+                sheet,cell=len(sheets),len(pending)
+                sprites[sprite_key]={'binding':identity,'sheet':sheet,'cell':cell,'pixelSha256':visible_hash(tile)}
+                items.extend([i,sheet,cell,sp] for i in ids)
+                pending.append(tile)
+                if len(pending)==PER:
+                    sheets.append(write_sheet(folder,len(sheets),pending))
+                    pending=[]
+            del image
         if pending:
             sheets.append(write_sheet(folder,len(sheets),pending))
         require(len(items)+len(unresolved)==len(rows),'source route partition')
