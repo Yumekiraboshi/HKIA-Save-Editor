@@ -3224,7 +3224,7 @@ fn large_inventory_batch_and_full_journal_roundtrip(){
 }
 
 #[test]
-fn ordinary_furniture_zero_refuses_placement_defaults_legacy_guid_and_opaque_layout(){
+fn ordinary_furniture_zero_distinguishes_independent_placement_from_defaults_legacy_guid_and_opaque_layout(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let item=427689u32; // Original nil Rug; native Hash128 source verified.
  let other=3202680u32;
@@ -3262,6 +3262,17 @@ fn ordinary_furniture_zero_refuses_placement_defaults_legacy_guid_and_opaque_lay
  for h in [
   home(vec![],vec![object(item,0)],0,0,0),
   home(vec![],vec![object(0,item)],0,0,0),
+ ]{
+  let raw=make(Some(h.clone()),false);let mut e=Editor::open(raw).unwrap();
+  assert!(e.inventory().iter().all(|r|r.quantity_minimum==0&&e.inventory_entry_removable(r.document_id)));
+  e.change_inventory_quantity(4,6,0).unwrap();e.remove_inventory_entries(&[(4,0)]).unwrap();
+  let output=e.export().unwrap();let checked=read_slot(&output).unwrap();
+  assert!(checked.envelope.decoded.windows(h.len()).any(|w|w==h.as_slice()));
+  let saved=Editor::open(output).unwrap();assert_eq!(saved.inventory().len(),1);assert_eq!(saved.inventory()[0].item_id,other as i32);
+ }
+ let nonnil=arr(vec![u(item),u(0),u(0),u(0),u(0),u(0),vec![0xc0],furniture_payload([1,0,0]),arr(vec![]),arr(vec![]),u(0),arr(vec![]),u(0)]);
+ for h in [
+  home(vec![],vec![nonnil],0,0,0),
   home(vec![],vec![],item,0,0),
   home(vec![],vec![],0,item,0),
   home(vec![],vec![],0,0,item),
@@ -6155,5 +6166,37 @@ fn all_ordinary_duplicate_families_recompute_membership_after_exact_deletion(){
   let saved=Editor::open(restored.export().unwrap()).unwrap();
   assert_eq!(saved.inventory(),restored.inventory());
   assert_eq!(saved.entries(),restored.entries());assert_eq!(saved.achievements(),restored.achievements());
+ }
+}
+
+#[test]
+fn ordinary_bag_fish_critter_and_furniture_survive_independent_modern_remote_placements(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let items=[1614767621u32,929880853,692732629,1078556752,427689,3202680];
+ for nonnil in [false,true]{
+  let remote=|item,table|arr(vec![u(item),u(table),vec![0xc0],if nonnil{furniture_payload([1,0,0])}else{vec![0xc0]},arr(vec![]),arr(vec![]),u(0),arr(vec![])]);
+  let objects=arr(items.chunks_exact(2).map(|pair|remote(pair[0],pair[1])).collect());
+  let home=arr(vec![guid([5,6,7,8]),l(0),arr(vec![]),u(0),u(0),guid([0;4]),objects,vec![0xc0],vec![0xc0],u(0)]);
+  let cabin=arr(vec![guid([9,10,11,12]),arr(vec![home.clone()])]);
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x9c;
+  for (i,item) in items.iter().enumerate(){p.extend(doc(1,arr(vec![u(4+i as u32),u(*item),u(0),u(7),vec![0xc0]])));}
+  p.extend(doc(19,arr(vec![u(0),arr(vec![cabin]),arr(vec![])])));
+  let raw=slot_from_payload("3.0.1",p);
+  for zipped in [false,true]{
+   let input=if zipped{zip(&raw)}else{raw.clone()};let mut e=Editor::open(input.clone()).unwrap();
+   let original=e.inventory();assert_eq!(original.len(),items.len());
+   assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==if nonnil{1}else{0}));
+   let requests:Vec<_>=original.iter().map(|r|(r.document_id,7)).collect();
+   if nonnil{assert!(e.remove_inventory_entries(&requests).is_err());assert!(!e.dirty());continue}
+   assert!(original.iter().all(|r|e.inventory_entry_removable(r.document_id)));
+   e.remove_inventory_entries(&requests).unwrap();
+   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+   assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);assert!(restored.redo_scope(Inventory));
+   let output=restored.export().unwrap();
+   let slot=if zipped{let z=ZipIndex::parse(&output).unwrap();z.extract(&output,z.entries.iter().position(|x|x.name==SLOT).unwrap()).unwrap()}else{output.clone()};
+   let checked=read_slot(&slot).unwrap();assert!(checked.envelope.decoded.windows(home.len()).any(|w|w==home.as_slice()));
+   let saved=Editor::open(output).unwrap();assert!(saved.inventory().is_empty());assert_eq!(saved.entries(),restored.entries());assert_eq!(saved.achievements(),restored.achievements());
+   assert!(items.iter().all(|id|saved.inventory_creatable().iter().any(|r|r.item_id==*id as i32)));
+  }
  }
 }
