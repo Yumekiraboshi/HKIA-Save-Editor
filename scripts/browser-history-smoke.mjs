@@ -3847,6 +3847,8 @@ async function run(){
 
  await page.reload({waitUntil:'networkidle'});
  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+ assert.equal(await page.locator('.tools-nav button[aria-current="page"]').getAttribute('data-tool'),'achievements','reload restores the last tool');
+ await chooseTab(page,'collections');
  steps=await countHistory(page,3);
  assert.match(await steps.nth(0).getAttribute('class')??'',/active/);
  await steps.nth(1).click(); // redo one collection entry after recovery
