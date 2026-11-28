@@ -42,11 +42,11 @@ const recoverable=new Set<()=>void>();
 function retryUnavailableArt(){
  for(const retry of [...recoverable])retry();
 }
-function trackUnavailableArt(retry:()=>void){
+export function trackUnavailableArt(retry:()=>void){
  if(recoverable.size===0&&typeof window!=='undefined')window.addEventListener('online',retryUnavailableArt);
  recoverable.add(retry);
 }
-function untrackUnavailableArt(retry:()=>void){
+export function untrackUnavailableArt(retry:()=>void){
  recoverable.delete(retry);
  if(recoverable.size===0&&typeof window!=='undefined')window.removeEventListener('online',retryUnavailableArt);
 }

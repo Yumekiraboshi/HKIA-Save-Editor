@@ -2377,6 +2377,27 @@ async function originalArtIndexRetrySmoke(){
  }finally{await context.close();}
  console.log('CHROMIUM ORIGINAL ART INDEX RETRY PASS: cached source index, recovered dynamic originals without reload');
 }
+async function originalArtworkFileRecoverySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();let available=false,attempts=0;
+  await page.route(/\/dynamic-colorways\/315822\.webp\?v=/,r=>{
+   attempts++;return available?r.continue():r.fulfill({status:503,body:'unavailable'});
+  });
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-original-file-recovery.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({artInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('315822');
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('.inventory-card .item-sprite')).some(el=>getComputedStyle(el).backgroundImage.includes('/source-colorways/315822.webp')));
+  await page.waitForLoadState('networkidle');
+  assert.ok(attempts>=1);
+  available=true;
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('.inventory-card .item-sprite')).some(el=>getComputedStyle(el).backgroundImage.includes('/dynamic-colorways/315822.webp?v=')));
+  assert.equal(await page.locator('.inventory-controls input[type="search"]').inputValue(),'315822');
+ }finally{await context.close();}
+ console.log('CHROMIUM ORIGINAL ART FILE RECOVERY PASS: preferred completed native icon restored in place');
+}
 async function inventoryOriginalArtSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -3169,6 +3190,7 @@ async function run(){
  await inventoryCreateMaterialSmoke();
  await inventoryOriginalArtSmoke();
  await originalArtIndexRetrySmoke();
+ await originalArtworkFileRecoverySmoke();
  await inventoryNativeResultArtSmoke();
  await inventoryNativeArtRetrySmoke();
  await inventoryIconScaleSmoke();

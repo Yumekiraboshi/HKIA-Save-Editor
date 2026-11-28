@@ -94,7 +94,10 @@ test('5,383 source-color variants are wired into Collection and Inventory artwor
  assert.match(app,/palette=\{nativeDyePalettes\[String\(dateDialogItem\[0\]\)\]\}/);
  assert.match(sprite,/data-dye-rendered=/);
  assert.doesNotMatch(sprite,/renderDyeSprite|createObjectURL/);
- assert.match(sprite,/return \(\)=>\{canceled=true;\}/);
+ assert.match(sprite,/return startOriginalArtRequest\(original,exact,/);
+ const view=readFileSync(new URL('../src/original-art-view.ts',import.meta.url),'utf8');
+ assert.match(view,/return \(\)=>\{canceled=true;untrackUnavailableArt\(retry\);\}/);
+ assert.doesNotMatch(view,/renderDyeSprite|createObjectURL/);
  for(const disallowed of [/native-dye-ring/,/native-dye-swatch/,/native-dye-preview/,/sharedDyeableIcon/]){
   assert.doesNotMatch(app,disallowed);assert.doesNotMatch(css,disallowed);
  }
