@@ -39,7 +39,8 @@ const copies:Partial<Record<Locale,FlowerEditorCopy>>={
  'zh-Hans':{title:'编辑颜色和图案',color:'颜色',pattern:'图案',accent:'图案颜色'},
  'zh-Hant':{title:'編輯顏色和圖案',color:'顏色',pattern:'圖案',accent:'圖案顏色'}
 };
-export function flowerEditorCopy(locale:Locale):FlowerEditorCopy&{effect:string}{return {...(copies[locale]??(locale==='fr-CA'?copies.fr!:en)),effect:effectCopy[locale]??(locale==='fr-CA'?effectCopy.fr!:'Effect')};}
+const speciesCopy:Partial<Record<Locale,string>>={ja:'花の種類',ar:'نوع الزهرة',de:'Blumenart',es:'Especie de flor',fr:'Espèce de fleur',it:'Specie di fiore',ko:'꽃 종류',nl:'Bloemsoort','pt-BR':'Espécie de flor',ru:'Вид цветка',tr:'Çiçek türü','zh-Hans':'花卉种类','zh-Hant':'花卉種類'};
+export function flowerEditorCopy(locale:Locale):FlowerEditorCopy&{effect:string;species:string}{return {...(copies[locale]??(locale==='fr-CA'?copies.fr!:en)),effect:effectCopy[locale]??(locale==='fr-CA'?effectCopy.fr!:'Effect'),species:speciesCopy[locale]??(locale==='fr-CA'?speciesCopy.fr!:'Flower species')};}
 
 type FurnitureEditorCopy={title:string;part:string;material:string;defaultMaterial:string};
 const furnitureCopies:Partial<Record<Locale,FurnitureEditorCopy>>={

@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount,tick,untrack} from 'svelte';
- import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,removeInventoryEntries,requestFlowerVariants,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurniturePreview,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPalettePreview,changeInventoryPaletteVariant,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafePreview,changeInventoryCafeVariant,createInventoryCafeVariant,requestWandVariants,changeInventoryWandIdentity,requestWandNestedMaterials,requestWandNestedPairs,changeInventoryWandNested,createInventoryWandNested,requestWandEditSources,requestAbsentWandSources,requestOwnedFurnitureWandSources,requestOwnedFurnitureWandPairs,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
+ import {openSave,changeCollection,changeInventoryQuantity,changeInventoryQuantities,removeInventoryEntries,requestFlowerVariants,requestFlowerSpeciesOptions,replaceInventoryFlowerSpecies,requestFlowerPreview,requestFlowerCreationVariants,createInventoryFlowerVariant,changeInventoryFlowerVariant,requestFurniturePreview,createInventoryFurnitureVariant,changeInventoryFurnitureVariant,requestPalettePreview,changeInventoryPaletteVariant,createInventoryPaletteVariant,requestBobaVariants,changeInventoryBobaVariant,requestBobaCreationVariants,createInventoryBobaVariant,requestCafePreview,changeInventoryCafeVariant,createInventoryCafeVariant,requestWandVariants,changeInventoryWandIdentity,requestWandNestedMaterials,requestWandNestedPairs,changeInventoryWandNested,createInventoryWandNested,requestWandEditSources,requestAbsentWandSources,requestOwnedFurnitureWandSources,requestOwnedFurnitureWandPairs,requestWandCreationVariants,createInventoryWandVariant,editAchievementAuto,planAchievementToggle,applyDraft,jumpHistory,restoreHistory,exportSave,clear,type SaveSnapshot,type InventoryEntry,type InventoryPatch,type InventoryQuantityRequest,type AchievementEntry,type AchievementValue,type HistoryRecord} from './worker-client';
  import {diffPatches,diffInventory,inventoryPatchesEqual,restoreLocalDraft,saveOriginalLocally,saveDraftChanges,forgetLocalDraft,type DraftPatch} from './draft-store';
  import {diffAchievements,decodeAchievementDraft,type StoredPatch} from './achievement-draft';
  import {achievementCopy} from './achievement-ui';
@@ -89,8 +89,9 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!Object.keys(flowerLabels).length)void flowerDisplayLoader.labels().then(data=>{if(!flowerDisplayDisposed)flowerLabels=data;}).catch(()=>{});
  }
  let flowerDialogEl:HTMLDialogElement|undefined=$state();
- let flowerEdit=$state<{documentId:number;itemId:number;revision:number;before:FlowerVariant;options:FlowerVariant[];creationOptions:FlowerVariant[];absent?:boolean}|null>(null);
+ let flowerEdit=$state<{documentId:number;itemId:number;revision:number;before:FlowerVariant;options:FlowerVariant[];creationOptions:FlowerVariant[];speciesOptions?:number[];quantity?:number;absent?:boolean}|null>(null);
  let flowerDraft=$state<FlowerVariant|null>(null);
+ let flowerTargetSpecies=$state<number|null>(null);
  let flowerDraftCreatable=$state(false);
  let variantAddQuantity=$state<number|undefined>(1);
  const validVariantAddQuantity=$derived(typeof variantAddQuantity==='number'&&Number.isInteger(variantAddQuantity)&&variantAddQuantity>=1&&variantAddQuantity<=2147483647);
@@ -281,7 +282,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  const historyItems=$derived(new Map(((catalog as Catalog|null)?.items??[]).map(item=>[item[0],item])));
  const inventoryHistoryItems=$derived.by(()=>{
   const result=new Map(((snapshot as SaveSnapshot|null)?.inventory??[]).map(item=>[item.documentId,item.itemId]));
-  for(const detail of historyDetails)if(detail.scope==='inventory'&&'createdHandle' in detail)result.set(detail.createdHandle,detail.itemId);
+  for(const detail of historyDetails)if(detail.scope==='inventory'&&'createdHandle' in detail){
+   result.set(detail.createdHandle,detail.itemId);
+   if('replacedItemId' in detail&&detail.replacedItemId!==undefined)result.set(detail.documentId,detail.replacedItemId);
+  }
   return result;
  });
  // Item IDs and category-to-art mappings are original Steam v3.0.1
@@ -880,9 +884,9 @@ import {verifiedFloorplanName} from './floorplan-names';
   const revision=snapshot.revision,before=flowerVariantOf(row.flower);
   busy=true;error='';
   try{
-   const [options,creationOptions]=await Promise.all([requestFlowerVariants(row.documentId),requestFlowerCreationVariants(row.documentId)]);
+   const [options,creationOptions,speciesOptions]=await Promise.all([requestFlowerVariants(row.documentId),requestFlowerCreationVariants(row.documentId),requestFlowerSpeciesOptions(row.documentId,before,before)]);
    if(!snapshot||snapshot.revision!==revision)return;
-   flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions};
+   flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions,speciesOptions,quantity:row.quantity};flowerTargetSpecies=null;
    flowerDraft=[...before];flowerDraftCreatable=false;variantAddQuantity=1;await tick();
    if(flowerDialogEl&&!flowerDialogEl.open)flowerDialogEl.showModal();
   }catch(e){error=describeError(e)}
@@ -1182,15 +1186,15 @@ import {verifiedFloorplanName} from './floorplan-names';
   const next=edit.options[index];if(!next)return;
   await refreshFlowerDraft(next);
  }
- async function refreshFlowerDraft(next:FlowerVariant){
+ async function refreshFlowerDraft(next:FlowerVariant,target:number|null=flowerTargetSpecies){
   const edit=flowerEdit;
   if(!snapshot||busy||!edit||snapshot.revision!==edit.revision)return;
   busy=true;error='';
   try{
-   const preview=await requestFlowerPreview(edit.documentId,edit.before,next);
+   const [preview,speciesOptions]=await Promise.all([requestFlowerPreview(edit.documentId,edit.before,next,target??undefined),edit.absent?Promise.resolve([]):requestFlowerSpeciesOptions(edit.documentId,edit.before,next)]);
    if(!snapshot||snapshot.revision!==edit.revision||flowerEdit?.documentId!==edit.documentId)return;
    flowerDraft=[...next];flowerDraftCreatable=preview.creatable;
-   flowerEdit={...edit,options:preview.options};
+   flowerEdit={...edit,options:preview.options,speciesOptions};flowerTargetSpecies=target;
   }catch(e){error=describeError(e)}
   finally{busy=false}
  }
@@ -1199,10 +1203,11 @@ import {verifiedFloorplanName} from './floorplan-names';
   event.preventDefault();if(inventoryAddMode)return;
   const selected=flowerEdit;
   if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
-  const next=flowerDraft;if(!next||next.every((n,i)=>n===selected.before[i]))return;
+  const next=flowerDraft,target=flowerTargetSpecies;if(!next||(target===null&&next.every((n,i)=>n===selected.before[i])))return;
+  if(target!==null&&(!selected.speciesOptions?.includes(target)||selected.quantity===undefined))return;
   busy=true;error='';
   try{
-   update(await changeInventoryFlowerVariant(selected.documentId,selected.before,next));
+   update(await (target===null?changeInventoryFlowerVariant(selected.documentId,selected.before,next):replaceInventoryFlowerSpecies(selected.documentId,selected.itemId,target,selected.quantity!,selected.before,next)));
    closeFlowerEditor();await persistDraft();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -1212,7 +1217,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy||!selected||snapshot.revision!==selected.revision)return;
   const next=flowerDraft;
   const quantity=variantAddQuantity;
-  if(!next||!validVariantAddQuantity||quantity===undefined||!flowerDraftCreatable)return;
+  if(!next||!validVariantAddQuantity||quantity===undefined||!flowerDraftCreatable||flowerTargetSpecies!==null)return;
   busy=true;error='';
   try{
    update(await createInventoryFlowerVariant(selected.documentId,selected.before,next,quantity));
@@ -2382,22 +2387,23 @@ import {verifiedFloorplanName} from './floorplan-names';
   {/if}
  </dialog>
  <dialog class="date-dialog" bind:this={flowerDialogEl} aria-labelledby="flower-editor-title"
-  onclose={()=>{flowerEdit=null;flowerDraft=null;flowerDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
+  onclose={()=>{flowerEdit=null;flowerDraft=null;flowerDraftCreatable=false;flowerTargetSpecies=null}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if flowerEdit}
    {@const edit=flowerEdit}
    {@const current=flowerDraft??edit.before}
    {@const appearance={growState:current[0],baseColor:current[1],pattern:current[2],patternColor:current[3]}}
    {@const previewBadges=snapshot?.version==='3.0.1'?flowerDecorators(appearance,flowerDefinitions):[]}
-   {@const changed=current.some((n,i)=>n!==edit.before[i])}
+   {@const changed=flowerTargetSpecies!==null||current.some((n,i)=>n!==edit.before[i])}
+   {@const displaySpecies=flowerTargetSpecies??edit.itemId}
    <form class="date-dialog-inner" onsubmit={e=>{if(edit.absent){e.preventDefault();void addInventoryFlowerVariant()}else void applyInventoryFlowerVariant(e)}}>
     <div class="date-dialog-heading">
-     <h2 id="flower-editor-title">{inventoryName(edit.itemId)}{#if flowerGrowthKind(edit.itemId,{growState:current[0],baseColor:0,pattern:0,patternColor:0})} · {flowerGrowthLabel(locale,flowerGrowthKind(edit.itemId,{growState:current[0],baseColor:0,pattern:0,patternColor:0}))}{/if}</h2>
+     <h2 id="flower-editor-title">{inventoryName(displaySpecies)}{#if flowerGrowthKind(displaySpecies,{growState:current[0],baseColor:0,pattern:0,patternColor:0})} · {flowerGrowthLabel(locale,flowerGrowthKind(displaySpecies,{growState:current[0],baseColor:0,pattern:0,patternColor:0}))}{/if}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFlowerEditor}>×</button>
     </div>
     <div class="date-dialog-item">
      <span class="date-dialog-art" style:height={previewBadges.length?'118px':undefined} aria-hidden="true">
       <span style:position="relative" style:display="flex" style:padding-top={previewBadges.length?'22px':undefined}>
-       <DynamicFlowerSprite itemId={edit.itemId} flower={appearance} definitions={flowerDefinitions} fallback={inventoryOriginalSprite(edit.itemId)}/>
+       <DynamicFlowerSprite itemId={displaySpecies} flower={appearance} definitions={flowerDefinitions} fallback={inventoryOriginalSprite(displaySpecies)}/>
        {#if previewBadges.length}
         <span class="inventory-native-decorators">
          {#each previewBadges as badge (badge.type)}
@@ -2408,8 +2414,17 @@ import {verifiedFloorplanName} from './floorplan-names';
        {/if}
       </span>
      </span>
-     <div class="date-dialog-detail"><strong>{flowerVariantName(current)}</strong>{#if changed}<button type="button" class="inventory-flower-reset" disabled={busy} aria-label={flowerVariantName(edit.before)} title={flowerVariantName(edit.before)} onclick={()=>void refreshFlowerDraft(edit.before)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>{/if}</div>
+     <div class="date-dialog-detail"><strong>{flowerVariantName(current)}</strong>{#if changed}<button type="button" class="inventory-flower-reset" disabled={busy} aria-label={flowerVariantName(edit.before)} title={flowerVariantName(edit.before)} onclick={()=>void refreshFlowerDraft(edit.before,null)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>{/if}</div>
     </div>
+    {#if !edit.absent&&(flowerTargetSpecies!==null||edit.speciesOptions?.length)}
+     <label class="date-dialog-field">
+      <span>{flowerCopy.species}</span>
+      <select name="flower-species" value={displaySpecies} disabled={busy} onchange={e=>{const id=Number(e.currentTarget.value);void refreshFlowerDraft(id===edit.itemId?edit.before:current,id===edit.itemId?null:id)}}>
+       <option value={edit.itemId}>{inventoryName(edit.itemId)}</option>
+       {#each edit.speciesOptions??[] as id}<option value={id}>{inventoryName(id)}</option>{/each}
+      </select>
+     </label>
+    {/if}
     {#if edit.options.some(v=>v[0]!==current[0])}
      <div style="display:flex;gap:6px;flex-wrap:wrap">
       {#each [0,6,7] as grow}
@@ -2432,7 +2447,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       </select>
      </label>
     {/each}
-    {#if flowerDraftCreatable}
+    {#if flowerDraftCreatable&&flowerTargetSpecies===null}
      <label class="date-dialog-field">
       <span>{inventoryAddCopy(locale)} · {iCopy.quantity}</span>
       <input type="number" name="variant-add-quantity" min="1" max="2147483647" step="1" bind:value={variantAddQuantity} disabled={busy}/>
@@ -2442,7 +2457,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     <div class="date-dialog-actions">
      <button type="button" class="date-dialog-cancel" disabled={busy} onclick={closeFlowerEditor}>{copy.cancel}</button>
      {#if edit.creationOptions.length||flowerDraftCreatable}
-      <button type="button" class="inventory-create-flower" disabled={busy||!validVariantAddQuantity||!flowerDraftCreatable} onclick={()=>void addInventoryFlowerVariant()}>{inventoryAddCopy(locale)}</button>
+      <button type="button" class="inventory-create-flower" disabled={busy||!validVariantAddQuantity||!flowerDraftCreatable||flowerTargetSpecies!==null} onclick={()=>void addInventoryFlowerVariant()}>{inventoryAddCopy(locale)}</button>
      {/if}
      {#if !edit.absent&&!inventoryAddMode}<button type="submit" formnovalidate class="primary" disabled={busy||!changed}>{copy.apply}</button>{/if}
     </div>

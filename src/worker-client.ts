@@ -44,7 +44,7 @@ export type SaveSnapshot={
  inventoryCreatable:InventoryEntry[];
  counters:CounterEntry[];
 };
-type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'inventory-remove-entries'|'flower-variant-change'|'flower-variants'|'flower-preview'|'flower-create'|'flower-create-variants'|'furniture-preview'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-preview'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'boba-variants'|'boba-variant-change'|'boba-create-variants'|'boba-create'|'cafe-variants'|'cafe-preview'|'cafe-variant-change'|'cafe-create-variants'|'cafe-create'|'wand-variants'|'wand-variant-change'|'wand-identity-change'|'wand-nested-materials'|'wand-nested-pairs'|'wand-nested-change'|'wand-nested-create'|'wand-create-variants'|'wand-absent-sources'|'wand-create'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
+type Action='open'|'snapshot'|'change'|'inventory-change'|'inventory-batch-change'|'inventory-remove-entries'|'flower-variant-change'|'flower-species-options'|'flower-species-replace'|'flower-variants'|'flower-preview'|'flower-create'|'flower-create-variants'|'furniture-preview'|'furniture-variants'|'furniture-variant-change'|'furniture-create'|'furniture-create-variants'|'palette-variants'|'palette-preview'|'palette-variant-change'|'palette-create-variants'|'palette-create'|'boba-variants'|'boba-variant-change'|'boba-create-variants'|'boba-create'|'cafe-variants'|'cafe-preview'|'cafe-variant-change'|'cafe-create-variants'|'cafe-create'|'wand-variants'|'wand-variant-change'|'wand-identity-change'|'wand-nested-materials'|'wand-nested-pairs'|'wand-nested-change'|'wand-nested-create'|'wand-create-variants'|'wand-absent-sources'|'wand-create'|'achievement'|'achievement-create'|'achievement-create-parent'|'achievement-parent-create'|'achievement-pair'|'achievement-plan-toggle'|'achievement-auto'|'batch'|'undo'|'redo'|'history-jump'|'history-restore'|'reset'|'export'|'clear';
 type Response={id:number;ok:boolean;value?:unknown;error?:string};
 let nextId=0;
 const worker=new Worker(new URL('./editor.worker.ts',import.meta.url),{type:'module'});
@@ -82,12 +82,18 @@ export function changeInventoryQuantities(rows:readonly InventoryQuantityRequest
 export function removeInventoryEntries(rows:readonly InventoryRemovalRequest[]):Promise<SaveSnapshot>{
  return rpc('inventory-remove-entries',{removalBatch:rows.map(row=>[...row])}) as Promise<SaveSnapshot>;
 }
+export function requestFlowerSpeciesOptions(documentId:number,beforeVariant:FlowerVariant,nextVariant:FlowerVariant):Promise<number[]>{
+ return rpc('flower-species-options',{documentId,beforeVariant:[...beforeVariant],nextVariant:[...nextVariant]}) as Promise<number[]>;
+}
+export function replaceInventoryFlowerSpecies(documentId:number,itemId:number,targetItemId:number,beforeQuantity:number,beforeVariant:FlowerVariant,nextVariant:FlowerVariant):Promise<SaveSnapshot>{
+ return rpc('flower-species-replace',{documentId,itemId,targetItemId,beforeQuantity,beforeVariant:[...beforeVariant],nextVariant:[...nextVariant]}) as Promise<SaveSnapshot>;
+}
 export function requestFlowerVariants(documentId:number):Promise<FlowerVariant[]>{
  return rpc('flower-variants',{documentId}) as Promise<FlowerVariant[]>;
 }
 export type FlowerPreview={options:FlowerVariant[];creatable:boolean};
-export function requestFlowerPreview(documentId:number,beforeVariant:FlowerVariant,nextVariant:FlowerVariant):Promise<FlowerPreview>{
- return rpc('flower-preview',{documentId,beforeVariant:[...beforeVariant],nextVariant:[...nextVariant]}) as Promise<FlowerPreview>;
+export function requestFlowerPreview(documentId:number,beforeVariant:FlowerVariant,nextVariant:FlowerVariant,targetItemId?:number):Promise<FlowerPreview>{
+ return rpc('flower-preview',{documentId,beforeVariant:[...beforeVariant],nextVariant:[...nextVariant],targetItemId}) as Promise<FlowerPreview>;
 }
 export function requestFlowerCreationVariants(documentId:number):Promise<FlowerVariant[]>{
  return rpc('flower-create-variants',{documentId}) as Promise<FlowerVariant[]>;

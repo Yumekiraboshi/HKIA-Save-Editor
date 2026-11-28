@@ -276,3 +276,23 @@ test('mixed persisted and staged removals decode as one native history transacti
  const invalid=bytes([u8(24),u32(1),u32(staged),i32(0)]);
  assert.deepEqual(decodeHistoryDetails(log([invalid],1),[meta('inventory',staged,null)]),[]);
 });
+
+test('flower species replacement history is one named transaction, including staged replacements',()=>{
+ const old=43114910,target=183701770,third=203856820,handle=2147483649,handle2=2147483650;
+ const before=[6,1,0,0],after=[7,1,12,16];
+ const replace=(created,source,sourceItem,item,from,to)=>bytes([u8(25),u32(created),u32(source),i32(sourceItem),i32(item),...from.map(i32),...to.map(i32),i32(3)]);
+ const ops=[replace(handle,8,old,target,before,after),replace(handle2,handle,target,third,after,before)];
+ const m=[meta('inventory',8,null),meta('inventory',handle,null,false,false)];
+ const details=decodeHistoryDetails(log(ops,1),m);
+ assert.equal(details.length,2);
+ assert.deepEqual(details[0],{scope:'inventory',documentId:8,createdHandle:handle,itemId:target,variant:after,quantity:3,replacedItemId:old});
+ assert.equal(formatHistoryChange(details[0],'en',historyDetailCopy('en'),'','Quantity',()=> 'Appearance',undefined,undefined,undefined,undefined,undefined,id=>({[old]:'A',[target]:'B'}[id]??'?')),'A → B · Appearance · Quantity: 3');
+ assert.deepEqual(decodeHistoryDetails(log([replace(handle,8,old,old,before,after)],1),m.slice(0,1)),[]);
+ assert.deepEqual(decodeHistoryDetails(log([ops[1]],1),[meta('inventory',handle,null)]),[]);
+});
+test('source-witness first flower additions and growth conversions retain native history descriptions',()=>{
+ const item=43114910,source=2147483648+item,handle=2147483649;
+ const create=(id,doc,from,to)=>bytes([u8(11),u32(id),u32(doc),i32(item),...from.map(i32),...to.map(i32),i32(1)]);
+ const ops=[create(handle,source,[6,2,0,0],[6,2,0,0]),create(handle+1,handle,[6,2,0,0],[7,2,0,0])];
+ assert.equal(decodeHistoryDetails(log(ops,2),[meta('inventory',source,null),meta('inventory',handle,null)]).length,2);
+});

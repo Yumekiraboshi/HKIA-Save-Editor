@@ -6637,6 +6637,66 @@ fn large_boba_families_keep_verified_variant_edit_and_creation(){
 
 
 #[test]
+fn all_unrestricted_flower_species_can_replace_a_stack_atomically(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let species=[43114910,183701770,203856820,228573412,252458237,261557677,274491259,275816250,462608550,668399845,1223758923,1299466625,1331175279,1386186941,1554283135,1561432864,1583118562,1669522060,1695731578,1804880447,1934826268,1968535430,2105820233];
+ let before=[6,6,0,0];let after=[7,8,0,0];
+ for (i,&item) in species.iter().enumerate(){
+  let target=species[(i+1)%species.len()];
+  let mut p=synthetic_payload("3.0.1");p[2]=6;p[3]=0x97;
+  p.extend(doc(1,arr(vec![u(4),u(item as u32),u(21),u(3),plain_flower(6)])));
+  p.extend(doc(1,arr(vec![u(5),u(target as u32),u(22),u(2),plain_flower(6)])));
+  let raw=slot_from_payload("3.0.1",p);
+  for zipped in [false,true]{
+   let input=if zipped{zip(&raw)}else{raw.clone()};let mut e=Editor::open(input.clone()).unwrap();
+   let original=e.inventory();
+   let choices=e.inventory_flower_species_options(4,before,before);
+   assert!(!choices.contains(&target));assert_eq!(choices.len(),21,"source {item}");
+   assert!(e.inventory_flower_species_options(4,before,after).contains(&target));
+   assert!(e.replace_inventory_flower_species(4,item,before,target,before,3).is_err());
+   assert!(e.replace_inventory_flower_species(4,item,before,target,after,2).is_err());
+   assert!(e.replace_inventory_flower_species(4,target,before,target,after,3).is_err());assert!(!e.dirty());
+   let id=e.replace_inventory_flower_species(4,item,before,target,after,3).unwrap();
+   assert_eq!(e.history().len(),1);assert!(e.inventory().iter().any(|r|r.document_id==id&&r.item_id==target&&r.quantity==3));
+   assert!(e.inventory().iter().all(|r|r.document_id!=4));
+   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+   assert_eq!(restored.inventory(),e.inventory());assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);
+   assert!(restored.redo_scope(Inventory));
+   let saved=Editor::open(restored.export().unwrap()).unwrap();
+   assert_eq!(saved.inventory().len(),2);assert!(saved.inventory().iter().all(|r|r.document_id!=4));
+   assert_eq!(saved.inventory_original_unique_payload(5),Some(plain_flower(6).as_slice()));
+   assert!(saved.inventory().iter().any(|r|r.item_id==target&&r.quantity==3&&saved.inventory_unique_data(r.document_id)==restored.inventory_unique_data(id)));
+   let next=species[(i+2)%species.len()];
+   let id2=restored.replace_inventory_flower_species(id,target,after,next,after,3).unwrap();
+   assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+   assert!(restored.inventory().iter().any(|r|r.document_id==id2&&r.item_id==next));
+  }
+ }
+}
+
+#[test]
+fn flower_species_preview_uses_destination_pattern_and_reserves_target_peers(){
+ let item=43114910;let target=183701770;let before=[6,6,0,0];let draft=[6,6,12,16];
+ let mut p=synthetic_payload("3.0.1");p[2]=5;p[3]=0x96;
+ p.extend(doc(1,arr(vec![u(4),u(item as u32),u(21),u(3),plain_flower(6)])));
+ let raw=slot_from_payload("3.0.1",p);
+ for zipped in [false,true]{
+  let mut e=Editor::open(if zipped{zip(&raw)}else{raw.clone()}).unwrap();
+  assert!(e.inventory_flower_preview(4,before,draft).is_err());
+  let options=e.inventory_flower_species_preview(4,before,target,before).unwrap();
+  assert!(options.contains(&draft));
+  assert!(e.inventory_flower_species_preview(4,before,target,draft).is_ok());
+  assert!(e.inventory_flower_species_preview(4,before,item,draft).is_err());
+  assert!(!e.dirty());
+  let id=e.replace_inventory_flower_species(4,item,before,target,draft,3).unwrap();
+  assert_eq!(e.inventory()[0].document_id,id);
+  let saved=Editor::open(e.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory()[0].item_id,target);
+  assert_eq!(saved.inventory_unique_data(saved.inventory()[0].document_id),e.inventory_unique_data(id));
+ }
+}
+
+#[test]
 fn exhausted_flower_defaults_keep_verified_free_starters_after_zero_and_creation(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let item=43114910u32;let candidate=0x80000000|item;

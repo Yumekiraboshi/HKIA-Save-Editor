@@ -315,6 +315,7 @@ enum Change {
  InventoryRemoved{rows:Vec<(u32,i32)>},
  FlowerVariant{document_id:u32,before:Option<FlowerVariant>,after:Option<FlowerVariant>},
  FlowerCreated{document_id:u32,source_id:u32,expected:FlowerVariant,flower:PendingFlower,quantity:i32},
+ FlowerSpeciesReplaced{document_id:u32,source_id:u32,source_item:i32,expected:FlowerVariant,flower:PendingFlower,quantity:i32},
  FurnitureVariant{document_id:u32,before:Option<FurnitureVariant>,after:Option<FurnitureVariant>},
  PaletteVariant{document_id:u32,before:Option<PaletteVariant>,after:Option<PaletteVariant>},
  WandVariant{document_id:u32,before:Option<WandData>,after:Option<WandData>},
@@ -346,7 +347,7 @@ pub struct HistoryRecord {
 }
 impl Change {
  fn scope(&self)->HistoryScope{
-  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}|Self::InventoryBatch{..}|Self::InventoryRemoved{..}|Self::FlowerVariant{..}|Self::FlowerCreated{..}|Self::FurnitureCreated{..}|Self::FurnitureVariant{..}|Self::PaletteVariant{..}|Self::PaletteCreated{..}|Self::BobaVariant{..}|Self::BobaCreated{..}|Self::CafeVariant{..}|Self::CafeCreated{..}|Self::WandVariant{..}|Self::WandCreated{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
+  match self {Self::Collection{..}=>HistoryScope::Collections,Self::Inventory{..}|Self::InventoryBatch{..}|Self::InventoryRemoved{..}|Self::FlowerVariant{..}|Self::FlowerCreated{..}|Self::FlowerSpeciesReplaced{..}|Self::FurnitureCreated{..}|Self::FurnitureVariant{..}|Self::PaletteVariant{..}|Self::PaletteCreated{..}|Self::BobaVariant{..}|Self::BobaCreated{..}|Self::CafeVariant{..}|Self::CafeCreated{..}|Self::WandVariant{..}|Self::WandCreated{..}=>HistoryScope::Inventory,_=>HistoryScope::Achievements}
  }
  fn history_record(&self,applied:bool)->HistoryRecord{
   let (item_id,guid,paired)=match self {
@@ -354,7 +355,7 @@ impl Change {
    Self::Inventory{document_id,..}|Self::FlowerVariant{document_id,..}|Self::FurnitureVariant{document_id,..}|Self::PaletteVariant{document_id,..}|Self::BobaVariant{document_id,..}|Self::CafeVariant{document_id,..}|Self::WandVariant{document_id,..}=>(*document_id as i32,[0;4],false),
    Self::InventoryBatch{deltas}=>(deltas[0].document_id as i32,[0;4],false),
    Self::InventoryRemoved{rows}=>(rows[0].0 as i32,[0;4],false),
-   Self::FlowerCreated{source_id,..}|Self::FurnitureCreated{source_id,..}|Self::PaletteCreated{source_id,..}|Self::BobaCreated{source_id,..}|Self::CafeCreated{source_id,..}|Self::WandCreated{source_id,..}=>(*source_id as i32,[0;4],false),
+   Self::FlowerCreated{source_id,..}|Self::FlowerSpeciesReplaced{source_id,..}|Self::FurnitureCreated{source_id,..}|Self::PaletteCreated{source_id,..}|Self::BobaCreated{source_id,..}|Self::CafeCreated{source_id,..}|Self::WandCreated{source_id,..}=>(*source_id as i32,[0;4],false),
    Self::Achievement{guid,..}|Self::AchievementCreated{guid,..}=>(0,*guid,false),
    Self::AchievementCreatedPair{guid,..}|Self::AchievementParentNew{child:(guid,..),..}=>(0,*guid,true),
    Self::AchievementPair{first:(guid,..),..}=>(0,*guid,true),
@@ -458,7 +459,7 @@ impl Editor {
  fn next_edit_revision(&self)->Result<u32,Error>{
   // A staged unique creation must remain replayable. Never evict its
   // creation record or prerequisites from the bounded native journal.
-  if (self.pending_unique_count()>0||self.redo.iter().any(|c|matches!(c,Change::FlowerCreated{..}|Change::FurnitureCreated{..}|Change::PaletteCreated{..}|Change::BobaCreated{..}|Change::CafeCreated{..}|Change::WandCreated{..})))&&self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
+  if (self.pending_unique_count()>0||self.redo.iter().any(|c|matches!(c,Change::FlowerCreated{..}|Change::FlowerSpeciesReplaced{..}|Change::FurnitureCreated{..}|Change::PaletteCreated{..}|Change::BobaCreated{..}|Change::CafeCreated{..}|Change::WandCreated{..})))&&self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
   self.revision.checked_add(1).ok_or(Error::Overflow)
  }
  pub fn revision(&self)->u32 {self.revision}
@@ -983,6 +984,67 @@ impl Editor {
  // Growth changes are inventory-only, for the same unrestricted species
  // already supported by the first-stack native state selection. A copied
  // payload could refer to the original growth state, so do not edit it.
+ fn flower_species_source(&self,id:u32,expected:FlowerVariant,draft:FlowerVariant)->Option<(i32,i32)>{
+  if !self.absent_flower_budget_available()||!self.inventory_entry_removable(id){return None}
+  let (item,quantity)=if let Some(f)=self.pending_flowers.get(&id){
+   (f.item_id,*self.inventory_changes.get(&id)?)
+  }else{
+   let row=self.active_saved_inventory().find(|r|r.id==id)?;
+   (row.item_id?,self.inventory_changes.get(&id).copied().or(row.quantity)?)
+  };
+  if quantity<=0||!Self::absent_flower_growth_supported(item,0)||!self.inventory_creation_payload_safe(item)||
+   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||restricted_flower_appearance(draft){return None}
+  let (_,current,_)=self.flower_context(id)?;
+  if expected!=current||
+   (draft[0]!=current[0]&&!self.flower_growth_change_allowed(id)){return None}
+  Some((item,quantity))
+ }
+ // Shared destination policy for candidate listing, draft preview and commit.
+ fn flower_species_destination(&self,source:i32,item:i32,draft:FlowerVariant)->Option<(FlowerPolicy,HashSet<FlowerVariant>)>{
+  let index=&self.slot.index;
+  if item==source||!Self::absent_flower_growth_supported(item,0)||
+   !crate::inventory_source::is_uncapped_required_unique_stack(item)||
+   index.inventory_furniture_refs_incomplete||index.inventory_clothing_item_refs_incomplete||
+   !self.inventory_creation_payload_safe(item)||index.inventory_furniture_item_refs.contains(&item)||
+   index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
+  let key=crate::inventory_source::inventory_item_denial_key(item)?;
+  let policy=flower_item_patterns(item,draft[0])?;
+  if index.inventory_furniture_guid_refs.contains(&key)||index.inventory_clothing_guid_refs.contains(&key)||
+   !valid_flower_variant(policy,draft){return None}
+  let mut reserved=HashSet::new();
+  for row in self.active_saved_inventory().filter(|r|r.item_id==Some(item)){
+   if !self.unique_quantity_ids.contains(&row.id){return None}
+   let before=self.original_flower_variant(row.id)?;
+   reserved.insert(before);reserved.insert(self.flower_variant_changes.get(&row.id).copied().unwrap_or(before));
+  }
+  for (&other,f) in &self.pending_flowers{
+   if f.item_id==item&&self.inventory_changes.contains_key(&other){
+    reserved.insert(f.variant);reserved.insert(self.flower_variant_changes.get(&other).copied().unwrap_or(f.variant));
+   }
+  }
+  (!reserved.contains(&draft)).then_some((policy,reserved))
+ }
+ /// Explicit whole-stack replacement, never an in-place mutation of a native reference key.
+ pub fn inventory_flower_species_options(&self,id:u32,expected:FlowerVariant,draft:FlowerVariant)->Vec<i32>{
+  let Some((source,_))=self.flower_species_source(id,expected,draft)else{return Vec::new()};
+  ABSENT_FLOWER_DEFAULTS.iter().filter_map(|&(item,_)|
+   self.flower_species_destination(source,item,draft).map(|_|item)).collect()
+ }
+ pub fn inventory_flower_species_preview(&self,id:u32,expected:FlowerVariant,target:i32,draft:FlowerVariant)->Result<Vec<FlowerVariant>,Error>{
+  let (source,_)=self.flower_species_source(id,expected,draft).ok_or(Error::Schema)?;
+  let (policy,reserved)=self.flower_species_destination(source,target,draft).ok_or(Error::Schema)?;
+  let mut choices=Self::flower_choices(policy,draft,&reserved);
+  Self::flower_growth_options(draft,&reserved,&mut choices);
+  Ok(choices)
+ }
+ pub fn replace_inventory_flower_species(&mut self,id:u32,source_item:i32,expected:FlowerVariant,target_item:i32,draft:FlowerVariant,quantity:i32)->Result<u32,Error>{
+  if self.flower_species_source(id,expected,draft)!=Some((source_item,quantity))||
+   self.flower_species_destination(source_item,target_item,draft).is_none(){return Err(Error::Schema)}
+  let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
+  let change=Change::FlowerSpeciesReplaced{document_id,source_id:id,source_item,expected,flower:PendingFlower{item_id:target_item,variant:draft},quantity};
+  self.restore_change(&change,false);self.undo.push(change);self.redo.retain(|c|c.scope()!=HistoryScope::Inventory);
+  self.revision=revision;Ok(document_id)
+ }
  fn flower_growth_change_allowed(&self,id:u32)->bool{
   let item=self.pending_flowers.get(&id).map(|f|f.item_id)
    .or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.item_id));
@@ -2770,7 +2832,7 @@ impl Editor {
    match change{
     Change::Inventory{document_id,after:Some(_),..} if document_id&PENDING_ITEM!=0=>{handles.insert(*document_id);}
     Change::InventoryBatch{deltas}=>for d in deltas{if d.document_id&PENDING_ITEM!=0&&d.after.is_some(){handles.insert(d.document_id);}},
-    Change::FlowerCreated{document_id,..}|Change::FurnitureCreated{document_id,..}|Change::PaletteCreated{document_id,..}|Change::BobaCreated{document_id,..}|Change::CafeCreated{document_id,..}|Change::WandCreated{document_id,..}=>{handles.insert(*document_id);},
+    Change::FlowerCreated{document_id,..}|Change::FlowerSpeciesReplaced{document_id,..}|Change::FurnitureCreated{document_id,..}|Change::PaletteCreated{document_id,..}|Change::BobaCreated{document_id,..}|Change::CafeCreated{document_id,..}|Change::WandCreated{document_id,..}=>{handles.insert(*document_id);},
     _=>{}
    }
   }
@@ -3304,6 +3366,15 @@ impl Editor {
      if id&PENDING_ITEM!=0{
       if reverse{self.inventory_changes.insert(id,quantity);}else{self.inventory_changes.remove(&id);}
      }else if reverse{self.inventory_removed.remove(&id);}else{self.inventory_removed.insert(id);}
+    }
+   }
+   Change::FlowerSpeciesReplaced{document_id,source_id,flower,quantity,..}=>{
+    if reverse{
+     self.pending_flowers.remove(&document_id);self.inventory_changes.remove(&document_id);
+     if source_id&PENDING_ITEM!=0{self.inventory_changes.insert(source_id,quantity);}else{self.inventory_removed.remove(&source_id);}
+    }else{
+     if source_id&PENDING_ITEM!=0{self.inventory_changes.remove(&source_id);}else{self.inventory_removed.insert(source_id);}
+     self.pending_flowers.insert(document_id,flower);self.inventory_changes.insert(document_id,quantity);
     }
    }
    Change::FlowerCreated{document_id,flower,quantity,..}=>{
@@ -4198,6 +4269,12 @@ impl Editor {
      out.push(24);out.extend((rows.len() as u32).to_le_bytes());
      for &(id,quantity) in rows{out.extend(id.to_le_bytes());out.extend(quantity.to_le_bytes());}
     }
+    Change::FlowerSpeciesReplaced{document_id,source_id,source_item,expected,flower,quantity}=>{
+     out.push(25);out.extend(document_id.to_le_bytes());out.extend(source_id.to_le_bytes());
+     out.extend(source_item.to_le_bytes());out.extend(flower.item_id.to_le_bytes());
+     for n in expected.into_iter().chain(flower.variant){out.extend(n.to_le_bytes());}
+     out.extend(quantity.to_le_bytes());
+    }
     Change::FlowerCreated{document_id,source_id,expected,flower,quantity}=>{
      out.push(11);out.extend(document_id.to_le_bytes());out.extend(source_id.to_le_bytes());out.extend(flower.item_id.to_le_bytes());
      for n in expected.into_iter().chain(flower.variant){out.extend(n.to_le_bytes());}
@@ -4205,7 +4282,7 @@ impl Editor {
     }
     Change::FlowerVariant{document_id,before,after}=>{
      out.push(8);out.extend(document_id.to_le_bytes());
-     let original=self.original_flower_variant(document_id).or_else(||self.undo.iter().chain(&self.redo).find_map(|c|match c{Change::FlowerCreated{document_id:id,flower,..} if *id==document_id=>Some(flower.variant),_=>None})).ok_or(Error::Schema)?;
+     let original=self.original_flower_variant(document_id).or_else(||self.undo.iter().chain(&self.redo).find_map(|c|match c{Change::FlowerCreated{document_id:id,flower,..}|Change::FlowerSpeciesReplaced{document_id:id,flower,..} if *id==document_id=>Some(flower.variant),_=>None})).ok_or(Error::Schema)?;
      for word in before.unwrap_or(original){out.extend(word.to_le_bytes());}
      for word in after.unwrap_or(original){out.extend(word.to_le_bytes());}
     }
@@ -4349,6 +4426,12 @@ impl Editor {
      let n=r.u32()? as usize;if n==0||n>MAX_INVENTORY_BATCH{return Err(Error::Budget)}
      let mut rows=Vec::with_capacity(n);for _ in 0..n{rows.push((r.u32()?,r.i32()?));}
      candidate.remove_inventory_entries(&rows)?;scopes.push(HistoryScope::Inventory);
+    }
+    25=>{
+     let handle=r.u32()?;let source=r.u32()?;let source_item=r.i32()?;let item=r.i32()?;
+     let before=[r.i32()?,r.i32()?,r.i32()?,r.i32()?];let after=[r.i32()?,r.i32()?,r.i32()?,r.i32()?];let quantity=r.i32()?;
+     if candidate.replace_inventory_flower_species(source,source_item,before,item,after,quantity)?!=handle{return Err(Error::Schema)}
+     scopes.push(HistoryScope::Inventory);
     }
     11=>{
      let handle=r.u32()?;let source=r.u32()?;let item=r.i32()?;
