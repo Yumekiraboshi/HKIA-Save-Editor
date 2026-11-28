@@ -1988,7 +1988,7 @@ async function inventoryRareCandleSmoke(){
   for(const pattern of [3,4,5,7,8,9])assert.ok(choices.some(v=>v[2]===pattern&&v[3]===0));
   const target=choices.find(v=>v[2]===3&&v[3]===0);assert.ok(target);
   const value=await dialog.locator('option[data-flower-variant="'+target.join(',')+'"]').getAttribute('value');assert.ok(value!==null);
-  await dialog.locator('select').filter({has:dialog.locator('option[value="'+value+'"]')}).first().selectOption(value);
+  await dialog.locator('select').selectOption(value);
   await dialog.locator('[data-native-decorator="11"] img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
   await dialog.locator('[data-inventory-art="native-static-route"].item-sprite').waitFor({timeout:30_000});
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
@@ -2078,7 +2078,7 @@ async function inventoryDefaultFurnitureCreationSmoke(){
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"]');
   await dialog.waitFor();
   const value=await dialog.locator('select option').filter({hasText:'Antique Lamp 2'}).getAttribute('value');assert.ok(value!==null);
-  await dialog.locator('select').filter({has:dialog.locator('option[value="'+value+'"]')}).first().selectOption(value);
+  await dialog.locator('select').filter({has:page.locator('option[value="'+value+'"]')}).first().selectOption(value);
   await dialog.locator('.inventory-create-furniture:not([disabled])').click();
   await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();
@@ -2089,7 +2089,7 @@ async function inventoryDefaultFurnitureCreationSmoke(){
   await card.nth(customIndex).locator('.inventory-unique-edit-button').click();
   await dialog.waitFor();
   const next=await dialog.locator('select option').filter({hasText:'Antique Lamp 3'}).getAttribute('value');assert.ok(next!==null);
-  await dialog.locator('select').filter({has:dialog.locator('option[value="'+next+'"]')}).first().selectOption(next);
+  await dialog.locator('select').filter({has:page.locator('option[value="'+next+'"]')}).first().selectOption(next);
   await dialog.locator('.inventory-create-furniture:not([disabled])').click();
   await dialog.waitFor({state:'hidden'});
   await card.nth(2).locator('.inventory-unique-edit-button:not([disabled])').waitFor();
@@ -2127,7 +2127,7 @@ async function inventoryAbsentFurnitureCreationSmoke(){
   await card.locator('.inventory-unique-edit-button').click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"]');await dialog.waitFor();
   const value=await dialog.locator('select option').filter({hasText:'Antique Lamp 2'}).getAttribute('value');assert.ok(value!==null);
-  await dialog.locator('select').filter({has:dialog.locator('option[value="'+value+'"]')}).first().selectOption(value);
+  await dialog.locator('select').filter({has:page.locator('option[value="'+value+'"]')}).first().selectOption(value);
   await dialog.locator('.inventory-create-furniture:not([disabled])').click();
   await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();
@@ -2185,7 +2185,7 @@ async function inventoryFurnitureCreationSmoke(){
   await cards.first().locator('.inventory-unique-edit-button').click();
   const dialog=page.locator('dialog[aria-labelledby="furniture-editor-title"]');await dialog.waitFor();
   const value=await dialog.locator('select option[data-material-index]').first().getAttribute('value');assert.ok(value!==null);
-  await dialog.locator('select').filter({has:dialog.locator('option[value="'+value+'"]')}).first().selectOption(value);
+  await dialog.locator('select').filter({has:page.locator('option[value="'+value+'"]')}).first().selectOption(value);
   const create=dialog.locator('.inventory-create-furniture');
   const addQuantity=dialog.locator('input[name="variant-add-quantity"]');
   assert.equal(await addQuantity.inputValue(),'1');
@@ -2199,7 +2199,7 @@ async function inventoryFurnitureCreationSmoke(){
   assert.equal(await cards.first().locator('input[name="quantity"]').inputValue(),'93');
   await cards.nth(1).locator('.inventory-unique-edit-button').click();await dialog.waitFor();
   const next=await dialog.locator('select option[data-material-index]').first().getAttribute('value');assert.ok(next!==null);
-  await dialog.locator('select').filter({has:dialog.locator('option[value="'+next+'"]')}).first().selectOption(next);
+  await dialog.locator('select').filter({has:page.locator('option[value="'+next+'"]')}).first().selectOption(next);
   await dialog.locator('button[type="submit"]').click();await dialog.waitFor({state:'hidden'});
   await added.fill('7');await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]').click();
   await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
