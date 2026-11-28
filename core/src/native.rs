@@ -140,6 +140,8 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
  /// that item alone; unique operations still use the full incomplete flag.
  pub inventory_partial_item_refs:HashSet<i32>,
  pub inventory_item_refs_unscoped:bool,
+ /// Complete positive-UID references resolved to one complete saved row.
+ pub inventory_resolved_positive_item_refs:HashSet<(i32,i32)>,
  /// ItemId-based references with a copied unique payload (outfits, stands,
  /// presets, placed items, mail and wand sources), separate from UID refs.
  pub inventory_payload_item_refs:HashSet<i32>,
@@ -780,6 +782,20 @@ pub fn index_native(bytes:&[u8],version:Version)->Result<NativeIndex,Error>{
  w.read(schema::ROOT,0,None,false)?;
  if w.c.pos!=bytes.len(){return Err(Error::Trailing)}
  if !w.version_seen||!w.collection_seen||w.index.achievements.is_empty()||w.index.counters.is_empty(){return Err(Error::Schema)}
+ // Resolve full reference pairs once, on every fresh schema walk (also
+ // the independent export reparse). Duplicate or malformed UID records
+ // never count as resolved, even when one candidate looks complete.
+ if version==Version::V301&&!w.index.inventory_item_refs.is_empty(){
+  let mut targets=HashMap::<i32,Option<i32>>::new();
+  for row in &w.index.inventory{
+   let Some(uid)=row.unique_id.filter(|&uid|uid>0)else{continue};
+   let item=row.item_id.filter(|&id|id>0&&row.id>0&&row.id<=i32::MAX as u32&&
+    row.unique_is_nil==Some(false)&&row.quantity.is_some_and(|q|q>=0)&&row.fields.iter().all(Option::is_some));
+   targets.entry(uid).and_modify(|target|*target=None).or_insert(item);
+  }
+  w.index.inventory_resolved_positive_item_refs=w.index.inventory_item_refs.iter().copied().filter(|&(item,uid)|
+   uid>0&&targets.get(&uid)==Some(&Some(item))).collect();
+ }
  correlate_source_only(&mut w.index);
  correlate_visitor_manager_source_only(&mut w.index);
  Ok(w.index)
