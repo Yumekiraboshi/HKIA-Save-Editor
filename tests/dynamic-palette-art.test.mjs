@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/inventory-palette-display.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {decodeInventoryPalettes,resolvePaletteTints,CUSTOM_PALETTE_ITEM_ID}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {decodeInventoryPalettes,resolvePaletteTints,paletteArtKey,CUSTOM_PALETTE_ITEM_ID}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 test('native palette snapshot preserves three ordered Color fields by document identity',()=>{
  const bytes=new Uint8Array(108),v=new DataView(bytes.buffer);v.setUint32(0,2,true);
  const a=[1,0,0,1,0,1,0,1,0,0,1,1],b=[0,0,1,1,1,0,0,1,0,1,0,1];
@@ -38,4 +38,15 @@ test('palette icon ignores finite tint alpha without altering the snapshot',()=>
  assert.deepEqual(palette,before);
  assert.equal(resolvePaletteTints(CUSTOM_PALETTE_ITEM_ID,[[2,0,0,1],...palette.slice(1)]),null);
  assert.equal(resolvePaletteTints(CUSTOM_PALETTE_ITEM_ID,[[0,0,0,Infinity],...palette.slice(1)]),null);
+});
+
+test('palette display identity follows the validated native RGB appearance',()=>{
+ const id=CUSTOM_PALETTE_ITEM_ID,first=[[0.25,0.5,0.75,0],[1,0,0,2],[0,1,0,-1]];
+ const same=first.map(c=>[...c.slice(0,3),1]);
+ assert.equal(paletteArtKey(id,first),paletteArtKey(id,same));
+ assert.notEqual(paletteArtKey(id,first),paletteArtKey(id,[[0.3,0.5,0.75,0],...first.slice(1)]));
+ assert.notEqual(paletteArtKey(id,first),paletteArtKey(id,[[0.25,0.5,0.75,NaN],...first.slice(1)]));
+ assert.equal(paletteArtKey(id,[[0.25,0.5,0.75,NaN],...first.slice(1)]),paletteArtKey(id,undefined));
+ assert.equal(paletteArtKey(id,[[2,0.5,0.75,1],...first.slice(1)]),paletteArtKey(id,null));
+ assert.notEqual(paletteArtKey(id,first),paletteArtKey(123,first));
 });
