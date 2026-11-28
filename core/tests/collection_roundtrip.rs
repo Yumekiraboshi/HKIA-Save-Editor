@@ -6543,8 +6543,28 @@ fn all_ordinary_duplicate_families_recompute_membership_after_exact_deletion(){
   assert!(!e.dirty());
   let requests:Vec<_>=original.iter().map(|r|(r.document_id,1,0)).collect();
   e.change_inventory_quantities(&requests).unwrap();
-  let saved=Editor::open(e.export().unwrap()).unwrap();
+  let zero_raw=e.export().unwrap();
+  let saved=Editor::open(zero_raw.clone()).unwrap();
   assert!(saved.inventory().iter().all(|r|r.quantity==0));assert_eq!(saved.inventory().len(),original.len());
+  // Reopen all-zero families, replenish only one row per family and
+  // verify that every source definition exposes the individual zero route.
+  let mut single=Editor::open(zero_raw).unwrap();
+  let refill:Vec<_>=original.chunks_exact(2).map(|pair|(pair[0].document_id,0,1)).collect();
+  single.change_inventory_quantities(&refill).unwrap();
+  assert!(single.inventory().chunks_exact(2).all(|p|p[0].quantity==1&&p[0].quantity_minimum==0&&p[1].quantity==0));
+  let single_raw=single.export().unwrap();
+  let mut single=Editor::open(single_raw.clone()).unwrap();
+  let first=refill[0].0;
+  assert!(single.change_inventory_quantity(first,2,0).is_err());assert!(!single.dirty());
+  single.change_inventory_quantity(first,1,0).unwrap();
+  let checkpoint=single.history_checkpoint().unwrap();
+  let mut replay=Editor::open(single_raw).unwrap();replay.restore_history(&checkpoint).unwrap();
+  assert_eq!(replay.inventory(),single.inventory());
+  assert!(replay.undo_scope(Inventory));assert_eq!(replay.inventory()[0].quantity,1);
+  assert!(replay.redo_scope(Inventory));
+  let reopened=Editor::open(replay.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory()[0].quantity,0);
+  assert_eq!(reopened.inventory_original_unique_payload(first),Some([0xc0].as_slice()));
   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input.clone()).unwrap();
   restored.restore_history(&cp).unwrap();assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);
   assert!(restored.redo_scope(Inventory));assert_eq!(restored.inventory(),e.inventory());
