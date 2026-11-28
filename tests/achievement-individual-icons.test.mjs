@@ -104,7 +104,8 @@ test('individual cards use exact sprites and missing rows retain placeholder; ca
  for(const part of [
   'loadAchievementIndividualAtlas(import.meta.env.BASE_URL,index,identity=>{',
   'achievementIndividualAtlas?.bySaveGuid.get(item.guid)',
-  '{#if individualArt}', '<span class="achievement-individual-sprite"',
+  '<NativeViewArtwork domain="achievement" key={item.guid}/>',
+  '{:else if individualArt}', '<span class="achievement-individual-sprite"',
   '{:else if art}', '<span class="achievement-category-sprite"',
   '<span class="item-art-empty">✧</span>',
   'nativeAchievementOrder(achievementGroupHierarchy,sourceAchievementRows,achievementFacts)',
@@ -125,7 +126,9 @@ test('achievement edit dialog uses native detail-only parent fallback; list stil
  assert.ok(modal.includes('achievementIndividualAtlas?.bySaveGuid.get(editingSaveGuid)'));
  assert.ok(modal.includes('resolveAchievementDetailCategoryArt(editingSaveGuid,snapshot.version,achievementCategoryAtlas,achievementIndividualIdentity,achievementGroupHierarchy)'));
  assert.ok(modal.includes("'native-parent'"));
- assert.ok(modal.includes('{#if dialogIndividualArt}'));
+ assert.ok(modal.includes('<NativeViewArtwork domain="achievement" key={editingSaveGuid} detail/>'));
+ assert.ok(modal.includes('{:else if dialogIndividualArt}'));
+ assert.ok(!app.includes('<NativeViewArtwork domain="achievement" key={item.guid} detail'));
  assert.ok(modal.includes('{:else if dialogCategoryArt}'));
  assert.ok(modal.includes('<span class="item-art-empty">✧</span>'));
  assert.ok(modal.includes('class="date-dialog-item achievement-dialog-item"'));
