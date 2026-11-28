@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/versioned-inventory-routes.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
-const {decodeInventoryRouteCandidate,createVersionedInventoryArtwork}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {decodeInventoryRouteCandidate,createVersionedInventoryArtwork,createVersionedPlaceholderProvider}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const version='9.1.0';
 const row=(itemId,kind,sourceBlockers=[],targetItemId)=>({itemId,kind,sourceBlockers,...(targetItemId===undefined?{}:{targetItemId})});
 const fixture=()=>({schema:'HKIA.IconReleaseCandidate.1',version,approval:'review-required',automaticReleaseActivationAuthorized:false,
@@ -50,4 +50,31 @@ test('all supported artwork routes use same-release sources with no fallback sub
  assert.equal(await render(5,version,{kind:'wand',value:{}}),null);assert.equal(calls.length,count);
  missingOverride=true;assert.equal(await render(4,version),null);
  assert.deepEqual(calls.at(-1).slice(0,3),['override',2,version]);assert.equal(reads,2);
+});
+
+test('native placeholder source uses exact receipt and asset pins, shares aliases and retries failed delivery',async()=>{
+ const v=fixture();v.routes[0]=row(1,'source-placeholder');v.nativePlaceholderItemIds=[1,3];v.placeholderCount=2;
+ // A real lossless WebP header is enough to exercise byte delivery here;
+ // no assertion of game-image equivalence is made by this synthetic test.
+ const data=Buffer.from('UklGRiIAAABXRUJQVlA4TBEAAAAvAAAAAAfQ//73v/+BiOh/AAA=','base64');
+ const hash=sha(data),file=hash+'.webp',r={file,sha256:hash,spritePathId:'-123'};
+ const manifest=Buffer.from(JSON.stringify({records:{1:r,3:r}}));
+ v.outputFiles={'original-placeholder-art/index.json':{sha256:sha(manifest),bytes:manifest.length},
+  ['original-placeholder-art/'+file]:{sha256:hash,bytes:data.length}};
+ const receipt=Buffer.from(JSON.stringify(v)),p=pin(v),old=globalThis.fetch;let requests=[],fail=true;
+ globalThis.fetch=async url=>{
+  requests.push(url);
+  if(url==='/candidate/release-candidate.json')return new Response(receipt);
+  if(url==='/candidate/original-placeholder-art/index.json')return new Response(manifest);
+  assert.equal(url,'/candidate/original-placeholder-art/'+file);
+  return new Response(fail?Buffer.from('bad'):data);
+ };
+ try{
+  const load=createVersionedPlaceholderProvider('/candidate/',p);
+  assert.equal(await load(3,'9.2.0'),null);assert.equal(requests.length,0);
+  assert.equal(await load(2,version),null);assert.equal(requests.length,2);
+  assert.equal(await load(3,version),null);fail=false;
+  const [a,b]=await Promise.all([load(1,version),load(3,version)]);
+  assert.ok(a instanceof Blob);assert.equal(a,b);assert.equal(requests.length,4);
+ }finally{globalThis.fetch=old;}
 });
