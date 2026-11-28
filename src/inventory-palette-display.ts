@@ -18,7 +18,12 @@ export function decodeInventoryPalettes(bytes:Uint8Array,docIds:ReadonlySet<numb
 export function resolvePaletteTints(itemId:number,palette:InventoryPalette):TintSet|null{
  // The exact v3.0.1 dynamic-color definition is the customized avatar
  // palette. Do not infer that arbitrary clothing uses this icon.
- if(itemId!==CUSTOM_PALETTE_ITEM_ID||palette.length!==3||
+ if(itemId!==CUSTOM_PALETTE_ITEM_ID)return null;
+ return resolvePaletteChannels(palette);
+}
+/** Shared shader input normalization, after the source version's palette route is verified. */
+export function resolvePaletteChannels(palette:InventoryPalette):TintSet|null{
+ if(palette.length!==3||
   !palette.every(c=>c.length===4&&c.every(Number.isFinite)&&c.slice(0,3).every(v=>v>=0&&v<=1)))return null;
  // The native Dynamic Sprite Color pixel program reads tint RGB only.
  // Canonicalize the display/cache identity, never the saved float words.

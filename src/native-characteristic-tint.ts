@@ -16,8 +16,8 @@ export const MAGIC_MAPPED_IDS:ReadonlySet<number>=new Set([104,105,106,107,108,1
 export const FLECK_MAPPED_IDS:ReadonlySet<number>=new Set([125,126,127]);
 const WHITE:Rgba=[1,1,1,1];
 /** Display only: absent native mapping is white; missing required swatches and unknown IDs remain withheld. */
-export function resolveNativeCharacteristicTint(id:number,colors:ReadonlyMap<number,Rgba>,mapped:ReadonlySet<number>):Rgba|null{
- if(!known.has(id))return null;
+export function resolveNativeCharacteristicTint(id:number,colors:ReadonlyMap<number,Rgba>,mapped:ReadonlySet<number>,knownIds:ReadonlySet<number>=known):Rgba|null{
+ if(!knownIds.has(id))return null;
  const rgba=colors.get(id);
  if(!mapped.has(id))return rgba===undefined?WHITE:null;
  if(!rgba||rgba.length!==4||!rgba.every(v=>Number.isFinite(v)&&v>=0&&v<=1))return null;
