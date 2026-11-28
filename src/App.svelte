@@ -1596,7 +1596,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  </header>
  <input class="visually-hidden" type="file" accept=".zip,.save,.dat,application/zip" bind:this={fileInput}
   onchange={e=>{const f=e.currentTarget.files?.[0];if(f)void load(f);e.currentTarget.value=''}}/>
- <main class="content">
+ <main class="content" class:workspace-wide={!!snapshot}>
   {#if error}<div class="message error" role="alert">{error}<button type="button" aria-label={copy.collapse} onclick={()=>error=''}>×</button></div>{/if}
   {#if snapshot && draftWarning}<div class="message error" role="alert">{copy.autosaveFailed}</div>{/if}
   {#if !snapshot}
