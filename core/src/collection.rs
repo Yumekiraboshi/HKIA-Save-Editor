@@ -2435,6 +2435,9 @@ impl Editor {
     out.push(next);
    }
   }
+  if out.is_empty(){
+   if let Some(next)=Self::palette_free_source_tuple(reserved,&[current]){out.push(next)}
+  }
   out
  }
  // Additional palettes only from already owned, eligible source rows.
@@ -2469,9 +2472,30 @@ impl Editor {
   }
   Some(reserved)
  }
+ // Search the same source-defined color domain used by final CAS. A
+ // diagonal starter is preferred, but occupied diagonals or one-slot
+ // neighbors must not hide a free complete tuple. Bound actual native
+ // comparisons, including the candidate exclusions, for large saves.
+ fn palette_free_source_tuple(reserved:&[PaletteVariant],excluded:&[PaletteVariant])->Option<PaletteVariant>{
+  const MAX_COMPARISONS:usize=2_000_000;
+  let colors:Vec<_>=Self::palette_output_choices().collect();
+  let mut comparisons=0usize;
+  let mut free=|next:PaletteVariant|->Option<bool>{
+   for &p in excluded.iter().chain(reserved){
+    comparisons+=1;if comparisons>MAX_COMPARISONS{return None}
+    if Self::palette_equal(p,next){return Some(false)}
+   }
+   Some(true)
+  };
+  for &c in &colors{let next=[c;3];if free(next)?{return Some(next)}}
+  for &a in &colors{for &b in &colors{for &c in &colors{
+   if a==b&&b==c{continue}
+   let next=[a,b,c];if free(next)?{return Some(next)}
+  }}}
+  None
+ }
  fn palette_starter(reserved:&[PaletteVariant])->Option<PaletteVariant>{
-  Self::palette_output_choices().map(|color|[color;3])
-   .find(|&v|!reserved.iter().any(|&p|Self::palette_equal(p,v)))
+  Self::palette_free_source_tuple(reserved,&[])
  }
  /// Offer a source-defined starter when no positive palette remains.
  pub fn inventory_absent_palette_default(&self)->Option<(i32,PaletteVariant)>{
@@ -2491,10 +2515,13 @@ impl Editor {
   if let Some((default,reserved))=self.absent_palette_context(id){
    return Self::palette_choices(default,default,&reserved)
   }
-  let Some((original,current,_))=self.palette_creation_context(id)else{return Vec::new()};
-  self.inventory_palette_variants(id).into_iter().filter(|v|
-   !Self::palette_equal(*v,original)&&!Self::palette_equal(*v,current)&&
-   v.iter().all(|&c|Self::palette_output_choices().any(|x|x==c))).collect()
+  let Some((original,current,reserved))=self.palette_creation_context(id)else{return Vec::new()};
+  let mut options:Vec<_>=Self::palette_choices(original,current,&reserved).into_iter()
+   .filter(|&v|Self::palette_creation_target(original,current,&reserved,v)).collect();
+  if options.is_empty(){
+   if let Some(next)=Self::palette_free_source_tuple(&reserved,&[original,current]){options.push(next)}
+  }
+  options
  }
  fn palette_creation_target(original:PaletteVariant,current:PaletteVariant,reserved:&[PaletteVariant],next:PaletteVariant)->bool{
   !Self::palette_equal(next,original)&&!Self::palette_equal(next,current)&&
@@ -2509,8 +2536,15 @@ impl Editor {
   }
   let (original,current,reserved)=self.palette_context(id).ok_or(Error::Schema)?;
   if expected!=current||!Self::valid_palette_target(original,draft)||reserved.iter().any(|&p|Self::palette_equal(p,draft)){return Err(Error::Schema)}
-  let creatable=self.palette_creation_context(id).is_some()&&Self::palette_creation_target(original,current,&reserved,draft);
-  Ok((Self::palette_choices(original,draft,&reserved),creatable))
+  let creation_allowed=self.palette_creation_context(id).is_some();
+  let creatable=creation_allowed&&Self::palette_creation_target(original,current,&reserved,draft);
+  let mut options=Self::palette_choices(original,draft,&reserved);
+  if creation_allowed&&!creatable&&!options.iter().any(|&v|Self::palette_creation_target(original,current,&reserved,v)){
+   if let Some(next)=Self::palette_free_source_tuple(&reserved,&[original,current,draft]){
+    if !options.contains(&next){options.push(next)}
+   }
+  }
+  Ok((options,creatable))
  }
  pub fn create_inventory_palette_variant(&mut self,source_id:u32,expected:PaletteVariant,next:PaletteVariant,quantity:i32)->Result<u32,Error>{
   if quantity<=0{return Err(Error::Schema)}
