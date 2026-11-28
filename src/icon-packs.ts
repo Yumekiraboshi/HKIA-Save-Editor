@@ -105,12 +105,12 @@ export async function loadIconPack(group:string,base:string):Promise<IconPack>{
 }
 
 type CandidatePart=Readonly<{file:string;bytes:number;sha256:string}>;
-export type CollectionPackPin=Readonly<{version:string;receiptSha256:string}>;
+export type CollectionPackPin=Readonly<{version:string;receiptFileSha256:string}>;
 const SHA256=/^[a-f0-9]{64}$/;
 const GROUP=/^[a-z_]+$/;
 function packCheck(ok:unknown):asserts ok{if(!ok)throw Error('ICON_CANDIDATE_INVALID');}
 function record(v:unknown):Record<string,unknown>{packCheck(v!==null&&typeof v==='object'&&!Array.isArray(v));return v as Record<string,unknown>;}
-function checkPin(p:CollectionPackPin){packCheck(/^\d+\.\d+\.\d+$/.test(p.version)&&SHA256.test(p.receiptSha256));}
+function checkPin(p:CollectionPackPin){packCheck(/^\d+\.\d+\.\d+$/.test(p.version)&&SHA256.test(p.receiptFileSha256));}
 /** The input bytes must already match the explicitly reviewed release pin.
  * All candidate parts use exact SHA-256 and size; no inferred filenames
  * beyond the original assembler's deterministic group/part naming scheme. */
@@ -135,7 +135,8 @@ export function decodeCandidateCollectionPacks(input:unknown,pin:CollectionPackP
   packCheck(Array.isArray(row)&&row.length===3&&typeof row[0]==='string'&&typeof row[2]==='string'&&/^[a-f0-9]{40}$/.test(row[2]));
   const part=expected.get(row[0]);packCheck(part&&part.bytes===row[1]&&!seen.has(row[0]));seen.add(row[0]);
  }
- packCheck(seen.size===expected.size&&Object.keys(files).filter(f=>f.startsWith('item-packs/')).length===expected.size&&Object.keys(files).filter(f=>f.startsWith('item-packs/')).every(f=>expected.has(f.slice(11))));
+ const packFiles=Object.keys(files).filter(f=>f.startsWith('item-packs/'));
+ packCheck(seen.size===expected.size&&packFiles.length===expected.size&&packFiles.every(f=>expected.has(f.slice('item-packs/'.length))));
  return groups;
 }
 /** Candidate-only, explicitly pinned source. Production loadIconPack stays
@@ -145,7 +146,7 @@ export function createVersionedCollectionPackLoader(root:string,pin:CollectionPa
  checkPin(pin);packCheck(root.startsWith('/')&&root.endsWith('/')&&!root.includes('..')&&!root.includes('//')&&!root.includes('\\')&&!/[?#]/.test(root));
  let pending:Promise<ReadonlyMap<string,readonly CandidatePart[]>>|undefined;
  const bindings=()=>pending??=(async()=>{
-  const data=await load(root,'release-candidate.json',pin.receiptSha256,16*1024*1024);
+  const data=await load(root,'release-candidate.json',pin.receiptFileSha256,16*1024*1024);
   return decodeCandidateCollectionPacks(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(data)),pin);
  })().catch(e=>{pending=undefined;throw e;});
  return async(group:string,version:string):Promise<IconPack>=>{
