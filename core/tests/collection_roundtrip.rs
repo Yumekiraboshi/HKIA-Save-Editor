@@ -6728,11 +6728,52 @@ fn palette_free_complete_tuple_after_single_channel_exhaustion(){
   let next=*options.iter().find(|v|(0..3).filter(|&i|v[i]!=original[i]).count()>1).expect("free complete tuple");
   assert!(!variants.iter().any(|&p|equal(p,next)));
   assert!(e.inventory_palette_preview(4,original,next).unwrap().1);
+  assert!(e.inventory_palette_creation_variants(4).contains(&next));
+  let mut creation=Editor::open(input.clone()).unwrap();
+  let added=creation.create_inventory_palette_variant(4,original,next,3).unwrap();
+  assert!(creation.create_inventory_palette_variant(4,original,next,1).is_err());
+  let reopened=Editor::open(creation.export().unwrap()).unwrap();
+  assert_eq!(reopened.inventory_original_unique_payload(4),Some(encode(original).as_slice()));
+  assert_eq!(reopened.inventory_unique_data(reopened.inventory().last().unwrap().document_id),creation.inventory_unique_data(added));
   e.change_inventory_palette_variant(4,original,next).unwrap();
   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
   assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
   let saved=Editor::open(restored.export().unwrap()).unwrap();
   for (i,&peer) in variants.iter().enumerate().skip(1){assert_eq!(saved.inventory_original_unique_payload(4+i as u32),Some(encode(peer).as_slice()));}
   assert_eq!(saved.inventory_unique_data(4).unwrap().display_words().1,next.into_iter().flatten().collect::<Vec<_>>());
+ }
+}
+
+#[test]
+fn palette_first_add_survives_all_equal_color_starters_reserved_by_zero_rows(){
+ use hkia_save_core::{collection::{HistoryScope::Inventory,PaletteVariant},inventory_palette_source::palette_output_color as color};
+ let item=1835273963u32;let candidate=0x80000000u32|item;
+ let encode=|v:PaletteVariant|arr(vec![vec![6],arr(v.into_iter().map(|c|arr(c.into_iter().map(|w|f(f32::from_bits(w))).collect())).collect())]);
+ let mut colors=Vec::new();
+ for index in (1..=13).chain(16..=30){for slot in [0,3,4]{
+  let c=color(index,slot).unwrap();
+  if !colors.iter().any(|p:&[u32;4]|{
+   let square=|i:usize|{let d=f32::from_bits(p[i])-f32::from_bits(c[i]);d*d};
+   ((square(0)+square(1))+square(2))+square(3)<f32::from_bits(0x2edbe6fe)
+  }){colors.push(c);}
+ }}
+ assert!(colors.len()>10);
+ let base=synthetic_payload("3.0.1");let mut p=vec![0x93,0];p.extend(u(1000));p.push(0xdc);p.extend(((base[3]&15) as u16+colors.len() as u16+2).to_be_bytes());p.extend(&base[4..]);
+ for (i,&c) in colors.iter().enumerate(){p.extend(doc(1,arr(vec![u(4+i as u32),u(item),u(1001+i as u32),u(0),encode([c;3])])));}
+ p.extend(doc(10,arr(vec![u(900),guid([1,2,3,4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([1,2,3,4]),vec![0xc3],vec![0xc0]])));
+ p.extend(doc(22,arr(vec![u(901),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
+ for zipped in [false,true]{
+  let raw=slot_from_payload("3.0.1",p.clone());let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let (_,starter)=e.inventory_absent_palette_default().unwrap();
+  assert!(starter[0]!=starter[1]||starter[1]!=starter[2]);
+  assert!(e.inventory_palette_preview(candidate,starter,starter).unwrap().1);
+  let id=e.create_inventory_palette_variant(candidate,starter,starter,2).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory_absent_palette_default(),Some((item as i32,starter)));
+  assert!(restored.redo_scope(Inventory));
+  let reopened=Editor::open(restored.export().unwrap()).unwrap();
+  for (i,&c) in colors.iter().enumerate(){assert_eq!(reopened.inventory_original_unique_payload(4+i as u32),Some(encode([c;3]).as_slice()));}
+  assert_eq!(reopened.inventory_unique_data(reopened.inventory().last().unwrap().document_id),e.inventory_unique_data(id));
  }
 }
