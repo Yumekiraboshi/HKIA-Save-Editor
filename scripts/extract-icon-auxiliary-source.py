@@ -36,8 +36,8 @@ def array_rows(node,data,p=0):
         out.append(data[p:q]);p=q
     return out,p
 
-def map_rows(node,data):
-    require([x[2] for x in node[-1]]==['keyData','valueData'],'unsupported typed map')
+def map_rows(node,data,fields=('keyData','valueData')):
+    require(tuple(x[2] for x in node[-1])==fields,'unsupported typed map')
     a,b=node[-1]
     keys,p=array_rows(a,data)
     vals,p=array_rows(b,data,p)
