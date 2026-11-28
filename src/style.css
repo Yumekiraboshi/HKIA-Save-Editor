@@ -392,8 +392,9 @@
 .inventory-sticky-tools .inventory-controls{margin-bottom:8px}
 .inventory-sticky-tools .inventory-group-strip{margin-bottom:0}
 
-/* Keep the control lane stable while hiding the apply action for an unchanged owned quantity. */
-.inventory-quantity-form .primary.quantity-unchanged{visibility:hidden;pointer-events:none}
+/* Remove the unused apply track entirely. The flexible quantity field fills
+ * the available width; the appearance action stays at the trailing edge. */
+.inventory-quantity-form .primary.quantity-unchanged{display:none}
 .inventory-quantity-form.quantity-pending input{border-color:var(--accent)}
 
 /* Shared virtual grids preserve the complete list geometry. */

@@ -86,10 +86,30 @@ import {verifiedFloorplanName} from './floorplan-names';
   activeTool=tool;
   try{sessionStorage.setItem('hkia-active-tool',tool)}catch{}
  }
+ function persistNavigation(){
+  try{sessionStorage.setItem('hkia-navigation-v1',JSON.stringify({
+   inventoryGroup,achievementGroup:achievementGroupSelection,
+   collectionGroup:selectedGroup,collectionSubgroup:selectedSubgroup,collectionVariants:showVariants
+  }))}catch{}
+ }
  function restoreActiveTool(){
   try{
    const tool=sessionStorage.getItem('hkia-active-tool');
    if(tool==='collections'||tool==='achievements'||tool==='inventory')activeTool=tool;
+   const raw=sessionStorage.getItem('hkia-navigation-v1');
+   if(!raw)return;
+   const nav=JSON.parse(raw);
+   if(!nav||typeof nav!=='object'||Array.isArray(nav))return;
+   const bounded=(v:unknown):string|null=>typeof v==='string'&&v.length>0&&v.length<128?v:null;
+   const inv=bounded(nav.inventoryGroup);
+   inventoryGroup=inv===OTHER_INVENTORY_GROUP?OTHER_INVENTORY_GROUP:NATIVE_INVENTORY_TABS.find(t=>t.key===inv)?.key??null;
+   achievementGroupSelection=bounded(nav.achievementGroup);
+   // Old drafts without the navigation record still use their saved collection path.
+   if('collectionGroup' in nav){
+    selectedGroup=bounded(nav.collectionGroup);
+    selectedSubgroup=selectedGroup?bounded(nav.collectionSubgroup):null;
+    showVariants=!!selectedGroup&&nav.collectionVariants===true;
+   }
   }catch{}
  }
  let achievementQuery=$state('');
@@ -384,6 +404,19 @@ import {verifiedFloorplanName} from './floorplan-names';
  const group=$derived(((catalog as Catalog | null)?.groups??[]).find((g:Group)=>g[0]===selectedGroup)??null);
  const subgroups=$derived(selectedGroup?listSubcategories((catalog as Catalog|null)?.items??[],selectedGroup,recorded,locale):[]);
  const activeSubgroup=$derived(subgroups.length===1?subgroups[0].key:subgroups.some(s=>s.key===selectedSubgroup)?selectedSubgroup:null);
+ // Validate only once the corresponding asynchronous source is available.
+ // Never replace a valid restored category with an interim loading default.
+ $effect(()=>{
+  if(!restored||!snapshot)return;
+  if(catalog&&selectedGroup&&!group){
+   selectedGroup=null;selectedSubgroup=null;showVariants=false;persistNavigation();
+  }else if(catalog&&selectedSubgroup&&!subgroups.some(s=>s.key===selectedSubgroup)){
+   selectedSubgroup=null;showVariants=false;persistNavigation();
+  }
+  if(achievementGroupHierarchy&&achievementGroupSelection&&achievementGroupSelection!=='__unmapped'&&!achievementGroupHierarchy.byGuid.has(achievementGroupSelection)){
+   achievementGroupSelection=null;persistNavigation();
+  }
+ });
  const families=$derived(recordedFamilies((catalog as Catalog|null)?.items??[],recorded));
  const hasVariants=$derived(Boolean(activeSubgroup&&((catalog as Catalog|null)?.items??[]).some((item:Item)=>item[3]===selectedGroup&&item[2]===activeSubgroup&&item[0]!==item[7])));
  const dateDialogItem=$derived(editId===null?null:((catalog as Catalog|null)?.items??[]).find((item:Item)=>item[0]===editId)??null);
@@ -729,6 +762,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   clearInventoryBatch();inventoryAddMode=false;
   selectTool('inventory');inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;inventoryShowZero=false;
   resetEditorViewport();editingAchievement=null;error='';
+  persistNavigation();
   refreshInventoryNativeArt();
   refreshFlowerDisplay();
   // Retry transient failures only when the user reopens Inventory.
@@ -737,7 +771,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function showAchievementGroup(guid:string|null){
   achievementGroupSelection=guid;achievementQuery='';
-  resetEditorViewport();
+  resetEditorViewport();persistNavigation();
  }
  function openAchievementsTab(){
   selectTool('achievements');editingAchievement=null;showAchievementGroup(null);error='';
@@ -777,30 +811,30 @@ import {verifiedFloorplanName} from './floorplan-names';
    editorViewport=readEditorViewport(el,topbarHeight);
   });
   void fetchImages(item[3]);
-  void persistDraft();
+  persistNavigation();void persistDraft();
  }
  function selectCategory(key:string){
   refreshVariantArtwork();
   selectedGroup=key;selectedSubgroup=null;showVariants=false;resetEditorViewport();
   query='';collectionSearchDrilldown=false;filter='all';editId=null;error='';
   void fetchImages(key);
-  void persistDraft();
+  persistNavigation();void persistDraft();
  }
  function selectSubcategory(key:string){
   if(!selectedGroup||!subgroups.some(sub=>sub.key===key))return;
   selectedSubgroup=key;showVariants=false;resetEditorViewport();query='';collectionSearchDrilldown=false;filter='all';editId=null;error='';
   if(iconPack?.group!==selectedGroup&&iconLoadingGroup!==selectedGroup)void fetchImages(selectedGroup);
-  void persistDraft();
+  persistNavigation();void persistDraft();
  }
  function goSubcategories(){
   selectedSubgroup=null;showVariants=false;resetEditorViewport();editId=null;query='';collectionSearchDrilldown=false;filter='all';
-  if(snapshot)void persistDraft();
+  persistNavigation();if(snapshot)void persistDraft();
  }
  function goHome(){
   refreshVariantArtwork();
   selectTool('collections');selectedGroup=null;selectedSubgroup=null;showVariants=false;resetEditorViewport();
   editId=null;query='';collectionSearchDrilldown=false;filter='all';iconEpoch++;iconLoadingGroup=null;iconPack=null;iconError=false;
-  if(snapshot)void persistDraft();
+  persistNavigation();if(snapshot)void persistDraft();
  }
  function askFile(){if(busy||!restored)return;fileMenu&&(fileMenu.open=false);fileInput?.click();}
  async function fetchImages(key:string){
@@ -850,7 +884,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   // different category. Keep the current category whenever it still matches.
   if(activeTool==='inventory'&&inventoryQuery.trim()){
    const target=inventorySearchTarget(previousGroup,inventoryMatchTotals);
-   if(target!==previousGroup){inventoryGroup=target;resetEditorViewport()}
+   if(target!==previousGroup){inventoryGroup=target;resetEditorViewport();persistNavigation()}
   }
  }
  /** Verify a restored native journal reproduces the locally persisted net edits.
@@ -918,7 +952,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     inventoryLocks=new Set((draft.ui.inventoryLocks??[]).filter(id=>liveIds.has(id)));
     selectedGroup=draft.ui.group;selectedSubgroup=draft.ui.subgroup;
     restoreActiveTool();
-    if(draft.ui.group)void fetchImages(draft.ui.group);
+    if(selectedGroup)void fetchImages(selectedGroup);
    }
    draftReady=true;
   }catch(e){draftReady=false;draftWarning=true;error=describeError(e)}
@@ -952,6 +986,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    clearInventoryBatch();inventoryAddMode=false;inventoryLocks=new Set();
    original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;inventoryBaseline=session.inventory;update(session,true);
    selectedGroup=null;selectedSubgroup=null;showVariants=false;resetEditorViewport();editId=null;query='';collectionSearchDrilldown=false;filter='all';
+   inventoryGroup=null;achievementGroupSelection=null;persistNavigation();
    iconEpoch++;iconLoadingGroup=null;iconPack=null;iconError=false;
    try{await saveOriginalLocally(file);draftReady=true;draftWarning=false}
    catch{draftReady=false;draftWarning=true}
@@ -1350,7 +1385,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   resetEditorViewport();
   if(!next.trim())return;
   const counts=inventorySearchGroupCounts(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,inventoryShowZero),next,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
-  inventoryGroup=inventorySearchTarget(activeInventoryGroup,counts);
+  inventoryGroup=inventorySearchTarget(activeInventoryGroup,counts);persistNavigation();
  }
  function toggleInventoryShowZero(){
   const previous=activeInventoryGroup;
@@ -1360,7 +1395,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    inventoryBatchSelected=new Set([...inventoryBatchSelected].filter(id=>visible.has(id)));
   }
   const counts=inventorySearchGroupCounts(inventoryDisplayRows(inventoryBrowseRows,false,inventoryShowZero),inventoryQuery,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
-  if(inventoryQuery.trim())inventoryGroup=inventorySearchTarget(previous,counts);
+  if(inventoryQuery.trim()){inventoryGroup=inventorySearchTarget(previous,counts);persistNavigation()}
  }
  function toggleInventoryBatch(row:InventoryEntry){
   if(!snapshot||busy||isInventoryLocked(row.documentId)||!inventoryBatchMode||(!row.editable&&(inventoryAddMode||!row.removable)))return;
@@ -1656,7 +1691,7 @@ import {verifiedFloorplanName} from './floorplan-names';
 </script>
 
 <svelte:head>
- <title>{activeTool==='achievements'?achCopy.title+' | HKIA Save Editor':'HKIA Save Editor'}</title>
+ <title>HKIA Save Editor</title>
  <meta name="description" content="HKIA Save Editor — edit local collection history and achievements"/>
 </svelte:head>
 
@@ -1889,7 +1924,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {/if}
     <button type="button" class="inventory-editable-filter inventory-add-toggle" class:active={inventoryAddMode}
      aria-pressed={inventoryAddMode} disabled={busy||(!inventoryAddMode&&inventoryAvailableToAdd.length===0)}
-     onclick={()=>{clearInventoryBatch();inventoryQuantityDrafts={};inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;resetEditorViewport()}}>
+     onclick={()=>{clearInventoryBatch();inventoryQuantityDrafts={};inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;resetEditorViewport();persistNavigation()}}>
      {inventoryAddMode?iCopy.tab:'+ '+inventoryAddCopy(locale)}
     </button>
     <button type="button" class="inventory-editable-filter inventory-batch-toggle" class:active={inventoryBatchMode}
@@ -1934,7 +1969,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       {@const representativeNative=representative===undefined?undefined:inventoryNativeArt?.entries.get(representative)}
       {@const representativeSprite=representativeNative??(representativeSource&&representative!==undefined?inventoryIconPacks[representativeSource[3]]?.entries[String(representative)]:undefined)}
       <button type="button" class="inventory-group-option" data-inventory-group={t.key} class:active={activeInventoryGroup===t.key}
-       aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;resetEditorViewport()}}>
+       aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;resetEditorViewport();persistNavigation()}}>
        <span class="inventory-category-representative" aria-hidden="true">
         <img class="inventory-category-fallback" src={t.art?ICONS+t.art:INVENTORY_UI+'category-'+t.key+'.webp'} alt="" loading="lazy"
          onerror={e=>{const image=e.currentTarget as HTMLImageElement,native=INVENTORY_UI+'category-'+t.key+'.webp';if(image.getAttribute('src')!==native)image.src=native;else image.style.visibility='hidden';}}/>
@@ -1953,7 +1988,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {#if inventoryOtherCount>0}
       <button type="button" class="inventory-group-option" class:active={activeInventoryGroup===OTHER_INVENTORY_GROUP}
        aria-pressed={activeInventoryGroup===OTHER_INVENTORY_GROUP}
-       onclick={()=>{inventoryGroup=OTHER_INVENTORY_GROUP;resetEditorViewport()}}>
+       onclick={()=>{inventoryGroup=OTHER_INVENTORY_GROUP;resetEditorViewport();persistNavigation()}}>
        <span>{iCopy.other}</span><small>{(inventoryMatchTotals.get(OTHER_INVENTORY_GROUP)??0).toLocaleString(locale)}</small>
       </button>
      {/if}
@@ -2155,7 +2190,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    {:else}
     <div class="category-grid">
      {#each categories as cat (cat.row[0])}
-      <button class="category-card" type="button" onclick={()=>selectCategory(cat.row[0])}>
+      <button class="category-card" type="button" onclick={()=>selectCategory(cat.row[0])} data-collection-group={cat.row[0]}>
        <span class="category-image"><img src={ICONS+cat.row[5]} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/></span>
        <span class="category-label">{titleFor(cat.row)}</span>
        <span class="category-count" title={copy.progressHint}>{cat.count.toLocaleString(locale)} / {cat.total.toLocaleString(locale)}</span>
@@ -2174,7 +2209,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    <div class="subcategory-grid">
     {#each subgroups as sub (sub.key)}
      {@const sprite=sub.previewId!==null&&iconPack?.group===selectedGroup?iconPack.entries[String(sub.previewId)]:undefined}
-     <button type="button" class="subcategory-card" onclick={()=>selectSubcategory(sub.key)}>
+     <button type="button" class="subcategory-card" onclick={()=>selectSubcategory(sub.key)} data-collection-subgroup={sub.key}>
       <span class="subcategory-art" aria-hidden="true">
        {#if sub.previewId!==null&&(originalVariantArt[String(sub.previewId)]||exactVariantArt[String(sub.previewId)]||(sprite&&nativeDyePalettes[String(sub.previewId)]))}
         <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(sub.previewId)]} sourceKey={catalog?.items.find(x=>x[0]===sub.previewId)?.[1]??''} exactArtUrl={exactVariantArt[String(sub.previewId)]} originalArtUrl={originalVariantArt[String(sub.previewId)]}/>
@@ -2202,7 +2237,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     </div>
     {#if hasVariants}
      <button type="button" class="variation-button" class:active={showVariants} aria-pressed={showVariants}
-      onclick={()=>{showVariants=!showVariants;resetEditorViewport();editId=null}}>
+      onclick={()=>{showVariants=!showVariants;resetEditorViewport();editId=null;persistNavigation()}}>
       {showVariants?copy.hideVariants:copy.showVariants}
      </button>
     {/if}
