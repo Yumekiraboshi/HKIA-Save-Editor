@@ -63,7 +63,13 @@ fn header(raw:&[u8])->Result<Version,Error>{
     }
     let n=c.array()?;if n>1000{return Err(Error::Budget)}
     for _ in 0..n*4{c.int(0,u32::MAX as i128)?;}
-    if c.array()?!=1||c.int(9,9)?!=9||c.pos!=raw.len(){return Err(Error::Schema)}
+    // SerializedPlatformReference is a one-field model, not a save union.
+    // Native PlatformType: macOS=7, Switch=9. Accept the observed v3.0.1
+    // macOS framing, preserving the original platform through export.
+    // Other platforms still fail closed.
+    if c.array()?!=1{return Err(Error::Schema)}
+    let platform=c.int(7,9)?;
+    if !(platform==9||platform==7&&version==Version::V301)||c.pos!=raw.len(){return Err(Error::Schema)}
     Ok(version)
 }
 pub fn decode_envelope(raw:&[u8])->Result<Envelope,Error>{decode_envelope_reuse(raw,Vec::new())}

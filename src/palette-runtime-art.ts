@@ -1,4 +1,5 @@
 import type {InventoryPalette} from './inventory-palette-display';
+import {isNeutralTintSet} from './dynamic-sprite-color';
 import {resolvePaletteTints,CUSTOM_PALETTE_ITEM_ID} from './inventory-palette-display';
 import type {PixelBuffer,Rect,SpriteOverlay} from './dynamic-sprite-raster';
 import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
@@ -31,6 +32,8 @@ function sources():Promise<Source>{
 }
 export async function renderPaletteArt(itemId:number,palette:InventoryPalette):Promise<Blob|null>{
  const tints=resolvePaletteTints(itemId,palette);if(!tints)return null;
+ // The original shader ignores the mask when all validated RGB tints are white.
+ if(isNeutralTintSet(tints))return renderPaletteBaseArt(itemId);
  try{
   const s=await sources(),size=s.manifest.logicalSize;
   return await renderCachedDynamicArt(JSON.stringify(['3.0.1','palette-dynamic-1',MANIFEST_SHA,itemId,tints]),{

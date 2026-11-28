@@ -14,3 +14,17 @@ for(const row of source.rows){
  if(route)routes.set(row.itemId,route);
 }
 export function nativeIconRoute(itemId:number):NativeIconRoute|undefined{return routes.get(itemId);}
+
+/** Original instruction and creation definitions point to the same local
+ * UiIcon and mask Sprite. This aliases only the uncolored original image;
+ * the instruction is never a chef appearance or a save-edit target. */
+const chefInstructionBases=new Map<number,number>();
+for(const row of source.rows){
+ if(routes.get(row.itemId)!=='instruction')continue;
+ const matches=source.rows.filter(candidate=>{
+  const route=routes.get(candidate.itemId);
+  return (route==='cafe'||route==='boba')&&candidate.baseSpritePathId===row.baseSpritePathId&&candidate.maskGuid===row.maskGuid&&candidate.maskSpritePathId===row.maskSpritePathId;
+ });
+ if(matches.length===1)chefInstructionBases.set(row.itemId,matches[0]!.itemId);
+}
+export function nativeChefInstructionBase(itemId:number):number|undefined{return chefInstructionBases.get(itemId);}

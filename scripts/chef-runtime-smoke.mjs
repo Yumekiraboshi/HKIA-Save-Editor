@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 export async function chefRuntimeSmoke(browser,origin,base){
  const {outputFiles}=await build({
-  entryPoints:[fileURLToPath(new URL('../src/chef-runtime-art.ts',import.meta.url))],
+  stdin:{contents:"export * from './chef-runtime-art'; export * from './palette-runtime-art';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
   bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env.BASE_URL':JSON.stringify(base)}
  });
  const context=await browser.newContext();
@@ -36,7 +36,9 @@ export async function chefRuntimeSmoke(browser,origin,base){
     const b=row.kind==='boba'?appearance(14):{kind:'cafe',colors:[14,14,14]};
     const first=await renderChefArt(row.itemId,a),second=await renderChefArt(row.itemId,b);
     const original=await renderChefBaseArt(row.itemId);
-    rows.push({id:row.itemId,a:await pixels(first),b:await pixels(second),original:await pixels(original),originalCache:original===await renderChefBaseArt(row.itemId),cache:first===await renderChefArt(row.itemId,a)});
+    const neutral=id=>row.kind==='boba'?{kind:'boba',colorId:id}:{kind:'cafe',colors:[id,id,id]};
+    const unmapped=await renderChefArt(row.itemId,neutral(1));
+    rows.push({id:row.itemId,a:await pixels(first),b:await pixels(second),original:await pixels(original),originalCache:original===await renderChefBaseArt(row.itemId),cache:first===await renderChefArt(row.itemId,a),neutral:await pixels(unmapped),neutralCache:unmapped!==null&&unmapped===await renderChefArt(row.itemId,neutral(2))});
    }
    return {rows,unknown:await renderChefArt(1798633565,{kind:'boba',colorId:999999})===null,unknownBase:await renderChefBaseArt(0)===null};
   },base);
@@ -46,8 +48,45 @@ export async function chefRuntimeSmoke(browser,origin,base){
    assert.equal(row.a.alpha,row.b.alpha);assert.notEqual(row.a.rgba,row.b.rgba,'same item must render different original color inputs: '+row.id);
    assert.ok(row.cache&&row.originalCache&&row.original.visible);
    assert.equal(row.original.alpha,row.a.alpha);
+   assert.equal(row.neutral.rgba,row.original.rgba);assert.ok(row.neutralCache);
    assert.equal(row.original.width,96);assert.equal(row.original.height,96);
   }
+  const neutralPage=await context.newPage();
+  try{
+   await neutralPage.route(root+'__chef_runtime_fixture__.html',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html><body></body></html>'}));
+   await neutralPage.route(root+'__chef_runtime_fixture__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
+   let requests=0;
+   for(const pattern of ['**/flower-mask-rgb-v3.0.1.webp','**/palette-mask-rgb-v3.0.1.webp'])
+    await neutralPage.route(pattern,r=>{requests++;return r.fulfill({status:503,body:'unavailable'});});
+   await neutralPage.goto(root+'__chef_runtime_fixture__.html');
+   const result=await neutralPage.evaluate(async base=>{
+    const {renderChefArt,renderChefBaseArt,renderPaletteArt,renderPaletteBaseArt}=await import(base+'__chef_runtime_fixture__.mjs');
+    const m=await (await fetch(base+'dynamic-chef-art/chef-runtime-source-v3.0.1.json')).json();
+    const white=[[1,1,1,0],[1,1,1,2],[1,1,1,-1]];
+    const checks=[];
+    for(const row of m.rows){
+     const a=id=>row.kind==='boba'?{kind:'boba',colorId:id}:{kind:'cafe',colors:[id,id,id]};
+     const neutral=await renderChefArt(row.itemId,a(1));
+     checks.push(neutral!==null&&neutral===await renderChefBaseArt(row.itemId)&&neutral===await renderChefArt(row.itemId,a(2))&&await renderChefArt(row.itemId,a(999999))===null);
+    }
+    const instructionPairs=[[664242277,406277059],[697059779,1237708874],[906644716,1798633565],[1711005390,1338995084],[1946811711,1053426049]];
+    const instructions=[];
+    for(const [id,source] of instructionPairs){
+     const original=await renderChefBaseArt(id);
+     instructions.push(original!==null&&original===await renderChefBaseArt(source)&&await renderChefArt(id,{kind:'cafe',colors:[6,14,11]})===null&&await renderChefArt(id,{kind:'boba',colorId:6})===null);
+    }
+    const palette=await renderPaletteArt(1835273963,white);
+    return {checks,instructions,palette:palette!==null&&palette===await renderPaletteBaseArt(1835273963),unknown:await renderPaletteArt(0,white)===null};
+   },base);
+   assert.equal(result.checks.length,10);assert.ok(result.checks.every(Boolean)&&result.palette&&result.unknown);
+   assert.equal(result.instructions.length,5);assert.ok(result.instructions.every(Boolean));
+   assert.equal(requests,0,'neutral appearance and native instruction art must not depend on mask textures');
+   const rejected=await neutralPage.evaluate(async base=>{
+    const {renderChefArt,renderPaletteArt}=await import(base+'__chef_runtime_fixture__.mjs');
+    return [await renderChefArt(1798633565,{kind:'boba',colorId:6})===null,await renderPaletteArt(1835273963,[[1,0,0,1],[1,1,1,1],[1,1,1,1]])===null];
+   },base);
+   assert.deepEqual(rejected,[true,true]);assert.equal(requests,2);
+  }finally{await neutralPage.close();}
   console.log('CHROMIUM DYNAMIC CHEF PASS: 10 native source icons, color variants, alpha, shared cache and unknown-ID refusal');
  }finally{await context.close();}
 }

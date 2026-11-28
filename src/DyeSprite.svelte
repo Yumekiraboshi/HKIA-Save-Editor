@@ -2,7 +2,7 @@
  import type {SpriteCell} from './icon-packs';
  import type {NativeDyePalette} from './native-dye-palettes';
  import {displayedDyeIconFidelity,isSourceColorwayUrl,isNamedOriginalItemUrl} from './item-icon-art';
- import {loadRegisteredColorwayFallback} from './colorway-fallback';
+ import {startOriginalArtRequest} from './original-art-view';
 
  let {sprite,exactArtUrl,originalArtUrl}:{
   sprite?:SpriteCell;palette?:NativeDyePalette;sourceKey?:string;
@@ -13,38 +13,13 @@
 
  $effect(()=>{
   const exact=exactArtUrl,original=originalArtUrl;
-  let canceled=false;
   displayedUrl=null;
   imageSource='original';
-
-  const showExact=(url:string,onFailure:()=>void)=>{
-   if(canceled)return;
-   const picture=new Image();
-   picture.src=url;
-   void picture.decode().then(()=>{
-    if(canceled)return;
-    displayedUrl=url;
-    if(isSourceColorwayUrl(url)||isNamedOriginalItemUrl(url))imageSource='game-source-sprite';
-    else imageSource='game-render';
-   }).catch(()=>{if(!canceled)onFailure();});
-  };
-  // Do not recolor or fit a substitute when the original file is unavailable.
-  // The unchanged original shared UiIcon is only a reference, not a colorway.
-  const showSharedReference=()=>{};
-  const showReconstruction=()=>{
-   if(exact&&exact!==original)showExact(exact,showSharedReference);
-  };
-  const showOriginalFallback=()=>{
-   if(!original||canceled)return;
-   void loadRegisteredColorwayFallback(original,import.meta.env.BASE_URL).then(url=>{
-    if(canceled)return;
-    if(url)showExact(url,showReconstruction);
-    else showReconstruction();
-   }).catch(()=>{if(!canceled)showReconstruction();});
-  };
-  if(original)showExact(original,showOriginalFallback);
-  else showReconstruction();
-  return ()=>{canceled=true;};
+  return startOriginalArtRequest(original,exact,import.meta.env.BASE_URL,url=>{
+   displayedUrl=url;
+   if(isSourceColorwayUrl(url)||isNamedOriginalItemUrl(url))imageSource='game-source-sprite';
+   else imageSource='game-render';
+  });
  });
 </script>
 

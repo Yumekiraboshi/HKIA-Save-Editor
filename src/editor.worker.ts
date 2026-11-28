@@ -116,7 +116,7 @@ function snapshot(e:Engine){
  const removalRows=new Map(inventory.map(row=>[row.documentId,row]));
  for(let i=0;i<rn;i++){
   const id=rv.getUint32(4+4*i,true),row=removalRows.get(id);
-  if(!row||row.removable||id>2147483647)throw Error('INVENTORY_SNAPSHOT_INVALID');row.removable=true;
+  if(!row||row.removable)throw Error('INVENTORY_SNAPSHOT_INVALID');row.removable=true;
  }
  if(e.hkia_inventory_default_furniture_ids()!==0)throw Error('INVENTORY_SNAPSHOT_INVALID');
  const defaultBytes=readBytes(e,e.hkia_reply_ptr(),e.hkia_reply_len());
@@ -598,7 +598,7 @@ async function execute(r:Request):Promise<unknown>{
   case 'inventory-remove-entries':{
    const rows=r.removalBatch;
    if(!Array.isArray(rows)||rows.length<1||rows.length>e.hkia_inventory_batch_limit()||
-    rows.some(row=>!Array.isArray(row)||row.length!==2||row.some((n,i)=>!Number.isInteger(n)||n<(i===0?1:0)||n>2147483647)))throw Error('INVENTORY_INVALID');
+    rows.some(row=>!Array.isArray(row)||row.length!==2||row.some((n,i)=>!Number.isInteger(n)||n<(i===0?1:0)||n>(i===0?4294967295:2147483647))))throw Error('INVENTORY_INVALID');
    const len=rows.length*8,p=e.hkia_stage(len);
    if(!p||p+len>e.memory.buffer.byteLength)throw Error('INVENTORY_INVALID');
    const view=new DataView(e.memory.buffer,p,len);

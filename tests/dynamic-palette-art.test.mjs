@@ -28,3 +28,14 @@ test('custom palette uses exact definition Sprite, atlas mask and opaque guarded
  assert.equal(m.rows[0].spritePathId,row.baseSpritePathId);assert.equal(m.rows[1].spritePathId,row.maskSpritePathId);assert.equal(m.maskGuid,row.maskGuid);
  for(const a of [m.base,m.mask]){const b=read(a.file);assert.equal(b.length,a.bytes);assert.equal(sha(b),a.sha256);assert.equal(b.toString('ascii',8,16),'WEBPVP8L');}
 });
+
+test('palette icon ignores finite tint alpha without altering the snapshot',()=>{
+ const palette=[[0.25,0.5,0.75,0],[1,0,0,2],[0,1,0,-1]];
+ const before=structuredClone(palette);
+ const normalized=[[0.25,0.5,0.75,1],[1,0,0,1],[0,1,0,1]];
+ assert.deepEqual(resolvePaletteTints(CUSTOM_PALETTE_ITEM_ID,palette),normalized);
+ assert.equal(JSON.stringify(resolvePaletteTints(CUSTOM_PALETTE_ITEM_ID,palette)),JSON.stringify(resolvePaletteTints(CUSTOM_PALETTE_ITEM_ID,normalized)));
+ assert.deepEqual(palette,before);
+ assert.equal(resolvePaletteTints(CUSTOM_PALETTE_ITEM_ID,[[2,0,0,1],...palette.slice(1)]),null);
+ assert.equal(resolvePaletteTints(CUSTOM_PALETTE_ITEM_ID,[[0,0,0,Infinity],...palette.slice(1)]),null);
+});

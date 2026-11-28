@@ -1,14 +1,14 @@
 <script lang="ts">
  import type {SpriteCell} from './icon-packs';
  import {watchDynamicArtVisibility,startDynamicArtRequest} from './dynamic-art-view';
- let {render,source,fallback,renderPartial}:{render:()=>Promise<Blob|null>;renderPartial?:()=>Promise<Blob|null>;source:'native-flower'|'native-palette'|'native-chef'|'native-wand'|'native-placeholder';fallback?:SpriteCell}=$props();
+ let {render,source,fallback,renderPartial,renderIntermediate}:{render:()=>Promise<Blob|null>;renderPartial?:()=>Promise<Blob|null>;renderIntermediate?:()=>Promise<Blob|null>;source:'native-flower'|'native-palette'|'native-chef'|'native-wand'|'native-placeholder';fallback?:SpriteCell}=$props();
  let near=$state(false);
  let url=$state<string|null>(null);
  let partial=$state(false);
  const setNear=(value:boolean)=>{near=value;};
  $effect(()=>{
   if(!near){url=null;partial=false;return;}
-  return startDynamicArtRequest(render,(value,isPartial)=>{url=value;partial=!!isPartial;},renderPartial);
+  return startDynamicArtRequest(render,(value,isPartial)=>{url=value;partial=!!isPartial;},renderPartial,renderIntermediate);
  });
 </script>
 <span use:watchDynamicArtVisibility={setNear}

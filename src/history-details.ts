@@ -101,7 +101,7 @@ export function decodeHistoryDetails(
     const batch:InventoryBatchDetail[]=[],seen=new Set<number>();
     for(let j=0;j<n;j++){
      const documentId=u32(),before=i32();
-     if(documentId<=0||documentId>2147483647||before<0||seen.has(documentId))return [];
+     if(documentId<=0||before<0||(documentId>2147483647&&before===0)||seen.has(documentId))return [];
      seen.add(documentId);batch.push({documentId,before,after:0});
     }
     result.push({scope:'inventory',documentId:batch[0].documentId,batch,physical:true});
