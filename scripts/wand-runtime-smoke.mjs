@@ -221,6 +221,40 @@ export async function wandRuntimeSmoke(browser,origin,base){
     assert.ok(mapped,pattern);assert.equal(attempts,1);
    }finally{await failurePage.close();}
   }
+  // A verified neutral tint set does not require the original mask, even
+  // when a source-item overlay is present. Nonneutral tint stays fail-closed.
+  const neutralPage=await context.newPage();
+  try{
+   await neutralPage.route(root+'__wand_runtime_fixture__.html',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html><body></body></html>'}));
+   await neutralPage.route(root+'__wand_runtime_fixture__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
+   let maskRequests=0;
+   await neutralPage.route('**/wand-mask-rgb-v3.0.1.webp',r=>{maskRequests++;return r.fulfill({status:503,body:'unavailable'});});
+   await neutralPage.goto(root+'__wand_runtime_fixture__.html');
+   const neutralRows=await neutralPage.evaluate(async base=>{
+    const {renderWandArt,renderWandBaseArt,renderWandOriginalBaseArt}=await import(base+'__wand_runtime_fixture__.mjs');
+    const manifest=await (await fetch(base+'dynamic-wand-art/wand-runtime-source-v3.0.1.json')).json(),out=[];
+    const a={magicCharacteristicId:1,fleckCharacteristicId:2};
+    for(const {itemId} of manifest.rows){
+     const original=await renderWandOriginalBaseArt(itemId);
+     const plain=await renderWandArt(itemId,{...a,sourceItemId:0});
+     const full=await renderWandArt(itemId,{...a,sourceItemId:1185152302});
+     const bytes=async b=>Array.from(new Uint8Array(await b.arrayBuffer())).join(',');
+     out.push({base:original!==null&&original===plain&&original===await renderWandBaseArt(itemId,a),
+      full:full!==null&&plain!==null&&await bytes(full)!==await bytes(plain),
+      shared:full!==null&&full===await renderWandArt(itemId,{magicCharacteristicId:2,fleckCharacteristicId:1,sourceItemId:1185152302}),
+      unknown:await renderWandArt(itemId,{...a,sourceItemId:315823})===null&&await renderWandArt(itemId,{...a,magicCharacteristicId:999999,sourceItemId:0})===null});
+    }
+    return out;
+   },base);
+   assert.equal(neutralRows.length,9);assert.ok(neutralRows.every(r=>r.base&&r.full&&r.shared&&r.unknown));
+   assert.equal(maskRequests,0);
+   const nonneutral=await neutralPage.evaluate(async base=>{
+    const {renderWandArt,renderWandBaseArt}=await import(base+'__wand_runtime_fixture__.mjs');
+    const a={magicCharacteristicId:1,fleckCharacteristicId:125};
+    return await renderWandArt(39246601,{...a,sourceItemId:0})===null&&await renderWandBaseArt(39246601,a)===null;
+   },base);
+   assert.ok(nonneutral);assert.ok(maskRequests>=1);
+  }finally{await neutralPage.close();}
   // If the preferred sample index is unavailable, both already-published
   // original collection and inventory cells remain usable for every shape.
   const fallbackPage=await context.newPage();

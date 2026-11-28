@@ -1,7 +1,7 @@
 import {resolveWandBaseTints,type WandBaseAppearance,type WandColor} from './wand-appearance';
-import type {Rgba} from './dynamic-sprite-color';
+import {isNeutralTintSet,type Rgba} from './dynamic-sprite-color';
 import type {PixelBuffer,Rect,SpriteOverlay} from './dynamic-sprite-raster';
-import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,type TextureAsset} from './dynamic-art-assets';
+import {loadVerifiedArtAsset,loadOpaqueArtTexture,renderCachedDynamicArt,renderCachedOriginalBase,NO_TINT_MASK,type TextureAsset} from './dynamic-art-assets';
 import {originalWandOverlay,originalWandCellKey,type WandOriginalCell} from './wand-original-subicon';
 import {loadSampledWandOverlay} from './wand-candidate-source';
 import {loadRemainingWandOverlay} from './wand-remaining-source';
@@ -91,10 +91,12 @@ export async function renderWandOriginalBaseArt(itemId:number):Promise<Blob|null
  * All output is an in-memory local blob. */
 export async function renderWandBaseArt(itemId:number,appearance:WandBaseAppearance):Promise<Blob|null>{
  try{
-  const s=await sources(),r=s.rows.get(itemId);if(!r)return null;
+  const s=await sourceBinding(),r=s.rows.get(itemId);if(!r)return null;
   const tints=resolveWandBaseTints(appearance,s.magic,s.flecks);if(!tints)return null;
+  if(isNeutralTintSet(tints))return renderWandOriginalBaseArt(itemId);
+  const {base,mask}=await sources();
   return await renderCachedDynamicArt(JSON.stringify(['3.0.1','wand-base-dynamic-1',WAND_MANIFEST_SHA,itemId,tints]),{
-   base:s.base,mask:s.mask,baseRect:r.base.sampleRect,maskRect:r.mask.sampleRect,trim:r.base.trimTopLeft,
+   base,mask,baseRect:r.base.sampleRect,maskRect:r.mask.sampleRect,trim:r.base.trimTopLeft,
    alphaOffsetY:s.manifest.alphaOffsetY,logicalSize:r.base.logicalSize,tints,maskColorSpace:'linear'
   });
  }catch{return null;}
@@ -117,13 +119,15 @@ async function guardedItemOverlay(itemId:number,transform:WandTransform):Promise
  * Normalized editor geometry; actual prefab/framebuffer parity is pending. */
 export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&{sourceItemId:number},originalCell?:WandOriginalCell):Promise<Blob|null>{
  try{
-  const s=await sources(),row=s.rows.get(itemId);
+  const s=await sourceBinding(),row=s.rows.get(itemId);
   const tints=resolveWandBaseTints(appearance,s.magic,s.flecks);
   if(!row||!tints)return null;
   // A known characteristic without a MagicDisplay entry has no native
   // sub-icon. The game hides that Image, so the tinted base is complete.
   // This does not cover unknown IDs or a failed fetch of an existing icon.
   if(appearance.sourceItemId===0&&!s.magic.has(appearance.magicCharacteristicId))return renderWandBaseArt(itemId,appearance);
+  const neutral=isNeutralTintSet(tints);
+  const {base,mask}=neutral?{base:await loadOpaqueArtTexture(ROOT,s.manifest.base),mask:NO_TINT_MASK}:await sources();
   const sub=await subSources(),transform=sub.wands.find(x=>x.itemId===itemId);
   if(!transform)return null;
   let spritePathId:string,sourceHash:string,overlay:SpriteOverlay;
@@ -179,7 +183,7 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
    }
   }
   return await renderCachedDynamicArt(JSON.stringify(['3.0.1','wand-composite-2',WAND_MANIFEST_SHA,WAND_SUBICON_MANIFEST_SHA,sourceHash,itemId,tints,spritePathId]),{
-   base:s.base,mask:s.mask,baseRect:row.base.sampleRect,maskRect:row.mask.sampleRect,trim:row.base.trimTopLeft,
+   base,mask,baseRect:row.base.sampleRect,maskRect:neutral?[0,0,1,1]:row.mask.sampleRect,trim:row.base.trimTopLeft,
    alphaOffsetY:s.manifest.alphaOffsetY,logicalSize:row.base.logicalSize,tints,maskColorSpace:'linear',overlay
   });
  }catch{return null;}
