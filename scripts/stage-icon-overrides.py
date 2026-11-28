@@ -24,6 +24,7 @@ def module(name):
 
 source = module('icon-source-update')
 decoder = module('extract-dynamic-colorways')
+native_webp = module('native-raster-webp')
 require = source.require
 sha = source.digest
 RENDERER = 'original-BC3-256-to-84-in-96-v1'
@@ -99,7 +100,7 @@ def reuse_previous(directory, previous, identity):
     require(sha(data) == record['sha256'], 'previous image SHA-256 mismatch')
     return data
 
-def scan_bundle(path, expected, name, targets, helper, previous, prior_dir, stage):
+def scan_bundle(path, expected, name, targets, helper, previous, prior_dir, stage,native_resolution=False):
     require(path.stat().st_size <= helper.auditor.MAX_INPUT, 'source bundle too large')
     raw = path.read_bytes()
     require(sha(raw) == expected, 'source bundle hash mismatch: ' + name)
@@ -139,6 +140,19 @@ def scan_bundle(path, expected, name, targets, helper, previous, prior_dir, stag
         require(0 <= pos <= len(res) - 65536, 'source texture stream bounds')
         stream_hash = sha(res[pos:pos+65536])
         identity = binding_identity(guid, targets[guid], sid, sprite, tid, texture, stream_hash)
+        if native_resolution:
+            identity['renderer']=native_webp.POLICY
+            old=previous.get(str(item))
+            reused=bool(old and old['binding']==identity)
+            if reused:
+                asset=native_webp.reuse(stage,prior_dir,old['asset'])
+            else:
+                image,verified=decoder.decode(texture,res,cab,sn,native_resolution=True)
+                require(verified==stream_hash,'decoded texture source mismatch')
+                asset=native_webp.store(stage,image)
+            require((asset['width'],asset['height'])==(stream['width'],stream['height']),'original override dimensions')
+            records[str(item)]={'binding':identity,'asset':asset,'sourceBundle':name,'sourceBundleSha256':expected,'cab':cab,'reused':reused}
+            continue
         data = reuse_previous(prior_dir, previous, identity)
         reused = data is not None
         if data is None:
@@ -152,7 +166,7 @@ def scan_bundle(path, expected, name, targets, helper, previous, prior_dir, stag
                               'reused': reused}
     return records
 
-def stage(snapshot, manifest_path, out, prior_dir=None):
+def stage(snapshot, manifest_path, out, prior_dir=None,native_resolution=False):
     targets = snapshot_targets(snapshot)
     manifest = source.read_json(manifest_path)
     require(manifest.get('schema') == 'HKIA.IconOverrideBundleInput.1' and
@@ -179,7 +193,15 @@ def stage(snapshot, manifest_path, out, prior_dir=None):
             'staging directory must be outside repository')
     require(not out.exists(), 'staging output already exists')
     helper = decoder.load_helpers()
-    previous = read_prior(prior_dir)
+    if native_resolution:
+        previous={}
+        if prior_dir:
+            old=source.read_json(prior_dir/'index.json')
+            require(old.get('schema')=='HKIA.NativeResolutionOverrideStage.1' and old.get('renderer')==native_webp.POLICY and
+                    old.get('assetPlatform')==platform and old.get('receiptSha256')==sha(source.stable({k:v for k,v in old.items() if k!='receiptSha256'})),
+                    'native previous override must not contain legacy resized assets')
+            previous=old['records']
+    else:previous=read_prior(prior_dir)
     out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='hkia-icon-stage-', dir=out.parent) as temp:
         folder = Path(temp) / 'result'
@@ -187,7 +209,7 @@ def stage(snapshot, manifest_path, out, prior_dir=None):
         records = {}
         for e in entries:
             found = scan_bundle(manifest_path.parent / e['file'], e['sha256'], e['name'],
-                                targets, helper, previous, prior_dir, folder)
+                                targets, helper, previous, prior_dir, folder,native_resolution)
             require(not set(found) & set(records), 'ambiguous cross-bundle override')
             records.update(found)
         missing = sorted(v[0] for v in targets.values() if str(v[0]) not in records)
@@ -209,6 +231,10 @@ def stage(snapshot, manifest_path, out, prior_dir=None):
                   'records': records, 'unresolvedItemIds': missing,
                   'reusedCount': sum(row['reused'] for row in records.values()),
                   'automaticReleaseActivationAuthorized': False}
+        if native_resolution:
+            result.update(schema='HKIA.NativeResolutionOverrideStage.1',renderer=native_webp.POLICY)
+            unique={r['asset']['sha256']:r['asset'] for r in records.values()}
+            result['uniqueAssetCount']=len(unique);result['imageBytes']=sum(r['bytes'] for r in unique.values())
         result['receiptSha256'] = sha(source.stable(result))
         source.write_new(folder / 'index.json', result)
         require(not out.exists(), 'staging output already exists')
@@ -256,12 +282,13 @@ if __name__ == '__main__':
     parser.add_argument('--snapshot', type=Path)
     parser.add_argument('--bundles', type=Path, help='original bundle input manifest')
     parser.add_argument('--previous-stage', type=Path)
+    parser.add_argument('--native-resolution',action='store_true')
     parser.add_argument('--out', type=Path)
     args = parser.parse_args()
     if args.self_test:
         self_test()
     elif args.snapshot and args.bundles and args.out:
-        result = stage(source.read_json(args.snapshot),args.bundles,args.out,args.previous_stage)
+        result = stage(source.read_json(args.snapshot),args.bundles,args.out,args.previous_stage,args.native_resolution)
         print('HKIA_ICON_OVERRIDE_STAGE', len(result['records']), 'of', result['expectedCount'],
               'reused', result['reusedCount'], 'unresolved',len(result['unresolvedItemIds']),
               'review-required')
