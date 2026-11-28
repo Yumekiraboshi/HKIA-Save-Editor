@@ -386,6 +386,7 @@ pub struct Editor {
  unique_quantity_ids:HashSet<u32>,
  structural_quantity_caps:HashMap<u32,i32>,
  structural_zero_ids:HashSet<u32>,
+ saved_removable_ids:HashSet<u32>,
  legacy_wand_sources_resolved:bool,
  flower_variant_changes:HashMap<u32,FlowerVariant>,
  furniture_variant_changes:HashMap<u32,FurnitureVariant>,
@@ -430,13 +431,13 @@ impl Editor {
   let legacy_wand_sources_resolved=slot.index.inventory.iter().filter(|r|matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))).all(|r|
    r.id>0&&r.id<PENDING_ITEM&&r.unique_id.is_some_and(|uid|uid>0)&&r.quantity.is_some_and(|q|q>=0)&&
    r.fields.iter().all(Option::is_some)&&Self::legacy_wand_identity_in(&slot.envelope.decoded,r).is_some());
-  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),inventory_removed:HashSet::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),pending_bobas:HashMap::new(),pending_cafes:HashMap::new(),pending_wands:HashMap::new(),inventory_item_rows,inventory_document_index,inventory_item_documents,unique_quantity_ids:HashSet::new(),structural_quantity_caps:HashMap::new(),structural_zero_ids:HashSet::new(),legacy_wand_sources_resolved,flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),boba_variant_changes:HashMap::new(),wand_variant_changes:HashMap::new(),cafe_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
+  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),inventory_removed:HashSet::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),pending_bobas:HashMap::new(),pending_cafes:HashMap::new(),pending_wands:HashMap::new(),inventory_item_rows,inventory_document_index,inventory_item_documents,unique_quantity_ids:HashSet::new(),structural_quantity_caps:HashMap::new(),structural_zero_ids:HashSet::new(),saved_removable_ids:HashSet::new(),legacy_wand_sources_resolved,flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),boba_variant_changes:HashMap::new(),wand_variant_changes:HashMap::new(),cafe_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
   editor.unique_quantity_ids=editor.index_unique_quantity_ids();
   editor.structural_quantity_caps=editor.index_structural_quantity_caps();
-  let removable:HashSet<_>=editor.inventory_removable_ids().into_iter().collect();
+  editor.saved_removable_ids=editor.index_saved_removable_ids();
   editor.structural_zero_ids=editor.slot.index.inventory.iter().filter_map(|r|{
    let item=r.item_id?;
-   if r.unique_is_nil!=Some(false)||!editor.structural_quantity_caps.contains_key(&r.id)||!removable.contains(&r.id){return None}
+   if r.unique_is_nil!=Some(false)||!editor.structural_quantity_caps.contains_key(&r.id)||!editor.saved_removable_ids.contains(&r.id){return None}
    // Last-copy reference completeness is independent from the quantity
    // field. In particular an unresolved legacy source or outfit copy
    // cannot be made safe by merely preserving the outer record.
@@ -1493,7 +1494,7 @@ impl Editor {
   if (self.is_emptyable_unique_family(r)||self.palette_zero_reference_safe(r))&&self.unique_quantity_ids.contains(&r.id){return true}
   let Some(item)=r.item_id else{return false};
   self.slot.envelope.version==Version::V301&&r.unique_is_nil==Some(true)&&
-   Self::physical_inventory_reference_safe(&self.slot.index,r,false)&&
+   self.saved_removable_ids.contains(&r.id)&&
    (self.has_single_active_saved_item(item)||self.ordinary_furniture_base_distinct(r,item))
  }
  // Index the original unique identities once, rather than scanning all
@@ -2938,7 +2939,7 @@ impl Editor {
     if self.inventory_removed.contains(&id){continue}
     let row=self.saved_inventory_row(id)?;
     if row.unique_is_nil!=Some(true)||row.unique_id!=Some(0)||!self.structural_quantity_caps.contains_key(&id)||
-     !Self::physical_inventory_reference_safe(&self.slot.index,row,false){return None}
+     !self.saved_removable_ids.contains(&id){return None}
     count+=1;
    }
    (count>1).then_some(item)
@@ -3077,15 +3078,20 @@ impl Editor {
  pub fn inventory_entry_removable(&self,id:u32)->bool{
   if self.slot.envelope.version!=Version::V301{return false}
   if id&PENDING_ITEM!=0{return self.inventory_changes.get(&id).is_some_and(|q|*q>0)}
-  !self.inventory_removed.contains(&id)&&
-   self.saved_inventory_row(id).is_some_and(|r|Self::physical_inventory_reference_safe(&self.slot.index,r,self.slot.index.inventory.iter().filter(|p|p.unique_id==r.unique_id).count()==1))
+  !self.inventory_removed.contains(&id)&&self.saved_removable_ids.contains(&id)
+ }
+ // Original native reference authority is immutable throughout a session.
+ // Re-evaluate against the independently parsed intermediate bytes on export.
+ fn index_saved_removable_ids(&self)->HashSet<u32>{
+  if self.slot.envelope.version!=Version::V301{return HashSet::new()}
+  let mut uids=HashMap::<i32,usize>::new();
+  for row in &self.slot.index.inventory{if let Some(uid)=row.unique_id{*uids.entry(uid).or_default()+=1;}}
+  self.slot.index.inventory.iter().filter_map(|r|
+   Self::physical_inventory_reference_safe(&self.slot.index,r,r.unique_id.is_some_and(|uid|uids.get(&uid)==Some(&1))).then_some(r.id)).collect()
  }
  pub fn inventory_removable_ids(&self)->Vec<u32>{
   if self.slot.envelope.version!=Version::V301{return Vec::new()}
-  let mut uids=HashMap::<i32,usize>::new();
-  for row in &self.slot.index.inventory{if let Some(uid)=row.unique_id{*uids.entry(uid).or_default()+=1;}}
-  self.slot.index.inventory.iter().filter_map(|r|(!self.inventory_removed.contains(&r.id)&&
-   Self::physical_inventory_reference_safe(&self.slot.index,r,r.unique_id.is_some_and(|uid|uids.get(&uid)==Some(&1)))).then_some(r.id))
+  self.slot.index.inventory.iter().filter_map(|r|(!self.inventory_removed.contains(&r.id)&&self.saved_removable_ids.contains(&r.id)).then_some(r.id))
    .chain(self.inventory_changes.iter().filter_map(|(&id,&q)|(id&PENDING_ITEM!=0&&q>0).then_some(id))).collect()
  }
  /// Exact persisted document removal and cancellation of staged additions in one transaction.
@@ -3093,11 +3099,10 @@ impl Editor {
   if requests.is_empty(){return Err(Error::Budget)}
   if self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
   let revision=self.next_edit_revision_with_cost(5usize.saturating_add(requests.len().saturating_mul(8)))?;
-  let removable:HashSet<_>=self.inventory_removable_ids().into_iter().collect();
   let mut seen=HashSet::new();
   for &(id,expected) in requests{
    if !seen.insert(id){return Err(Error::Duplicate)}
-   if !removable.contains(&id)||self.inventory_changes.get(&id).copied().or_else(||
+   if !self.inventory_entry_removable(id)||self.inventory_changes.get(&id).copied().or_else(||
     self.saved_inventory_row(id).and_then(|r|r.quantity))!=Some(expected){return Err(Error::Schema)}
   }
   let change=Change::InventoryRemoved{rows:requests.to_vec()};
