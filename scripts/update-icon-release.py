@@ -198,6 +198,8 @@ def run(input_path,root,previous=None,resume=False,execute=command):
             '--reviewed-outfit-layout',LAYOUTS['outfit'],'--out',out/'snapshot.json',
             *[x for name,b in bundles.items() if name!='definitions' for x in ('--bundle',name+'='+b['file'])]])
         primary=source.read_json(out/'snapshot.json');source.validate_snapshot(primary)
+        require(all(primary['sourceBundleSha256'].get(n)==b['sha256'] for n,b in bundles.items()) and
+                set(primary['locallyObservedBundles'])==set(bundles),'input bundle changed during snapshot')
         override=primary
         if config.get('overrideDefinitions'):
             d=config['overrideDefinitions']
@@ -245,11 +247,16 @@ def run(input_path,root,previous=None,resume=False,execute=command):
     x=step('auxiliary-assets',['snapshot','auxiliary-bindings'],lambda out:execute('stage-icon-auxiliary-assets.py',[
         '--snapshot',snapshot_path,'--auxiliary',a/'auxiliary.json','--bundles',s/'atlas-input.json',
         '--out',out/'output',*previous_stage('auxiliary-assets')]))
-    rel=step('release',['snapshot','base-atlas','overrides','dynamic-bindings','dynamic-textures'],
-        lambda out:execute('assemble-icon-release.py',['--snapshot',snapshot_path,'--override-snapshot',override_snapshot,
+    def assemble(out):
+        require(source.file_digest(Path(config['catalog']['file']))==config['catalog']['sha256'],
+                'catalog changed during update')
+        execute('assemble-icon-release.py',['--snapshot',snapshot_path,'--override-snapshot',override_snapshot,
         '--definitions',definition['file'],'--catalog',config['catalog']['file'],'--base-stage',b/'output',
         '--override-stage',o/'output','--dynamic-receipt',d/'dynamic.json','--dynamic-stage',t/'output',
-        '--reviewed-result-layout',LAYOUTS['result'],'--out',out/'output']))
+        '--reviewed-result-layout',LAYOUTS['result'],'--out',out/'output'])
+        require(source.file_digest(Path(config['catalog']['file']))==config['catalog']['sha256'],
+                'catalog changed during assembly')
+    rel=step('release',['snapshot','base-atlas','overrides','dynamic-bindings','dynamic-textures'],assemble)
     f=step('families',['dynamic-bindings','auxiliary-bindings','auxiliary-assets','release'],
         lambda out:execute('compile-icon-family-bindings.py',['--dynamic',d/'dynamic.json',
         '--auxiliary',a/'auxiliary.json','--auxiliary-stage',x/'output','--release',rel/'output',
