@@ -7118,10 +7118,30 @@ fn native_inventory_pin_rank_survives_quantity_history_and_export(){
  let input=slot_from_payload("3.0.1",payload);
  let mut e=Editor::open(input).unwrap();
  assert_eq!(e.inventory_pin_orders(),vec![(4,1),(6,1)]);
+ assert_eq!(e.inventory_pin_projection(),vec![(4,Some(1)),(5,None),(6,Some(1))]);
  e.change_inventory_quantity(5,1,2).unwrap();
  assert_eq!(e.inventory_pin_orders(),vec![(4,1),(6,1)]);
  assert!(e.undo_scope(Inventory));assert_eq!(e.inventory_pin_orders(),vec![(4,1),(6,1)]);
  assert!(e.redo_scope(Inventory));assert_eq!(e.inventory_pin_orders(),vec![(4,1),(6,1)]);
  let reopened=Editor::open(e.export().unwrap()).unwrap();
  assert_eq!(reopened.inventory_pin_orders(),vec![(4,1),(6,1)]);
+}
+
+#[test]
+fn native_pin_projection_distinguishes_empty_screen_from_missing_or_unresolved(){
+ use hkia_save_core::native::INVENTORY_PIN_SCREEN;
+ for mode in 0..4{
+  let mut payload=synthetic_payload("3.0.1");payload[2]=9;payload[3]=if mode==0{0x97}else{0x98};
+  payload.extend(doc(1,arr(vec![u(4),u(1877756618),u(0),u(6),vec![0xc0]])));
+  payload.extend(doc(1,arr(vec![u(5),u(2147483647),u(0),u(1),vec![0xc0]])));
+  if mode!=0{
+   let key=if mode==1{[4,5,6,7]}else{INVENTORY_PIN_SCREEN};
+   let sets=arr(vec![arr(vec![u(0),guid(key)])]);
+   let items=if mode==3{arr(vec![arr(vec![u(9),guid([10,20,30,40]),u(0)])])}else{arr(vec![])};
+   payload.extend(doc(23,arr(vec![u(6),vec![0xc0],vec![0xc0],arr(vec![sets,items])])));
+  }
+  let e=Editor::open(slot_from_payload("3.0.1",payload)).unwrap();
+  assert!(e.inventory_pin_orders().is_empty());
+  assert_eq!(e.inventory_pin_projection(),if mode==2{vec![(4,None)]}else{vec![]});
+ }
 }
