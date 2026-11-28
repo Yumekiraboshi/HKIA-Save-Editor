@@ -329,6 +329,7 @@
 }
 
 .inventory-item-art.flower-variant{position:relative;padding-top:22px;box-sizing:content-box}
+.inventory-blueprint.flower-variant>.inventory-blueprint-pattern{top:22px}
 .inventory-native-decorators{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;gap:2px;z-index:1;pointer-events:none}
 .inventory-flower-variant-name{font-size:10px;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
