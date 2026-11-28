@@ -149,7 +149,6 @@ import {verifiedFloorplanName} from './floorplan-names';
   inventoryBatchSelected=new Set([...inventoryBatchSelected].filter(id=>!next.has(id)));
   void persistDraft();
  }
- const inventoryLockCopy=$derived(inventoryProtectionCopy(locale));
  let inventoryBatchSelected=$state<Set<number>>(new Set());
  let inventoryBatchQuantity=$state<number|undefined>(undefined);
  // Presentation only: the tightest bound returned by Rust for selected rows.
@@ -285,6 +284,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const removalCopy=$derived(removalConfirmationCopy(locale));
  const achCopy=$derived(achievementCopy(locale));
  const iCopy=$derived(inventoryCopy(locale));
+ const inventoryLockCopy=$derived(inventoryProtectionCopy(locale));
  const iBatchCopy=$derived(inventoryBatchCopy(locale));
  const flowerCopy=$derived(flowerEditorCopy(locale));
  const furnitureCopy=$derived(furnitureEditorCopy(locale));
