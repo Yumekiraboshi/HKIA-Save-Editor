@@ -115,7 +115,10 @@ export async function wandRuntimeSmoke(browser,origin,base){
     const a={magicCharacteristicId:104,fleckCharacteristicId:125};
     const original=await renderWandArt(row.itemId,{...a,sourceItemId:1320295322});
     const alias=await renderWandArt(row.itemId,{...a,sourceItemId:5365022});
-    sharedAliases.push({id:row.itemId,same:original!==null&&original===alias,art:await pixels(alias),plain:(await pixels(await renderWandBaseArt(row.itemId,a))).rgba});
+    const ramen=await renderWandArt(row.itemId,{...a,sourceItemId:1061947263});
+    const ramenRecipe=await renderWandArt(row.itemId,{...a,sourceItemId:964128772});
+    sharedAliases.push({id:row.itemId,same:original!==null&&original===alias,art:await pixels(alias),plain:(await pixels(await renderWandBaseArt(row.itemId,a))).rgba,
+     ramenSame:ramen!==null&&ramen===ramenRecipe,ramenArt:await pixels(ramenRecipe)});
    }
    const allShapes=[];
    for(const row of m.rows){
@@ -136,7 +139,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
   for(const row of out.templateRows){assert.ok(row.art.visible&&row.cached);assert.notEqual(row.art.rgba,row.plain);}
   for(const id of new Set(out.templateRows.map(r=>r.id)))assert.equal(new Set(out.templateRows.filter(r=>r.id===id).map(r=>r.art.rgba)).size,2);
   assert.equal(out.sharedAliases.length,9);
-  assert.ok(out.sharedAliases.every(r=>r.same&&r.art.visible&&r.art.rgba!==r.plain));
+  assert.ok(out.sharedAliases.every(r=>r.same&&r.art.visible&&r.art.rgba!==r.plain&&r.ramenSame&&r.ramenArt.visible&&r.ramenArt.rgba!==r.plain));
   assert.equal(out.outside.length,9);
   for(const row of out.outside){assert.ok(row.art.visible&&row.cached&&row.noCell&&row.mismatched);assert.notEqual(row.art.rgba,row.plain.rgba);}
   assert.equal(out.allShapes.length,36);assert.equal(new Set(out.allShapes.map(r=>r.id)).size,9);

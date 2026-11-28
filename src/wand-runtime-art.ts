@@ -12,6 +12,16 @@ import {loadPaletteOriginalOverlay} from './palette-runtime-art';
 
 const ROOT=import.meta.env.BASE_URL+'dynamic-wand-art/';
 
+/** Exact shared definition UiIcon identities. Ramen Recipe and Ramen
+ * both reference Sprite -3674899348677039372; do not use recipe-result
+ * substitution or a recolored ramen payload for the native wand source. */
+const originalTemplates=new Map<number,{kind:'chef'|'palette';itemId:number}>([
+ [1061947263,{kind:'chef',itemId:1061947263}],
+ [964128772,{kind:'chef',itemId:1061947263}],
+ [1835273963,{kind:'palette',itemId:1835273963}]
+]);
+export function wandOriginalTemplate(itemId:number){return originalTemplates.get(itemId);}
+
 export const WAND_MANIFEST_SHA='5d4d42d95417c8e6222747433b784a32ee9aaebb91216366a70645a33085f0bb';
 type Row={itemId:number;maskGuid:string;base:{spritePathId:string;sampleRect:Rect;trimTopLeft:Rect;logicalSize:number};mask:{spritePathId:string;sampleRect:Rect;colorSpace:number;filterMode:number;mipCount:number}};
 type Manifest={schema:string;version:string;base:TextureAsset;mask:TextureAsset;alphaOffsetY:number;magic:WandColor[];flecks:WandColor[];rows:Row[]};
@@ -138,10 +148,11 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
     // The two source definitions withheld from the static inventory atlas
     // still have an original UiIcon. Reuse the pinned base texture directly
     // (not the source item's individually recolored image).
-    const shared=appearance.sourceItemId===1061947263
-     ?await loadChefOriginalOverlay(appearance.sourceItemId,transform)
-     :appearance.sourceItemId===1835273963
-      ?await loadPaletteOriginalOverlay(appearance.sourceItemId,transform):null;
+    const template=wandOriginalTemplate(appearance.sourceItemId);
+    const shared=template?.kind==='chef'
+     ?await loadChefOriginalOverlay(template.itemId,transform)
+     :template?.kind==='palette'
+      ?await loadPaletteOriginalOverlay(template.itemId,transform):null;
     if(shared){
      ({spritePathId,sourceHash,overlay}=shared);
     }else{
