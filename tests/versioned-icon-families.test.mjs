@@ -92,3 +92,24 @@ test('ordinary source uses the original version-pinned UiIcon route including re
  assert.ok(await f.wand(4,version,{magicCharacteristicId:902,fleckCharacteristicId:903,sourceItemId:8}) instanceof Blob);
  assert.equal(await f.wand(4,version,{magicCharacteristicId:902,fleckCharacteristicId:903,sourceItemId:9}),null);
 });
+
+
+test('flower decorator uses exact pattern Icon route rather than the species tint mask',async()=>{
+ const manifest={...defs,flowerPatterns:[{index:1,isEffect:false},{index:16,isEffect:true},{index:17,isEffect:true}],flowerPatternArtIndices:[1,17]};
+ const requests=[];
+ const load=async(root)=>{
+  requests.push(root);
+  return new TextEncoder().encode(JSON.stringify(root==='/bindings/'?manifest:pages(['pattern:1','pattern:17']))).buffer;
+ };
+ const loadTexture=async(root,a)=>({width:a.width,height:a.height,rgba:new Uint8ClampedArray(a.width*a.height*4).fill(255)});
+ const f=createVersionedFamilyRenderer({bindings:'/bindings/',dynamic:'/dynamic/',auxiliary:'/aux/'},pin,{load,loadTexture});
+ assert.equal(await f.flowerPattern(1,'9.2.0'),null);assert.equal(requests.length,0);
+ assert.equal(await f.flowerPattern(0,version),null);assert.equal(requests.length,0);
+ assert.equal(await f.flowerPattern(16,version),null);
+ assert.ok(await f.flowerPattern(1,version) instanceof Blob);
+ assert.ok(await f.flowerPattern(17,version) instanceof Blob);
+ assert.equal(await f.flowerPattern(999,version),null);
+ assert.deepEqual(requests,['/bindings/','/aux/']);
+ assert.throws(()=>decodeVersionedFamilyBindings({...manifest,flowerPatternArtIndices:[1,1]},pin),/INVALID/);
+ assert.throws(()=>decodeVersionedFamilyBindings({...manifest,flowerPatternArtIndices:[999]},pin),/INVALID/);
+});

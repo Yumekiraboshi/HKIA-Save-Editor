@@ -17,7 +17,7 @@ type FamilyRow={itemId:number;family:Family;maskGuid:string|null;baseSpritePathI
 type Transform=Pick<SpriteOverlay,'scale'|'offsetPercent'|'rotation'>;
 type Bindings={rows:Map<number,FamilyRow>;defs:FlowerTintDefinitions;flowerIndex:FlowerMaskIndex;
  known:Set<number>;chefMapped:Set<number>;chef:Map<number,Rgba>;magic:Map<number,Rgba>;flecks:Map<number,Rgba>;
- growth:Set<number>;transforms:Map<number,Transform>};
+ growth:Set<number>;patternArt:Set<number>;transforms:Map<number,Transform>};
 export type FamilySourcePin=Readonly<{version:string;bindingsSha256:string;dynamic:DynamicSourcePin;auxiliary:DynamicSourcePin}>;
 const SHA=/^[a-f0-9]{64}$/;
 const GUID=/^[a-f0-9]{32}$/;
@@ -62,6 +62,8 @@ export function decodeVersionedFamilyBindings(v:unknown,pin:FamilySourcePin):Bin
  for(const raw of list(a.flowerPatterns)){
   const r=obj(raw),i=id(r.index);check(!Object.hasOwn(patterns,i)&&typeof r.isEffect==='boolean');patterns[i]=r.isEffect;
  }
+ const patternIds=list(a.flowerPatternArtIndices??[]).map(id),patternArt=new Set(patternIds);
+ check(patternArt.size===patternIds.length&&patternIds.every(i=>Object.hasOwn(patterns,i)));
  const rows=new Map<number,FamilyRow>(),flowerItems:FlowerMaskIndex['items'][number][]=[],masks:Record<string,boolean>={};
  for(const raw of list(a.rows)){
   const r=obj(raw),itemId=id(r.itemId),family=r.family;
@@ -88,7 +90,7 @@ export function decodeVersionedFamilyBindings(v:unknown,pin:FamilySourcePin):Bin
   check(rows.get(i)?.family==='wand'&&!transforms.has(i)&&scale>=0&&offset.length===2);
   transforms.set(i,{scale,offsetPercent:[finite(offset[0]),finite(offset[1])],rotation:finite(r.rotation)});
  }
- return {rows,defs:{colors:flowerColors,patterns},flowerIndex:{items:flowerItems,masks},known,chefMapped,chef,magic,flecks,growth,transforms};
+ return {rows,defs:{colors:flowerColors,patterns},flowerIndex:{items:flowerItems,masks},known,chefMapped,chef,magic,flecks,growth,patternArt,transforms};
 }
 /** Nonzero wand source IDs use their actual original UiIcon, never an
  * individually recolored source, a named override, or a guessed fallback.
@@ -156,5 +158,15 @@ export function createVersionedFamilyRenderer(
    return dynamic.render(itemId,version,row.maskGuid,t,layer);
   }catch{return null;}
  }
- return {original,flower,chef,palette,wand};
+ /** Pattern artwork is the actual native FlowerPatternDefinition.Icon,
+  * not the per-species dynamic tint mask. Missing routes do not invent a
+  * decorative image. The UI may use the existing circular plate renderer. */
+ async function flowerPattern(patternIndex:number,version:string):Promise<Blob|null>{
+  try{
+   if(version!==pin.version||!Number.isSafeInteger(patternIndex)||patternIndex<=0)return null;
+   const b=await bindings();if(!b.patternArt.has(patternIndex))return null;
+   return auxiliary.originalRoute('pattern:'+patternIndex,version);
+  }catch{return null;}
+ }
+ return {original,flower,chef,palette,wand,flowerPattern};
 }
