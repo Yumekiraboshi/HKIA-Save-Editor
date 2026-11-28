@@ -1,6 +1,7 @@
 import type {InventoryEntry} from './worker-client';
 import type {CollectionItem} from './subcategories';
 import type {NativeInventoryIndex} from './inventory-native-data';
+import {compareNativeInventory,type NativeInventorySort} from './inventory-native-sort';
 import {FLOWER_CREATION_SOURCE_IDS} from './inventory-native-crafting';
 
 /** Original InventoryViewModel.RawCategories array: v3.0.1 metadata 0xC1E150.
@@ -101,11 +102,12 @@ export function inventorySearchTarget(current:InventoryGroupKey,counts:ReadonlyM
 export function browseInventory(
  rows:readonly InventoryEntry[],term:string,selectedGroup:InventoryGroupKey,
  editableOnly:boolean,localizedNames:Readonly<Record<string,string>>,
- sourceItems:ReadonlyMap<number,CollectionItem>,index:NativeInventoryIndex,locale:string,variantName?:(row:InventoryEntry)=>string
+ sourceItems:ReadonlyMap<number,CollectionItem>,index:NativeInventoryIndex,locale:string,variantName?:(row:InventoryEntry)=>string,sourceOrder?:NativeInventorySort|null
 ):InventoryEntry[]{
  const q=normalizeInventorySearch(term).trim();
  return rows.filter(row=>nativeInventoryGroups(row.itemId,index).includes(selectedGroup)&&
   matchesInventorySearch(row,q,editableOnly,localizedNames,sourceItems,variantName)).sort((a,b)=>{
+  if(sourceOrder)return compareNativeInventory(a,b,sourceOrder);
   const an=localizedNames[String(a.itemId)]??sourceItems.get(a.itemId)?.[5]??String(a.itemId);
   const bn=localizedNames[String(b.itemId)]??sourceItems.get(b.itemId)?.[5]??String(b.itemId);
   return an.localeCompare(bn,locale)||a.itemId-b.itemId||a.documentId-b.documentId;
