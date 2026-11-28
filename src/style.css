@@ -374,7 +374,8 @@
 .inventory-removal-swatch{width:19px;height:19px;border:1px solid var(--line);border-radius:4px;flex:none}
 
 .inventory-category-actions{display:flex;align-items:center;flex-wrap:wrap;gap:6px;flex:0 0 100%;margin:0}
-.inventory-pin-button{position:absolute;top:5px;left:5px;z-index:2;display:grid;place-items:center;min-width:26px;max-width:80px;height:26px;border-radius:5px;background:var(--panel);color:var(--muted);padding:0 3px;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inventory-pin-button{position:absolute;inset-block-start:5px;inset-inline-start:5px;z-index:2;display:grid;place-items:center;width:25px;height:25px;padding:0;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted);overflow:hidden}
+.inventory-pin-button:disabled{opacity:.35;cursor:default}
 .inventory-pin-button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
 
 
