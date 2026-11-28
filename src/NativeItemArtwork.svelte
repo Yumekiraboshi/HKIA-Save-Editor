@@ -18,7 +18,8 @@
  const renderPartial=$derived.by(()=>{
   const s=session,i=itemId;
   return domain==='inventory'&&appearance?async()=>{
-   const row=await s?.service.item.inventory(i,s.version);
+   if(!s)return null;
+   const row=await s.service.item.inventory(i,s.version);
    return row?.art instanceof Blob?row.art:null;
   }:undefined;
  });
