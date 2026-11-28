@@ -4,7 +4,7 @@ import {encodeDynamicArtPng} from './dynamic-art-png';
 export type TextureAsset={file:string;bytes:number;sha256:string;rgbSha256:string;width:number;height:number};
 const digest=async(data:ArrayBuffer)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data)),v=>v.toString(16).padStart(2,'0')).join('');
 export async function loadVerifiedArtAsset(root:string,file:string,sha:string,max:number,exact?:number):Promise<ArrayBuffer>{
- if(!/^[a-z0-9.-]+$/.test(file))throw Error('DYNAMIC_ART_FILE');
+ if(!/^[a-z0-9][a-z0-9_.-]*$/.test(file)||file.includes('..'))throw Error('DYNAMIC_ART_FILE');
  const r=await fetch(root+file);if(!r.ok)throw Error('DYNAMIC_ART_FETCH');
  const data=await r.arrayBuffer();
  if(data.byteLength>max||(exact!==undefined&&data.byteLength!==exact)||await digest(data)!==sha)throw Error('DYNAMIC_ART_HASH');

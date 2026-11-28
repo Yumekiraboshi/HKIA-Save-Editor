@@ -102,3 +102,44 @@ test('browser pack verification rejects modified, truncated and unregistered ZIP
   assert.equal(requested.length,2);
  }finally{globalThis.fetch=fetchBefore;URL.createObjectURL=create;URL.revokeObjectURL=revoke;}
 });
+
+test('versioned collection transport reuses real multipart ZIPs with explicit candidate file identity',async()=>{
+ const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/icon-packs.ts',import.meta.url))],bundle:true,write:false,format:'esm',platform:'node',logLevel:'silent'});
+ const {decodeCandidateCollectionPacks,createVersionedCollectionPackLoader}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+ const group='collections_group_events',version='9.1.0',parts=new Map();
+ const sha=data=>createHash('sha256').update(data).digest('hex');
+ const receipt={schema:'HKIA.IconReleaseCandidate.1',version,approval:'review-required',automaticReleaseActivationAuthorized:false,
+  collectionPackParts:{[group]:6},collectionPackDigests:[],outputFiles:{}};
+ for(let i=0;i<6;i++){
+  const file=group+(i?'-'+i:'')+'.zip',data=readFileSync(new URL(file,root));
+  parts.set(file,data);receipt.outputFiles['item-packs/'+file]={bytes:data.length,sha256:sha(data)};
+  receipt.collectionPackDigests.push([file,data.length,createHash('sha1').update('blob '+data.length+'\0').update(data).digest('hex')]);
+ }
+ const bytes=Buffer.from(JSON.stringify(receipt)),pin={version,receiptFileSha256:sha(bytes)};
+ assert.equal(decodeCandidateCollectionPacks(receipt,pin).get(group).length,6);
+ for(const mutate of [
+  v=>{v.version='9.2.0'},v=>{v.collectionPackParts[group]=5},
+  v=>{v.collectionPackDigests.pop()},v=>{v.collectionPackDigests.push(v.collectionPackDigests[0])},
+  v=>{v.outputFiles['item-packs/'+group+'.zip'].bytes=0},
+  v=>{v.outputFiles['item-packs/other.zip']={bytes:1,sha256:'a'.repeat(64)}}
+ ]){const v=structuredClone(receipt);mutate(v);assert.throws(()=>decodeCandidateCollectionPacks(v,pin),/ICON_CANDIDATE_INVALID/);}
+ const originalFetch=globalThis.fetch;const requested=[];let corruptReceipt=true,corruptPack=false;
+ globalThis.fetch=async url=>{
+  requested.push(url);
+  if(url==='/candidate/release-candidate.json')return new Response(corruptReceipt?Buffer.from('{}'):bytes);
+  const data=parts.get(url.slice('/candidate/item-packs/'.length));
+  assert.ok(data);
+  if(corruptPack&&url.endsWith(group+'.zip')){const broken=Buffer.from(data);broken[100]^=1;return new Response(broken);}
+  return new Response(data);
+ };
+ try{
+  const load=createVersionedCollectionPackLoader('/candidate/',pin);
+  await assert.rejects(load(group,'9.2.0'),/ICON_CANDIDATE_INVALID/);assert.equal(requested.length,0);
+  await assert.rejects(load(group,version),/DYNAMIC_ART_HASH/);assert.equal(requested.length,1);
+  corruptReceipt=false;await assert.rejects(load('other',version),/ICON_CANDIDATE_INVALID/);assert.equal(requested.length,2);
+  corruptPack=true;await assert.rejects(load(group,version),/DYNAMIC_ART_HASH/);
+  corruptPack=false;const pack=await load(group,version);
+  try{assert.deepEqual(Object.keys(pack.entries).map(Number).sort((a,b)=>a-b),catalog.items.filter(x=>x[3]===group).map(x=>x[0]).sort((a,b)=>a-b));}
+  finally{pack.dispose();}
+ }finally{globalThis.fetch=originalFetch;}
+});

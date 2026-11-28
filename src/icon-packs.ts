@@ -1,4 +1,5 @@
 import packSource from '../data/collection-icon-pack-digests-v3.0.1.json';
+import {loadVerifiedArtAsset} from './dynamic-art-assets';
 export type NativeSheetAsset={root:string;file:string;sha256:string;bytes:number};
 export type SpriteCell={url:string;x:number;y:number;group?:string;sheet?:number;cell?:number;nativeSheet?:NativeSheetAsset};
 export type IconPack={group:string;entries:Record<string,SpriteCell>;dispose():void};
@@ -55,20 +56,15 @@ function validateIndex(value:unknown,group:string):PackIndex{
  return v;
 }
 
-export async function loadIconPack(group:string,base:string):Promise<IconPack>{
- if(!/^[a-z_]+$/.test(group))throw Error('ICON_GROUP_INVALID');
- const count=PART_COUNTS[group]??1;
+async function decodeIconPack(group:string,count:number,loadPart:(i:number)=>Promise<ArrayBuffer>):Promise<IconPack>{
+ if(!/^[a-z_]+$/.test(group)||!Number.isInteger(count)||count<1||count>64)throw Error('ICON_GROUP_INVALID');
  const urls:string[]=[];
  try{
   const indexed=new Map<string,Uint8Array>();
-  const response=await Promise.all(Array.from({length:count},(_,i)=>
-   fetch(base+'item-packs/'+group+(i?'-'+i:'')+'.zip')));
-  if(response.some(r=>!r.ok))throw Error('ICON_FETCH_FAILED');
+  const parts=await Promise.all(Array.from({length:count},(_,i)=>loadPart(i)));
   let total=0;
-  for(const [i,r] of response.entries()){
-   const data=await r.arrayBuffer();
+  for(const data of parts){
    total+=data.byteLength;if(total>20*1024*1024)throw Error('ICON_PACK_BUDGET');
-   await verifyIconPackBytes(group+(i?'-'+i:'')+'.zip',data);
    for(const [k,v] of readStoredZip(data)){
     if(indexed.has(k))throw Error('ICON_DUPLICATE');
     indexed.set(k,v);
@@ -97,4 +93,65 @@ export async function loadIconPack(group:string,base:string):Promise<IconPack>{
   urls.forEach(x=>URL.revokeObjectURL(x));
   throw e;
  }
+}
+
+export async function loadIconPack(group:string,base:string):Promise<IconPack>{
+ return decodeIconPack(group,PART_COUNTS[group]??1,async i=>{
+  const name=group+(i?'-'+i:'')+'.zip';
+  const response=await fetch(base+'item-packs/'+name);
+  if(!response.ok)throw Error('ICON_FETCH_FAILED');
+  const data=await response.arrayBuffer();await verifyIconPackBytes(name,data);return data;
+ });
+}
+
+type CandidatePart=Readonly<{file:string;bytes:number;sha256:string}>;
+export type CollectionPackPin=Readonly<{version:string;receiptFileSha256:string}>;
+const SHA256=/^[a-f0-9]{64}$/;
+const GROUP=/^[a-z_]+$/;
+function packCheck(ok:unknown):asserts ok{if(!ok)throw Error('ICON_CANDIDATE_INVALID');}
+function record(v:unknown):Record<string,unknown>{packCheck(v!==null&&typeof v==='object'&&!Array.isArray(v));return v as Record<string,unknown>;}
+function checkPin(p:CollectionPackPin){packCheck(/^\d+\.\d+\.\d+$/.test(p.version)&&SHA256.test(p.receiptFileSha256));}
+/** The input bytes must already match the explicitly reviewed release pin.
+ * All candidate parts use exact SHA-256 and size; no inferred filenames
+ * beyond the original assembler's deterministic group/part naming scheme. */
+export function decodeCandidateCollectionPacks(input:unknown,pin:CollectionPackPin):ReadonlyMap<string,readonly CandidatePart[]>{
+ checkPin(pin);const v=record(input);
+ packCheck(v.schema==='HKIA.IconReleaseCandidate.1'&&v.version===pin.version&&v.approval==='review-required'&&v.automaticReleaseActivationAuthorized===false);
+ const parts=record(v.collectionPackParts),files=record(v.outputFiles),digests=v.collectionPackDigests;
+ packCheck(Array.isArray(digests)&&digests.length<=4096&&Object.keys(parts).length<=256);
+ const expected=new Map<string,CandidatePart>(),groups=new Map<string,readonly CandidatePart[]>();
+ for(const [group,count] of Object.entries(parts)){
+  packCheck(GROUP.test(group)&&typeof count==='number'&&Number.isInteger(count)&&count>=1&&count<=64);
+  const rows:CandidatePart[]=[];let total=0;
+  for(let i=0;i<count;i++){
+   const file=group+(i?'-'+i:'')+'.zip',f=record(files['item-packs/'+file]),bytes=f.bytes,sha256=f.sha256;
+   packCheck(typeof bytes==='number'&&Number.isSafeInteger(bytes)&&bytes>=1&&bytes<=4_000_000&&typeof sha256==='string'&&SHA256.test(sha256)&&!expected.has(file));
+   total+=bytes;const part={file,bytes,sha256};expected.set(file,part);rows.push(part);
+  }
+  packCheck(total<=20*1024*1024);groups.set(group,rows);
+ }
+ const seen=new Set<string>();
+ for(const row of digests){
+  packCheck(Array.isArray(row)&&row.length===3&&typeof row[0]==='string'&&typeof row[2]==='string'&&/^[a-f0-9]{40}$/.test(row[2]));
+  const part=expected.get(row[0]);packCheck(part&&part.bytes===row[1]&&!seen.has(row[0]));seen.add(row[0]);
+ }
+ const packFiles=Object.keys(files).filter(f=>f.startsWith('item-packs/'));
+ packCheck(seen.size===expected.size&&packFiles.length===expected.size&&packFiles.every(f=>expected.has(f.slice('item-packs/'.length))));
+ return groups;
+}
+/** Candidate-only, explicitly pinned source. Production loadIconPack stays
+ * on its existing release. Unknown groups and mismatched versions fail
+ * without a network request for any image pack. */
+export function createVersionedCollectionPackLoader(root:string,pin:CollectionPackPin,load=loadVerifiedArtAsset){
+ checkPin(pin);packCheck(root.startsWith('/')&&root.endsWith('/')&&!root.includes('..')&&!root.includes('//')&&!root.includes('\\')&&!/[?#]/.test(root));
+ let pending:Promise<ReadonlyMap<string,readonly CandidatePart[]>>|undefined;
+ const bindings=()=>pending??=(async()=>{
+  const data=await load(root,'release-candidate.json',pin.receiptFileSha256,16*1024*1024);
+  return decodeCandidateCollectionPacks(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(data)),pin);
+ })().catch(e=>{pending=undefined;throw e;});
+ return async(group:string,version:string):Promise<IconPack>=>{
+  packCheck(version===pin.version&&GROUP.test(group));
+  const rows=(await bindings()).get(group);packCheck(rows);
+  return decodeIconPack(group,rows.length,i=>load(root+'item-packs/',rows[i].file,rows[i].sha256,4_000_000,rows[i].bytes));
+ };
 }
