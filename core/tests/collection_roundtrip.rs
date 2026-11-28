@@ -4439,6 +4439,49 @@ fn floral_outfits_first_add_edit_clone_zero_and_refill(){
 
 
 #[test]
+fn nested_furniture_wand_reaches_free_combination_when_all_single_slot_neighbors_are_reserved(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=384749651u32;let source=61381969i32;let before=[source,104,125,13,2,0];
+ let payload=arr(vec![vec![9],arr(vec![u(source as u32),furniture_payload([13,2,0]),u(104),u(125),u(0)])]);
+ let mut p=synthetic_payload("3.0.1");p[2]=5;p[3]=0x96;
+ p.extend(doc(1,arr(vec![u(4),u(item),u(21),u(3),payload])));
+ let raw=slot_from_payload("3.0.1",p);let mut seed=Editor::open(raw).unwrap();
+ let single=seed.inventory_wand_nested_creation_material_variants(4);
+ assert!(single.len()>1);
+ let mut peers=Vec::new();
+ for material in single{
+  let next=[source,104,125,material[0],material[1],material[2]];
+  if let Ok(id)=seed.create_inventory_wand_nested(4,before,next,1){peers.push(id);}
+ }
+ assert!(peers.len()>1);
+ // Export once to establish unique native keys, including material aliases.
+ let mut seed=Editor::open(seed.export().unwrap()).unwrap();
+ let zero:Vec<_>=seed.inventory().iter().filter(|r|r.document_id!=4).map(|r|(r.document_id,1,0)).collect();
+ seed.change_inventory_quantities(&zero).unwrap();let raw=seed.export().unwrap();
+ for zipped in [false,true]{
+  let input=if zipped{zip(&raw)}else{raw.clone()};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  let options=e.inventory_wand_nested_material_variants(4);
+  assert_eq!(options.len(),1);let material=options[0];
+  assert!((0..3).filter(|&i|material[i]!=before[i+3]).count()>=2);
+  assert!(e.inventory_wand_nested_creation_material_variants(4).contains(&material));
+  let target=[source,104,125,material[0],material[1],material[2]];
+  let id=e.create_inventory_wand_nested(4,before,target,2).unwrap();
+  assert!(e.change_inventory_wand_nested(4,before,target).is_err());
+  assert!(e.undo_scope(Inventory));assert_eq!(e.inventory(),original);
+  e.change_inventory_wand_nested(4,before,target).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert_eq!(restored.inventory_unique_data(4),e.inventory_unique_data(4));
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);
+  assert!(restored.redo_scope(Inventory));let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory_unique_data(4),e.inventory_unique_data(4));
+  assert_eq!(saved.inventory().iter().filter(|r|r.quantity==0).count(),peers.len());
+  assert_eq!(saved.inventory()[0].quantity,3);
+  assert!(e.inventory_unique_data(id).is_none());
+ }
+}
+
+#[test]
 fn furniture_source_wand_edits_and_additions_preserve_exact_nested_identity(){
  use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
  let item=384749651u32;let source=61381969i32;let candidate=0x80000000|item;

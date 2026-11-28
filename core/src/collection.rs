@@ -1963,23 +1963,20 @@ impl Editor {
  }
  fn wand_nested_material_options_from(item:i32,original:WandData,current:WandData,reserved:&HashSet<WandData>,pair:WandVariant,draft:FurnitureVariant,creation:bool)->Vec<FurnitureVariant>{
   let Some(source)=Self::wand_material_source(item,current[0])else{return Vec::new()};
-  let mut out=Vec::new();let mut seen=HashSet::new();let old=Self::wand_key(item,current);
+  let old=Self::wand_key(item,current);
   let original_key=Self::wand_key(item,original);
-  let mut target=current;target[1..3].copy_from_slice(&pair);target[3..].copy_from_slice(&draft);
-  let mut offer=|target:WandData|{
-   let key=Self::wand_key(item,target);
-   if key!=old&&(!creation||key!=original_key)&&key.is_some_and(|k|!reserved.contains(&k))&&
-    Self::valid_furniture_target(source,Self::wand_materials(original),Self::wand_materials(target)){
-    let v=Self::wand_materials(target);if seen.insert(v){out.push(v)}
-   }
+  let mut target=current;target[1..3].copy_from_slice(&pair);
+  let allowed=|materials:FurnitureVariant|{
+   let mut next=target;next[3..].copy_from_slice(&materials);
+   let key=Self::wand_key(item,next);
+   key!=old&&(!creation||key!=original_key)&&key.is_some_and(|k|!reserved.contains(&k))&&
+    Self::valid_furniture_target(source,Self::wand_materials(original),materials)
   };
-  offer(target);
-  for slot in source.slots{
-   let i=slot.slot as usize+3;
-   for n in std::iter::once(0).chain(slot.allowed.iter().copied()){
-    let mut next=target;next[i]=n;offer(next);
-   }
-  }
+  // A pair-only change may retain the draft. For material changes use
+  // the same normalized one-slot and free-combination planner as furniture.
+  let mut out=Vec::new();
+  if allowed(draft){out.push(draft)}
+  out.extend(Self::furniture_draft_choices(source,draft,allowed));
   out
  }
  pub fn inventory_wand_nested_creation_material_variants(&self,id:u32)->Vec<FurnitureVariant>{
