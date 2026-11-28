@@ -45,9 +45,9 @@ function fixture(){
  return {files,pin,receipt,catalog,packName,native};
 }
 test('collection own route table rejects catalog and missing route mismatches',()=>{
- const f=fixture();assert.equal(decodeCollectionOwnRoutes(f.receipt,f.catalog,f.pin).own.size,4);
+ const f=fixture();assert.equal(decodeNativeItemArt(f.receipt,f.native,f.catalog,f.pin).own.size,4);
  for(const mutate of [f=>f.catalog.items.pop(),f=>f.receipt.collectionOwnRoutes.pop(),f=>{f.native.collectionOwnRoutes[0][2]=true},f=>f.catalog.version='9.2.0']){
-  const f=fixture();mutate(f);assert.throws(()=>decodeCollectionOwnRoutes(f.receipt,f.catalog,f.pin),/ITEM_ART_RELEASE_INVALID/);
+  const f=fixture();mutate(f);assert.throws(()=>decodeNativeItemArt(f.receipt,f.native,f.catalog,f.pin),/ITEM_ART_RELEASE_INVALID/);
  }
 });
 test('one shared release selects actual base, override, recipe, placeholder and dynamic image providers',async()=>{
