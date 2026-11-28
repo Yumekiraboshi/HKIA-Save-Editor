@@ -303,7 +303,7 @@
 .inventory-group-option small{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
 .inventory-group-option.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 .inventory-group-option:hover:not(.active){background:var(--hover)}
-.inventory-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(136px,100%),1fr));gap:6px;align-items:stretch}
+.inventory-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(136px,100%),1fr));gap:6px;align-items:stretch;grid-auto-rows:204px;overflow-anchor:none}
 .inventory-card{--inventory-control-size:30px;position:relative;padding:7px;display:flex;flex-direction:column;gap:5px;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px}
 .inventory-card-heading{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;flex:1}
 /* A fixed 22px badge lane above the 64px artwork cell for every card.
@@ -397,3 +397,18 @@
  * the available width; the appearance action stays at the trailing edge. */
 .inventory-quantity-form .primary.quantity-unchanged{display:none}
 .inventory-quantity-form.quantity-pending input{border-color:var(--accent)}
+
+/* Shared virtual grids preserve the complete list geometry. */
+.editor-virtual-grid{overflow-anchor:none;align-items:stretch}
+.collection-item-grid{grid-auto-rows:208px}
+.collection-item-grid>.item-tile{height:100%;min-height:0}
+.collection-item-grid .item-toggle{height:100%;min-height:0}
+.achievement-item-grid.editor-virtual-grid{grid-auto-rows:224px}
+.collection-search-results.editor-virtual-grid{grid-auto-rows:108px}
+.collection-search-results.editor-virtual-grid .collection-search-result{height:100%;min-height:0;overflow:hidden}
+.collection-search-result-name,.collection-search-result-context{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+@media(max-width:730px){
+ .collection-item-grid{grid-auto-rows:200px}
+ .achievement-item-grid.editor-virtual-grid{grid-auto-rows:211px}
+ .collection-search-results.editor-virtual-grid{grid-auto-rows:104px}
+}
