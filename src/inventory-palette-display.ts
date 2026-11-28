@@ -25,6 +25,13 @@ export function resolvePaletteTints(itemId:number,palette:InventoryPalette):Tint
  return palette.every(c=>c[3]===1)?palette:palette.map(c=>[c[0],c[1],c[2],1] as Rgba) as unknown as TintSet;
 }
 
+/** Display identity uses the exact same validated shader inputs as the
+ * runtime renderer. Invalid or absent appearances share the reference-only
+ * identity; neither can reuse a previously colored image. */
+export function paletteArtKey(itemId:number,palette:InventoryPalette|null|undefined):string{
+ return JSON.stringify([itemId,palette?resolvePaletteTints(itemId,palette):null]);
+}
+
 /** Exact unsigned words for transport/history. Float conversion is display-only. */
 export type PaletteVariant=number[];
 export function isPaletteVariantWire(value:unknown):value is PaletteVariant{
