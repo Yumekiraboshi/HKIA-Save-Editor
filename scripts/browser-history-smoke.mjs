@@ -1057,6 +1057,26 @@ async function inventoryChefQuantitySmoke(){
   console.log('CHROMIUM CHEF ZERO PASS: confirmed zero, draft, history and native export reparse');
  }finally{await context.close();}
 }
+async function activeToolReloadSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-tool-reload.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  for(const tool of ['inventory','achievements','collections']){
+   await chooseTab(page,tool);
+   await page.reload({waitUntil:'networkidle'});
+   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+   assert.equal(await page.locator('.tools-nav button[aria-current="page"]').getAttribute('data-tool'),tool,'restore last active tool without another click');
+  }
+  await page.evaluate(()=>sessionStorage.setItem('hkia-active-tool','invalid'));
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  assert.equal(await page.locator('.tools-nav button[aria-current="page"]').getAttribute('data-tool'),'collections');
+  console.log('CHROMIUM ACTIVE TOOL RELOAD PASS');
+ }finally{await context.close()}
+}
 async function inventoryEditExportSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -3854,6 +3874,8 @@ async function run(){
 
  await page.reload({waitUntil:'networkidle'});
  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+ assert.equal(await page.locator('.tools-nav button[aria-current="page"]').getAttribute('data-tool'),'achievements','reload restores the last tool');
+ await chooseTab(page,'collections');
  steps=await countHistory(page,3);
  assert.match(await steps.nth(0).getAttribute('class')??'',/active/);
  await steps.nth(1).click(); // redo one collection entry after recovery
@@ -3992,6 +4014,7 @@ async function run(){
  await inventoryChefQuantitySmoke();
  await wandRuntimeSmoke(browser,origin,base);
  await wandMipSmoke(browser,origin,base);
+ await activeToolReloadSmoke();
  await inventoryEditExportSmoke();
  await inventoryBatchQuantitySmoke();
  await inventoryLastPositiveDuplicateZeroSmoke();

@@ -79,6 +79,18 @@ import {verifiedFloorplanName} from './floorplan-names';
  const ICONS=import.meta.env.BASE_URL+'icons/';
  const INVENTORY_UI=import.meta.env.BASE_URL+'inventory-ui/';
  let activeTool:Tool=$state('collections');
+ // Navigation preference is local to this browser tab, not part of the save
+ // or its asynchronous recovery journal. Persist synchronously before reload.
+ function selectTool(tool:Tool){
+  activeTool=tool;
+  try{sessionStorage.setItem('hkia-active-tool',tool)}catch{}
+ }
+ function restoreActiveTool(){
+  try{
+   const tool=sessionStorage.getItem('hkia-active-tool');
+   if(tool==='collections'||tool==='achievements'||tool==='inventory')activeTool=tool;
+  }catch{}
+ }
  let achievementQuery=$state('');
  let inventoryQuery=$state('');
  let inventoryGroup:InventoryGroupKey|null=$state(null);
@@ -708,7 +720,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function openInventoryTab(){
   refreshVariantArtwork();
   clearInventoryBatch();inventoryAddMode=false;
-  activeTool='inventory';inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;inventoryShowZero=false;
+  selectTool('inventory');inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;inventoryShowZero=false;
   inventoryLimit=BATCH_SIZE;editingAchievement=null;error='';
   refreshInventoryNativeArt();
   refreshFlowerDisplay();
@@ -721,7 +733,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   achievementLimit=BATCH_SIZE;
  }
  function openAchievementsTab(){
-  activeTool='achievements';editingAchievement=null;showAchievementGroup(null);error='';
+  selectTool('achievements');editingAchievement=null;showAchievementGroup(null);error='';
   refreshAchievementImages();
  }
  function achievementName(guid:string,index:number):string{
@@ -774,7 +786,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function goHome(){
   refreshVariantArtwork();
-  activeTool='collections';selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
+  selectTool('collections');selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
   editId=null;query='';collectionSearchDrilldown=false;filter='all';iconEpoch++;iconLoadingGroup=null;iconPack=null;iconError=false;
   if(snapshot)void persistDraft();
  }
@@ -893,6 +905,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     const liveIds=new Set(session.inventory.map(row=>row.documentId));
     inventoryLocks=new Set((draft.ui.inventoryLocks??[]).filter(id=>liveIds.has(id)));
     selectedGroup=draft.ui.group;selectedSubgroup=draft.ui.subgroup;
+    restoreActiveTool();
     if(draft.ui.group)void fetchImages(draft.ui.group);
    }
    draftReady=true;
