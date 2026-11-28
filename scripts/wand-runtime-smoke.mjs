@@ -39,7 +39,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
     const neutral={magicCharacteristicId:1,fleckCharacteristicId:2};
     const unmapped=await renderWandBaseArt(row.itemId,neutral);
     const full=await renderWandArt(row.itemId,{...neutral,sourceItemId:1185152302});
-    rows.push({id:row.itemId,a:await pixels(first),b:await pixels(second),original:await pixels(original),originalCache:original===await renderWandOriginalBaseArt(row.itemId),cache:first===await renderWandBaseArt(row.itemId,a),neutral:await pixels(unmapped),neutralCache:unmapped!==null&&unmapped===await renderWandBaseArt(row.itemId,{magicCharacteristicId:2,fleckCharacteristicId:1}),neutralFull:await pixels(full),neutralNoSource:await renderWandMagicArt(row.itemId,{...neutral,sourceItemId:0})===null});
+    rows.push({id:row.itemId,a:await pixels(first),b:await pixels(second),original:await pixels(original),originalCache:original===await renderWandOriginalBaseArt(row.itemId),cache:first===await renderWandBaseArt(row.itemId,a),neutral:await pixels(unmapped),neutralCache:unmapped!==null&&unmapped===await renderWandBaseArt(row.itemId,{magicCharacteristicId:2,fleckCharacteristicId:1}),neutralFull:await pixels(full),neutralNoSource:unmapped!==null&&await renderWandMagicArt(row.itemId,{...neutral,sourceItemId:0})===unmapped,neutralColored:await renderWandMagicArt(row.itemId,{magicCharacteristicId:1,fleckCharacteristicId:125,sourceItemId:0})===await renderWandBaseArt(row.itemId,{magicCharacteristicId:1,fleckCharacteristicId:125})});
    }
    const composed=[];
    for(const magic of m.magic){
@@ -137,7 +137,7 @@ export async function wandRuntimeSmoke(browser,origin,base){
    return {rows,composed,itemRows,added,inv,directSources,placeholders,outside,allShapes,templateRows,sharedAliases,unknownOriginal:await renderWandOriginalBaseArt(0)===null,unsupportedSource:await renderWandArt(39246601,{sourceItemId:315823,magicCharacteristicId:104,fleckCharacteristicId:125})===null,unknown:await renderWandBaseArt(39246601,{magicCharacteristicId:999999,fleckCharacteristicId:125})===null};
   },base);
   assert.equal(out.rows.length,9);assert.ok(out.unknown&&out.unknownOriginal);
-  for(const row of out.rows){assert.equal(row.neutral.rgba,row.original.rgba);assert.ok(row.neutralCache&&row.neutralFull.visible&&row.neutralNoSource);}
+  for(const row of out.rows){assert.equal(row.neutral.rgba,row.original.rgba);assert.ok(row.neutralCache&&row.neutralFull.visible&&row.neutralNoSource&&row.neutralColored);}
   assert.equal(out.composed.length,13);assert.ok(out.unsupportedSource);
   assert.equal(out.templateRows.length,18);
   for(const row of out.templateRows){assert.ok(row.art.visible&&row.cached);assert.notEqual(row.art.rgba,row.plain);}
@@ -194,6 +194,31 @@ export async function wandRuntimeSmoke(browser,origin,base){
     assert.notDeepEqual(failed.first,failed.plain,pattern);
     assert.notDeepEqual(failed.guarded,failed.plain,pattern);
     assert.notDeepEqual(failed.first,failed.guarded,pattern);
+   }finally{await failurePage.close();}
+  }
+  // Native absence is distinct from a missing file. A known unmapped magic
+  // characteristic does not need either overlay asset, while a mapped one does.
+  for(const pattern of ['**/wand-subicon-source-v3.0.1.json','**/wand-magic-overlay-v3.0.1.webp']){
+   const failurePage=await context.newPage();
+   try{
+    await failurePage.route(root+'__wand_runtime_fixture__.html',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html><body></body></html>'}));
+    await failurePage.route(root+'__wand_runtime_fixture__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
+    let attempts=0;
+    await failurePage.route(pattern,r=>{attempts++;return r.fulfill({status:503,body:'unavailable'});});
+    await failurePage.goto(root+'__wand_runtime_fixture__.html');
+    const absent=await failurePage.evaluate(async base=>{
+     const {renderWandArt,renderWandBaseArt}=await import(base+'__wand_runtime_fixture__.mjs');
+     const a={sourceItemId:0,magicCharacteristicId:1,fleckCharacteristicId:125};
+     const full=await renderWandArt(39246601,a),plain=await renderWandBaseArt(39246601,a);
+     return full!==null&&full===plain&&await renderWandArt(39246601,{...a,magicCharacteristicId:999999})===null;
+    },base);
+    assert.ok(absent,pattern);assert.equal(attempts,0);
+    const mapped=await failurePage.evaluate(async base=>{
+     const {renderWandArt,renderWandBaseArt}=await import(base+'__wand_runtime_fixture__.mjs');
+     const a={sourceItemId:0,magicCharacteristicId:104,fleckCharacteristicId:125};
+     return await renderWandArt(39246601,a)===null&&await renderWandBaseArt(39246601,a)!==null;
+    },base);
+    assert.ok(mapped,pattern);assert.equal(attempts,1);
    }finally{await failurePage.close();}
   }
   // If the preferred sample index is unavailable, both already-published

@@ -117,10 +117,15 @@ async function guardedItemOverlay(itemId:number,transform:WandTransform):Promise
  * Normalized editor geometry; actual prefab/framebuffer parity is pending. */
 export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&{sourceItemId:number},originalCell?:WandOriginalCell):Promise<Blob|null>{
  try{
-  const [s,sub]=await Promise.all([sources(),subSources()]);
-  const row=s.rows.get(itemId),transform=sub.wands.find(x=>x.itemId===itemId);
+  const s=await sources(),row=s.rows.get(itemId);
   const tints=resolveWandBaseTints(appearance,s.magic,s.flecks);
-  if(!row||!transform||!tints)return null;
+  if(!row||!tints)return null;
+  // A known characteristic without a MagicDisplay entry has no native
+  // sub-icon. The game hides that Image, so the tinted base is complete.
+  // This does not cover unknown IDs or a failed fetch of an existing icon.
+  if(appearance.sourceItemId===0&&!s.magic.has(appearance.magicCharacteristicId))return renderWandBaseArt(itemId,appearance);
+  const sub=await subSources(),transform=sub.wands.find(x=>x.itemId===itemId);
+  if(!transform)return null;
   let spritePathId:string,sourceHash:string,overlay:SpriteOverlay;
   if(appearance.sourceItemId===0){
    const index=sub.magic.findIndex(x=>x.characteristicId===appearance.magicCharacteristicId);
