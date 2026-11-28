@@ -160,7 +160,7 @@ test('compact inventory keeps quantity controls accessible and locks unsupported
  assert.match(css,/\.inventory-item-art \.item-sprite\{[^}]*transform:scale/);
  assert.match(app,/\{#if item\.editable\}\s*\{@const pending=quantityPending\(item\)\}\s*\{@const originalQuantity=[^\n]+\}\s*<form class="inventory-quantity-form"/);
  assert.match(app,/class:quantity-unchanged=\{!pending\}/);
- assert.match(app,/disabled=\{busy\|\|inventoryBatchMode\|\|!pending\|\|!quantityInputValid\(item\)\}/);
+ assert.match(app,/disabled=\{busy\|\|inventoryBatchMode\|\|locked\|\|!pending\|\|!quantityInputValid\(item\)\}/);
  assert.match(css,/\.inventory-quantity-form[^{}]*\.quantity-unchanged\{[^}]*visibility:hidden/);
  assert.match(app,/aria-label=\{iCopy\.apply\}/);
  assert.match(app,/class="inventory-readonly-quantity" title=\{iCopy\.readonly\}/);

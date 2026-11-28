@@ -370,6 +370,11 @@
 .inventory-removal-palette{display:flex;gap:4px;margin-top:3px;align-items:center}
 .inventory-removal-swatch{width:19px;height:19px;border:1px solid var(--line);border-radius:4px;flex:none}
 
+.inventory-category-actions{display:flex;align-items:center;flex-wrap:wrap;gap:6px;flex:0 0 100%;margin:0}
+.inventory-lock-button{position:absolute;top:5px;left:5px;z-index:2;display:grid;place-items:center;width:26px;height:26px;border-radius:5px;background:transparent;color:var(--muted);padding:0}
+.inventory-lock-button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+.inventory-card.inventory-locked{border-color:var(--accent)}
+
 /* Wide workspaces increase the number of columns, not artwork sizes.
    Keep narrow layout and focused modal widths unchanged. */
 @media(min-width:1301px){
