@@ -55,6 +55,7 @@ import {searchAchievementRows} from './achievement-search';
  import {nativeChefInstructionBase} from './native-icon-route';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
  import IngredientBadges from './IngredientBadges.svelte';
+ import {ordinaryRecipeBadges} from './ordinary-recipe-badges';
  import {cafeIngredientBadges,bobaIngredientBadges,type IngredientBadge} from './ingredient-badges';
  import {cafeSlotLabel,cafeVariantLabel,cafeOptionLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
  import {bobaFieldOptions,bobaFieldLabel,bobaFieldValue,bobaNeedsTupleChoice,fullBobaLabel,type BobaVariant,type BobaField} from './inventory-boba-display';
@@ -150,10 +151,15 @@ import {verifiedFloorplanName} from './floorplan-names';
   for(const row of rows){if(locked&&liveIds.has(row.documentId))next.add(row.documentId);else next.delete(row.documentId)}
   inventoryLocks=next;
   inventoryBatchSelected=new Set([...inventoryBatchSelected].filter(id=>!next.has(id)));
+  if(locked&&Object.keys(inventoryQuantityDrafts).length){
+   const drafts={...inventoryQuantityDrafts};
+   for(const row of rows)delete drafts[row.documentId];
+   inventoryQuantityDrafts=drafts;
+  }
   void persistDraft();
  }
- // Quantity input is a UI draft, not a native edit. A changed snapshot
- // invalidates draft values so Undo/Redo and reload cannot show stale input.
+ // Quantity input is a UI draft, not a native edit. Preserve independent
+ // rows across commits; history and new sessions explicitly discard drafts.
  let inventoryQuantityDrafts=$state<Record<number,string>>({});
  function quantityInput(row:InventoryEntry):string{
   return inventoryQuantityDrafts[row.documentId]??String(inventoryAddMode?1:row.quantity);
@@ -348,9 +354,11 @@ import {verifiedFloorplanName} from './floorplan-names';
   ?inventoryLockedRows(inventoryBrowseRows,inventoryLocks):inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,inventoryShowZero));
  const inventoryEffectiveEditableOnly=$derived(inventoryEditableOnly&&!inventoryLockedOnly);
  const inventoryGroupTotals=$derived(inventoryGroupCounts(inventoryDisplayedRows,nativeInventoryIndex));
+ // Category existence follows all rows, not the zero-visibility setting.
+ const inventoryOtherCount=$derived(inventoryBrowseRows.reduce((n,row)=>n+Number(nativeInventoryGroups(row.itemId,nativeInventoryIndex).includes(OTHER_INVENTORY_GROUP)),0));
  const inventoryMatchTotals=$derived(inventorySearchGroupCounts(inventoryDisplayedRows,inventoryQuery,inventoryEffectiveEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName));
  const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
- const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
+ const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!inventoryOtherCount?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
  const inventoryCategoryRows=$derived(nativeInventoryIndex.size?((snapshot as SaveSnapshot|null)?.inventory??[]).filter(row=>nativeInventoryGroups(row.itemId,nativeInventoryIndex).includes(activeInventoryGroup)):[]);
  const categoryZeroRows=$derived(inventoryCategoryRows.filter(row=>!isInventoryLocked(row.documentId)&&row.editable&&row.quantityMinimum===0&&row.quantity>0));
  const categoryRemoveRows=$derived(inventoryCategoryRows.filter(row=>!isInventoryLocked(row.documentId)&&row.removable));
@@ -543,10 +551,9 @@ import {verifiedFloorplanName} from './floorplan-names';
    const item=inventorySourceItems.get(id);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
-  function addIngredientSources(badges:IngredientBadge[]){for(const badge of badges)if(badge.itemIds.length<=2)for(const id of badge.itemIds)addWandSource(id);}
+  function addIngredientSources(badges:IngredientBadge[]){for(const badge of badges)for(const id of badge.itemIds)addWandSource(id);}
   for(const row of inventoryRows.slice(0,inventoryLimit)){
-   addIngredientSources(cafeIngredientBadges(row.cafe?.variant,snapshot.cafeWitnesses??[]));
-   addIngredientSources(bobaIngredientBadges(row.boba?.variant,snapshot.bobaWitnesses??[]));
+   addIngredientSources(inventoryIngredientBadges(row));
    // Native TryGetSubIcon returns the source item's normal UiIcon, even
    // when the wand itself has a native inventory-art entry.
    if(hasNativeWandArt(row.itemId))addWandSource(inventoryWandAppearance(row.itemId,row.unique)?.sourceItemId);
@@ -649,6 +656,13 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(native)return native;
   const group=inventorySourceItems.get(id)?.[3];
   return selectWandOriginalCell(id,group,group?inventoryIconPacks[group]?.entries:undefined);
+ }
+ function inventoryIngredientBadges(item:InventoryEntry):IngredientBadge[]{
+  if(!snapshot||snapshot.version!=='3.0.1')return [];
+  if(item.cafe)return cafeIngredientBadges(item.cafe.variant,snapshot.cafeWitnesses??[]);
+  if(item.boba)return bobaIngredientBadges(item.boba.variant,snapshot.bobaWitnesses??[]);
+  if((item.unique&&item.unique.tag!==-1)||!nativeInventoryGroups(item.itemId,nativeInventoryIndex).includes('food'))return [];
+  return ordinaryRecipeBadges(item.itemId,snapshot.version);
  }
  function inventoryOriginalSprite(itemId:number){
   if(inventoryNativeArt?.withheld.has(itemId))return undefined;
@@ -793,8 +807,19 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!entry.guid)return hCopy.title;
   return achievementName(achievementGuid(entry.guid),0);
  }
- function update(s:SaveSnapshot){
-  inventoryQuantityDrafts={};
+ function update(s:SaveSnapshot,discardDrafts=false){
+  if(discardDrafts||inventoryAddMode||!snapshot)inventoryQuantityDrafts={};
+  else if(Object.keys(inventoryQuantityDrafts).length){
+   const before=new Map(snapshot.inventory.map(row=>[row.documentId,row]));
+   const after=new Map(s.inventory.map(row=>[row.documentId,row]));
+   const retained:Record<number,string>={};
+   for(const [key,value] of Object.entries(inventoryQuantityDrafts)){
+    const id=Number(key),old=before.get(id),row=after.get(id);
+    if(old&&row&&row.editable&&!isInventoryLocked(id)&&old.itemId===row.itemId&&old.quantity===row.quantity&&
+     old.quantityMinimum===row.quantityMinimum&&old.quantityLimit===row.quantityLimit&&value!==String(row.quantity))retained[id]=value;
+   }
+   inventoryQuantityDrafts=retained;
+  }
   const previousGroup=activeInventoryGroup;
   snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));
   // A restored or newly created search match must not remain hidden in a
@@ -864,7 +889,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     }
     if(!session)session=patches.length||achievementPatches.length||inventoryPatches.length?await applyDraft(patches,achievementPatches,inventoryPatches):s;
    collectionSearchDrilldown=false;query='';
-    original=draft.file;baseline=originalRows;achievementBaseline=s.achievements;inventoryBaseline=s.inventory;update(session);
+    original=draft.file;baseline=originalRows;achievementBaseline=s.achievements;inventoryBaseline=s.inventory;update(session,true);
     const liveIds=new Set(session.inventory.map(row=>row.documentId));
     inventoryLocks=new Set((draft.ui.inventoryLocks??[]).filter(id=>liveIds.has(id)));
     selectedGroup=draft.ui.group;selectedSubgroup=draft.ui.subgroup;
@@ -900,7 +925,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    await draftWrites.catch(()=>{});
    const session=await openSave(file);
    clearInventoryBatch();inventoryAddMode=false;inventoryLocks=new Set();
-   original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;inventoryBaseline=session.inventory;update(session);
+   original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;inventoryBaseline=session.inventory;update(session,true);
    selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';collectionSearchDrilldown=false;filter='all';
    iconEpoch++;iconLoadingGroup=null;iconPack=null;iconError=false;
    try{await saveOriginalLocally(file);draftReady=true;draftWarning=false}
@@ -933,7 +958,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      selectedGroup=priorGroup;selectedSubgroup=priorSubgroup;showVariants=priorVariants;visibleLimit=BATCH_SIZE;
      if(priorGroup&&(!iconPack||iconPack.group!==priorGroup))void fetchImages(priorGroup);
     }catch{
-     original=null;snapshot=null;inventoryLocks=new Set();recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];
+     original=null;snapshot=null;inventoryQuantityDrafts={};inventoryLocks=new Set();recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];
      selectedGroup=null;selectedSubgroup=null;showVariants=false;iconEpoch++;iconLoadingGroup=null;iconPack=null;
     }
    }
@@ -1482,7 +1507,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const scope=activeTool;
   busy=true;error='';
   try{
-   update(await jumpHistory(scope,target));
+   update(await jumpHistory(scope,target),true);
    // A history jump may remove or recreate selected inventory rows. Never
    // carry a selection or an unsubmitted quantity across native revisions.
    if(scope==='inventory')resetInventoryBatchSelection();
@@ -1516,7 +1541,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!snapshot||busy)return;
   if(snapshot.dirty&&!confirm(copy.discard))return;
   busy=true;error='';
-  try{await draftWrites.catch(()=>{});await forgetLocalDraft();await clear();snapshot=null;original=null;inventoryLocks=new Set();recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];editingAchievement=null;goHome();draftReady=true;draftWarning=false;}
+  try{await draftWrites.catch(()=>{});await forgetLocalDraft();await clear();snapshot=null;original=null;inventoryQuantityDrafts={};inventoryLocks=new Set();recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];editingAchievement=null;goHome();draftReady=true;draftWarning=false;}
   catch(e){error=e instanceof Error?e.message:copy.unknown}
   finally{busy=false}
  }
@@ -1893,7 +1918,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     </div>
    {/if}
    </div>
-   {#if inventoryVisibleGroups.length>0||(inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)>0}
+   {#if inventoryVisibleGroups.length>0||inventoryOtherCount>0}
     
     <nav class="inventory-group-strip" aria-label={iCopy.tab}>
      {#each inventoryVisibleGroups as t (t.key)}
@@ -1918,7 +1943,7 @@ import {verifiedFloorplanName} from './floorplan-names';
        <span>{inventoryGroupLabel(locale,t.key)}</span><small>{(inventoryMatchTotals.get(t.key)??0).toLocaleString(locale)}</small>
       </button>
      {/each}
-     {#if (inventoryGroupTotals.get(OTHER_INVENTORY_GROUP)??0)>0}
+     {#if inventoryOtherCount>0}
       <button type="button" class="inventory-group-option" class:active={activeInventoryGroup===OTHER_INVENTORY_GROUP}
        aria-pressed={activeInventoryGroup===OTHER_INVENTORY_GROUP}
        onclick={()=>{inventoryGroup=OTHER_INVENTORY_GROUP;inventoryLimit=BATCH_SIZE}}>
@@ -2011,7 +2036,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          </span>
         {/if}
        </span>
-       <IngredientBadges rows={snapshot.version==='3.0.1'?(item.cafe?cafeIngredientBadges(item.cafe.variant,snapshot.cafeWitnesses??[]):bobaIngredientBadges(item.boba?.variant,snapshot.bobaWitnesses??[])):[]} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/>
+       <IngredientBadges rows={inventoryIngredientBadges(item)} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/>
        <strong class="inventory-name" title={inventoryName(item.itemId)}>{inventoryName(item.itemId)}</strong>
        {#if variantTitle}<span class="inventory-flower-variant-name" title={variantTitle}>{variantTitle}</span>{/if}
       </div>
