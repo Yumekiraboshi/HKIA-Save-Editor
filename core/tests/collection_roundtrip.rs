@@ -7158,3 +7158,39 @@ fn native_pin_projection_distinguishes_empty_screen_from_missing_or_unresolved()
   assert_eq!(e.inventory_pin_projection(),if mode==2{vec![(4,None)]}else{vec![]});
  }
 }
+
+#[test]
+fn existing_native_pin_set_cas_history_and_export_preserve_other_sets(){
+ use hkia_save_core::{native::INVENTORY_PIN_SCREEN,collection::HistoryScope::Inventory};
+ let material=[0x7539b33a,0x40c88e66,0xff582cb7,0x469faae7];
+ let other=[10,20,30,40];
+ for zipped in [false,true]{
+  let mut payload=synthetic_payload("3.0.1");payload[2]=9;payload[3]=0x98;
+  payload.extend(doc(1,arr(vec![u(4),u(1877756618),u(0),u(6),vec![0xc0]])));
+  payload.extend(doc(1,arr(vec![u(5),u(1877756618),u(0),u(1),vec![0xc0]])));
+  let sets=arr(vec![arr(vec![u(0),guid(INVENTORY_PIN_SCREEN)]),arr(vec![u(1),guid([4,5,6,7])])]);
+  let items=arr(vec![arr(vec![u(1),guid(other),u(0)])]);
+  payload.extend(doc(23,arr(vec![u(6),vec![0xc0],vec![0xc0],arr(vec![sets,items])])));
+  let raw=slot_from_payload("3.0.1",payload);let input=if zipped{zip(&raw)}else{raw.clone()};
+  let original=read_slot(&raw).unwrap();let source=original.index.pinned_items_source.as_ref().unwrap();
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.change_inventory_pin(4,other,false,true).is_err());
+  assert!(e.change_inventory_pin(4,material,true,false).is_err());
+  assert!(!e.dirty());
+  e.change_inventory_pin(4,material,false,true).unwrap();
+  assert_eq!(e.inventory_pin_orders(),vec![(4,0),(5,0)]);
+  assert!(e.change_inventory_pin(5,material,false,true).is_err());
+  let checkpoint=e.history_checkpoint().unwrap();
+  let mut restored=Editor::open(input.clone()).unwrap();restored.restore_history(&checkpoint).unwrap();
+  assert_eq!(restored.history_checkpoint().unwrap(),checkpoint);
+  let export=e.export().unwrap();
+  let opened=Editor::open(export.clone()).unwrap();assert_eq!(opened.inventory_pin_orders(),vec![(4,0),(5,0)]);
+  let exported_slot=if zipped{let z=ZipIndex::parse(&export).unwrap();z.targets(&export).unwrap().0.unwrap()}else{export};
+  let parsed=read_slot(&exported_slot).unwrap();let pins=parsed.index.pinned_items_source.as_ref().unwrap();
+  assert_eq!(pins.items.iter().map(|p|(p.set_id,p.item_guid,p.order)).collect::<Vec<_>>(),vec![(0,material,0),(1,other,1)]);
+  assert_eq!(original.envelope.decoded[source.sets_span.clone()],parsed.envelope.decoded[pins.sets_span.clone()]);
+  assert!(e.undo_scope(Inventory));assert!(!e.dirty());assert!(e.redo_scope(Inventory));
+  e.change_inventory_pin(5,material,true,false).unwrap();assert!(e.inventory_pin_orders().is_empty());assert!(!e.dirty());
+  assert!(e.undo_scope(Inventory));assert_eq!(e.inventory_pin_orders(),vec![(4,0),(5,0)]);
+ }
+}

@@ -1,4 +1,4 @@
-//! v3.0.1 original inventory pin identity. No write or context authority.
+//! v3.0.1 original inventory pin identity and bounded existing-set transaction.
 //! Hash128Extensions.Append at 0x2E52A60/BF0/D20 and Unity short hash at
 //! 0x7595EA0. Explicit little-endian word order; no platform-dependent hash.
 use crate::{native::{InventoryRow,InventoryUniqueData},wire::{Cursor,Token}};
@@ -145,4 +145,56 @@ mod tests{
   assert_ne!(append_int(append_int([0;4],1),2),append_int(append_int([0;4],2),1));
   assert_eq!(color_code([0,0,0,0]),color_code([0x80000000,0x80000000,0x80000000,0x80000000]));
  }
+}
+
+/// Logical persisted pin row; order is global across saved sets.
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub(crate) struct PinRow{pub set_id:i16,pub item_guid:Guid,pub order:i16}
+pub(crate) fn source_rows(source:&crate::native::PinnedItemsSource)->Vec<PinRow>{
+ source.items.iter().map(|p|PinRow{set_id:p.set_id,item_guid:p.item_guid,order:p.order}).collect()
+}
+/// Create/remove in a previously authenticated set. Existing unrelated GUIDs
+/// remain opaque. The original global order is closed after removal; the
+/// least recent row is evicted only at the verified native capacity of 200.
+pub(crate) fn plan(rows:&[PinRow],set_id:i16,key:Guid,before:bool,after:bool)->Result<Vec<PinRow>,crate::Error>{
+ use crate::Error;
+ if before==after||key==[0;4]||rows.len()>200{return Err(Error::Schema)}
+ let found=rows.iter().position(|p|p.set_id==set_id&&p.item_guid==key);
+ if found.is_some()!=before{return Err(Error::Schema)}
+ let mut next=rows.to_vec();
+ if let Some(index)=found{
+  let removed=next.remove(index);
+  for p in &mut next{if p.order>removed.order{p.order-=1;}}
+ }else{
+  if next.len()==200{let i=next.iter().position(|p|p.order==199).ok_or(Error::Schema)?;next.remove(i);}
+  for p in &mut next{p.order=p.order.checked_add(1).ok_or(Error::Overflow)?;}
+  next.insert(0,PinRow{set_id,item_guid:key,order:0});
+ }
+ Ok(next)
+}
+/// Preserve original retained row bytes except the explicitly changed order.
+pub(crate) fn encode_rows(raw:&[u8],source:&crate::native::PinnedItemsSource,rows:&[PinRow])->Result<Vec<u8>,crate::Error>{
+ use crate::Error;
+ if rows.len()>200{return Err(Error::Budget)}
+ let old=raw.get(source.items_span.clone()).ok_or(Error::Schema)?;
+ let mut c=Cursor::new(old);if c.array()?!=source.items.len(){return Err(Error::Schema)}
+ let mut out=Vec::new();
+ if rows.len()==source.items.len(){out.extend(&old[..c.pos]);}
+ else if rows.len()<16{out.push(0x90|rows.len() as u8)}
+ else{out.push(0xdc);out.extend((rows.len() as u16).to_be_bytes());}
+ for p in rows{
+  if let Some(s)=source.items.iter().find(|s|s.set_id==p.set_id&&s.item_guid==p.item_guid){
+   if p.order==s.order{out.extend(raw.get(s.whole.clone()).ok_or(Error::Schema)?);}
+   else{
+    out.extend(raw.get(s.whole.start..s.order_span.start).ok_or(Error::Schema)?);
+    out.push(0xd1);out.extend(p.order.to_be_bytes());
+    out.extend(raw.get(s.order_span.end..s.whole.end).ok_or(Error::Schema)?);
+   }
+  }else{
+   out.extend([0x93,0xd1]);out.extend(p.set_id.to_be_bytes());
+   for w in p.item_guid{out.push(0xce);out.extend(w.to_be_bytes());}
+   out.push(0xd1);out.extend(p.order.to_be_bytes());
+  }
+ }
+ Ok(out)
 }

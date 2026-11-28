@@ -137,7 +137,7 @@ pub(crate) struct DocumentSpan{pub key:(i32,u32),pub bytes:Range<usize>}
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub struct PinnedSetSource {pub set_id:i16,pub key:[u32;4],pub whole:Range<usize>}
 #[derive(Debug,Clone,PartialEq,Eq)]
-pub struct PinnedItemSource {pub set_id:i16,pub item_guid:[u32;4],pub order:i16,pub whole:Range<usize>}
+pub struct PinnedItemSource {pub set_id:i16,pub item_guid:[u32;4],pub order:i16,pub whole:Range<usize>,pub order_span:Range<usize>}
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub struct PinnedItemsSource {
  pub document_id:u32,pub whole:Range<usize>,pub sets_span:Range<usize>,pub items_span:Range<usize>,
@@ -292,7 +292,7 @@ impl<'a> Walk<'a>{
       let id=i16::try_from(f[0].0.int()?).map_err(|_|Error::Schema)?;
       let key=f[1].0.guid()?;
       if sets{set_rows.push(PinnedSetSource{set_id:id,key,whole:start..self.c.pos});}
-      else{item_rows.push(PinnedItemSource{set_id:id,item_guid:key,order:i16::try_from(f[2].0.int()?).map_err(|_|Error::Schema)?,whole:start..self.c.pos});}
+      else{item_rows.push(PinnedItemSource{set_id:id,item_guid:key,order:i16::try_from(f[2].0.int()?).map_err(|_|Error::Schema)?,whole:start..self.c.pos,order_span:f[2].1.clone()});}
      }
      if !valid{Ok(Value::Other)}else if sets{Ok(Value::PinSets(set_rows))}else{Ok(Value::PinItems(item_rows))}
     }else if ctx==Some(("chef-colors",0)){
