@@ -27,7 +27,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false,categoryProtectionInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -57,6 +57,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
    paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
    doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
+  ...(categoryProtectionInventory?[doc(1,arr([8],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([9],u32(627013240),[0],u32(9),[0xc0]))]:[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
   ...(ordinaryFurnitureInventory?[doc(1,arr([8],u32(427689),[0],u32(5),[0xc0])),doc(1,arr([9],u32(3202680),[0],u32(6),[0xc0])),furnitureHomeObject]:[]),
   ...(ordinaryClothingInventory?[doc(10,arr([8],hash(1,2,3,4),
@@ -1068,11 +1069,11 @@ async function inventoryCategoryProtectionSmoke(){
  try{
   const page=await context.newPage();
   await page.goto(origin+base,{waitUntil:'networkidle'});
-  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-category-lock.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({batchInventory:true}))});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-category-lock.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({categoryProtectionInventory:true}))});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');
   const search=page.locator('.inventory-controls input[type="search"]'),card=page.locator('.inventory-card');
-  await search.fill('315822');
+  await search.fill('1877756618');
   await card.locator('.inventory-lock-button').click();
   await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').isDisabled(),true);
@@ -1087,9 +1088,10 @@ async function inventoryCategoryProtectionSmoke(){
   }));
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
-  await chooseTab(page,'inventory');await search.fill('315822');
+  await chooseTab(page,'inventory');await search.fill('1877756618');
   await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
   const modal=page.locator('.removal-confirm-dialog');
+  // Both ordinary material rows have verified zero/removal eligibility.
   // Search deliberately hides the only unlocked row. Category operation
   // still targets it, never the locked visible row.
   await page.locator('.inventory-category-zero').click();
@@ -1098,7 +1100,7 @@ async function inventoryCategoryProtectionSmoke(){
   await modal.locator('.removal-confirm-action').click();
   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
-  await search.fill('517031');
+  await search.fill('627013240');
   await card.waitFor({state:'hidden'});
   await page.locator('.inventory-show-zero-toggle').click();
   await card.locator('input[name="quantity"]').waitFor();
@@ -1108,18 +1110,18 @@ async function inventoryCategoryProtectionSmoke(){
   await card.locator('.inventory-lock-button').click();
   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
   await page.locator('.inventory-show-zero-toggle').click();
-  await search.fill('315822');
+  await search.fill('1877756618');
   await page.locator('.inventory-category-remove').click();
   await modal.waitFor({state:'visible'});
   assert.equal(await modal.locator('.inventory-removal-targets li').count(),1,'hidden zero row included');
   await modal.locator('.inventory-remove-entry-action').click();
   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
   await page.locator('.inventory-show-zero-toggle').click();
-  await search.fill('517031');await card.waitFor({state:'hidden'});
+  await search.fill('627013240');await card.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]').click();
   await card.locator('input[name="quantity"]').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'0');
-  await search.fill('315822');await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
+  await search.fill('1877756618');await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
   console.log('CHROMIUM CATEGORY PROTECTION PASS: persisted lock, filtered category zero, hidden physical deletion, protected history');
  }finally{await context.close()}
