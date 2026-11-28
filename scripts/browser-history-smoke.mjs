@@ -27,7 +27,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,ordinaryRecipeInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,ordinaryRecipeInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false,categoryProtectionInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -58,6 +58,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
    paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
    doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
+  ...(categoryProtectionInventory?[doc(1,arr([8],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([9],u32(627013240),[0],u32(9),[0xc0]))]:[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
   ...(ordinaryFurnitureInventory?[doc(1,arr([8],u32(427689),[0],u32(5),[0xc0])),doc(1,arr([9],u32(3202680),[0],u32(6),[0xc0])),furnitureHomeObject]:[]),
   ...(ordinaryClothingInventory?[doc(10,arr([8],hash(1,2,3,4),
@@ -191,9 +192,9 @@ async function inventoryDynamicPaletteArtSmoke(){
   const inputs=page.locator('.inventory-card input[name="quantity"]');
   assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.min)),['1','1']);
   await inputs.first().fill('4');await page.locator('.inventory-card button[type="submit"]').first().click();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await inputs.nth(1).fill('7');await page.locator('.inventory-card button[type="submit"]').nth(1).click();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await sprites.nth(1).waitFor({timeout:30_000});
   assert.deepEqual(await sprites.evaluateAll(els=>els.map(e=>getComputedStyle(e).backgroundImage).sort()),originalUrls,'quantity-only snapshot refresh retains dynamic artwork URLs');
   await page.locator('.inventory-card .inventory-unique-edit-button').first().click();
@@ -202,7 +203,7 @@ async function inventoryDynamicPaletteArtSmoke(){
   await editor.locator('button[type="submit"]:not([disabled])').click();await editor.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await page.locator('button[title="Redo"]:not([disabled])').click();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
   await inputs.nth(1).waitFor();
@@ -332,7 +333,7 @@ async function inventoryPaletteCreationSmoke(){
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
   await page.locator('button[title="Undo"]:not([disabled])').click();await rows.nth(1).waitFor({state:'detached'});
   await page.locator('button[title="Redo"]:not([disabled])').click();await rows.nth(1).waitFor();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1835273963');
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
@@ -641,7 +642,7 @@ async function inventoryWandEditSmoke(){
   await chooseWandFields(dialog,106,127);
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();await page.locator('button[title="Redo"]:not([disabled])').click();
-  await card.locator('button[type="submit"]:not([disabled])').waitFor();
+  await card.locator('.inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-show-zero-toggle[aria-pressed="false"]').click();await page.locator('.inventory-controls input[type="search"]').fill('1429161083');
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
@@ -653,7 +654,7 @@ async function inventoryWandEditSmoke(){
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
   await page.locator('button[title="Undo"]:not([disabled])').click();await rows.nth(1).waitFor({state:'detached'});
   await page.locator('button[title="Redo"]:not([disabled])').click();await rows.nth(1).waitFor();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-show-zero-toggle[aria-pressed="false"]').click();await page.locator('.inventory-controls input[type="search"]').fill('1429161083');
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
@@ -697,6 +698,8 @@ async function inventoryBobaEditSmoke(){
    await page.setViewportSize({width,height:800});
    const box=await lane.boundingBox(),del=await card.locator('.inventory-stack-delete').boundingBox();
    assert.ok(box&&del&&(box.x+box.width<=del.x||del.x+del.width<=box.x||box.y+box.height<=del.y||del.y+del.height<=box.y),'ingredient lane must not cover delete control');
+   const lock=await card.locator('.inventory-lock-button').boundingBox();
+   assert.ok(box&&lock&&(box.x+box.width<=lock.x||lock.x+lock.width<=box.x||box.y+box.height<=lock.y||lock.y+lock.height<=box.y),'ingredient lane must not cover lock control');
    assert.equal(await lane.locator('.ingredient-badge').count(),4);
   }
   await page.setViewportSize({width:1280,height:800});
@@ -714,7 +717,7 @@ async function inventoryBobaEditSmoke(){
   await card.locator('.inventory-flower-variant-name').filter({hasText:'With tapioca · Sweet'}).waitFor();
   await page.locator('button[title="Redo"]:not([disabled])').click();
   await card.locator('.inventory-flower-variant-name').filter({hasText:'Without tapioca · Unsweetened'}).waitFor();
-  await card.locator('button[type="submit"]:not([disabled])').waitFor();
+  await card.locator('.inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1798633565');
   await card.locator('.inventory-flower-variant-name').filter({hasText:'Without tapioca · Unsweetened'}).waitFor();
@@ -820,7 +823,7 @@ async function inventoryBobaFullCreationSmoke(){
   await rows.nth(1).waitFor();assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
   await page.locator('button[title="Undo"]:not([disabled])').click();await rows.nth(1).waitFor({state:'detached'});
   await page.locator('button[title="Redo"]:not([disabled])').click();await rows.nth(1).waitFor();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('1798633565');await rows.nth(1).waitFor();
   assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
@@ -864,7 +867,7 @@ async function inventoryCafeEditSmoke(){
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await page.locator('button[title="Redo"]:not([disabled])').click();
-  await card.locator('button[type="submit"]:not([disabled])').waitFor();
+  await card.locator('.inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('203331651');
   await card.locator('.inventory-unique-edit-button').waitFor();
@@ -912,7 +915,7 @@ async function inventoryCafeCreationAndOptionalSideSmoke(){
   const none=side.locator('option[data-ingredient-id="0"]');
   await side.selectOption(await none.getAttribute('value'));
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').first().waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').first().waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('1338995084');await rows.nth(1).waitFor();
   assert.deepEqual(await rows.evaluateAll(els=>els.map(e=>e.value)),['1','3']);
@@ -975,7 +978,7 @@ async function inventoryChefQuantitySmoke(){
    const inputs=page.locator('.inventory-card input[name="quantity"]');await inputs.nth(1).waitFor();return inputs;
   };
   const apply=(index=0)=>page.locator('.inventory-card button[type="submit"]').nth(index).click();
-  const settled=()=>page.locator('.inventory-card button[type="submit"]:not([disabled])').nth(1).waitFor();
+  const settled=()=>page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').nth(1).waitFor();
   await openInventory();
   let inputs=await inputFor(203331651);
   assert.deepEqual(await inputs.evaluateAll(rows=>rows.map(r=>r.min)),['0','0']);
@@ -1034,14 +1037,24 @@ async function inventoryEditExportSmoke(){
   const quantity=card.locator('input[name="quantity"]');
   assert.equal(await quantity.inputValue(),'6');
   assert.equal(await quantity.isDisabled(),false);
+  const apply=card.locator('button[type="submit"]');
+  assert.equal(await apply.isVisible(),false,'unchanged owned quantity has no visible apply action');
   await quantity.fill('25');
-  await card.locator('button[type="submit"]').click();
+  await apply.waitFor({state:'visible'});
+  assert.equal(await card.locator('.inventory-quantity-delta').innerText(),'6 → 25');
+  await quantity.fill('6');
+  await apply.waitFor({state:'hidden'});
+  await quantity.fill('25');
+  await apply.click();
   await page.locator('.inventory-card input[name="quantity"]').first().waitFor();
   // The filled DOM input already contains 25 before the native edit. Wait for
   // the completed CAS transaction and actual committed IndexedDB draft, not
   // just the input's value, before exercising recovery.
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').first().waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').first().waitFor();
   await page.locator('.state-dot.changed').waitFor();
+  await apply.waitFor({state:'hidden'});
+  assert.equal(await card.locator('.inventory-quantity-delta').innerText(),'6 → 25');
+  assert.equal(await card.locator('.inventory-quantity-form').getAttribute('data-quantity-committed'),'25');
   const storedInventory=await page.evaluate(()=>new Promise((resolve,reject)=>{
    const open=indexedDB.open('hkia-editor-local-session',1);
    open.onerror=()=>reject(open.error);
@@ -1093,6 +1106,70 @@ async function confirmInventoryRemoval(page,accept=true){
  await modal.locator(accept?'.removal-confirm-action':'.removal-cancel').click();
  await modal.waitFor({state:'hidden'});
 }
+async function inventoryCategoryProtectionSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-category-lock.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({categoryProtectionInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]'),card=page.locator('.inventory-card');
+  await search.fill('1877756618');
+  await card.locator('.inventory-lock-button').click();
+  await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').isDisabled(),true);
+  assert.equal(await card.locator('.inventory-quantity-form button[type="submit"]').isDisabled(),true);
+  assert.equal(await card.locator('.inventory-quantity-form').getAttribute('data-quantity-ready'),'false');
+  assert.equal(await card.locator('.inventory-stack-delete').isDisabled(),true);
+  await page.locator('.inventory-batch-toggle').click();
+  assert.equal(await card.locator('.inventory-batch-checkbox').count(),0);
+  await page.locator('.inventory-batch-toggle').click();
+  await page.waitForFunction(async()=>new Promise(resolve=>{
+   const req=indexedDB.open('hkia-editor-local-session',1);
+   req.onsuccess=()=>{const db=req.result;const get=db.transaction('unsaved-changes','readonly').objectStore('unsaved-changes').get('current');get.onsuccess=()=>{db.close();resolve(get.result?.ui?.inventoryLocks?.length===1)};get.onerror=()=>{db.close();resolve(false)}};
+   req.onerror=()=>resolve(false);
+  }));
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('1877756618');
+  await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
+  const modal=page.locator('.removal-confirm-dialog');
+  // Both ordinary material rows have verified zero/removal eligibility.
+  // Search deliberately hides the only unlocked row. Category operation
+  // still targets it, never the locked visible row.
+  await page.locator('.inventory-category-zero').click();
+  await modal.waitFor({state:'visible'});
+  assert.equal(await modal.locator('.inventory-removal-targets li').count(),1);
+  await modal.locator('.removal-confirm-action').click();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
+  await search.fill('627013240');
+  await card.waitFor({state:'hidden'});
+  await page.locator('.inventory-show-zero-toggle').click();
+  await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'0');
+  await card.locator('.inventory-lock-button').click();
+  assert.equal(await page.locator('button[title="Undo"]').isDisabled(),true,'history cannot change a locked row');
+  await card.locator('.inventory-lock-button').click();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  await page.locator('.inventory-show-zero-toggle').click();
+  await search.fill('1877756618');
+  await page.locator('.inventory-category-remove').click();
+  await modal.waitFor({state:'visible'});
+  assert.equal(await modal.locator('.inventory-removal-targets li').count(),1,'hidden zero row included');
+  await modal.locator('.inventory-remove-entry-action').click();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  await page.locator('.inventory-show-zero-toggle').click();
+  await search.fill('627013240');await card.waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]').click();
+  await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'0');
+  await search.fill('1877756618');await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
+  console.log('CHROMIUM CATEGORY PROTECTION PASS: persisted lock, filtered category zero, hidden physical deletion, protected history');
+ }finally{await context.close()}
+}
 async function inventoryBatchQuantitySmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -1125,7 +1202,7 @@ async function inventoryBatchQuantitySmoke(){
   assert.equal(await page.locator('.inventory-batch-checkbox:checked').count(),0);
   await page.locator('.inventory-batch-toggle').click();
   await page.locator('.inventory-batch-form').waitFor({state:'hidden'});
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').first().waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').first().waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');
@@ -1219,7 +1296,7 @@ async function inventoryQuantityBoundsSmoke(){
   await input.fill('3');
   await page.locator('.inventory-card button[type="submit"]').click();
   await page.locator('.state-dot.changed').waitFor();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   assert.equal(await input.inputValue(),'3');
   await page.locator('.inventory-batch-toggle').click();
   await page.locator('.inventory-batch-checkbox').check();
@@ -1270,12 +1347,12 @@ async function inventoryEmptyMaterialSmoke(currency=false){
   await deleteButton.click();await removal.waitFor({state:'visible'});
   await removal.locator('.removal-confirm-action').click();
   await page.locator('.state-dot.changed').waitFor();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   input=await inputFor(second);
   assert.equal(await input.inputValue(),'0');
   await input.fill('5');
   await apply();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await openItems();
   assert.equal(await (await inputFor(first)).inputValue(),'0');
@@ -1288,7 +1365,7 @@ async function inventoryEmptyMaterialSmoke(currency=false){
   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
   assert.equal(await (await inputFor(second)).inputValue(),'5');
   input=await inputFor(first);await input.fill('6');await apply();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.locator('.inventory-batch-toggle').click();
   const firstName=await page.locator('.inventory-card .inventory-name').innerText();
   await page.locator('.inventory-batch-checkbox').check();
@@ -1316,7 +1393,7 @@ async function inventoryEmptyMaterialSmoke(currency=false){
   assert.equal(await (await inputFor(first)).inputValue(),'6');
   assert.equal(await (await inputFor(second)).inputValue(),'5');
   await page.locator('button[title="Undo"]').click();
-  await page.locator('.inventory-card button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   assert.equal(await (await inputFor(first)).inputValue(),'0');
   assert.equal(await (await inputFor(second)).inputValue(),'5');
   await page.locator('.file-menu > summary').click();
@@ -1871,8 +1948,8 @@ async function inventoryFlowerGrowthDisplaySmoke(){
    const card=cards.first(),quantity=card.locator('input[name="quantity"]'),apply=card.locator('.inventory-quantity-form button[type="submit"]');
    assert.equal(await quantity.getAttribute('min'),'0');
    await quantity.fill('0');await apply.click();await confirmInventoryRemoval(page);
-   await apply.waitFor({state:'visible'});
-   await card.locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+   await apply.waitFor({state:'hidden'});
+   await card.locator('.inventory-quantity-form[data-quantity-ready="true"]').waitFor();
    assert.equal(await quantity.inputValue(),'0');
    await page.locator('button[title="Undo"]:not([disabled])').click();
    await page.locator('button[title="Redo"]:not([disabled])').waitFor();
@@ -2033,10 +2110,10 @@ async function inventoryFlowerVariantEditSmoke(){
   await quantity.waitFor();assert.equal(await quantity.getAttribute('min'),'0');
   await quantity.fill('0');await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]').click();await confirmInventoryRemoval(page);
   await page.locator('button[title="Undo"]:not([disabled])').waitFor();
-  await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   assert.equal(await quantity.inputValue(),'0');
   await quantity.fill('25');await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]').click();
-  await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await page.locator('.inventory-show-zero-toggle[aria-pressed="false"]').click();
@@ -2128,7 +2205,7 @@ async function inventoryFlowerCreationSmoke(){
   await added.waitFor();assert.equal(await added.inputValue(),'5');
   assert.equal(await cards.first().locator('input[name="quantity"]').inputValue(),'1');
   await added.fill('7');await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]').click();
-  await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await cards.nth(1).locator('.inventory-quantity-form[data-quantity-ready="true"][data-quantity-committed="7"]').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('43114910');
@@ -2463,7 +2540,7 @@ async function inventoryFurnitureCreationSmoke(){
   await dialog.locator('select').filter({has:page.locator('option[value="'+next+'"]')}).first().selectOption(next);
   await dialog.locator('button[type="submit"]').click();await dialog.waitFor({state:'hidden'});
   await added.fill('7');await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]').click();
-  await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await cards.nth(1).locator('.inventory-quantity-form[data-quantity-ready="true"][data-quantity-committed="7"]').waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('61381969');
   await added.waitFor();assert.equal(await added.inputValue(),'7');
@@ -2592,7 +2669,7 @@ async function inventoryFurnitureVariantEditSmoke(){
   assert.equal(await quantity.inputValue(),'93');
   await quantity.fill('42');
   await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]').click();
-  await page.locator('.inventory-card .inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');
@@ -3804,6 +3881,7 @@ async function run(){
  await wandMipSmoke(browser,origin,base);
  await inventoryEditExportSmoke();
  await inventoryBatchQuantitySmoke();
+ await inventoryCategoryProtectionSmoke();
  await inventoryQuantityBoundsSmoke();
  await inventoryEmptyMaterialSmoke();
  await inventoryEmptyMaterialSmoke(true);

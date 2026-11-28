@@ -41,6 +41,10 @@
  :global(.inventory-card:has(>.inventory-batch-checkbox)) .ingredient-badges.wide{width:min(94px,calc(100% - 30px));left:calc(50% + 10px)}
  :global([dir="rtl"] .inventory-card:has(>.inventory-stack-delete)) .ingredient-badges.wide{left:calc(50% + 10px)}
  :global([dir="rtl"] .inventory-card:has(>.inventory-batch-checkbox)) .ingredient-badges.wide{left:calc(50% - 10px)}
+ :global(.inventory-card:has(>.inventory-lock-button):has(>.inventory-stack-delete)) .ingredient-badges.wide,
+ :global(.inventory-card:has(>.inventory-lock-button):has(>.inventory-batch-checkbox)) .ingredient-badges.wide{width:min(94px,calc(100% - 52px));left:50%}
+ :global([dir="rtl"] .inventory-card:has(>.inventory-lock-button):has(>.inventory-stack-delete)) .ingredient-badges.wide,
+ :global([dir="rtl"] .inventory-card:has(>.inventory-lock-button):has(>.inventory-batch-checkbox)) .ingredient-badges.wide{left:50%}
  :global(.inventory-flower-preview-frame) .ingredient-badges{width:min(94px,100%)}
  .ingredient-badge{position:relative;display:block;flex:none;width:var(--ingredient-size);height:var(--ingredient-size)}
  .ingredient-art{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden}

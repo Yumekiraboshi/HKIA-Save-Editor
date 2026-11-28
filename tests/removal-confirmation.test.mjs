@@ -61,7 +61,9 @@ test('confirmation checks save identity, revision and current recorded/completed
  assert.match(app,/closeRemovalConfirmation\(\);error=removalCopy\.stale;return/);
  assert.match(app,/if\(target\.kind==='collections'\)\{[\s\S]*?await change\(target\.id,null\)/);
  assert.match(app,/else if\(target\.kind==='achievements'\)await quickToggleAchievement\(target\.item,undefined,undefined,true\)/);
- assert.match(app,/target\.requests\.some\(\(\[id,before\]\)=>!snapshot\?\.inventory\.some\(row=>row\.documentId===id&&row\.quantity===before&&\(physical\?row\.removable:row\.editable&&row\.quantityMinimum===0\)\)/);
+ assert.match(app,/target\.requests\.some\(\(\[id,before\]\)=>\{/);
+ assert.match(app,/const row=liveInventory\?\.get\(id\)/);
+ assert.match(app,/return isInventoryLocked\(id\)\|\|!row\|\|row\.quantity!==before\|\|!\(physical\?row\.removable:row\.editable&&row\.quantityMinimum===0\)/);
  assert.match(app,/if\(target\.batch\)\{update\(await changeInventoryQuantities\(target\.requests\.filter\(\(\[,before\]\)=>before!==0\)\)\)/);
  assert.match(app,/requestRemoval\(\{kind:'inventory',requests,physical,zero,batch,name,targets:details,revision:snapshot\.revision\},opener\)/);
  assert.match(app,/if\(next===0\)\{requestInventoryDelete\(rows,true,/);
@@ -82,7 +84,7 @@ test('batch removal preview includes zero records only for physical removal and 
  const app=read('../src/App.svelte');
  assert.match(app,/const targets=physical\?rows:rows\.filter\(row=>row\.quantity>0\)/);
  assert.match(app,/const requests:InventoryQuantityRequest\[\]=targets\.map\(row=>\[row\.documentId,row\.quantity,0\]\)/);
- assert.match(app,/const details=targets\.map\(row=>\(\{documentId:row\.documentId,name:/);
+ assert.match(app,/const details=targets\.slice\(0,BATCH_SIZE\)\.map\(row=>\(\{documentId:row\.documentId,name:/);
  assert.match(app,/\{#each pendingRemoval\.targets as target \(target\.documentId\)\}/);
  assert.match(app,/target\.quantity\.toLocaleString\(locale\)/);
  assert.match(app,/removeInventoryEntries\(target\.requests\.map\(\(\[id,before\]\)=>\[id,before\]\)\)/);

@@ -668,3 +668,19 @@ All flower-derived appearance families, including resolved legacy tag-2 and mode
 #### Exhausted flower default identities
 
 The shared tag-7 Add path prefers the original source defaults. When all verified default starters are reserved by saved or staged identities, it may offer one deterministic free tuple from the same finite native preview policy (including the verified growth states only for species). This covers flowers and supported flower-crafted outputs, including patterned candles. The original default witness, source/entitlement gates, reservation of original/effective identities, UID allocation and atomic history remain mandatory. Existing zero rows are preserved. Synthetic raw/ZIP regression is required; real-game acceptance remains unverified.
+
+### Exact removal scope and quantity draft presentation
+
+An exact positive UID reference that resolves to a single complete saved row protects that row, not unrelated UIDs sharing its Item ID. Apply this rule to physical removal and the common structural zero gate for complete source-verified existing rows; bare Item IDs, partial/dangling/duplicate UIDs, copied payloads, unresolved contexts, GUID references and special state remain guarded. No new acquisition or appearance-generation authority is granted. Quantity input is a UI-only draft; hide the check action when an owned quantity equals its committed value, show before→after when pending or different from the original, validate before native CAS, and reset pending input on a new native snapshot. Add mode retains its explicit submit action. Actual game acceptance and browser behavior require validation.
+
+
+#### Physical cleanup of existing missing-required-payload rows
+
+A complete saved UID-zero nil record for a source-verified uncapped required-unique flower, cafe/Boba, wand or palette family may be removed by exact document identity if the existing strict unique reference checks pass. The payload is invalid for ordinary addition/refill; do not manufacture a default or grant quantity editing. Preserve bare/dangling references, outfit group guards, copied wand and palette guards (a nil palette cannot establish distinctness from a copy), entitlement-sensitive flower exclusions, and all special service/layout/kit exclusions. This is removal-only cleanup of existing rows, not evidence that a particular GetAll implementation creates them. Raw/ZIP synthetic regressions cover positive and zero quantities, atomic refusal, history replay, export/reparse and retained unrelated records. Actual game acceptance unverified.
+
+
+#### Exact-reference scope for structural wand quantity-zero
+
+For a complete saved wand row already authorized for physical removal and structural quantity editing, reuse exact UID reference authority for quantity-zero. Retain separate wand copy, clothing/palette context, legacy source resolution and exact source GUID denial checks. An independently resolved positive UID reference to another saved row no longer blocks quantity-zero of this row; bare/dangling references remain blocked. This does not authorize changes to wand source, appearance, acquisition or references. Existing semantic identity/creation checks remain unchanged. Synthetic raw/ZIP CAS, checkpoint recovery, deletion and reparse regressions added. Actual game acceptance unverified.
+
+The missing-required-payload regression now enumerates all 138 source definitions from the pinned quantity table, with one positive and one zero row per definition. The expected scope is all 136 uncapped required-unique definitions (272 rows), including the five DLC flower clothing definitions with the existing exact outfit/piece crosswalk, retaining both Home service definitions. The earlier 131 estimate missed the existing DLC fallback crosswalk. This is the conditional removal-only scope of malformed nil records, not proof of full variant editing or real save prevalence. CI must verify the expected partition.
