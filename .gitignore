@@ -11,3 +11,6 @@ public/source-colorways/*.webp
 
 # Derived per-item dynamic sprites are validated and materialized at build time.
 public/dynamic-colorways/
+
+# Reviewed native-resolution delivery is materialized from verified archives.
+public/native-art-releases/
