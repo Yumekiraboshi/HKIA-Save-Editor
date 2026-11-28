@@ -2545,6 +2545,37 @@ async function inventoryNativeArtRetrySmoke(){
  }
  console.log('CHROMIUM NATIVE INVENTORY ART RETRY PASS: exact target recovered by tab or online event without page reload, withheld route retained');
 }
+async function inventoryCategoryFallbackSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.route('**/item-packs/*.zip',r=>r.fulfill({status:503,body:'unavailable'}));
+  await page.route('**/inventory-art/index.json',r=>r.fulfill({status:503,body:'unavailable'}));
+  await page.route('**/source-colorways/index.json',r=>r.fulfill({status:503,body:'unavailable'}));
+  await page.route('**/dynamic-colorways/index.json',r=>r.fulfill({status:503,body:'unavailable'}));
+  // Original collection navigation images also may be temporarily absent.
+  await page.route('**/icons/collections_group_*.webp',r=>r.fulfill({status:503,body:'unavailable'}));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-category-fallback.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({emptyMaterialInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const tabs=page.locator('.inventory-group-option[data-inventory-group]');
+  await tabs.last().waitFor({timeout:30_000});
+  assert.equal(await tabs.count(),13);
+  for(const tab of await tabs.all()){
+   await tab.scrollIntoViewIfNeeded();
+   const key=await tab.getAttribute('data-inventory-group');
+   const image=tab.locator('.inventory-category-fallback');
+   await image.waitFor({timeout:30_000});
+   await page.waitForFunction(key=>{
+    const img=document.querySelector('[data-inventory-group="'+key+'"] .inventory-category-fallback');
+    return img?.src.endsWith('/inventory-ui/category-'+key+'.webp')&&img.complete&&img.naturalWidth>0;
+   },key,{timeout:30_000});
+   assert.ok(await image.isVisible(),key);
+  }
+ }finally{await context.close();}
+ console.log('CHROMIUM INVENTORY CATEGORY FALLBACK PASS: all 13 native tab Sprites independently available');
+}
 async function inventoryNativeSheetRetrySmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -3514,6 +3545,7 @@ async function run(){
  await originalArtworkFileRecoverySmoke();
  await inventoryNativeResultArtSmoke();
  await inventoryNativeArtRetrySmoke();
+ await inventoryCategoryFallbackSmoke();
  await inventoryNativeSheetRetrySmoke();
  await inventoryIconScaleSmoke();
  await inventoryDynamicFlowerArtSmoke();

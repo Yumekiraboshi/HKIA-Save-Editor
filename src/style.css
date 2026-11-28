@@ -295,6 +295,8 @@
 .inventory-group-option img{width:34px;height:34px;object-fit:contain;flex:none}
 .inventory-group-option .inventory-category-representative{position:relative;width:34px;height:34px;flex:none;overflow:hidden}
 .inventory-category-representative>span{position:absolute;top:0;left:0;width:96px;height:96px;transform:scale(.3541666667);transform-origin:top left;background-repeat:no-repeat;pointer-events:none}
+.inventory-category-representative>.item-art-empty{visibility:hidden}
+.inventory-category-representative:has(>.item-sprite)>.inventory-category-fallback{display:none}
 .inventory-group-option span{overflow:hidden;text-overflow:ellipsis}
 .inventory-group-option small{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
 .inventory-group-option.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
