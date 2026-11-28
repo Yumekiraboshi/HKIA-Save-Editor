@@ -2,7 +2,8 @@
  import InventoryAtlasSprite from './InventoryAtlasSprite.svelte';
  import type {SpriteCell} from './icon-packs';
  import type {IngredientBadge} from './ingredient-badges';
- let {rows,spriteFor,nameFor}:{rows:IngredientBadge[];spriteFor:(id:number)=>SpriteCell|undefined;nameFor:(id:number)=>string}=$props();
+ import {ingredientFlavorOnlyLabel} from './ingredient-identification';
+ let {rows,spriteFor,nameFor,locale='en'}:{rows:IngredientBadge[];spriteFor:(id:number)=>SpriteCell|undefined;nameFor:(id:number)=>string;locale?:string}=$props();
  let laneWidth=$state(64);
  const size=$derived(Math.min(22,Math.max(1,Math.floor((laneWidth-(rows.length-1)*2)/Math.max(1,rows.length)))));
  const smallScale=$derived(size*.66/96);
@@ -13,18 +14,18 @@
    {@const sprites=badge.itemIds.map(spriteFor)}
    {@const sprite=sprites.length===1?sprites[0]:undefined}
    {@const columns=Math.ceil(Math.sqrt(sprites.length))}
-   {@const title=(badge.itemIds.map(nameFor).join(' / ')||'?')+(badge.count>1?' · '+badge.count:'')}
-   <span class="ingredient-badge" data-ingredient-candidates={badge.itemIds.join(',')} data-ingredient-count={badge.count} data-ingredient-key={badge.key} data-ingredient-slots={badge.slots.join(',')} role="img" aria-label={title} {title}>
+   {@const title=(badge.itemIds.map(nameFor).join(' / ')||'?')+(badge.count>1?' · '+badge.count:'')+(badge.flavorOnly?' · '+ingredientFlavorOnlyLabel(locale):'')}
+   <span class="ingredient-badge" data-ingredient-candidates={badge.itemIds.join(',')} data-ingredient-count={badge.count} data-ingredient-key={badge.key} data-ingredient-match={badge.flavorOnly?'flavor':badge.itemIds.length?'exact':'unresolved'} data-ingredient-slots={badge.slots.join(',')} role="img" aria-label={title} {title}>
     <span class="ingredient-art" aria-hidden="true">
      {#if sprite}<InventoryAtlasSprite {sprite}/>
-     {:else if sprites.length===2&&sprites.every(Boolean)}
+     {:else if sprites.length===2&&sprites.some(Boolean)}
       {#each sprites as candidate,i}
-       {#if candidate}<span class="ingredient-candidate" class:second={i===1}><InventoryAtlasSprite sprite={candidate}/></span>{/if}
+       <span class="ingredient-candidate" class:second={i===1}>{#if candidate}<InventoryAtlasSprite sprite={candidate}/>{:else}<span class="ingredient-missing">✧</span>{/if}</span>
       {/each}
-     {:else if sprites.length>2&&sprites.every(Boolean)}
+     {:else if sprites.length>2&&sprites.some(Boolean)}
       <span class="ingredient-candidate-grid" style:grid-template-columns={`repeat(${columns},minmax(0,1fr))`} style:--candidate-grid-scale={size/columns/96}>
        {#each sprites as candidate}
-        {#if candidate}<span class="ingredient-grid-cell"><InventoryAtlasSprite sprite={candidate}/></span>{/if}
+        <span class="ingredient-grid-cell">{#if candidate}<InventoryAtlasSprite sprite={candidate}/>{:else}<span class="ingredient-missing">✧</span>{/if}</span>
        {/each}
       </span>
      {:else}<span class="ingredient-unknown">{badge.itemIds.length===0?'?':'✧'}</span>{/if}
@@ -56,5 +57,6 @@
  .ingredient-candidate-grid{display:grid;width:100%;height:100%;align-content:center}
  .ingredient-grid-cell{position:relative;aspect-ratio:1;overflow:hidden}
  .ingredient-grid-cell :global(.item-sprite){transform:scale(var(--candidate-grid-scale))}
+ .ingredient-missing{display:grid;place-items:center;width:100%;height:100%;font-size:8px;color:var(--muted)}
  .ingredient-count{position:absolute;bottom:0;right:0;min-width:10px;height:11px;border-radius:3px;background:var(--panel);color:var(--ink);font-size:9px;font-weight:700;line-height:11px;text-align:center;box-shadow:0 0 0 1px var(--line)}
 </style>

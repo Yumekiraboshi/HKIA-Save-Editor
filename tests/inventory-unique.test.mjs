@@ -182,3 +182,37 @@ test('all 25 native flower species distinguish all eight states from out-of-rang
   for(const growState of [-1,8,255,1.5,NaN])assert.equal(flowerGrowthKind(itemId,{growState,baseColor:1,pattern:0,patternColor:0}),'unknown');
  }
 });
+
+test('all native chef Add starters use the same ordered appearance as saved rows and initial previews',async()=>{
+ const {inventoryChefAppearance,chefDraftAppearance,hasNativeChefArt}=await load('../src/inventory-chef-display.ts');
+ const {readFileSync}=await import('node:fs');
+ const source=JSON.parse(readFileSync(new URL('../public/dynamic-chef-art/chef-runtime-source-v3.0.1.json',import.meta.url)));
+ assert.equal(source.rows.length,10);
+ for(const row of source.rows){
+  const id=row.itemId;assert.ok(hasNativeChefArt(id));
+  const variants=row.kind==='cafe'?[[48,49,48,9,46,9],[44,0,0,6,0,0],[44,49,0,6,46,0]]:[[8,99,79,78,71]];
+  for(const variant of variants){
+   const info=row.kind==='cafe'?{tag:3,fieldCount:2,words:[variant.slice(3).filter(n=>n>0).length,...variant.slice(3).filter(n=>n>0)]}:{tag:4,fieldCount:5,words:[variant[0]]};
+   const candidate={variant,editable:true,creationOnly:true};
+   const args=row.kind==='cafe'?[candidate,undefined]:[undefined,candidate];
+   const expected=inventoryChefAppearance(id,info);
+   assert.ok(expected);
+   assert.deepEqual(chefDraftAppearance(id,variant),expected);
+   assert.deepEqual(inventoryChefAppearance(id,undefined,...args),expected);
+   assert.equal(inventoryChefAppearance(id,undefined),null);
+   assert.equal(inventoryChefAppearance(id,{tag:-2,fieldCount:0,words:[]},...args),null);
+   if(row.kind==='cafe')assert.equal(chefDraftAppearance(id,[48,0,49,9,0,46]),null);
+  }
+ }
+ assert.equal(chefDraftAppearance(0,[48,49,48,9,46,9]),null);
+});
+test('palette Add default preserves exact source words and saved appearance wins',async()=>{
+ const {inventoryPaletteCardAppearance,paletteFromWords,paletteArtKey,CUSTOM_PALETTE_ITEM_ID}=await load('../src/inventory-palette-display.ts');
+ const words=[0x3f800000,0,0,0x3f800000,0,0x3f800000,0,0x3f800000,0,0,0x3f800000,0x3f800000];
+ const expected=paletteFromWords(words),original=inventoryPaletteCardAppearance(undefined,words);
+ assert.deepEqual(original,expected);
+ assert.equal(paletteArtKey(CUSTOM_PALETTE_ITEM_ID,original),paletteArtKey(CUSTOM_PALETTE_ITEM_ID,expected));
+ assert.equal(inventoryPaletteCardAppearance(expected,Array(12).fill(0)),expected);
+ assert.equal(inventoryPaletteCardAppearance(undefined,undefined),undefined);
+ assert.equal(inventoryPaletteCardAppearance(undefined,[0]),undefined);
+});

@@ -1,6 +1,6 @@
 <script lang="ts">
  import art from '../data/inventory-decorator-art-v3.0.1.json';
- let {type,primaryColor,patternUrl,iconColor}:{type:number;primaryColor?:string;patternUrl?:string;iconColor?:string}=$props();
+ let {type,primaryColor,secondaryColor,patternUrl,iconColor}:{type:number;primaryColor?:string;secondaryColor?:string;patternUrl?:string;iconColor?:string}=$props();
  const base=import.meta.env.BASE_URL;
  const root=base+'inventory-decorators/';
  const rgba=(c:number[])=>'rgba('+c.slice(0,3).map(v=>Math.round(v*255)).join(',')+','+c[3]+')';
@@ -14,7 +14,9 @@
   style:--plate={'url("'+root+art.plate.file+'")'}
   style:--primary={(type===12||dyeTint)&&primaryColor?primaryColor:rgba(row.primary)} style:--accent={rgba(row.accent)}
   style:width={art.geometry.outer+'px'} style:height={art.geometry.outer+'px'}>
-  <span class="plate-inner" style:width={art.geometry.inner+'px'} style:height={art.geometry.inner+'px'}></span>
+  <span class="plate-inner" data-flower-two-tone={type===12&&primaryColor&&secondaryColor?'true':undefined}
+   style:background-image={type===12&&primaryColor&&secondaryColor?'linear-gradient(135deg, '+primaryColor+' 0 50%, '+secondaryColor+' 50% 100%)':undefined}
+   style:width={art.geometry.inner+'px'} style:height={art.geometry.inner+'px'}></span>
   <span class="native-decorator-icon-clip" class:native-dye-icon-clip={dyeTint} style:width={art.geometry.inner+'px'} style:height={art.geometry.inner+'px'}>
    {#if dyeTint}
     <span class="native-dye-icon-tint" style:background-color={iconColor} style:mask-image={'url("'+icon+'")' }></span>

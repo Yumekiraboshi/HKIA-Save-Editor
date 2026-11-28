@@ -75,3 +75,16 @@ export function paletteRemovalSwatches(palette:InventoryPalette|undefined):strin
  if(!palette||palette.length!==3||!palette.every(c=>c.length===4&&c.every(v=>Number.isFinite(v)&&v>=0&&v<=1)))return [];
  return palette.map(c=>'rgba('+c.slice(0,3).map(n=>Math.round(n*255)).join(',')+','+c[3]+')');
 }
+
+/** The Add card and its initial edit preview share the exact Rust starter.
+ * No default is synthesized for a saved or otherwise unsupported row. */
+export function inventoryPaletteCardAppearance(palette:InventoryPalette|undefined,creationDefault:PaletteVariant|undefined):InventoryPalette|undefined{
+ return palette??(isPaletteVariantWire(creationDefault)?paletteFromWords(creationDefault):undefined);
+}
+
+/** The native palette artwork uses RGB, not saved alpha. Show the ordered
+ * three visible channel colors and retain exact words for the Rust editor. */
+export function paletteAppearanceSwatches(palette:InventoryPalette|undefined):string[]{
+ if(!palette||!resolvePaletteTints(CUSTOM_PALETTE_ITEM_ID,palette))return [];
+ return palette.map(c=>'#'+c.slice(0,3).map(n=>Math.round(n*255).toString(16).padStart(2,'0')).join(''));
+}
