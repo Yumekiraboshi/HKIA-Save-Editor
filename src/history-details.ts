@@ -1,4 +1,4 @@
-import {HISTORY_MAX_BYTES,HISTORY_MAX_ROWS,HISTORY_MAX_BATCH_ROWS} from './history-limits';
+import {HISTORY_MAX_BYTES,HISTORY_MAX_ROWS} from './history-limits';
 import type {FlowerVariant,FurnitureVariant} from './inventory-unique';
 import {CUSTOM_PALETTE_ITEM_ID,paletteColorHex,type PaletteVariant} from './inventory-palette-display';
 import type {CafeVariant} from './inventory-cafe-display';
@@ -88,7 +88,7 @@ export function decodeHistoryDetails(
     if(documentId<=0||before<0||after<0||before===after)return [];
     result.push({scope:'inventory',documentId,before,after});
    }else if(kind===10){
-    const n=u32();if(n<1||n>HISTORY_MAX_BATCH_ROWS)return [];
+    const n=u32();if(n<1||n>Math.floor((v.byteLength-at)/12))return [];
     const batch:InventoryBatchDetail[]=[],seen=new Set<number>();
     for(let j=0;j<n;j++){
      const documentId=u32(),before=i32(),after=i32();
@@ -97,7 +97,7 @@ export function decodeHistoryDetails(
     }
     result.push({scope:'inventory',documentId:batch[0].documentId,batch});
    }else if(kind===24){
-    const n=u32();if(n<1||n>HISTORY_MAX_BATCH_ROWS)return [];
+    const n=u32();if(n<1||n>Math.floor((v.byteLength-at)/8))return [];
     const batch:InventoryBatchDetail[]=[],seen=new Set<number>();
     for(let j=0;j<n;j++){
      const documentId=u32(),before=i32();
