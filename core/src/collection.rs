@@ -1514,10 +1514,16 @@ impl Editor {
   let materials=Self::wand_materials(v);
   if materials==WAND_NIL_MATERIALS{return Some(v)}
   let s=Self::wand_material_source(item,source)?;
-  if materials.iter().any(|&m|m<0||furniture_source::material_unlock_item(m).is_some()){return None}
+  // Identity is not acquisition permission. A complete saved source
+  // material may be retained in its original slot; final edit and
+  // creation predicates separately enforce unlock-linked restrictions.
+  if materials.iter().any(|&m|m<0){return None}
   let [a,b,c]=furniture_key(s,materials)?;
   if Some([a,b,c])==furniture_key(s,[0;3]){return None}
   Some([source,magic,fleck,a,b,c])
+ }
+ fn wand_creation_materials_allowed(v:WandData)->bool{
+  Self::wand_materials(v).iter().all(|&m|furniture_source::material_unlock_item(m).is_none())
  }
  fn wand_identity(row:&crate::native::InventoryRow)->Option<WandData>{
   let item=row.item_id?;
@@ -1537,7 +1543,7 @@ impl Editor {
   row.item_id==Some(crate::inventory_source::ITEM_WAND_ID)&&row.id>0&&row.id<PENDING_ITEM&&
    row.unique_id.is_some_and(|uid|uid>0)&&row.quantity.is_some_and(|q|q>=0)&&
    row.fields.iter().all(Option::is_some)&&
-   Self::wand_identity(row).is_some_and(|v|Self::wand_materials(v)!=WAND_NIL_MATERIALS)
+   Self::wand_identity(row).is_some_and(|v|Self::wand_materials(v)!=WAND_NIL_MATERIALS&&Self::wand_creation_materials_allowed(v))
  }
  pub(crate) fn verified_bag_ordinary_wand_copy(row:&crate::native::InventoryRow)->bool{
   row.id>0&&row.id<PENDING_ITEM&&row.unique_id.is_some_and(|uid|uid>0)&&
@@ -1852,6 +1858,7 @@ impl Editor {
   }).collect()
  }
  fn stage_wand(&mut self,source_id:u32,item_id:i32,expected:WandVariant,expected_nested:Option<WandData>,identity:WandData,quantity:i32)->Result<u32,Error>{
+  if !Self::wand_creation_materials_allowed(identity){return Err(Error::Schema)}
   let document_id=self.allocate_staged_unique_handle()?;let revision=self.next_edit_revision()?;
   let change=Change::WandCreated{document_id,source_id,item_id,expected,expected_nested,identity,quantity};
   self.restore_change(&change,false);self.undo.push(change);
@@ -1968,7 +1975,7 @@ impl Editor {
   let mut target=current;target[1..3].copy_from_slice(&pair);target[3..].copy_from_slice(&draft);
   let mut offer=|target:WandData|{
    let key=Self::wand_key(item,target);
-   if key!=old&&(!creation||key!=original_key)&&key.is_some_and(|k|!reserved.contains(&k))&&
+   if key!=old&&(!creation||(key!=original_key&&Self::wand_creation_materials_allowed(target)))&&key.is_some_and(|k|!reserved.contains(&k))&&
     Self::valid_furniture_target(source,Self::wand_materials(original),Self::wand_materials(target)){
     let v=Self::wand_materials(target);if seen.insert(v){out.push(v)}
    }
