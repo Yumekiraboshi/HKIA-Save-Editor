@@ -256,3 +256,36 @@ test('recovering one dynamic card does not revoke a shared base used by another 
   stopB();assert.deepEqual(revoked,['blob:upgrade-2','blob:upgrade-1']);
  }finally{stopA();stopB();URL.createObjectURL=create;URL.revokeObjectURL=revoke;if(previous===undefined)delete globalThis.window;else globalThis.window=previous;}
 });
+
+test('transient HTTP failures recover without an online event, shared bounded retries stop for canceled or permanently missing art',async()=>{
+ const previous=globalThis.window,events=new EventTarget();
+ let nextTimer=1;const timers=new Map();
+ events.setTimeout=(callback,ms)=>{assert.equal(ms,2000);const id=nextTimer++;timers.set(id,callback);return id;};
+ events.clearTimeout=id=>timers.delete(id);
+ globalThis.window=events;
+ let ready=false,goodCalls=0,missingCalls=0,canceledCalls=0;
+ const good=new Blob(['recovered']),base=new Blob(['base']),shown=[];
+ const stopGood=startDynamicArtRequest(async()=>{goodCalls++;return ready?good:null;},(url,partial)=>shown.push([url,partial]),async()=>base);
+ const stopMissing=startDynamicArtRequest(async()=>{missingCalls++;return null;},()=>{});
+ const stopCanceled=startDynamicArtRequest(async()=>{canceledCalls++;return null;},()=>{});
+ const tick=async()=>{
+  assert.equal(timers.size,1,'all visible failed requests share one timer');
+  const [id,callback]=timers.entries().next().value;timers.delete(id);callback();
+  await new Promise(setImmediate);
+ };
+ try{
+  await new Promise(setImmediate);
+  assert.equal(shown.length,2);assert.equal(shown[1][1],true);
+  stopCanceled();ready=true;await tick();
+  assert.equal(goodCalls,2);assert.equal(missingCalls,2);assert.equal(canceledCalls,1);
+  assert.equal(shown.length,3);assert.equal(shown[2][1],false);
+  await tick();assert.equal(missingCalls,3);assert.equal(timers.size,0);
+  // An explicit reconnect still gets a fresh bounded recovery budget.
+  events.dispatchEvent(new Event('online'));await new Promise(setImmediate);
+  assert.equal(missingCalls,4);assert.equal(goodCalls,2);assert.equal(timers.size,1);
+  stopMissing();assert.equal(timers.size,0);
+ }finally{
+  stopGood();stopMissing();stopCanceled();
+  if(previous===undefined)delete globalThis.window;else globalThis.window=previous;
+ }
+});
