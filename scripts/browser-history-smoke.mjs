@@ -27,7 +27,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,ordinaryRecipeInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false,categoryProtectionInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,ordinaryRecipeInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false,categoryProtectionInventory=false,duplicateZeroInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -59,6 +59,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
    doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
   ...(categoryProtectionInventory?[doc(1,arr([8],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([9],u32(627013240),[0],u32(9),[0xc0]))]:[]),
+  ...(duplicateZeroInventory?[doc(1,arr([8],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([9],u32(1877756618),[0],u32(0),[0xc0]))]:[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
   ...(ordinaryFurnitureInventory?[doc(1,arr([8],u32(427689),[0],u32(5),[0xc0])),doc(1,arr([9],u32(3202680),[0],u32(6),[0xc0])),furnitureHomeObject]:[]),
   ...(ordinaryClothingInventory?[doc(10,arr([8],hash(1,2,3,4),
@@ -1183,6 +1184,32 @@ async function inventoryCategoryProtectionSmoke(){
   await search.fill('1877756618');await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
   console.log('CHROMIUM CATEGORY PROTECTION PASS: persisted lock, filtered category zero, hidden physical deletion, protected history');
+ }finally{await context.close()}
+}
+async function inventoryLastPositiveDuplicateZeroSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-duplicate-zero.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({duplicateZeroInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-controls input[type="search"]').fill('1877756618');
+  const card=page.locator('.inventory-card'),modal=page.locator('.removal-confirm-dialog');
+  await card.waitFor();
+  assert.equal(await card.count(),1);
+  await card.locator('.inventory-stack-delete').click();
+  await modal.locator('.removal-confirm-action').waitFor({state:'visible'});
+  await modal.locator('.removal-confirm-action').click();
+  await card.waitFor({state:'hidden'});
+  await page.locator('.inventory-show-zero-toggle').click();
+  await card.nth(1).waitFor();
+  assert.equal(await card.count(),2,'zeroing retains both original records');
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await page.locator('.inventory-show-zero-toggle').click();
+  await card.waitFor();
+  assert.equal(await card.count(),1,'undo restores the positive stack');
+  console.log('CHROMIUM LAST POSITIVE DUPLICATE ZERO PASS');
  }finally{await context.close()}
 }
 async function inventoryBatchQuantitySmoke(){
@@ -3896,6 +3923,7 @@ async function run(){
  await wandMipSmoke(browser,origin,base);
  await inventoryEditExportSmoke();
  await inventoryBatchQuantitySmoke();
+ await inventoryLastPositiveDuplicateZeroSmoke();
  await inventoryCategoryProtectionSmoke();
  await inventoryQuantityBoundsSmoke();
  await inventoryEmptyMaterialSmoke();

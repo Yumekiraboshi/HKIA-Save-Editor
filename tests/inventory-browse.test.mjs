@@ -299,4 +299,8 @@ test('batch-only duplicate zero requires every positive peer and respects lock s
  assert.deepEqual(inventoryBatchZeroRows(all,[a,ordinary],()=>false),[ordinary]);
  assert.deepEqual(inventoryBatchZeroRows(all,all,id=>id===2),[ordinary]);
  assert.deepEqual(inventoryBatchZeroRows(all,[a,b,ordinary],id=>id===3),[a,b,ordinary]);
+ // A singleton request is a complete positive family when its peers are already zero.
+ assert.deepEqual(inventoryBatchZeroRows([a,zero],[a],()=>false),[a]);
+ assert.deepEqual(inventoryBatchZeroRows([a,zero],[a],id=>id===1),[]);
+ assert.deepEqual(inventoryBatchZeroRows([a,zero],[a],id=>id===3),[a]);
 });

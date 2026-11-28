@@ -1360,9 +1360,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function requestInventoryDelete(rows:InventoryEntry[],batch:boolean,opener:HTMLElement,allowPhysical=true){
   if(!snapshot||busy||inventoryAddMode||!rows.length||rows.some(row=>isInventoryLocked(row.documentId))||rows.length>snapshot.inventoryBatchLimit)return;
   const physical=allowPhysical&&rows.every(row=>row.removable);
-  const zero=batch
-   ?inventoryBatchZeroRows(snapshot.inventory,rows,isInventoryLocked).length===rows.filter(row=>row.quantity>0).length&&rows.some(row=>row.quantity>0)
-   :rows.every(row=>row.editable&&row.quantityMinimum===0)&&rows.some(row=>row.quantity>0);
+  const zero=inventoryBatchZeroRows(snapshot.inventory,rows,isInventoryLocked).length===rows.filter(row=>row.quantity>0).length&&rows.some(row=>row.quantity>0);
   if(!physical&&!zero)return;
   const targets=physical?rows:rows.filter(row=>row.quantity>0);
   const requests:InventoryQuantityRequest[]=targets.map(row=>[row.documentId,row.quantity,0]);
@@ -1450,7 +1448,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   const target=pendingRemoval;
   if(!target||!snapshot||busy)return;
   const liveInventory=target.kind==='inventory'?new Map(snapshot.inventory.map(row=>[row.documentId,row])):null;
-  const zeroRows=target.kind==='inventory'&&target.batch&&!physical?new Set(inventoryBatchZeroRows(snapshot.inventory,
+  const zeroRows=target.kind==='inventory'&&!physical?new Set(inventoryBatchZeroRows(snapshot.inventory,
    target.requests.flatMap(([id])=>{const row=liveInventory?.get(id);return row?[row]:[]}),isInventoryLocked).map(row=>row.documentId)):null;
   if(snapshot.revision!==target.revision||original!==removalOriginal||
    (target.kind==='collections'
@@ -1475,7 +1473,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    busy=true;error='';
    try{
     if(physical){update(await removeInventoryEntries(target.requests.map(([id,before])=>[id,before])));resetInventoryBatchSelection()}
-    else if(target.batch){update(await changeInventoryQuantities(target.requests.filter(([,before])=>before!==0)));resetInventoryBatchSelection()}
+    else if(target.batch||target.requests.some(([id])=>liveInventory?.get(id)?.batchZeroOnly)){update(await changeInventoryQuantities(target.requests.filter(([,before])=>before!==0)));resetInventoryBatchSelection()}
     else{const [id,before,next]=target.requests[0];update(await changeInventoryQuantity(id,before,next))}
     await persistDraft();
    }catch(e){error=describeError(e)}
