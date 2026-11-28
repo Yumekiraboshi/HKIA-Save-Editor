@@ -4,8 +4,8 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-const {outputFiles}=await build({stdin:{contents:"export * from './chef-appearance'; export * from './native-characteristic-tint'; export * from './native-icon-route';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {resolveChefTints,NATIVE_CHARACTERISTIC_IDS,CHEF_MAPPED_IDS,nativeChefInstructionBase,nativeIconRoute}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {outputFiles}=await build({stdin:{contents:"export * from './chef-appearance'; export * from './native-characteristic-tint'; export * from './native-icon-route'; export * from './inventory-cafe-display';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+const {resolveChefTints,NATIVE_CHARACTERISTIC_IDS,CHEF_MAPPED_IDS,nativeChefInstructionBase,nativeIconRoute,cafeOptionLabel}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const dir=new URL('../public/dynamic-chef-art/',import.meta.url),read=n=>readFileSync(new URL(n,dir)),sha=b=>createHash('sha256').update(b).digest('hex');
 const raw=read('chef-runtime-source-v3.0.1.json'),m=JSON.parse(raw);
 const colors=new Map(m.colors.map(r=>[r.characteristicId,r.rgba]));
@@ -79,4 +79,10 @@ test('all five native chef instructions share exact original base and mask ident
  assert.deepEqual(pairs.sort((a,b)=>a[0]-b[0]),[[664242277,406277059],[697059779,1237708874],[906644716,1798633565],[1711005390,1338995084],[1946811711,1053426049]]);
  for(const row of audit.rows.filter(r=>!r.key.startsWith('item_instruction_chefcreation_')))assert.equal(nativeChefInstructionBase(row.itemId),undefined);
  assert.equal(nativeChefInstructionBase(0),undefined);
+});
+
+test('coupled cafe choices explicitly label every changed native slot',()=>{
+ const current=[44,49,48,6,46,9],target=[55,39,48,25,46,9],witnesses=[[1,55,25],[2,39,46]],name=id=>({1:'A',2:'B'}[id]??'');
+ assert.equal(cafeOptionLabel({variant:target,ingredientId:0,slot:0},current,witnesses,name),'1: A · 2: B');
+ assert.equal(cafeOptionLabel({variant:[55,49,48,25,46,9],ingredientId:1,slot:0},current,witnesses,name),'A');
 });

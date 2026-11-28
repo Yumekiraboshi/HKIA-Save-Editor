@@ -136,8 +136,8 @@ pub(crate) struct DocumentSpan{pub key:(i32,u32),pub bytes:Range<usize>}
 #[derive(Debug,Default)]
 pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievements:Vec<Model>,pub counters:Vec<Model>,pub collections:Vec<CollectionEntry>,pub deprecated_count:usize,pub dictionary_entries:usize,pub collection_map:Option<Range<usize>>,pub root_documents_span:Option<Range<usize>>,pub celebrations:Vec<CelebrationSpan>,pub inventory:Vec<InventoryRow>,pub inventory_item_refs:HashSet<(i32,i32)>,pub inventory_legacy_uid_refs:HashSet<i32>,pub inventory_item_refs_incomplete:bool,pub deprecated:Vec<DeprecatedEntry>,pub deprecated_map:Option<Range<usize>>,pub collection_version:Option<CollectionVersion>,
  /// A partial native ItemId/UID reference can name an exact ItemId without
- /// identifying its individual variant. Ordinary nil operations can protect
- /// that item alone; unique operations still use the full incomplete flag.
+ /// identifying its individual variant. Existing inventory operations protect
+ /// the named item alone; allocating new unique IDs still requires the full index.
  pub inventory_partial_item_refs:HashSet<i32>,
  pub inventory_item_refs_unscoped:bool,
  /// ItemId-based references with a copied unique payload (outfits, stands,

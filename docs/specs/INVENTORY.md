@@ -559,6 +559,10 @@ The Rust preview recomputes source-defined single-slot options from the complete
 For the nine source-verified cafe outputs and Boba, the existing source-defined first-add path is available when all original rows of that item are verified, independently zero/refill eligible and effectively zero, with no active staged row of that item. Reserve original and effective complete ordered identities; choose an unreserved native starter from source recipe pairs or Boba triples, and reject collisions in the same CAS. Unsupported cafe tuple lengths, missing references and family/allocation limits retain their prior denial. Zero rows are not positive witnesses; preserve their document, UID and original payload and refill independently. The same Add dialog, history and native reparse apply, without consuming or generating ingredients. Synthetic raw/ZIP regression; game acceptance unverified.
 
 
+#### Reachable free cafe combinations
+
+When every one-slot neighbor of a validated tag-3 draft is reserved, the common Rust planner may offer one free complete recipe using the same original source ingredient choices and final validator used for first additions. Preserve original/effective peer keys, the native ordered ingredient pairs, source restrictions, ownership witnesses, CAS and history. Label all coupled slot changes in the dialog. No extra transport format or acquisition authority. Synthetic raw/ZIP regressions cover all four three-slot output definitions; actual game acceptance unverified.
+
 #### Native cafe draft preview
 
 Compose each complete ordered cafe tuple through the same Rust preview and creation predicate used by CAS. Recompute legal slot choices from the current draft rather than combining stale single-slot suggestions in TypeScript. Reserve original/effective peers, allow legitimate intermediate edits (including retained original ingredient pairs), and enable creation only when the full target passes source and ownership validation. A preview does not write inventory/history. Existing row mutation, first-add, zero-family addition and final export stay on their existing native paths. Synthetic raw/ZIP coverage includes a slot pair becoming selectable after changing another slot, and collision denial before commit.
@@ -592,6 +596,10 @@ The pinned original was re-read across all 12,163 typed definitions; the previou
 A complete unambiguous existing UID-zero nil bag row at zero may be refilled even if its last-copy removal is blocked by incomplete equipment or other reference context. Reuse positive quantity bounds; do not authorize a new zero operation, absent record, entitlement or reference mutation. The Add view exposes Rust-authorized ordinary zero rows independently of the removal minimum. Undo restores the original zero without creating a new record.
 
 An existing source-verified empty nil furniture base may also be refilled beside distinct verified nondefault customized peers. Reuse the same original/effective variant identity check as removal, without requiring last-copy removal permission. Duplicate/ambiguous/default peers remain ineligible; placement/reference guards still prohibit removal. The Add view follows Rust's editable flag for zero rows rather than deriving permissions from the payload tag. Raw/ZIP regression covers reference-protected refill, recovery, distinct peer preservation and rejection of subsequent removal.
+
+#### Shared exact partial Item ID scope for existing unique records
+
+A v3.0.1 partial typed UniqueItemIdModel with one positive Item ID is an exact item-level denial, including every unique row of that item. Existing unique appearance/zero checks share the native ordinary reference scope, as physical removal already does. Unknown/zero Item IDs, truncated legacy models and unscoped references continue to deny semantic editing. All separate payload-copy, furniture, clothing, palette, original/effective identity and UID guards remain intact. Allocation of new unique UIDs still requires the complete reference index; no new unique acquisition authority is granted. Structural quantity editing remains independent. Synthetic raw/ZIP regression covers modern and legacy flower, furniture and wand plus cafe, Boba and palette, exact target denial, history and byte-preserving reparse. Actual game acceptance unverified.
 
 #### Flower species replacement (v3.0.1)
 

@@ -41,3 +41,10 @@ export function cafeSlotLabel(variant:CafeVariant,slot:number,witnesses:readonly
 export function cafeVariantLabel(variant:CafeVariant,witnesses:readonly CafeWitness[],name:(id:number)=>string):string{
  return [0,1,2].filter(i=>variant[i]>0).map(i=>cafeSlotLabel(variant,i,witnesses,name)).join(' · ');
 }
+
+/** Display every changed slot of a coupled native option, without generating a target. */
+export function cafeOptionLabel(option:CafeOption,current:CafeVariant,witnesses:readonly CafeWitness[],name:(id:number)=>string):string{
+ const changes=[0,1,2].filter(i=>option.variant[i]!==current[i]||option.variant[i+3]!==current[i+3]);
+ if(changes.length>1)return changes.map(i=>(i+1)+': '+cafeSlotLabel(option.variant,i,witnesses,name)).join(' · ');
+ return (option.ingredientId?name(option.ingredientId):'')||cafeSlotLabel(option.variant,option.slot,witnesses,name);
+}
