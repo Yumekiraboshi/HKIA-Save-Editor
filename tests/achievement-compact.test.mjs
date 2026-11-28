@@ -36,7 +36,7 @@ test('collection-like achievement cards create source-defined absent records on 
  for(const mark of [
    'class="category-grid achievement-category-grid"',
    'class="category-card achievement-category-card"',
-   'class="item-grid achievement-grid achievement-item-grid"',
+   'class="item-grid achievement-grid achievement-item-grid editor-virtual-grid"',
    'class="item-tile achievement-tile"',
    'class="item-toggle achievement-toggle"',
    'class="date-button achievement-dialog-button"',
