@@ -129,16 +129,19 @@ def scan_bundle(path, expected, name, targets, helper, previous, prior_dir, stag
         sn, at = decoder.name(sprite)
         require(sn == 'icon_' + key and decoder.name(texture)[0] == sn,
                 'original Sprite/definition identity mismatch: ' + str(item))
-        require(struct.unpack_from('<4f', sprite, at) == (0., 0., 256., 256.) and
-                decoder.ptr(sprite, at + 100) == (0, tid), 'unsupported Sprite geometry/PPtr')
         stream = helper.texture_stream(texture, '<')
-        require(stream['width'] == stream['height'] == 256 and stream['format'] == 'BC3/DXT5' and
-                stream['compressedBytes'] == 65536 and stream['streamPath'] == f'archive:/{cab}/{cab}.resS',
-                'unsupported completed icon texture')
-        res = nodes[cab + '.resS']
-        pos = stream['streamOffset']
-        require(0 <= pos <= len(res) - 65536, 'source texture stream bounds')
-        stream_hash = sha(res[pos:pos+65536])
+        w,h=stream['width'],stream['height']
+        size=((w+3)//4)*((h+3)//4)*16
+        require(type(w) is int and type(h) is int and 0<min(w,h)<=max(w,h)<=native_webp.MAX_DIMENSION and
+                (native_resolution or (w,h)==(256,256)) and
+                struct.unpack_from('<4f',sprite,at)==(0.,0.,float(w),float(h)) and
+                decoder.ptr(sprite,at+100)==(0,tid),'unsupported Sprite geometry/PPtr')
+        require(stream['format']=='BC3/DXT5' and stream['compressedBytes']==size and
+                stream['streamPath']==f'archive:/{cab}/{cab}.resS','unsupported completed icon texture')
+        res=nodes[cab+'.resS']
+        pos=stream['streamOffset']
+        require(0<=pos<=len(res)-size,'source texture stream bounds')
+        stream_hash=sha(res[pos:pos+size])
         identity = binding_identity(guid, targets[guid], sid, sprite, tid, texture, stream_hash)
         if native_resolution:
             identity['renderer']=native_webp.POLICY
@@ -147,8 +150,8 @@ def scan_bundle(path, expected, name, targets, helper, previous, prior_dir, stag
             if reused:
                 asset=native_webp.reuse(stage,prior_dir,old['asset'])
             else:
-                image,verified=decoder.decode(texture,res,cab,sn,native_resolution=True)
-                require(verified==stream_hash,'decoded texture source mismatch')
+                from PIL import Image
+                image=Image.frombytes('RGBA',(w,h),res[pos:pos+size],'bcn',3).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
                 asset=native_webp.store(stage,image)
             require((asset['width'],asset['height'])==(stream['width'],stream['height']),'original override dimensions')
             records[str(item)]={'binding':identity,'asset':asset,'sourceBundle':name,'sourceBundleSha256':expected,'cab':cab,'reused':reused}
