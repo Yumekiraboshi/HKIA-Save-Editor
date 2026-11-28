@@ -358,7 +358,7 @@ async function chooseWandFields(dialog,magic,fleck){
   const exact=select.locator('option[data-wand-variant="'+magic+':'+fleck+'"]');
   const choice=await (await exact.count()?exact:select.locator('option[data-wand-field-value="'+target+'"]').first()).getAttribute('value');
   assert.ok(choice!==null);await select.selectOption(choice);
-  await dialog.locator('select[name="wand-'+field+'"]:not([disabled])').waitFor();
+  await dialog.locator('[data-wand-busy="false"]').waitFor();
  }
  assert.equal(await state.getAttribute('data-wand-selected'),magic+':'+fleck);
 }
@@ -480,7 +480,6 @@ async function inventoryFirstFurnitureWandSmoke(){
   await card.locator('.inventory-unique-edit-button:not([disabled])').click();await dialog.waitFor();
   const source=dialog.locator('select[name="wand-owned-furniture"]');
   await source.selectOption('8');
-  const pair=dialog.locator('select[name="wand-magic"]:not([disabled])');
   await chooseWandFields(dialog,106,127);
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-wand:not([disabled])').click();await dialog.waitFor({state:'hidden'});

@@ -2145,17 +2145,19 @@ import {verifiedFloorplanName} from './floorplan-names';
       </select>
      </label>
     {/if}
-    <div class="date-dialog-field" data-wand-option-count={edit.options.length} data-wand-selected={selected.join(':')} data-wand-selection={wandSelection}>
+    <div class="date-dialog-field" data-wand-option-count={edit.options.length} data-wand-selected={selected.join(':')} data-wand-selection={wandSelection} data-wand-busy={busy}>
      {#each wandFieldLabels(locale) as label, i}
       {@const field=i===0?0:1}
       {@const other=field===0?1:0}
-      {@const choices=wandFieldOptions(edit.options,selected,field)}
+      {@const allowReset=!edit.absent&&edit.appearance.sourceItemId===edit.beforeSource}
+      {@const pairs=allowReset?[...edit.options,edit.before]:edit.options}
+      {@const choices=wandFieldOptions(pairs,selected,field)}
       <label class="date-dialog-field">
        <span>{label}</span>
-       <select name={field===0?'wand-magic':'wand-fleck'} value={-1} onchange={e=>{const value=e.currentTarget.value;e.currentTarget.value='-1';wandSelection=Number(value);void chooseWandPair(value)}} disabled={busy||!choices.length||Boolean(edit.sourceChoices&&!edit.appearance.sourceItemId)}>
-        <option value={-1} disabled>{wandMaterialLabel(selected[field],id=>sourceNames[String(id)]??'—')}</option>
+       <select name={field===0?'wand-magic':'wand-fleck'} value={''} onchange={e=>{const value=e.currentTarget.value;e.currentTarget.value='';wandSelection=Number(value);void chooseWandPair(value)}} disabled={busy||!choices.length||Boolean(edit.sourceChoices&&!edit.appearance.sourceItemId)}>
+        <option value={''} disabled>{wandMaterialLabel(selected[field],id=>sourceNames[String(id)]??'—')}</option>
         {#each choices as choice (choice.index)}
-         <option value={choice.index} data-wand-variant={choice.pair.join(':')} data-wand-field-value={choice.pair[field]}>{wandMaterialLabel(choice.pair[field],id=>sourceNames[String(id)]??'—')}{choice.pair[other]!==selected[other]?' · '+wandFieldLabels(locale)[other]+': '+wandMaterialLabel(choice.pair[other],id=>sourceNames[String(id)]??'—'):''}</option>
+         <option value={choice.index===edit.options.length?-1:choice.index} data-wand-variant={choice.pair.join(':')} data-wand-field-value={choice.pair[field]}>{wandMaterialLabel(choice.pair[field],id=>sourceNames[String(id)]??'—')}{choice.pair[other]!==selected[other]?' · '+wandFieldLabels(locale)[other]+': '+wandMaterialLabel(choice.pair[other],id=>sourceNames[String(id)]??'—'):''}</option>
         {/each}
        </select>
       </label>
