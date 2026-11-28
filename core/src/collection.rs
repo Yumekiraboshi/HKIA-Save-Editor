@@ -527,19 +527,25 @@ impl Editor {
   }).collect();
   rows.extend(self.pending_inventory_rows());rows
  }
- /// Native default inventory-screen favorites, projected onto current row identities.
- /// Absence of a rank is not proof that an unresolved/context-specific row is unpinned.
- /// This projection is display-only; it is not destructive-operation authorization.
- pub fn inventory_pin_orders(&self)->Vec<(u32,i16)>{
-  use crate::inventory_pin as pin;
+ /// Display-only native default inventory-screen pin projection.
+ /// A row is omitted when the screen set or its projected identity is unresolved.
+ /// Some(order) is a match; None is no match in this explicitly saved set.
+ /// Neither a missing row nor a negative projection authorizes destructive edits:
+ /// runtime context and unique hash/identity semantics still require verification.
+ pub fn inventory_pin_projection(&self)->Vec<(u32,Option<i16>)>{
   let Some(source)=self.slot.index.pinned_items_source.as_ref()else{return Vec::new()};
-  let orders:HashMap<_,_>=source.for_screen(crate::native::INVENTORY_PIN_SCREEN).map(|p|(p.item_guid,p.order)).collect();
-  if orders.is_empty(){return Vec::new()}
+  let screen=crate::native::INVENTORY_PIN_SCREEN;
+  if !source.sets.iter().any(|s|s.key==screen){return Vec::new()}
+  let orders:HashMap<_,_>=source.for_screen(screen).map(|p|(p.item_guid,p.order)).collect();
   self.inventory().into_iter().filter_map(|r|{
    let id=r.document_id;
    let key=self.effective_inventory_pin_guid(id,r.item_id)?;
-   Some((id,*orders.get(&key)?))
+   Some((id,orders.get(&key).copied()))
   }).collect()
+ }
+ /// Positive ranks remain available for the existing native display comparator.
+ pub fn inventory_pin_orders(&self)->Vec<(u32,i16)>{
+  self.inventory_pin_projection().into_iter().filter_map(|(id,order)|Some((id,order?))).collect()
  }
  fn effective_inventory_pin_guid(&self,id:u32,item:i32)->Option<crate::inventory_pin::Guid>{
   use crate::inventory_pin as pin;
