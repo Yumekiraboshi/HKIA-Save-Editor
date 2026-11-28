@@ -92,8 +92,9 @@ export function decodeVersionedFamilyBindings(v:unknown,pin:FamilySourcePin):Bin
 }
 /** Nonzero wand source IDs use their actual original UiIcon, never an
  * individually recolored source, a named override, or a guessed fallback.
- * The optional resolver is supplied by the reviewed same-release ordinary
- * source layer; if unavailable the complete wand composite stays withheld. */
+ * All definition UiIcons share the version-pinned source page layer. An
+ * optional independently verified same-version source can recover delivery
+ * failures; otherwise the complete wand composite stays withheld. */
 export function createVersionedFamilyRenderer(
  roots:{bindings:string;dynamic:string;auxiliary:string},pin:FamilySourcePin,
  options:{load?:typeof loadVerifiedArtAsset;loadTexture?:Parameters<typeof createVersionedDynamicSourceLoader>[3];
@@ -141,10 +142,16 @@ export function createVersionedFamilyRenderer(
    if(row?.family!=='wand'||!row.maskGuid||!transform||!Number.isSafeInteger(value.sourceItemId)||value.sourceItemId<0||value.sourceItemId>0x7fffffff)return null;
    const t=resolveWandBaseTints(value,b.magic,b.flecks,{known:b.known,magic:new Set(b.magic.keys()),flecks:new Set(b.flecks.keys())});
    if(!t)return null;
-   const layer=value.sourceItemId===0?(b.magic.has(value.magicCharacteristicId)?
-    await auxiliary.originalOverlayRoute('magic:'+value.magicCharacteristicId,version,transform):null):
-    (b.rows.has(value.sourceItemId)?await dynamic.originalOverlay(value.sourceItemId,version,transform):
-     await options.itemOverlay?.(value.sourceItemId,version,transform));
+   // Native TryGetSubIcon hides the overlay for a known characteristic
+   // with no MagicDisplay entry. A mapped but unavailable Sprite is not
+   // the same state. The tint resolver above rejects unknown IDs.
+   if(value.sourceItemId===0&&!b.magic.has(value.magicCharacteristicId))
+    return dynamic.render(itemId,version,row.maskGuid,t);
+   const layer=value.sourceItemId===0?
+    await auxiliary.originalOverlayRoute('magic:'+value.magicCharacteristicId,version,transform):
+    ((b.rows.has(value.sourceItemId)?await dynamic.originalOverlay(value.sourceItemId,version,transform):null)
+     ??await dynamic.originalOverlayRoute('item:'+value.sourceItemId,version,transform)
+     ??await options.itemOverlay?.(value.sourceItemId,version,transform));
    if(!layer||layer.version!==version)return null;
    return dynamic.render(itemId,version,row.maskGuid,t,layer);
   }catch{return null;}
