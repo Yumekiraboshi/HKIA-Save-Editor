@@ -5467,6 +5467,7 @@ fn exact_legacy_copy_reference_protects_only_its_native_item(){
   assert!(original[0].editable&&original[0].quantity_minimum==1);
   assert!(original[1].editable&&original[1].quantity_minimum==0);
   assert!(original[2].editable&&original[2].quantity_minimum==0);
+  assert!(!e.inventory_entry_removable(4));assert!(e.inventory_entry_removable(5));assert!(e.inventory_entry_removable(6));
   assert!(e.change_inventory_quantity(4,2,0).is_err());
   e.change_inventory_quantities(&[(5,2,0),(6,2,0)]).unwrap();
   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
@@ -5476,9 +5477,24 @@ fn exact_legacy_copy_reference_protects_only_its_native_item(){
   assert_eq!(saved.inventory_original_unique_payload(4),Some(cafe.as_slice()));
   assert_eq!(saved.inventory_original_unique_payload(5),Some(other.as_slice()));
  }
- let mut unknown=Editor::open(make([u32::MAX;4])).unwrap();
- assert!(unknown.inventory()[1].editable&&unknown.inventory()[1].quantity_minimum==1);assert_ne!(unknown.inventory()[2].quantity_minimum,0);
- assert!(unknown.change_inventory_quantity(6,2,0).is_err());assert!(!unknown.dirty());
+ // A complete nonzero GUID outside the full source crosswalk cannot
+ // denote another known ItemId. Zero is genuinely unscoped.
+ for zipped in [false,true]{
+  let raw=make([u32::MAX;4]);let input=if zipped{zip(&raw)}else{raw};
+  let mut unknown=Editor::open(input.clone()).unwrap();let original=unknown.inventory();
+  assert!(original[2].editable&&original[2].quantity_minimum==0);
+  assert!(unknown.inventory_entry_removable(6));
+  unknown.remove_inventory_entries(&[(6,2)]).unwrap();
+  let cp=unknown.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert!(saved.inventory().iter().all(|r|r.document_id!=6));
+  for id in [4,5,7]{assert_eq!(saved.inventory_original_unique_payload(id),unknown.inventory_original_unique_payload(id));}
+  let raw=make([0;4]);let mut unscoped=Editor::open(if zipped{zip(&raw)}else{raw}).unwrap();
+  assert_eq!(unscoped.inventory()[2].quantity_minimum,1);
+  assert!(!unscoped.inventory_entry_removable(6));
+  assert!(unscoped.remove_inventory_entries(&[(6,2)]).is_err());assert!(!unscoped.dirty());
+ }
 }
 
 #[test]
