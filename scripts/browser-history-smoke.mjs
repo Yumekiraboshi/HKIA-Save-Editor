@@ -1513,6 +1513,48 @@ async function inventoryDynamicFlowerArtSmoke(){
   console.log('CHROMIUM DYNAMIC FLOWER PASS: original source sampling, distinct same-ID appearances, native effect-mask fallback, unknown pattern refusal, local blob generation');
  }finally{await context.close();}
 }
+async function flowerDefinitionRecoverySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  let definitionsAvailable=false,labelsAvailable=false,definitionsAttempts=0,labelsAttempts=0;
+  await page.route('**/inventory-ui/flowers.json',r=>{
+   definitionsAttempts++;return definitionsAvailable?r.continue():r.fulfill({status:503,body:'unavailable'});
+  });
+  await page.route('**/inventory-ui/flower-labels.json',r=>{
+   labelsAttempts++;return labelsAvailable?r.continue():r.fulfill({status:503,body:'unavailable'});
+  });
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-flower-definition-recovery.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({flowerInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('43114910');
+  const complete=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"][data-icon-fidelity="source-derived-runtime"]');
+  const partial=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-flower"][data-icon-fidelity="source-derived-base-only"]');
+  await partial.first().waitFor({timeout:30_000});
+  await page.waitForLoadState('networkidle');
+  assert.equal(await complete.count(),0);
+  assert.ok(definitionsAttempts>=1&&labelsAttempts>=1);
+  definitionsAvailable=true;const previous=definitionsAttempts;
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await complete.nth(3).waitFor({timeout:30_000});
+  assert.equal(await complete.count(),4);
+  assert.equal(definitionsAttempts,previous+1);
+  await page.waitForLoadState('networkidle');
+  labelsAvailable=true;const previousLabels=labelsAttempts;
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.locator('.inventory-flower-variant-name').filter({hasText:'Ombre'}).waitFor({timeout:30_000});
+  assert.equal(labelsAttempts,previousLabels+1);
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForLoadState('networkidle');
+  assert.equal(definitionsAttempts,previous+1);
+  assert.equal(labelsAttempts,previousLabels+1);
+  assert.equal(await complete.count(),4);
+  assert.equal(await search.inputValue(),'43114910');
+ }finally{await context.close();}
+ console.log('CHROMIUM FLOWER DEFINITION RECOVERY PASS: native color and labels recover independently without reloading verified data');
+}
 async function flowerGrowthSheetRecoverySmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -3209,6 +3251,7 @@ async function run(){
  await inventoryNativeArtRetrySmoke();
  await inventoryIconScaleSmoke();
  await inventoryDynamicFlowerArtSmoke();
+ await flowerDefinitionRecoverySmoke();
  await inventoryFlowerGrowthDisplaySmoke();
  await flowerGrowthSheetRecoverySmoke();
  await flowerRuntimeCoverage(browser,origin,base);
