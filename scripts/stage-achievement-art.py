@@ -69,6 +69,9 @@ def validate_census(census, index, hierarchy):
         rows[guid] = row
         source_guids.add(asset_guid)
     require(len(rows) == len(keys) == census['definitionCount'], 'incomplete pointer census')
+    if version=='3.0.1' and platform=='steam':
+        require(census['definitionsSha256']==source.known_baseline(version,platform)['definitions'], 'baseline source mismatch')
+        require(len(rows)==820 and sum(r['iconPPtr']==[0,'0'] for r in rows.values())==559, 'baseline source census mismatch')
     return rows
 
 
