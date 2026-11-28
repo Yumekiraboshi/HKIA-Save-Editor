@@ -677,7 +677,7 @@ def assemble_native_distribution(out,release_dir,family_path,auxiliary_stage,vie
     require(set(paths)=={p.relative_to(release_dir).as_posix() for p in release_dir.rglob('*') if p.is_file()}-{'release-candidate.json'},
             'release output census')
     for name,meta in paths.items():
-        require(re.fullmatch(r'(?:collection-catalog\\.json|native-art/(?:index\\.json|[a-f0-9]{64}\\.webp)|dynamic-source-pages/(?:index\\.json|source-[a-f0-9]{64}\\.webp))',name),
+        require(re.fullmatch(r'(?:collection-catalog\.json|native-art/(?:index\.json|[a-f0-9]{64}\.webp)|dynamic-source-pages/(?:index\.json|source-[a-f0-9]{64}\.webp))',name),
                 'unexpected native delivery path: '+name)
         copy_verified(release_dir/name,out/name,meta)
     shutil.copyfile(release_dir/'release-candidate.json',out/'release-candidate.json')
