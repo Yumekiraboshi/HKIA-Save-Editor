@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/inventory-boba-display.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
-const {bobaSelectionForBase,bobaBaseKey,bobaFieldOptions,bobaFieldValue}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {bobaSelectionForBase,bobaBaseKey,bobaFieldOptions,bobaFieldValue,bobaNeedsTupleChoice}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 test('changing a boba base preserves the selected attributes only for a native offered tuple',()=>{
  const before=[6,44,76,75,73],options=[[46,39,76,78,73],[46,39,79,78,71],[9,55,79,78,71],[9,55,76,78,72],[6,44,79,75,71]];
  assert.equal(bobaSelectionForBase(before,options,-1,bobaBaseKey(options[0])),0);
@@ -26,4 +26,12 @@ test('separate boba fields project only offered tuples and preserve unrelated at
  assert.deepEqual(bobaFieldOptions(before,options,1,1,true).map(x=>x.index),[1]);
  assert.equal(bobaFieldValue(options[0],before,1,'en',[[123,39,46]],()=> 'Tea'),'Tea · Without milk');
  assert.equal(bobaFieldValue(options[1],before,1,'en',[[123,39,46]],()=> 'Tea'),'Tea');
+});
+
+test('complete tuple fallback is shown only when field-level options cannot reach any offered tuple',()=>{
+ const before=[6,99,88,77,1000],options=[[6,44,76,75,73],[6,44,79,75,73]];
+ assert.equal(bobaNeedsTupleChoice(before,options,-1),true);
+ assert.equal(bobaNeedsTupleChoice(before,options,0),false);
+ assert.equal(bobaNeedsTupleChoice(before,[],-1),false);
+ assert.equal(bobaNeedsTupleChoice(options[0],[options[1]],-1),false);
 });

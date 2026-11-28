@@ -104,6 +104,12 @@ export function bobaFieldOptions(before:BobaVariant,options:readonly BobaVariant
  }
  return [...projected.values()];
 }
+/** If no single-field choice is reachable, display complete Rust-issued
+ * tuples instead of trapping the user on an unsupported or occupied key. */
+export function bobaNeedsTupleChoice(before:BobaVariant,options:readonly BobaVariant[],selection:number,absent=false):boolean{
+ return options.some((_,index)=>index!==selection)&&!([1,2,3,4] as BobaField[]).some(field=>
+  bobaFieldOptions(before,options,selection,field,absent).some(choice=>choice.index>=0&&choice.index!==selection));
+}
 const fieldLabels:Record<string,[string,string,string,string]>={
  en:['Flavor','Tapioca','Milk','Sweetness'],ja:['フレーバー','タピオカ','ミルク','甘さ'],
  ar:['النكهة','التابيوكا','الحليب','الحلاوة'],de:['Geschmack','Tapioka','Milch','Süße'],
