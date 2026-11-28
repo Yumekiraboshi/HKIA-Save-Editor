@@ -139,6 +139,88 @@ pub fn capture(slot:&ReadSlot,scope:Scope,name:&str,created_ms:i64)->Result<Vec<
     append(&mut out,&digest)?;
     Ok(out)
 }
+
+#[derive(Debug,Clone,PartialEq,Eq)]
+pub struct SourceInfo {
+    pub scope:Scope,
+    pub version:Version,
+    pub name:String,
+    pub created_ms:i64,
+    pub identity:[u8;32],
+    pub buildings:u32,
+    pub rooms:u32,
+}
+struct Reader<'a>{bytes:&'a [u8],at:usize}
+impl<'a> Reader<'a>{
+    fn take(&mut self,n:usize)->Result<&'a [u8],Error>{
+        let end=self.at.checked_add(n).ok_or(Error::Overflow)?;
+        let result=self.bytes.get(self.at..end).ok_or(Error::Truncated)?;
+        self.at=end;Ok(result)
+    }
+    fn u32(&mut self)->Result<u32,Error>{Ok(u32::from_le_bytes(self.take(4)?.try_into().unwrap()))}
+    fn guid(&mut self)->Result<[u32;4],Error>{
+        let mut id=[0;4];for n in &mut id{*n=self.u32()?;}
+        if id==[0;4]{return Err(Error::Schema)} Ok(id)
+    }
+    fn frame(&mut self,max:usize)->Result<&'a [u8],Error>{
+        let n=self.u32()? as usize;
+        if n==0||n>max{return Err(Error::Budget)} self.take(n)
+    }
+}
+/// Parses only the bounded source envelope; embedded native tokens are not
+/// authenticated or authorized by the checksum. Never write imported frames.
+pub fn inspect(bytes:&[u8])->Result<SourceInfo,Error>{
+    if bytes.len()>MAX_DECODED{return Err(Error::Budget)}
+    let end=bytes.len().checked_sub(32).ok_or(Error::Truncated)?;
+    if bytes[end..]!=sha256(&bytes[..end]){return Err(Error::Schema)}
+    let mut r=Reader{bytes:&bytes[..end],at:0};
+    if r.take(8)?!=MAGIC{return Err(Error::Schema)}
+    let tag=r.take(1)?[0];
+    if tag>2{return Err(Error::Schema)}
+    let version=match r.frame(5)?{b"3.0.0"=>Version::V300,b"3.0.1"=>Version::V301,_=>return Err(Error::Version)};
+    let created_ms=i64::from_le_bytes(r.take(8)?.try_into().unwrap());
+    if created_ms<=0||created_ms>8_640_000_000_000_000{return Err(Error::Schema)}
+    let name=std::str::from_utf8(r.frame(MAX_NAME)?).map_err(|_|Error::Schema)?;
+    if name.trim().is_empty(){return Err(Error::Schema)}
+    let identity=r.take(32)?.try_into().unwrap();
+    let buildings=r.u32()?;
+    if buildings==0||buildings as usize>LIMIT||(tag!=2&&buildings!=1){return Err(Error::Schema)}
+    let mut last_cabin=None;
+    let mut last_home=[0;4];
+    let mut last_building=[0;4];
+    let mut home_ids=HashSet::new();
+    let mut rooms=0u32;
+    for _ in 0..buildings{
+        let id=r.guid()?;
+        if last_cabin.is_some_and(|prev|prev>=id){return Err(Error::Duplicate)}
+        last_cabin=Some(id);last_building=id;
+        r.frame(MAX_DECODED)?;
+        let count=r.u32()?;
+        rooms=rooms.checked_add(count).ok_or(Error::Overflow)?;
+        if count==0||rooms as usize>LIMIT||(tag==0&&count!=1){return Err(Error::Schema)}
+        let mut last_apartment=None;
+        for _ in 0..count{
+            let apartment=r.take(1)?[0];
+            if last_apartment.is_some_and(|prev|prev>=apartment){return Err(Error::Duplicate)}
+            last_apartment=Some(apartment);
+            let home=r.guid()?;
+            if !home_ids.insert(home){return Err(Error::Duplicate)}
+            last_home=home;
+            r.frame(MAX_DECODED)?;r.frame(MAX_DECODED)?;
+        }
+    }
+    if r.at!=end{return Err(Error::Trailing)}
+    let scope=match tag{0=>Scope::Room(last_home),1=>Scope::Cabin(last_building),_=>Scope::AllCabinSources};
+    Ok(SourceInfo{scope,version,name:name.to_owned(),created_ms,identity,buildings,rooms})
+}
+/// A true result is an exact re-capture of the current original source, not
+/// proof of account ownership or permission to restore to another slot.
+pub fn inspect_against(slot:&ReadSlot,bytes:&[u8])->Result<(SourceInfo,bool),Error>{
+    let info=inspect(bytes)?;
+    let same=info.version==slot.envelope.version&&info.identity==sha256(&slot.envelope.decoded)
+        &&capture(slot,info.scope,&info.name,info.created_ms).is_ok_and(|canonical|canonical==bytes);
+    Ok((info,same))
+}
 #[cfg(test)]
 mod tests{
     use super::*;
@@ -168,6 +250,23 @@ mod tests{
         assert_eq!(slot.envelope.decoded,original);
         assert!(capture(&slot,Scope::Cabin(rows[0].cabin),"building",2).is_ok());
         assert!(capture(&slot,Scope::AllCabinSources,"all",3).is_ok());
+    }
+    #[test]fn inspect_roundtrip_and_reject_damage(){
+        let slot=sample();
+        for scope in [Scope::Room([5,6,7,8]),Scope::Cabin([1,2,3,4]),Scope::AllCabinSources]{
+            let data=capture(&slot,scope,"日本語",123).unwrap();
+            let (info,same)=inspect_against(&slot,&data).unwrap();
+            assert!(same);assert_eq!(info.scope,scope);assert_eq!(info.rooms,1);
+            assert_eq!(info.name,"日本語");assert_eq!(info.created_ms,123);
+            for n in 0..data.len(){assert!(inspect(&data[..n]).is_err());}
+            let mut bad=data.clone();bad[8]=7;
+            assert!(inspect(&bad).is_err());
+            let end=bad.len()-32;let hash=sha256(&bad[..end]);bad[end..].copy_from_slice(&hash);
+            assert!(inspect(&bad).is_err());
+            let mut changed=data.clone();changed[end-1]^=1;
+            let hash=sha256(&changed[..end]);changed[end..].copy_from_slice(&hash);
+            assert!(!inspect_against(&slot,&changed).unwrap().1);
+        }
     }
     #[test]fn denies_incomplete_unknown_and_missing(){
         let mut slot=sample();

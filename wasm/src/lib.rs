@@ -1284,3 +1284,22 @@ pub extern "C" fn hkia_layout_source_capture(scope:u32,a0:u32,a1:u32,a2:u32,a3:u
   a.reply=bytes;0
  })
 }
+
+#[no_mangle]
+pub extern "C" fn hkia_layout_source_inspect()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  let bytes=std::mem::take(&mut a.stage);
+  let Some(e)=a.editor.as_ref()else{return 1};
+  let Ok((info,same))=e.inspect_layout_source(&bytes)else{return 1};
+  use hkia_save_core::{layouts::Scope,envelope::Version};
+  let scope=match info.scope{Scope::Room(_)=>0,Scope::Cabin(_)=>1,Scope::AllCabinSources=>2};
+  let version=match info.version{Version::V300=>0,Version::V301=>1,_=>return 1};
+  let mut out=vec![scope,version,u8::from(same)];
+  out.extend(info.created_ms.to_le_bytes());
+  out.extend(info.buildings.to_le_bytes());
+  out.extend(info.rooms.to_le_bytes());
+  out.extend(info.name.as_bytes());
+  a.reply=out;0
+ })
+}

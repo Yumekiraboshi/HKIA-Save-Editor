@@ -471,6 +471,9 @@ impl Editor {
   if self.layout_source_identity()!=expected{return Err(Error::Schema)}
   crate::layouts::capture(&self.slot,scope,name,created_ms)
  }
+ pub fn inspect_layout_source(&self,bytes:&[u8])->Result<(crate::layouts::SourceInfo,bool),Error>{
+  crate::layouts::inspect_against(&self.slot,bytes)
+ }
  fn saved_inventory_row(&self,id:u32)->Option<&crate::native::InventoryRow>{
   self.inventory_document_index.get(&id).and_then(|&i|self.slot.index.inventory.get(i))
  }
