@@ -1,4 +1,8 @@
 <script lang="ts">
+ import NativeItemArtwork from './NativeItemArtwork.svelte';
+ import {useNativeArt} from './native-art-context';
+ const getNativeSession=useNativeArt();
+ const nativeSession=$derived(getNativeSession());
  import InventoryAtlasSprite from './InventoryAtlasSprite.svelte';
  import type {SpriteCell} from './icon-packs';
  import type {IngredientBadge} from './ingredient-badges';
@@ -17,7 +21,17 @@
    {@const title=(badge.itemIds.map(nameFor).join(' / ')||'?')+(badge.count>1?' · '+badge.count:'')+(badge.flavorOnly?' · '+ingredientFlavorOnlyLabel(locale):'')}
    <span class="ingredient-badge" data-ingredient-candidates={badge.itemIds.join(',')} data-ingredient-count={badge.count} data-ingredient-key={badge.key} data-ingredient-match={badge.flavorOnly?'flavor':badge.itemIds.length?'exact':'unresolved'} data-ingredient-slots={badge.slots.join(',')} role="img" aria-label={title} {title}>
     <span class="ingredient-art" aria-hidden="true">
-     {#if sprite}<InventoryAtlasSprite {sprite}/>
+     {#if nativeSession&&badge.itemIds.length===1}
+      <NativeItemArtwork domain="definition" itemId={badge.itemIds[0]}/>
+     {:else if nativeSession&&badge.itemIds.length===2}
+      {#each badge.itemIds as id,i}
+       <span class="ingredient-candidate" class:second={i===1}><NativeItemArtwork domain="definition" itemId={id}/></span>
+      {/each}
+     {:else if nativeSession&&badge.itemIds.length>2}
+      <span class="ingredient-candidate-grid" style:grid-template-columns={`repeat(${columns},minmax(0,1fr))`}>
+       {#each badge.itemIds as id}<span class="ingredient-grid-cell"><NativeItemArtwork domain="definition" itemId={id}/></span>{/each}
+      </span>
+     {:else if sprite}<InventoryAtlasSprite {sprite}/>
      {:else if sprites.length===2&&sprites.some(Boolean)}
       {#each sprites as candidate,i}
        <span class="ingredient-candidate" class:second={i===1}>{#if candidate}<InventoryAtlasSprite sprite={candidate}/>{:else}<span class="ingredient-missing">✧</span>{/if}</span>
