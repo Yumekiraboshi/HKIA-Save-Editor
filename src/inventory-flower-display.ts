@@ -72,14 +72,18 @@ export async function loadFlowerLabels(base:string):Promise<FlowerLabels>{
  * append FlowerColor (12) with the definition's Color as PrimaryColor,
  * then FlowerPattern (11) if IsPatterned. Never infer a missing definition.
  * The zero pattern/secondary-color sentinel is a valid absent reference. */
-export type FlowerDecorator={type:12;primaryColor:string}|{type:11;patternUrl:string};
+// Editor enhancement: display both native color references in one plate.
+export type FlowerDecorator={type:12;primaryColor:string;secondaryColor?:string}|{type:11;patternUrl:string};
 export function flowerDecorators(flower:InventoryFlower|undefined,defs:FlowerDisplayDefinitions|null):FlowerDecorator[]{
  if(!flower||!defs||!Object.hasOwn(defs.colors,String(flower.baseColor)))return [];
  if(flower.pattern!==0&&!Object.hasOwn(defs.patterns,String(flower.pattern)))return [];
  if(flower.patternColor!==0&&!Object.hasOwn(defs.colors,String(flower.patternColor)))return [];
  const color=flowerSwatch(defs.colors[String(flower.baseColor)]);
  if(!color)return [];
- const rows:FlowerDecorator[]=[{type:12,primaryColor:color}];
+ const pattern=defs.patterns[String(flower.pattern)];
+ const secondaryColor=flower.pattern!==0&&pattern&&!pattern.effect&&flower.patternColor!==0
+  ?flowerSwatch(defs.colors[String(flower.patternColor)]):undefined;
+ const rows:FlowerDecorator[]=[{type:12,primaryColor:color,...(secondaryColor?{secondaryColor}:{})}];
  if(flower.pattern!==0)rows.push({type:11,patternUrl:'pattern-'+flower.pattern+'.webp'});
  return rows;
 }
