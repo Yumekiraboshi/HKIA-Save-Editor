@@ -2917,8 +2917,12 @@ impl Editor {
   if index.inventory_item_refs_unscoped||
    index.inventory_partial_item_refs.contains(&item)||index.inventory_payload_refs_incomplete||
    index.inventory_furniture_refs_incomplete||index.inventory_clothing_item_refs_incomplete||
-   index.inventory_payload_item_refs.contains(&item)||index.inventory_furniture_item_refs.contains(&item)||
-   index.inventory_item_refs.iter().any(|&(i,u)|i==item&&(uid==0||u==0||u==uid))||
+   index.inventory_payload_item_refs.contains(&item)||index.inventory_furniture_bare_item_refs.contains(&item)||
+   // A resolved positive UID is an exact reference to another complete row.
+   // Do not turn it into an Item-ID-wide denial. Bare, dangling or ambiguous
+   // identities still protect the entire family; copied payloads remain separate.
+   index.inventory_item_refs.iter().any(|&(i,u)|i==item&&(u==0||u==uid||
+    !index.inventory_resolved_positive_item_refs.contains(&(i,u))))||
    (uid>0&&(index.inventory_legacy_uid_refs.contains(&uid)||
     !uid_unique)){return false}
   let Some(key)=crate::inventory_source::inventory_item_denial_key(item)else{return false};
