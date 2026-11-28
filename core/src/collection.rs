@@ -459,6 +459,14 @@ impl Editor {
  }
  pub fn version(&self)->String {self.slot.envelope.version.as_str()}
  pub fn source_bytes(&self)->usize {self.original.len()}
+ /// Original native layout source only. Staged changes to other domains do
+ /// not alter these immutable Home/Cabin tokens. No restore permission.
+ pub fn layout_source_catalog(&self)->Result<Vec<crate::layouts::LayoutRoom>,Error>{
+  crate::layouts::catalog(&self.slot)
+ }
+ pub fn capture_layout_source(&self,scope:crate::layouts::Scope,name:&str,created_ms:i64)->Result<Vec<u8>,Error>{
+  crate::layouts::capture(&self.slot,scope,name,created_ms)
+ }
  fn saved_inventory_row(&self,id:u32)->Option<&crate::native::InventoryRow>{
   self.inventory_document_index.get(&id).and_then(|&i|self.slot.index.inventory.get(i))
  }
