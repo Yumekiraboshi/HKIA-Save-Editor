@@ -24,6 +24,7 @@ def module(name):
     return m
 
 source = module('icon-source-update')
+native_webp = module('native-raster-webp')
 helpers = module('extract-native-result-icons')
 mesh = helpers.module('extract-furniture-mesh-source')
 typed = helpers.module('extract-furniture-preview-camera')
@@ -145,7 +146,7 @@ def texture_data(texture,allowed_color_spaces=(1,)):
     return image.transpose(Image.Transpose.FLIP_TOP_BOTTOM), {'textureCab':bundle['cab'],
             'texturePathId':tid,'textureObjectSha256':sha(raw),'texturePayloadSha256':sha(payload)}
 
-def crop_tile(image, logical, rect, offset):
+def original_canvas(image, logical, rect, offset):
     from PIL import Image
     lw,lh = logical
     x,y,w,h = rect
@@ -165,6 +166,12 @@ def crop_tile(image, logical, rect, offset):
     supported(left>=0 and upper>=0 and left+crop.width<=canvas.width and
               upper+crop.height<=canvas.height, 'rounded trim outside logical bounds')
     canvas.paste(crop,(left,upper))
+    return canvas
+
+def crop_tile(image, logical, rect, offset):
+    # Legacy production transport only. New candidates use original_canvas.
+    from PIL import Image
+    canvas = original_canvas(image, logical, rect, offset)
     scale = 84/max(canvas.size)
     size = tuple(max(1,round(v*scale)) for v in canvas.size)
     tile = Image.new('RGBA',(96,96))
@@ -230,7 +237,7 @@ def read_previous(folder, row, sheets, cache=None):
     require(visible_hash(tile)==row['pixelSha256'],'previous tile identity mismatch')
     return tile
 
-def stage(snapshot, manifest_path, out, prior_dir=None):
+def stage(snapshot, manifest_path, out, prior_dir=None, native_resolution=False):
     rows = source.validate_snapshot(snapshot)
     manifest = source.read_json(manifest_path)
     require(manifest.get('schema')=='HKIA.NativeIconAtlasInput.1' and
@@ -256,7 +263,17 @@ def stage(snapshot, manifest_path, out, prior_dir=None):
     definitions = loaded['definitions']
     require(out.resolve()!=source.ROOT and source.ROOT not in out.resolve().parents and not out.exists(),
             'new staging directory outside repository required')
-    old,old_sheets = previous_tiles(prior_dir)
+    if native_resolution:
+        old,old_sheets={},[]
+        if prior_dir:
+            prior=source.read_json(prior_dir/'index.json')
+            require(prior.get('schema')=='HKIA.NativeResolutionIconStage.1' and
+                    prior.get('renderer')==native_webp.POLICY and prior.get('platform')==snapshot['platform'] and
+                    prior.get('receiptSha256')==sha(source.stable({k:v for k,v in prior.items() if k!='receiptSha256'})),
+                    'native previous stage must not contain resized legacy assets')
+            old=prior['sprites']
+    else:
+        old,old_sheets = previous_tiles(prior_dir)
     # Group by complete source pointer, not by name or per-item variants.
     groups = collections.defaultdict(list)
     for i,row in rows.items():
@@ -296,13 +313,26 @@ def stage(snapshot, manifest_path, out, prior_dir=None):
                 sprite_key=sb['cab']+':'+sp
                 if sprite_key in sprites:
                     existing=sprites[sprite_key]
-                    items.extend([i,existing['sheet'],existing['cell'],sp] for i in ids)
+                    if native_resolution:items.extend([i,sprite_key] for i in ids)
+                    else:items.extend([i,existing['sheet'],existing['cell'],sp] for i in ids)
                     continue
                 identity={'spriteCab':sb['cab'],'spritePathId':sp,'spriteSha256':sha(raw),
                           'logicalSize':logical,'rect':rect,'offset':offset,**binding,**tex}
                 identity=json.loads(source.stable(identity))
                 previous=old.get(sprite_key)
                 try:
+                    if native_resolution:
+                        if previous and previous['binding']==identity:
+                            meta=native_webp.reuse(folder,prior_dir,previous['asset'])
+                            require((meta['width'],meta['height'])==(round(logical[0]),round(logical[1])),
+                                    'prior original dimensions mismatch')
+                            reused+=1
+                        else:
+                            canvas=original_canvas(image,logical,rect,offset)
+                            meta=native_webp.store(folder,canvas)
+                        sprites[sprite_key]={'binding':identity,'asset':meta}
+                        items.extend([i,sprite_key] for i in ids)
+                        continue
                     if previous and previous['binding']==identity:
                         tile=read_previous(prior_dir,previous,old_sheets,previous_sheet_cache)
                         reused+=1
@@ -330,6 +360,12 @@ def stage(snapshot, manifest_path, out, prior_dir=None):
                 'reusedSpriteCount':reused,'definitionCount':len(rows),
                 'dynamicReviewItemIds':sorted(i for i,row in rows.items() if row['dynamicColor']),
                 'automaticReleaseActivationAuthorized':False}
+        if native_resolution:
+            result.update(schema='HKIA.NativeResolutionIconStage.1',renderer=native_webp.POLICY)
+            for field in ('size','columns','sheets'):del result[field]
+            unique={r['asset']['sha256']:r['asset'] for r in sprites.values()}
+            result['uniqueAssetCount']=len(unique)
+            result['imageBytes']=sum(r['bytes'] for r in unique.values())
         result['receiptSha256']=sha(source.stable(result))
         source.write_new(folder/'index.json',result)
         require(not out.exists(),'staging output already exists')
@@ -366,12 +402,13 @@ if __name__=='__main__':
     p.add_argument('--snapshot',type=Path)
     p.add_argument('--bundles',type=Path)
     p.add_argument('--previous-stage',type=Path)
+    p.add_argument('--native-resolution',action='store_true',help='original-size lossless WebP candidate; no 96px sheets')
     p.add_argument('--out',type=Path)
     a=p.parse_args()
     if a.self_test:
         self_test()
     elif a.snapshot and a.bundles and a.out:
-        result=stage(source.read_json(a.snapshot),a.bundles,a.out,a.previous_stage)
+        result=stage(source.read_json(a.snapshot),a.bundles,a.out,a.previous_stage,a.native_resolution)
         print('HKIA_NATIVE_ICON_ATLAS_STAGE',len(result['records']),'of',result['definitionCount'],
               'sprites',len(result['sprites']),'reused',result['reusedSpriteCount'],
               'unresolved',len(result['unresolved']),'review-required')
