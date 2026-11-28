@@ -49,3 +49,12 @@ test('all four atlas views use the same verified reactive binding, not an unveri
   assert.doesNotMatch(source,/(?:fallback|sprite)\??\.url/,name);
  }
 });
+
+test('candidate sheet numbers and separate release roots use the same verified loader',async()=>{
+ let calls=0;const load=createInventorySheetLoader(async()=>({url:'blob:verified-'+(++calls),height:1152}));
+ const a={...asset,root:'/candidate/inventory-art/',file:'sheet-010.webp'};
+ assert.equal((await load(a)).url,'blob:verified-1');
+ assert.equal((await load(a)).url,'blob:verified-1');
+ assert.equal((await load({...a,root:'/other/inventory-art/'})).url,'blob:verified-2');
+ await assert.rejects(load({...a,file:'sheet-1000.webp'}),/ASSET/);
+});
