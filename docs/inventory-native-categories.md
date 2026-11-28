@@ -50,3 +50,16 @@ The 152 source-placeholder definitions all reference the same original Sprite Pa
 ## Native category fallback during artwork delivery failures
 
 Preserve the Owner-approved colored representative images and collection category artwork. All 13 original TabItemView category Sprites are available as independent fallbacks, including key-items, items and wands which previously had no fallback. A category keeps its fixed 34px artwork slot while a representative atlas or named image is unavailable; the native placeholder never overlaps a loaded representative. Existing colored collection category artwork remains the first fallback when available. If it cannot load, use the exact original category Sprite. No category membership, item images or save logic changes. Tests verify every existing native category file hash and exercise all thirteen original fallbacks in Chromium with the other artwork paths unavailable.
+
+
+## Reviewed versioned category artwork candidates
+
+`scripts/stage-category-art.py` and `src/versioned-category-art.ts` share the original native Sprite/texture crop and verified image delivery foundation for Collection and Inventory categories. The reviewed category scope binds the exact version/platform/definition SHA, complete collection and inventory keys and original item IDs. The `HKIA.CategoryArtPointerCensus.1` input binds that scope file SHA-256 and supplies each domain/key, native Sprite PPtr pair [fileId, decimalPathIdString], pointer-owning bundle, explicit navigation representativeItemId (or null) and collectionFallback key (or null). Collection rows have neither representative nor fallback. The reviewed layout marker is `native-category-pointers-v1`. The `HKIA.CategoryArtBundleInput.1` binds the census file SHA-256, version/platform and actual source bundle names, relative paths and SHA-256.
+
+```sh
+python scripts/stage-category-art.py --census category-pointers.json --scope category-scope.json --bundles category-bundles.json --out /staging/category-art
+```
+
+Output: `HKIA.CategoryArtCandidate.1` manifest plus content-addressed lossless 96px WebP files. The loader requires the exact manifest file SHA and same-version catalog scope, verifies original source and file identities, shares immutable bytes and retries failures. Inventory artwork order stays representative item → approved Collection category → original native tab icon; no arbitrary item substitution. Collection uses its original category directly. Explicit native null and unresolved references remain different states.
+
+This does not independently extract the native category pointer census or category catalog; both must be reviewed from the actual original version. The existing UI remains on 3.0.1 until candidate validation/registration. No save changes or new category policy.
