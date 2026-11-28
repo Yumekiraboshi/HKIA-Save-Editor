@@ -110,3 +110,54 @@ export function createVersionedInventoryArtwork(root:string,pin:InventoryRoutePi
   }catch{return null;}
  };
 }
+
+/** Candidate placeholder files are native source sprites, not inferred
+ * item-specific artwork. Bind both the index and the shared WebP bytes
+ * to the reviewed release receipt. Only native placeholder IDs may use it. */
+export function createVersionedPlaceholderProvider(root:string,pin:InventoryRoutePin,load=loadVerifiedArtAsset){
+ pinCheck(pin);rootCheck(root);
+ type Asset={file:string;bytes:number;sha256:string};
+ let pending:Promise<ReadonlyMap<number,Asset>>|undefined;
+ const index=()=>pending??=(async()=>{
+  const receipt=obj(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(
+   await load(root,'release-candidate.json',pin.receiptFileSha256,16*1024*1024))));
+  const routes=decodeInventoryRouteCandidate(receipt,pin),files=obj(receipt.outputFiles);
+  const sourceIds=list(receipt.nativePlaceholderItemIds).map(id),allowed=new Set(sourceIds);
+  check(allowed.size===sourceIds.length&&sourceIds.every(i=>routes.has(i)));
+  const descriptor=(file:string,max:number):Asset=>{
+   const r=obj(files['original-placeholder-art/'+file]);
+   check(typeof r.sha256==='string'&&SHA.test(r.sha256)&&typeof r.bytes==='number'&&Number.isSafeInteger(r.bytes)&&r.bytes>0&&r.bytes<=max);
+   return {file,sha256:r.sha256,bytes:r.bytes};
+  };
+  const indexAsset=descriptor('index.json',8*1024*1024);
+  const manifest=obj(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(
+   await load(root+'original-placeholder-art/',indexAsset.file,indexAsset.sha256,8*1024*1024,indexAsset.bytes))));
+  const result=new Map<number,Asset>();
+  for(const [key,raw] of Object.entries(obj(manifest.records))){
+   const i=id(Number(key)),r=obj(raw);
+   check(String(i)===key&&allowed.has(i)&&typeof r.sha256==='string'&&SHA.test(r.sha256)&&r.file===r.sha256+'.webp'&&
+    typeof r.spritePathId==='string'&&/^-?[1-9]\d{0,18}$/.test(r.spritePathId));
+   const asset=descriptor(r.file,200000);check(asset.sha256===r.sha256);
+   result.set(i,asset);
+  }
+  check(result.size===receipt.placeholderCount);
+  for(const [i,route] of routes)if(route.kind==='source-placeholder'&&!route.sourceBlockers.length)check(result.has(i));
+  return result;
+ })().catch(e=>{pending=undefined;throw e;});
+ const cache=new Map<string,Promise<Blob>>();
+ return async(itemId:number,version:string):Promise<Blob|null>=>{
+  try{
+   if(version!==pin.version)return null;
+   id(itemId);const asset=(await index()).get(itemId);if(!asset)return null;
+   const ready=cache.get(asset.sha256);if(ready)return await ready;
+   const task=(async()=>{
+    const bytes=await load(root+'original-placeholder-art/',asset.file,asset.sha256,200000,asset.bytes);
+    const header=new Uint8Array(bytes,0,12);
+    check(String.fromCharCode(...header.subarray(0,4))==='RIFF'&&String.fromCharCode(...header.subarray(8,12))==='WEBP');
+    return new Blob([bytes],{type:'image/webp'});
+   })().catch(e=>{cache.delete(asset.sha256);throw e;});
+   cache.set(asset.sha256,task);if(cache.size>32)cache.delete(cache.keys().next().value!);
+   return await task;
+  }catch{return null;}
+ };
+}
