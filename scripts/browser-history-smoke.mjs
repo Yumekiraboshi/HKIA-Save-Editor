@@ -20,14 +20,14 @@ const append=(...arrays)=>Uint8Array.from(arrays.flatMap(x=>Array.from(x)));
 const u32=n=>append([0xce],Array.from({length:4},(_,i)=>n>>>(24-8*i)&255));
 const f32=n=>{const a=new Uint8Array(5);a[0]=0xca;new DataView(a.buffer).setFloat32(1,n);return a};
 const i64=n=>{const a=new Uint8Array(9);a[0]=0xd3;new DataView(a.buffer).setBigInt64(1,n,false);return a};
-const arr=(...elements)=>{assert.ok(elements.length<16);return append([0x90|elements.length],...elements)};
+const arr=(...elements)=>{assert.ok(elements.length<=65535);return append(elements.length<16?[0x90|elements.length]:[0xdc,elements.length>>8,elements.length&255],...elements)};
 const map=(...pairs)=>{assert.ok(pairs.length%2===0&&pairs.length/2<16);return append([0x80|pairs.length/2],...pairs)};
 const hash=(...words)=>append(...words.map(u32));
 const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,ordinaryRecipeInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false,categoryProtectionInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,ordinaryRecipeInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false,categoryProtectionInventory=false,largeInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -49,7 +49,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
  const placedFurniture=arr(u32(3202680),u32(0),u32(0),u32(0),u32(0),u32(0),[0xc0],[0xc0],arr(),arr(),u32(0),arr(),u32(0));
  const furnitureHome=arr(hash(41,42,43,44),arr(),u32(0),u32(0),hash(0,0,0,0),i64(0n),[0xc0],[0xc2],[0xc0],arr(placedFurniture),[0xc0],[0xc0],u32(0),u32(0),arr());
  const furnitureHomeObject=doc(32,arr([10],hash(10,0,0,0),[0],arr(doc(8,arr(arr(furnitureHome))))));
- const model=arr([0],cafeCreateInventory?[10]:(editableFlower||editableFurniture||paletteCreationInventory||bobaCreateInventory||wandEditInventory||nestedWandInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
+ const model=arr([0],largeInventory?u32(600):cafeCreateInventory?[10]:(editableFlower||editableFurniture||paletteCreationInventory||bobaCreateInventory||wandEditInventory||nestedWandInventory)?[8]:[4],arr(doc(18,arr([0],u32(87),str(version))),child,parent,counter,object,inventory,
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(scaleInventory?[2064380032,1806222956,142358610].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
   ...(resultArtInventory?[10455890,1217231008].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
@@ -59,6 +59,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
    doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
   ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
   ...(categoryProtectionInventory?[doc(1,arr([8],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([9],u32(627013240),[0],u32(9),[0xc0]))]:[]),
+  ...(largeInventory?Array.from({length:480},(_,i)=>doc(1,arr(u32(20+i),u32(1877756618),[0],u32(i+1),[0xc0]))):[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
   ...(ordinaryFurnitureInventory?[doc(1,arr([8],u32(427689),[0],u32(5),[0xc0])),doc(1,arr([9],u32(3202680),[0],u32(6),[0xc0])),furnitureHomeObject]:[]),
   ...(ordinaryClothingInventory?[doc(10,arr([8],hash(1,2,3,4),
@@ -3376,6 +3377,41 @@ async function achievementAtlasRetrySmoke(trigger='tab'){
  }finally{await context.close();}
 }
 
+async function inventoryFullRangeScrollSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-large-inventory.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({largeInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]');
+  await search.fill('1877756618');
+  const grid=page.locator('.inventory-grid[data-total="480"]'),cards=grid.locator('.inventory-card');
+  await grid.waitFor();
+  await page.waitForFunction(()=>{const g=document.querySelector('.inventory-grid');return g?.getAttribute('data-total')==='480'&&g.getBoundingClientRect().height>8000&&Number(g.getAttribute('data-window-start'))===0});
+  const height=await grid.evaluate(el=>el.getBoundingClientRect().height);
+  assert.ok(await cards.count()<160,'only a bounded viewport window is mounted');
+  const first=cards.first().locator('input[name="quantity"]');
+  await first.fill('999');
+  await page.evaluate(()=>window.scrollTo({top:document.documentElement.scrollHeight,behavior:'instant'}));
+  await page.waitForFunction(()=>{const g=document.querySelector('.inventory-grid');return g?.getAttribute('data-window-end')==='480'&&Number(g.getAttribute('data-window-start'))>0});
+  assert.equal(await grid.evaluate(el=>el.getBoundingClientRect().height),height,'scroll range does not grow');
+  assert.ok(await cards.count()<160,'earlier cards are unmounted');
+  assert.ok(await cards.last().evaluate(el=>{const r=el.getBoundingClientRect();return r.bottom<=innerHeight+1&&r.top>=0}),'final card reachable directly');
+  await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
+  await page.waitForFunction(()=>document.querySelector('.inventory-grid')?.getAttribute('data-window-start')==='0');
+  assert.equal(await first.inputValue(),'999','uncommitted quantity survives virtualization');
+  await page.setViewportSize({width:390,height:844});
+  await page.waitForFunction(()=>{const g=document.querySelector('.inventory-grid');return !!g&&g.getBoundingClientRect().height>30000});
+  await page.evaluate(()=>window.scrollTo({top:document.documentElement.scrollHeight,behavior:'instant'}));
+  await page.waitForFunction(()=>document.querySelector('.inventory-grid')?.getAttribute('data-window-end')==='480');
+  assert.ok(await cards.last().evaluate(el=>el.getBoundingClientRect().bottom<=innerHeight+1),'mobile final card reachable');
+  await search.fill('627013240');
+  await page.waitForFunction(()=>document.querySelector('.inventory-grid')?.getAttribute('data-total')==='0'&&scrollY===0);
+  console.log('CHROMIUM INVENTORY FULL RANGE PASS: direct end, bounded DOM, stable height, preserved draft and responsive geometry');
+ }finally{await context.close()}
+}
 async function fullWidthWorkspaceSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1920,height:900}});
  try{
@@ -3880,6 +3916,7 @@ async function run(){
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
  await context.close();
  await fullWidthWorkspaceSmoke();
+ await inventoryFullRangeScrollSmoke();
  await achievementExportReopenRoundtrip();
  await inventoryDynamicPaletteArtSmoke();
  await inventoryPaletteCreationSmoke();
