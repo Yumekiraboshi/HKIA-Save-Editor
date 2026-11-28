@@ -688,7 +688,9 @@ async function inventoryBobaEditSmoke(){
   await card.locator('[data-ingredient-key="tapioca"]').waitFor();
   const milkBadge=card.locator('[data-ingredient-key="milk"]');
   await milkBadge.locator('.ingredient-candidate .item-sprite').nth(1).waitFor({timeout:30_000});
-  assert.equal(await milkBadge.locator('.ingredient-ambiguity').innerText(),'?');
+  assert.equal(await milkBadge.locator('.ingredient-ambiguity').count(),0);
+  assert.equal(await milkBadge.locator('.ingredient-unknown').count(),0);
+  assert.equal(await milkBadge.getAttribute('title'),'Coral Milk / Cactus Cream');
   const lane=card.locator('.ingredient-badges');
   for(const width of [1280,390]){
    await page.setViewportSize({width,height:800});

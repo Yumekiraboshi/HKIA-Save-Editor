@@ -20,9 +20,9 @@
       {#each sprites as candidate,i}
        {#if candidate}<span class="ingredient-candidate" class:second={i===1}><InventoryAtlasSprite sprite={candidate}/></span>{/if}
       {/each}
-     {:else}<span class="ingredient-unknown">?</span>{/if}
+     {:else}<span class="ingredient-unknown">{badge.itemIds.length===0?'?':'✧'}</span>{/if}
     </span>
-    {#if badge.itemIds.length===2&&sprites.every(Boolean)}<span class="ingredient-ambiguity" aria-hidden="true">?</span>{/if}
+
     {#if badge.count>1}<span class="ingredient-count" aria-hidden="true">{badge.count}</span>{/if}
    </span>
   {/each}
@@ -42,6 +42,5 @@
  .ingredient-candidate{position:absolute;top:0;left:0;width:66%;height:66%;overflow:hidden}
  .ingredient-candidate.second{top:auto;left:auto;bottom:0;right:0}
  .ingredient-candidate :global(.item-sprite){transform:scale(var(--ingredient-candidate-scale))}
- .ingredient-ambiguity{position:absolute;top:0;right:0;min-width:9px;height:10px;border-radius:3px;background:var(--panel);color:var(--ink);font-size:9px;font-weight:700;line-height:10px;text-align:center;box-shadow:0 0 0 1px var(--line)}
  .ingredient-count{position:absolute;bottom:0;right:0;min-width:10px;height:11px;border-radius:3px;background:var(--panel);color:var(--ink);font-size:9px;font-weight:700;line-height:11px;text-align:center;box-shadow:0 0 0 1px var(--line)}
 </style>
