@@ -2699,10 +2699,7 @@ impl Editor {
     // A complete reference to a different live positive UID protects
     // that record, not every variant of its item. Missing/duplicate
     // UID targets remain ambiguous and continue to protect the family.
-    let mut targets=index.inventory.iter().filter(|r|r.unique_id==Some(u));
-    let resolved=targets.next().is_some_and(|r|r.item_id==Some(i)&&r.unique_is_nil==Some(false)&&
-     r.id>0&&r.id<PENDING_ITEM&&r.quantity.is_some_and(|q|q>=0)&&r.fields.iter().all(Option::is_some));
-    !resolved||targets.next().is_some()
+    !index.inventory_resolved_positive_item_refs.contains(&(i,u))
    })||
    (uid>0&&(index.inventory_legacy_uid_refs.contains(&uid)||
     !uid_unique)){return false}
