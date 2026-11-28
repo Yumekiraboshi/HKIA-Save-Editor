@@ -3236,6 +3236,43 @@ async function achievementAtlasRetrySmoke(trigger='tab'){
  }finally{await context.close();}
 }
 
+async function fullWidthWorkspaceSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1920,height:900}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  const empty=page.locator('.empty-workspace');
+  await empty.waitFor();
+  const center=await empty.boundingBox();
+  assert.ok(center&&center.width<=640&&Math.abs(center.x+center.width/2-960)<2,'unloaded screen remains centered');
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-wide-workspace.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({flowerInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  const width=async locator=>locator.evaluate(el=>el.getBoundingClientRect().width);
+  for(const tool of ['collections','achievements','inventory']){
+   await chooseTab(page,tool);
+   assert.ok(await width(page.locator('main.content.workspace-wide'))>1880,tool+' uses the wide viewport');
+   assert.ok(await width(page.locator('.bar-inner'))>1880,'header uses wide viewport');
+  }
+  await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  await page.locator('.inventory-card').first().waitFor({timeout:30_000});
+  const columns=()=>page.locator('.inventory-grid').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length);
+  const wide=await columns();
+  await page.setViewportSize({width:1280,height:900});
+  const narrow=await columns();
+  assert.ok(wide>narrow,'wide inventory increases the number of columns');
+  await page.setViewportSize({width:1920,height:900});
+  await page.locator('.inventory-card .inventory-unique-edit-button:not([disabled])').first().click();
+  const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');
+  await dialog.waitFor();
+  const bounds=await dialog.boundingBox();
+  assert.ok(bounds&&bounds.width<=450&&Math.abs(bounds.x+bounds.width/2-960)<2,'focused editor stays centered and bounded');
+  await dialog.locator('.date-dialog-close').click();
+  await page.setViewportSize({width:390,height:844});
+  const mobile=await page.locator('main.content.workspace-wide').boundingBox();
+  assert.ok(mobile&&mobile.x>=-1&&mobile.x+mobile.width<=391,'narrow workspace remains within viewport');
+  console.log('CHROMIUM FULL WIDTH WORKSPACE PASS: centered start/dialog, all three full-width tools, responsive inventory columns');
+ }finally{await context.close()}
+}
 async function run(){
  await waitForServer();
  browser=await chromium.launch({headless:true,executablePath:installedChrome(),args:['--no-sandbox','--disable-dev-shm-usage']});
@@ -3702,6 +3739,7 @@ async function run(){
  assert.deepEqual(errors,[],'no console exceptions or 5xx during browser replay');
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
  await context.close();
+ await fullWidthWorkspaceSmoke();
  await achievementExportReopenRoundtrip();
  await inventoryDynamicPaletteArtSmoke();
  await inventoryPaletteCreationSmoke();
