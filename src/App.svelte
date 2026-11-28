@@ -51,9 +51,9 @@ import {searchAchievementRows} from './achievement-search';
  import {nativeResultIconTarget} from './native-result-icon';
  import {selectWandOriginalCell,selectInventoryWandOriginalCell} from './wand-original-subicon';
  import {inventoryWandAppearance,hasNativeWandArt,wandVariantOf,wandVariantLabel,wandMaterialLabel,wandFieldOptions,wandFieldLabels,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
- import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
- import {nativeChefInstructionBase} from './native-icon-route';
- import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteAppearanceSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
+ import {inventoryChefAppearance,chefDraftAppearance,hasNativeChefArt} from './inventory-chef-display';
+ import {nativeChefInstructionUsesOriginal} from './native-icon-route';
+ import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,inventoryPaletteCardAppearance,paletteColorHex,paletteRemovalSwatches,paletteAppearanceSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
  import IngredientBadges from './IngredientBadges.svelte';
  import {ordinaryRecipeBadges} from './ordinary-recipe-badges';
  import {cafeIngredientBadges,bobaIngredientBadges,type IngredientBadge} from './ingredient-badges';
@@ -199,7 +199,6 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryLimit=$state(BATCH_SIZE);
  let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
  let inventoryBaseline:InventoryEntry[]=$state.raw([]);
- const originalInventoryQuantities=$derived(new Map(inventoryBaseline.map(row=>[row.documentId,row.quantity])));
  // Source-verified game UiIcon ZIP packs are shared by Collection/Inventory.
  // Inventory loads only groups currently needed by visible owned rows.
  const inventoryIconPending=new Set<string>();
@@ -568,7 +567,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
   if(cafeEdit)addIngredientSources(cafeIngredientBadges(cafeDraft??cafeEdit.before,snapshot.cafeWitnesses??[]));
-  if(bobaEdit)addIngredientSources(bobaIngredientBadges(bobaEdit.options[bobaSelection]??bobaEdit.before,snapshot.bobaWitnesses??[]));
+  if(bobaEdit)addIngredientSources(bobaIngredientBadges(bobaEdit.options[bobaSelection]??bobaEdit.before,snapshot.cafeWitnesses??snapshot.bobaWitnesses??[]));
   if(wandEdit&&hasNativeWandArt(wandEdit.itemId))addWandSource(wandEdit.appearance.sourceItemId);
   // A dialog may outlive its visible inventory row or be opened from Add.
   // Load its own original definition group using the same bounded pack queue.
@@ -609,7 +608,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function setTheme(v:ThemePref){
   themePref=v;try{localStorage.setItem('hkia-display-theme',v)}catch{}
  }
- function bobaName(v:BobaVariant):string{return fullBobaLabel(v,locale,snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}
+ function bobaName(v:BobaVariant):string{return fullBobaLabel(v,locale,snapshot?.cafeWitnesses??snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}
  function cafeName(v:CafeVariant):string{return cafeVariantLabel(v,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}
  function wandName(v:WandVariant):string{return wandVariantLabel(v,id=>sourceNames[String(id)]??'—')}
  function inventoryVariantSearchName(row:InventoryEntry):string{
@@ -621,7 +620,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   }
   if(row.boba)return bobaName(row.boba.variant);
   if(row.cafe)return cafeName(row.cafe.variant);
-  if(row.palette)return paletteAppearanceSwatches(row.palette).join(' / ');
+  const palette=inventoryPaletteCardAppearance(row.palette,row.paletteCreationDefault);
+  if(palette)return paletteAppearanceSwatches(palette).join(' / ');
   const furniture=furnitureVariantOf(row.unique);
   if(furniture)return furnitureVariantTitle(furnitureDisplay,row.itemId,furniture,furnitureCopy.defaultMaterial);
   return [flowerGrowthLabel(locale,flowerGrowthKind(row.itemId,row.flower)),flowerDisplay(row.flower,flowerDefinitions,flowerLabels[locale]??{})?.title].filter(Boolean).join(' · ');
@@ -660,7 +660,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function inventoryIngredientBadges(item:InventoryEntry):IngredientBadge[]{
   if(!snapshot||snapshot.version!=='3.0.1')return [];
   if(item.cafe)return cafeIngredientBadges(item.cafe.variant,snapshot.cafeWitnesses??[]);
-  if(item.boba)return bobaIngredientBadges(item.boba.variant,snapshot.bobaWitnesses??[]);
+  if(item.boba)return bobaIngredientBadges(item.boba.variant,snapshot.cafeWitnesses??snapshot.bobaWitnesses??[]);
   if((item.unique&&item.unique.tag!==-1)||!nativeInventoryGroups(item.itemId,nativeInventoryIndex).includes('food'))return [];
   return ordinaryRecipeBadges(item.itemId,snapshot.version);
  }
@@ -1956,10 +1956,11 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const customized=snapshot.version==='3.0.1'&&furnitureHasCustomizedAppearance(furnitureDisplay,furnitureVariantOf(item.unique))}
      {@const dyeBadge=flowerBadges.length===0?dyeDecoratorFor(item.itemId,snapshot.version,nativeDyePalettes):null}
      {@const variantTitle=inventoryVariantSearchName(item)}
-     {@const chef=inventoryChefAppearance(item.itemId,item.unique)}
+     {@const chef=inventoryChefAppearance(item.itemId,item.unique,item.cafe,item.boba)}
      {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
      {@const nestedWand=wandNestedOf(item.unique)}
-     {@const uniqueSwatches=item.palette?paletteAppearanceSwatches(item.palette):nestedWand?furnitureAppearanceSwatches(furnitureDisplay,nestedWand[0],nestedWand.slice(3)):furnitureAppearanceSwatches(furnitureDisplay,item.itemId,furnitureVariantOf(item.unique))}
+     {@const paletteAppearance=inventoryPaletteCardAppearance(item.palette,item.paletteCreationDefault)}
+     {@const uniqueSwatches=paletteAppearance?paletteAppearanceSwatches(paletteAppearance):nestedWand?furnitureAppearanceSwatches(furnitureDisplay,nestedWand[0],nestedWand.slice(3)):furnitureAppearanceSwatches(furnitureDisplay,item.itemId,furnitureVariantOf(item.unique))}
      {@const canFlower=!!item.flower&&!!item.unique?.flowerEditable&&!!flowerDefinitions&&!!flowerLabels[locale]}
      {@const canFurniture=!!item.unique?.furnitureEditable||!!item.furnitureCreatable}
      {@const canPalette=!!item.paletteCreationDefault||!!item.unique?.paletteEditable&&!!item.palette}
@@ -1984,12 +1985,12 @@ import {verifiedFloorplanName} from './floorplan-names';
         {/if}
         {#if hasNativeWandArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite} originalCell={wand?wandOriginalCell(wand.sourceItemId):undefined}/>
-         {:else if snapshot.version==='3.0.1'&&nativeChefInstructionBase(item.itemId)!==undefined&&(!item.unique||item.unique.tag===0)&&!originalVariantArt[String(item.itemId)]}
+         {:else if snapshot.version==='3.0.1'&&nativeChefInstructionUsesOriginal(item.itemId,item.unique?.tag)&&!originalVariantArt[String(item.itemId)]}
           <DynamicChefSprite itemId={item.itemId} originalOnly={true} fallback={nativeSprite??sprite}/>
          {:else if hasNativeChefArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicChefSprite itemId={item.itemId} appearance={chef} fallback={nativeSprite??sprite}/>
          {:else if item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
-         <DynamicPaletteSprite itemId={item.itemId} palette={item.palette} fallback={nativeSprite??sprite}/>
+         <DynamicPaletteSprite itemId={item.itemId} palette={paletteAppearance} fallback={nativeSprite??sprite}/>
         {:else if hasNativeFlowerArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
          <DynamicFlowerSprite itemId={item.itemId} flower={item.flower} definitions={flowerDefinitions} fallback={nativeSprite??sprite}/>
         {:else if resultId!==undefined&&resultOriginal}
@@ -2025,7 +2026,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          </span>
         {/if}
        </span>
-       <IngredientBadges rows={inventoryIngredientBadges(item)} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/>
+       <IngredientBadges rows={inventoryIngredientBadges(item)} spriteFor={inventoryOriginalSprite} nameFor={inventoryName} {locale}/>
        <strong class="inventory-name" title={inventoryName(item.itemId)}>{inventoryName(item.itemId)}</strong>
        {#if uniqueSwatches.length}
         <span class="inventory-appearance-swatches" data-unique-swatches={item.palette?'palette':nestedWand?'wand-furniture':'furniture'} aria-hidden="true">
@@ -2036,15 +2037,11 @@ import {verifiedFloorplanName} from './floorplan-names';
       </div>
       {#if item.editable}
        {@const pending=quantityPending(item)}
-       {@const originalQuantity=originalInventoryQuantities.get(item.documentId)??0}
        <form class="inventory-quantity-form" class:quantity-pending={pending&&!inventoryAddMode} data-quantity-pending={pending&&!inventoryAddMode} data-quantity-committed={item.quantity} data-quantity-ready={!busy&&!inventoryBatchMode&&!locked} onsubmit={e=>void applyInventoryQuantity(item,e)}>
         <label>
          <span class="visually-hidden">{iCopy.quantity}</span>
          <input type="number" name="quantity" min={inventoryAddMode?Math.max(1,item.quantityMinimum):item.quantityMinimum} max={item.quantityLimit??1} step="1"
           value={quantityInput(item)} oninput={e=>setQuantityInput(item,e.currentTarget.value)} disabled={busy||inventoryBatchMode||locked} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
-         {#if !inventoryAddMode&&(pending||originalQuantity!==item.quantity)}
-          <small class="inventory-quantity-delta" class:unapplied={pending}>{(pending?item.quantity:originalQuantity).toLocaleString(locale)} → {(pending?quantityInput(item):item.quantity.toLocaleString(locale))}</small>
-         {/if}
         </label>
         <button type="submit" class="primary" class:quantity-unchanged={!pending} disabled={busy||inventoryBatchMode||locked||!pending||!quantityInputValid(item)} title={iCopy.apply} aria-label={iCopy.apply}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
@@ -2253,7 +2250,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="cafe-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeCafeEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'cafe',colors:selected.slice(3).filter(n=>n>0)}} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={cafeIngredientBadges(selected,snapshot?.cafeWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/></span></div>
+    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={chefDraftAppearance(edit.itemId,selected)} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={cafeIngredientBadges(selected,snapshot?.cafeWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName} {locale}/></span></div>
     {#each [0,1,2].filter(i=>selected[i]>0||edit.before[i]>0||edit.options.some(v=>v.slot===i)) as slot}
      {@const choices=edit.options.map((option,index)=>({option,index})).filter(({option})=>option.slot===slot)}
      <label class="date-dialog-field" data-cafe-slot={slot}>
@@ -2386,7 +2383,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="boba-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeBobaEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={bobaIngredientBadges(selected,snapshot?.bobaWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/></span></div>
+    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={chefDraftAppearance(edit.itemId,selected)} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={bobaIngredientBadges(selected,snapshot?.cafeWitnesses??snapshot?.bobaWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName} {locale}/></span></div>
     {#each ([1,3,2,4] as BobaField[]) as field}
      {@const choices=bobaFieldOptions(edit.before,edit.options,bobaSelection,field,edit.absent)}
      <label class="date-dialog-field">
@@ -2394,7 +2391,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <select name={['','boba-flavor','boba-pearls','boba-milk','boba-sweetness'][field]} value={bobaSelection}
        onchange={e=>{bobaSelection=Number(e.currentTarget.value);error=''}} disabled={busy||choices.length<=1}>
        {#each choices as choice (choice.index)}
-        <option value={choice.index} data-boba-value={choice.variant[field]}>{bobaFieldValue(choice.variant,selected,field,locale,snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
+        <option value={choice.index} data-boba-value={choice.variant[field]}>{bobaFieldValue(choice.variant,selected,field,locale,snapshot?.cafeWitnesses??snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
        {/each}
       </select>
      </label>

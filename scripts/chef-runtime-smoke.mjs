@@ -69,7 +69,7 @@ export async function chefRuntimeSmoke(browser,origin,base){
      const neutral=await renderChefArt(row.itemId,a(1));
      checks.push(neutral!==null&&neutral===await renderChefBaseArt(row.itemId)&&neutral===await renderChefArt(row.itemId,a(2))&&await renderChefArt(row.itemId,a(999999))===null);
     }
-    const instructionPairs=[[664242277,406277059],[697059779,1237708874],[906644716,1798633565],[1711005390,1338995084],[1946811711,1053426049]];
+    const instructionPairs=[[664242277,406277059],[697059779,1237708874],[906644716,1798633565],[1711005390,1338995084],[1946811711,1053426049],[964128772,1061947263]];
     const instructions=[];
     for(const [id,source] of instructionPairs){
      const original=await renderChefBaseArt(id);
@@ -79,7 +79,7 @@ export async function chefRuntimeSmoke(browser,origin,base){
     return {checks,instructions,palette:palette!==null&&palette===await renderPaletteBaseArt(1835273963),unknown:await renderPaletteArt(0,white)===null};
    },base);
    assert.equal(result.checks.length,10);assert.ok(result.checks.every(Boolean)&&result.palette&&result.unknown);
-   assert.equal(result.instructions.length,5);assert.ok(result.instructions.every(Boolean));
+   assert.equal(result.instructions.length,6);assert.ok(result.instructions.every(Boolean));
    assert.equal(requests,0,'neutral appearance and native instruction art must not depend on mask textures');
    const rejected=await neutralPage.evaluate(async base=>{
     const {renderChefArt,renderPaletteArt}=await import(base+'__chef_runtime_fixture__.mjs');

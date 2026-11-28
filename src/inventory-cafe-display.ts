@@ -1,3 +1,4 @@
+import {ingredientIdentityLabel} from './ingredient-identification';
 /** Display-only exact native cafe tuples and source ingredient examples. */
 export type CafeVariant=[number,number,number,number,number,number];
 export type CafeRow={variant:CafeVariant;editable:boolean;creationOnly?:boolean};
@@ -35,8 +36,7 @@ export function decodeCafeOptions(bytes:Uint8Array):CafeOption[]{
  });
 }
 export function cafeSlotLabel(variant:CafeVariant,slot:number,witnesses:readonly CafeWitness[],name:(id:number)=>string):string{
- const candidates=witnesses.filter(w=>w[1]===variant[slot]&&w[2]===variant[slot+3]);
- return candidates.map(w=>name(w[0])).filter(Boolean).join(' / ')||'—';
+ return ingredientIdentityLabel(variant[slot],variant[slot+3],witnesses,name)||'—';
 }
 export function cafeVariantLabel(variant:CafeVariant,witnesses:readonly CafeWitness[],name:(id:number)=>string):string{
  return [0,1,2].filter(i=>variant[i]>0).map(i=>cafeSlotLabel(variant,i,witnesses,name)).join(' · ');
