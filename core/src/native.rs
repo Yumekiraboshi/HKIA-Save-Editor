@@ -519,6 +519,8 @@ impl<'a> Walk<'a>{
       let mut fields=Vec::new();let mut document_id=None;
       let mut legacy_wand_source=None;
       let mut mermaidifier_source=None;
+      let mut legacy_wand_source_guid_present=false;
+      let mut mermaidifier_source_guid_present=false;
       for (i,spec) in specs.iter().take(n).enumerate(){let at=self.c.pos;let value=match spec{Some(_) if short=="GameCounterData"&&i==1=>{self.budget(depth+1)?;if self.c.peek()?==0xc0{self.c.token()?;Value::Nil}else{let n=self.c.array()?;for _ in 0..n{self.budget(depth+2)?;if !matches!(self.c.token()?,Token::Str(_)){return Err(Error::Schema)}}Value::Count(n)}},Some(s)=>self.read(*s,depth+1,if short=="GameCollectionsTraitModel"&&i==0{Some(("collection-key0",0))}else if name==CABIN&&i==6{Some((CABIN,6))}else if name==VISITOR_MANAGER&&i==4{Some((VISITOR_MANAGER,4))}else if clothing_guid_lists.contains(&i){Some(("clothing-guid-list",0))}else if clothing_preset_list==Some(i){Some(("clothing-preset-list",0))}else if short=="InventoryItem"&&ctx==Some((DOC,1))&&i==4{Some((INVENTORY_UNIQUE_CAPTURE,0))}else if short=="CafeCreationUniqueData"&&matches!(ctx,Some((INVENTORY_UNIQUE_CAPTURE,3))|Some((WAND_SOURCE_CAPTURE,3)))&&i==1{Some(("chef-colors",0))}else if short=="WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&i==1{Some((WAND_SOURCE_CAPTURE,0))}else{None},short=="GameCollectionsTraitModel"&&i==1)?,None=>{if self.c.token()?!=Token::Nil{return Err(Error::Schema)}Value::Nil}};
        if payload_ref_keys.contains(&i)&&!(self.version==Version::V301&&name=="Sunblink.Game.WandUniqueData"&&ctx==Some((INVENTORY_UNIQUE_CAPTURE,9))&&n==5){
         let item=i32::try_from(value.int()?).map_err(|_|Error::Schema)?;
@@ -536,9 +538,11 @@ impl<'a> Walk<'a>{
         let words=value.guid()?;
         if words!=[0;4]{self.index.inventory_furniture_guid_refs.insert(crate::inventory_source::furniture_guid_fingerprint(words));}
         if self.version==Version::V301&&name=="Sunblink.Game.WandUniqueDataDeprecatedV75"&&i==0{
+         legacy_wand_source_guid_present=words!=[0;4];
          legacy_wand_source=crate::inventory_source::native_item_reference_id(words);
         }
         if self.version==Version::V301&&name=="Sunblink.UserData.MermaidifierOutfitModel"&&i==1{
+         mermaidifier_source_guid_present=words!=[0;4];
          mermaidifier_source=crate::inventory_source::native_item_reference_id(words);
         }
        }
@@ -553,12 +557,16 @@ impl<'a> Walk<'a>{
          // item rather than every unrelated inventory record.
          if name=="Sunblink.Game.WandUniqueDataDeprecatedV75"&&n==5{
           if let Some(item)=legacy_wand_source{self.index.inventory_payload_item_refs.insert(item);}
-          else{self.index.inventory_payload_refs_incomplete=true;}
+          else if !legacy_wand_source_guid_present{self.index.inventory_payload_refs_incomplete=true;}
+          // A complete nonzero GUID is still an exact denial key even if
+          // it is absent from the full pinned definition crosswalk. It
+          // cannot denote an unrelated known ItemId: the fingerprint was
+          // already inserted above. Never infer a source or create it.
          }else if name=="Sunblink.UserData.MermaidifierOutfitModel"&&n==3&&matches!(tag,2|7){
           // A complete flower outfit copy has an exact source item GUID.
           // Keep unknown GUIDs and nested wand payloads conservative.
           if let Some(item)=mermaidifier_source{self.index.inventory_payload_item_refs.insert(item);}
-          else{self.index.inventory_payload_refs_incomplete=true;}
+          else if !mermaidifier_source_guid_present{self.index.inventory_payload_refs_incomplete=true;}
          }else{self.index.inventory_payload_refs_incomplete=true;}
         }
        }
