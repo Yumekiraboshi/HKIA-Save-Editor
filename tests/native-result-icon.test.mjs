@@ -80,7 +80,7 @@ test('original blueprint pattern is used only for version-gated native result ro
  const plan=art.rows.find(r=>r.type===8);
  assert.equal(plan.name,'plan.ItemDecorator');assert.equal(plan.sprite.pathId,'973684600144313423');
  assert.equal(source.rows.filter(([id])=>nativeResultIconTarget(id,'3.0.1')!==undefined).length,762);
- assert.ok(app.includes('class:flower-variant={flowerBadges.length>0||!!dyeBadge||resultId!==undefined}'));
+ assert.ok(app.includes('class:flower-variant={customized||flowerBadges.length>0||!!dyeBadge||resultId!==undefined}'));
  assert.ok(app.includes('{#if resultId!==undefined}<InventoryDecorator type={8}/>'));
  assert.equal(app.match(/<InventoryDecorator type=\{8\}/g)?.length,1);
  assert.ok(css.includes('.inventory-blueprint.flower-variant>.inventory-blueprint-pattern{top:22px}'));

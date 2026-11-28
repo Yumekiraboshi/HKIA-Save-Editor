@@ -507,7 +507,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(wandEdit&&hasNativeWandArt(wandEdit.itemId))addWandSource(wandEdit.appearance.sourceItemId);
   // A dialog may outlive its visible inventory row or be opened from Add.
   // Load its own original definition group using the same bounded pack queue.
-  for(const edit of [flowerEdit,paletteEdit,cafeEdit,bobaEdit,wandEdit]){
+  for(const edit of [flowerEdit,paletteEdit,cafeEdit,bobaEdit,wandEdit,furnitureEdit]){
    if(!edit||inventoryNativeArt?.entries.has(edit.itemId)||inventoryNativeArt?.withheld.has(edit.itemId))continue;
    const item=inventorySourceItems.get(edit.itemId);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
@@ -1807,7 +1807,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          <button type="button" class="inventory-stack-delete" disabled={busy||!item.removable&&(!item.editable||item.quantityMinimum!==0||item.quantity<=0)} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)+': '+inventoryName(item.itemId)} onclick={e=>requestInventoryDelete([item],false,e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
         {/if}
       <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
-       <span class="inventory-item-art" class:inventory-blueprint={resultId!==undefined} class:flower-variant={flowerBadges.length>0||!!dyeBadge||resultId!==undefined} style:position="relative" style:--inventory-icon-scale={nativeInventoryIconScale(item.itemId,snapshot.version)} aria-hidden="true">
+       <span class="inventory-item-art" class:inventory-blueprint={resultId!==undefined} class:flower-variant={customized||flowerBadges.length>0||!!dyeBadge||resultId!==undefined} style:position="relative" style:--inventory-icon-scale={nativeInventoryIconScale(item.itemId,snapshot.version)} aria-hidden="true">
         {#if resultId!==undefined}
          <span class="inventory-blueprint-pattern" data-native-blueprint-pattern="bp_grid" style:background-image={'url("'+INVENTORY_UI+'bp-grid.webp")'}></span>
         {/if}
@@ -2291,10 +2291,26 @@ import {verifiedFloorplanName} from './floorplan-names';
    {@const selected=furnitureDraft??edit.before}
    {@const changed=selected.some((v,i)=>v!==edit.before[i])}
    {@const canCreate=furnitureDraftCreatable}
+   {@const original=inventoryOriginalSprite(edit.itemId)}
+   {@const customized=snapshot?.version==='3.0.1'&&furnitureHasCustomizedAppearance(furnitureDisplay,selected)}
    <form class="date-dialog-inner" onsubmit={e=>{if(edit.createOnly){e.preventDefault();void addInventoryFurnitureVariant()}else void applyInventoryFurnitureVariant(e)}}>
     <div class="date-dialog-heading">
      <h2 id="furniture-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFurnitureEditor}>×</button>
+    </div>
+    <div style="display:flex;justify-content:center" aria-hidden="true">
+     <span class="inventory-item-art" class:flower-variant={customized} style:position="relative" data-furniture-icon-preview>
+      {#if originalVariantArt[String(edit.itemId)]||exactVariantArt[String(edit.itemId)]}
+       <DyeSprite sprite={original} originalArtUrl={originalVariantArt[String(edit.itemId)]} exactArtUrl={exactVariantArt[String(edit.itemId)]}/>
+      {:else if inventoryNativeArt?.placeholders.has(edit.itemId)}
+       <DynamicArtSprite source="native-placeholder" render={renderNativePlaceholderArt}/>
+      {:else if original}
+       <InventoryAtlasSprite sprite={original}/>
+      {:else}
+       <span class="item-art-empty">✧</span>
+      {/if}
+      {#if customized}<span class="inventory-native-decorators"><InventoryDecorator type={9}/></span>{/if}
+     </span>
     </div>
     <div class="date-dialog-field">
      <span>{furnitureCopy.title}</span>
