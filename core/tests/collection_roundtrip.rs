@@ -6484,3 +6484,24 @@ fn exhausted_flower_defaults_keep_verified_free_starters_after_zero_and_creation
  let options=e.inventory_flower_creation_variants(candidate);assert_eq!(options.len(),1);
  assert!(e.inventory_flower_preview(candidate,options[0],options[0]).unwrap().1);
 }
+
+
+#[test]
+fn all_source_verified_flower_add_families_keep_a_free_starter_after_defaults(){
+ let raw=slot_from_payload("3.0.1",synthetic_payload("3.0.1"));
+ let source=Editor::open(raw.clone()).unwrap();
+ let ids=source.inventory_absent_flower_ids();assert_eq!(ids.len(),105);
+ for item in ids{
+  let candidate=0x80000000|item as u32;
+  let mut e=Editor::open(raw.clone()).unwrap();
+  let defaults=e.inventory_flower_creation_variants(candidate);
+  assert!(!defaults.is_empty(),"item {item}");
+  for &v in &defaults{e.create_inventory_flower_variant(candidate,[0;4],v,1).unwrap();}
+  let options=e.inventory_flower_creation_variants(candidate);
+  assert_eq!(options.len(),1,"item {item}");
+  let starter=options[0];
+  assert!(!defaults.contains(&starter),"item {item}");
+  assert!(e.inventory_flower_preview(candidate,starter,starter).unwrap().1,"item {item}");
+  assert!(e.create_inventory_flower_variant(candidate,starter,starter,1).is_ok(),"item {item}");
+ }
+}
