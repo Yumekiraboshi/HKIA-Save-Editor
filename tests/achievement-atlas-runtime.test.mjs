@@ -77,14 +77,22 @@ test('altered or absent WebP bytes never become a displayable image',async()=>{
 });
 
 test('achievement image downloads begin only for an opened save and use failure-safe placeholders',()=>{
- assert.match(app,/if\(achievementImagesFailed\|\|!snapshot\|\|activeTool!=='achievements'\|\|achievementIndex\.size!==820/);
- assert.match(app,/achievementImagesStarted=true;/);
- assert.match(app,/if\(!achievementIndividualAtlas\)void loadAchievementIndividualAtlas\(/);
- assert.match(app,/if\(!achievementCategoryAtlas\)void loadAchievementCategoryAtlas\(/);
- assert.match(app,/if\(achievementImagesFailed\)\{[^}]*achievementImagesStarted=false;[^}]*achievementImagesFailed=false;/);
+ assert.match(app,/if\(achievementImagesDisposed\|\|!snapshot\|\|activeTool!=='achievements'\|\|achievementIndex\.size!==820/);
+ assert.match(app,/if\(!achievementIndividualAtlas&&!achievementIndividualPending\)/);
+ assert.match(app,/if\(!achievementCategoryAtlas&&!achievementCategoryPending\)/);
+ for(const kind of ['Individual','Category']){
+  assert.ok(app.includes('achievement'+kind+'Pending=true;'));
+  assert.ok(app.includes('void loadAchievement'+kind+'Atlas('));
+  assert.ok(app.includes('achievement'+kind+'Failed=true;'));
+  assert.ok(app.includes('achievement'+kind+'Failed=false;'));
+  assert.ok(app.includes('achievement'+kind+'Pending=false;'));
+ }
+ assert.match(app,/function openAchievementsTab\(\)\{[^}]*refreshAchievementImages\(\);/);
  assert.match(app,/onclick=\{openAchievementsTab\}/);
- assert.match(app,/achievementImagesFailed=true/);
- assert.match(app,/achievementImagesEpoch\+\+;/);
+ assert.match(app,/window\.addEventListener\('online',refreshAchievementImages\)/);
+ assert.match(app,/window\.removeEventListener\('online',refreshAchievementImages\)/);
+ assert.match(app,/achievementImagesDisposed=true;/);
+ assert.match(app,/if\(achievementImagesDisposed\)\{atlas\.dispose\?\.\(\);return;\}/);
  assert.match(app,/achievementIndividualAtlas\?\.dispose\?\.\(\)/);
  assert.match(app,/achievementCategoryAtlas\?\.dispose\?\.\(\)/);
  assert.match(app,/\{#if achievementImagesFailed\}/);
