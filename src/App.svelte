@@ -125,6 +125,14 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(!inventoryNativeArtDisposed)inventoryNativeArt=art;
   }).catch(()=>{});
  }
+ let topbarElement=$state<HTMLElement|undefined>();
+ let topbarHeight=$state(64);
+ $effect(()=>{
+  const element=topbarElement;if(!element)return;
+  const measure=()=>{topbarHeight=Math.ceil(element.getBoundingClientRect().height)};
+  measure();const observer=new ResizeObserver(measure);observer.observe(element);
+  return ()=>observer.disconnect();
+ });
  let inventoryEditableOnly=$state(false);
  let inventoryShowZero=$state(false);
  let inventoryAddMode=$state(false);
@@ -1518,7 +1526,7 @@ import {verifiedFloorplanName} from './floorplan-names';
 </svelte:head>
 
 <div class="site-shell">
- <header class="topbar">
+ <header class="topbar" bind:this={topbarElement}>
   <div class="bar-inner">
    <button class="brand" type="button" onclick={goHome} aria-label={copy.brand}>
     <span class="brand-mark" aria-hidden="true">✦</span><span class="brand-name">{copy.brand}</span>
@@ -1734,6 +1742,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {/if}
    </dialog>
   {:else if activeTool==='inventory'}
+   <div class="inventory-sticky-tools" style:--inventory-sticky-top={topbarHeight+'px'}>
    <div class="collection-controls inventory-controls">
     <label class="search-field">
      <svg class="search-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.75" cy="10.75" r="6.75"/><path d="m16 16 5 5"/></svg>
@@ -1810,6 +1819,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      {/if}
     </nav>
    {/if}
+   </div>
    <div class="inventory-grid">
     {#each inventoryRows.slice(0,inventoryLimit) as item (item.documentId)}
      {@const definition=inventorySourceItems.get(item.itemId)}
