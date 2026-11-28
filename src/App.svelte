@@ -567,7 +567,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
   if(cafeEdit)addIngredientSources(cafeIngredientBadges(cafeDraft??cafeEdit.before,snapshot.cafeWitnesses??[]));
-  if(bobaEdit)addIngredientSources(bobaIngredientBadges(bobaEdit.options[bobaSelection]??bobaEdit.before,snapshot.bobaWitnesses??[]));
+  if(bobaEdit)addIngredientSources(bobaIngredientBadges(bobaEdit.options[bobaSelection]??bobaEdit.before,snapshot.cafeWitnesses??snapshot.bobaWitnesses??[]));
   if(wandEdit&&hasNativeWandArt(wandEdit.itemId))addWandSource(wandEdit.appearance.sourceItemId);
   // A dialog may outlive its visible inventory row or be opened from Add.
   // Load its own original definition group using the same bounded pack queue.
@@ -608,7 +608,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function setTheme(v:ThemePref){
   themePref=v;try{localStorage.setItem('hkia-display-theme',v)}catch{}
  }
- function bobaName(v:BobaVariant):string{return fullBobaLabel(v,locale,snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}
+ function bobaName(v:BobaVariant):string{return fullBobaLabel(v,locale,snapshot?.cafeWitnesses??snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}
  function cafeName(v:CafeVariant):string{return cafeVariantLabel(v,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}
  function wandName(v:WandVariant):string{return wandVariantLabel(v,id=>sourceNames[String(id)]??'—')}
  function inventoryVariantSearchName(row:InventoryEntry):string{
@@ -657,7 +657,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  function inventoryIngredientBadges(item:InventoryEntry):IngredientBadge[]{
   if(!snapshot||snapshot.version!=='3.0.1')return [];
   if(item.cafe)return cafeIngredientBadges(item.cafe.variant,snapshot.cafeWitnesses??[]);
-  if(item.boba)return bobaIngredientBadges(item.boba.variant,snapshot.bobaWitnesses??[]);
+  if(item.boba)return bobaIngredientBadges(item.boba.variant,snapshot.cafeWitnesses??snapshot.bobaWitnesses??[]);
   if((item.unique&&item.unique.tag!==-1)||!nativeInventoryGroups(item.itemId,nativeInventoryIndex).includes('food'))return [];
   return ordinaryRecipeBadges(item.itemId,snapshot.version);
  }
@@ -2018,7 +2018,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          </span>
         {/if}
        </span>
-       <IngredientBadges rows={inventoryIngredientBadges(item)} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/>
+       <IngredientBadges rows={inventoryIngredientBadges(item)} spriteFor={inventoryOriginalSprite} nameFor={inventoryName} {locale}/>
        <strong class="inventory-name" title={inventoryName(item.itemId)}>{inventoryName(item.itemId)}</strong>
        {#if variantTitle}<span class="inventory-flower-variant-name" title={variantTitle}>{variantTitle}</span>{/if}
       </div>
@@ -2241,7 +2241,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="cafe-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeCafeEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'cafe',colors:selected.slice(3).filter(n=>n>0)}} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={cafeIngredientBadges(selected,snapshot?.cafeWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/></span></div>
+    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'cafe',colors:selected.slice(3).filter(n=>n>0)}} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={cafeIngredientBadges(selected,snapshot?.cafeWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName} {locale}/></span></div>
     {#each [0,1,2].filter(i=>selected[i]>0||edit.before[i]>0||edit.options.some(v=>v.slot===i)) as slot}
      {@const choices=edit.options.map((option,index)=>({option,index})).filter(({option})=>option.slot===slot)}
      <label class="date-dialog-field" data-cafe-slot={slot}>
@@ -2374,7 +2374,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="boba-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeBobaEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={bobaIngredientBadges(selected,snapshot?.bobaWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/></span></div>
+    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={bobaIngredientBadges(selected,snapshot?.cafeWitnesses??snapshot?.bobaWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName} {locale}/></span></div>
     {#each ([1,3,2,4] as BobaField[]) as field}
      {@const choices=bobaFieldOptions(edit.before,edit.options,bobaSelection,field,edit.absent)}
      <label class="date-dialog-field">
@@ -2382,7 +2382,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       <select name={['','boba-flavor','boba-pearls','boba-milk','boba-sweetness'][field]} value={bobaSelection}
        onchange={e=>{bobaSelection=Number(e.currentTarget.value);error=''}} disabled={busy||choices.length<=1}>
        {#each choices as choice (choice.index)}
-        <option value={choice.index} data-boba-value={choice.variant[field]}>{bobaFieldValue(choice.variant,selected,field,locale,snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
+        <option value={choice.index} data-boba-value={choice.variant[field]}>{bobaFieldValue(choice.variant,selected,field,locale,snapshot?.cafeWitnesses??snapshot?.bobaWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
        {/each}
       </select>
      </label>

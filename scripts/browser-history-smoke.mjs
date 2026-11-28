@@ -27,7 +27,7 @@ const doc=(tag,body)=>arr([tag],body);
 const str=text=>append([0xa0|text.length],new TextEncoder().encode(text));
 const timestamp=(sec,nanos)=>append([0xc7,12,0xff],Array.from({length:4},(_,i)=>nanos>>>(24-8*i)&255),i64(BigInt(sec)).subarray(1));
 
-function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,ordinaryRecipeInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false,categoryProtectionInventory=false}={}){
+function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInventory=false,resultArtInventory=false,ordinaryRecipeInventory=false,ingredientResolutionInventory=false,flowerInventory=false,flowerGrowthInventory=false,paletteInventory=false,paletteCreationInventory=false,editableFlower=false,ownedRestrictedFlower=false,editableFurniture=false,batchInventory=false,chefInventory=false,chefQuantityInventory=false,bobaEditInventory=false,bobaCreateInventory=false,cafeEditInventory=false,cafeCreateInventory=false,wandEditInventory=false,nestedWandInventory=false,quantityBounds=false,emptyMaterialInventory=false,ordinaryFurnitureInventory=false,paletteRemovalInventory=false,ordinaryClothingInventory=false,categoryProtectionInventory=false}={}){
  const version='3.0.1';
  const collection=doc(39,arr(map(),map([2],i64(638000000000000001n),[3],i64(9n))));
  const object=doc(32,arr([3],hash(0,0,0,3),[0],arr(collection)));
@@ -54,6 +54,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
   ...(scaleInventory?[2064380032,1806222956,142358610].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
   ...(resultArtInventory?[10455890,1217231008].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
   ...(ordinaryRecipeInventory?[1878551760,167310698,357344998].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
+  ...(ingredientResolutionInventory?[chef(8,203331651,arr([3],arr(arr(u32(54),u32(99),u32(57)),arr(u32(9),u32(8),u32(33))))),chef(9,1798633565,arr([4],arr(u32(8),u32(99),u32(79),u32(78),u32(71))))]:[]),
   ...(paletteRemovalInventory?[doc(10,arr([8],hash(1,2,3,4),arr(),arr(),arr(),hash(1,2,3,4),[0xc3],
    paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
    doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
@@ -2843,6 +2844,32 @@ async function inventoryNativeSheetRetrySmoke(){
  }finally{await context.close();}
  console.log('CHROMIUM NATIVE INVENTORY SHEET RETRY PASS: verified independent sheet recovery and reuse');
 }
+async function inventoryIngredientResolutionSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(String(e)));
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-ingredient-resolution.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({ingredientResolutionInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]'),card=page.locator('.inventory-card').first();
+  await search.fill('203331651');
+  const cheese=card.locator('[data-ingredient-key="1:54:9"]');
+  await cheese.locator('.item-sprite').waitFor({timeout:30_000});
+  assert.equal(await cheese.getAttribute('data-ingredient-candidates'),'1002666914');
+  assert.equal(await cheese.getAttribute('data-ingredient-match'),'flavor');
+  assert.match(await cheese.getAttribute('title'),/Flavor match only/);
+  assert.equal(await card.locator('.ingredient-unknown').count(),0);
+  await search.fill('1798633565');
+  const citrus=card.locator('[data-ingredient-key="1:99:8"]');
+  await citrus.locator('.item-sprite').waitFor({timeout:30_000});
+  assert.equal(await citrus.getAttribute('data-ingredient-candidates'),'319731107');
+  assert.equal(await citrus.getAttribute('data-ingredient-match'),'exact');
+  assert.equal(await card.locator('.ingredient-unknown').count(),0);
+  assert.deepEqual(errors,[]);
+ }finally{await context.close();}
+ console.log('CHROMIUM INGREDIENT RESOLUTION PASS: authored cheese mismatch and non-authored exact Boba flavor');
+}
 async function inventoryOrdinaryRecipeBadgeSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -3890,6 +3917,7 @@ async function run(){
  await inventoryFirstChefSmoke();
  await inventoryCafeEditSmoke();
  await inventoryOrdinaryRecipeBadgeSmoke();
+ await inventoryIngredientResolutionSmoke();
  await inventoryCafeCreationAndOptionalSideSmoke();
  await inventoryChefQuantitySmoke();
  await wandRuntimeSmoke(browser,origin,base);
