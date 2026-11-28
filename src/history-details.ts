@@ -9,6 +9,7 @@ import {toDateTimeValue} from './collection-date';
 
 export type InventoryBatchDetail={documentId:number;before:number;after:number};
 export type HistoryDetail =
+ | {scope:'inventory';documentId:number;pinBefore:boolean;pinAfter:boolean}
  | {scope:'inventory';documentId:number;batch:InventoryBatchDetail[];physical?:true}
  | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FlowerVariant;quantity:number;replacedItemId?:number;furnitureCreated?:false;paletteCreated?:false;bobaCreated?:false;cafeCreated?:false;wandCreated?:false}
  | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FurnitureVariant;quantity:number;furnitureCreated:true;paletteCreated?:false;bobaCreated?:false;cafeCreated?:false;wandCreated?:false}
@@ -96,6 +97,10 @@ export function decodeHistoryDetails(
      seen.add(documentId);batch.push({documentId,before,after});
     }
     result.push({scope:'inventory',documentId:batch[0].documentId,batch});
+   }else if(kind===26){
+    const documentId=u32(),key=guid(),before=u8(),after=u8();
+    if(documentId<=0||documentId>2147483647||key.every(n=>n===0)||before>1||after>1||before===after)return [];
+    result.push({scope:'inventory',documentId,pinBefore:before===1,pinAfter:after===1});
    }else if(kind===24){
     const n=u32();if(n<1||n>Math.floor((v.byteLength-at)/8))return [];
     const batch:InventoryBatchDetail[]=[],seen=new Set<number>();
@@ -256,6 +261,7 @@ export function formatHistoryChange(
  const wandLabel=(pair:WandVariant,source?:number,materials?:FurnitureVariant)=>[
   source?wandSourceName?.(source)??String(source):'',wandVariantName?.(pair)??'—',materials?furnitureVariantName?.(materials)??materials.join(' / '):''
  ].filter(Boolean).join(' · ');
+ if(detail.scope==='inventory'&&'pinAfter' in detail)return detail.pinAfter?copy.added:copy.removed;
  if(detail.scope==='inventory'&&'batch' in detail)return detail.batch.map(row=>(inventoryBatchName?.(row.documentId)??String(row.documentId))+': '+(detail.physical?row.before+' → '+copy.removed:row.before+' → '+row.after)).join(' · ');
  if(detail.scope==='inventory'&&'createdHandle' in detail&&'replacedItemId' in detail&&detail.replacedItemId!==undefined)return (wandSourceName?.(detail.replacedItemId)??String(detail.replacedItemId))+' → '+(wandSourceName?.(detail.itemId)??String(detail.itemId))+' · '+(flowerVariantName?.(detail.variant)??String(detail.variant))+' · '+quantityLabel+': '+detail.quantity;
  if(detail.scope==='inventory'&&'createdHandle' in detail)return copy.added+' · '+(detail.wandCreated?wandLabel(detail.variant,detail.sourceItemId,detail.nestedMaterials):detail.cafeCreated?(cafeVariantName?.(detail.variant)??'—'):detail.bobaCreated?(bobaVariantName?.(detail.variant)??bobaVariantLabel(detail.variant,locale)):detail.paletteCreated?[0,1,2].map(i=>paletteColorHex(detail.variant,i)).join(' / '):detail.furnitureCreated?(furnitureVariantName?.(detail.variant)??String(detail.variant)):(flowerVariantName?.(detail.variant)??String(detail.variant)))+' · '+quantityLabel+': '+detail.quantity;

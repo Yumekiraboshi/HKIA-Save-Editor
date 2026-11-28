@@ -63,9 +63,9 @@ test('confirmation checks save identity, revision and current recorded/completed
  assert.match(app,/else if\(target\.kind==='achievements'\)await quickToggleAchievement\(target\.item,undefined,undefined,true\)/);
  assert.match(app,/target\.requests\.some\(\(\[id,before\]\)=>\{/);
  assert.match(app,/const row=liveInventory\?\.get\(id\)/);
- assert.match(app,/return isInventoryLocked\(id\)\|\|!row\|\|row\.quantity!==before\|\|!\(physical\?row\.removable:zeroRows\?\(before===0\|\|zeroRows\.has\(id\)\):row\.editable&&row\.quantityMinimum===0\)/);
- assert.match(app,/if\(target\.batch\|\|target\.requests\.some\(\(\[id\]\)=>liveInventory\?\.get\(id\)\?\.batchZeroOnly\)\)\{update\(await changeInventoryQuantities\(target\.requests\.filter\(\(\[,before\]\)=>before!==0\)\)\)/);
- assert.match(app,/requestRemoval\(\{kind:'inventory',requests,physical,zero,batch,name,targets:details,revision:snapshot\.revision\},opener\)/);
+ assert.match(app,/return isInventoryLocked\(id\)\|\|!row\|\|\(target\.batch&&row\.nativePinBulkProtected\)\|\|row\.quantity!==before\|\|!\(physical\?row\.removable:zeroRows\?\(before===0\|\|zeroRows\.has\(id\)\):row\.editable&&row\.quantityMinimum===0\)/);
+ assert.match(app,/if\(target\.batch\|\|target\.requests\.some\(\(\[id\]\)=>liveInventory\?\.get\(id\)\?\.batchZeroOnly\)\)\{update\(await changeInventoryQuantities\(target\.requests\.filter\(\(\[,before\]\)=>before!==0\),target\.batch\)\)/);
+ assert.match(app,/requestRemoval\(\{kind:'inventory',requests,physical,zero,batch,name,targets:details,revision:snapshot\.revision,categoryExcluded:excluded\|\|undefined\},opener\)/);
  assert.match(app,/if\(next===0\)\{requestInventoryDelete\(rows,true,/);
  assert.match(app,/if\(next===0\)\{requestInventoryDelete\(\[row\],false,/);
  assert.doesNotMatch(app,/confirm\(inventoryEmptyCopy\(locale\)\)/);
@@ -87,6 +87,6 @@ test('batch removal preview includes zero records only for physical removal and 
  assert.match(app,/const details=targets\.slice\(0,BATCH_SIZE\)\.map\(row=>\(\{documentId:row\.documentId,name:/);
  assert.match(app,/\{#each pendingRemoval\.targets as target \(target\.documentId\)\}/);
  assert.match(app,/target\.quantity\.toLocaleString\(locale\)/);
- assert.match(app,/removeInventoryEntries\(target\.requests\.map\(\(\[id,before\]\)=>\[id,before\]\)\)/);
+ assert.match(app,/removeInventoryEntries\(target\.requests\.map\(\(\[id,before\]\)=>\[id,before\]\),target\.batch\)/);
  assert.match(app,/onclick=\{\(\)=>void confirmRemoval\(true\)\}/);
 });
