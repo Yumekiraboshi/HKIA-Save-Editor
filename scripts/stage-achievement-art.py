@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Offline original achievement atlas candidate staging.
 
-Requires a separately reviewed, complete LocalAchievementDefinition pointer
-census for this exact definition bundle. This is not a managed-reference
-layout extractor: no offsets, asset GUIDs or null references are guessed.
+Reads typed LocalAchievementData from the exact original definitions bundle,
+joining a reviewed achievement index and hierarchy. No guessed offsets, GUIDs
+or image references.
 Reuse the native Sprite/texture decoder and source fingerprint verification.
 """
 import argparse
@@ -74,6 +74,53 @@ def validate_census(census, index, hierarchy):
         require(len(rows)==820 and sum(r['iconPPtr']==[0,'0'] for r in rows.values())==559, 'baseline source census mismatch')
     return rows
 
+
+def extract_census(definitions_path,index_path,hierarchy_path,version,platform,expected_sha256):
+    """Read original typed LocalAchievementData; join only verified catalog identities."""
+    source.checked_release(version,platform)
+    index,hierarchy=map(source.read_json,(index_path,hierarchy_path))
+    bundle=atlas.load_bundle(definitions_path,expected_sha256)
+    aux=atlas.module('extract-icon-auxiliary-source')
+    matches=[]
+    for pid,(cls,tree,raw) in bundle['objects'].items():
+        if cls!=114:continue
+        nodes=[n for n in tree[-1] if n[2]=='LocalAchievementData']
+        if not nodes:continue
+        fields=atlas.helpers.fields(tree,raw,atlas.mesh)
+        if atlas.mesh.string(fields['m_Name'])[0]=='LynxMrdPayload':
+            matches.append((pid,nodes[0],fields['LocalAchievementData'],raw))
+    require(len(matches)==1,'unique native LocalAchievementData required')
+    pid,node,data,raw=matches[0]
+    elements,end=aux.array_rows(node,data)
+    require(end==len(data),'achievement array boundary')
+    element=node[-1][0][-1][1]
+    expected={g:(k,t) for g,k,t in index['records']}
+    parents={g:None for g,_ in hierarchy['groups']}
+    for g,children in hierarchy['groups']:
+        for child in children:
+            require(child not in parents,'duplicate achievement parent')
+            parents[child]=g
+    rows=[]
+    for payload in elements:
+        f=atlas.helpers.fields(element,payload,atlas.mesh)
+        guid=atlas.mesh.string(f['SourceAssetGuid'])[0]
+        name=atlas.mesh.string(f['SerializedName'])[0]
+        require(ASSET_GUID.fullmatch(guid) and name.endswith('.LocalAchievementDefinition') and len(f['Title'])==12 and len(f['Icon'])==12,'unsupported typed achievement identity')
+        key=name.removesuffix('.LocalAchievementDefinition')
+        save_guid=':'.join(guid[i:i+8][::-1] for i in range(0,32,8))
+        title=str(struct.unpack_from('<q',f['Title'],4)[0])
+        require(expected.get(save_guid)==(key,title) and save_guid in parents,'achievement catalog identity mismatch')
+        ref=atlas.mesh.ptr(f['Icon'])
+        require(0<=ref[0]<=len(bundle['external']),'achievement external PPtr')
+        if ref[0]==0 and ref[1]!='0':
+            require(bundle['objects'].get(ref[1],(None,))[0]==213,'achievement local Sprite PPtr')
+        rows.append({'saveGuid':save_guid,'sourceKey':key,'sourceGuid':guid,'parent':parents[save_guid],'iconPPtr':ref})
+    census={'schema':'HKIA.AchievementPointerCensus.1','version':version,'platform':platform,
+            'reviewedRouting':ROUTING,'definitionsSha256':expected_sha256,
+            'catalogIndexFileSha256':source.file_digest(index_path),'catalogHierarchyFileSha256':source.file_digest(hierarchy_path),
+            'definitionCount':len(rows),'rows':rows,'sourceObjectPathId':pid,'sourceObjectSha256':sha(raw)}
+    validate_census(census,index,hierarchy)
+    return census
 
 def stage(census_path,index_path,hierarchy_path,bundles_path,out,prior_dir=None):
     census,index,hierarchy,manifest = map(source.read_json,(census_path,index_path,hierarchy_path,bundles_path))
@@ -149,8 +196,17 @@ if __name__=='__main__':
     p.add_argument('--self-test',action='store_true')
     for name in ('census','index','hierarchy','bundles','out'):p.add_argument('--'+name,type=Path)
     p.add_argument('--previous-stage',type=Path)
+    p.add_argument('--definitions',type=Path)
+    p.add_argument('--version')
+    p.add_argument('--platform')
+    p.add_argument('--definitions-sha256')
+    p.add_argument('--extract-census',action='store_true')
     a=p.parse_args()
     if a.self_test:self_test()
+    elif a.extract_census and all(getattr(a,k) for k in ('definitions','index','hierarchy','out','version','platform','definitions_sha256')):
+        result=extract_census(a.definitions,a.index,a.hierarchy,a.version,a.platform,a.definitions_sha256)
+        source.write_new(a.out,result)
+        print('HKIA_ORIGINAL_ACHIEVEMENT_CENSUS',result['definitionCount'])
     elif all(getattr(a,k) for k in ('census','index','hierarchy','bundles','out')):
         r=stage(a.census,a.index,a.hierarchy,a.bundles,a.out,a.previous_stage)
         print('HKIA_ACHIEVEMENT_ART_CANDIDATE',r['definitionCount'],'definitions',r['nativeNullCount'],'native null',r['unresolvedCount'],'unresolved')
