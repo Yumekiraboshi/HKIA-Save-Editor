@@ -17,7 +17,7 @@ type SourceRow=Readonly<{
 }>;
 type SourceIndex=ReadonlyMap<string,SourceRow>;
 const SHA=/^[a-f0-9]{64}$/;
-const KEY=/^(?:(?:base|magic|item):[1-9][0-9]{0,9}|growth:[1-9][0-9]{0,9}:(?:0|7)|mask:[a-f0-9]{32})$/;
+const KEY=/^(?:(?:base|magic|item|pattern):[1-9][0-9]{0,9}|growth:[1-9][0-9]{0,9}:(?:0|7)|mask:[a-f0-9]{32})$/;
 const fail=():never=>{throw Error('VERSIONED_DYNAMIC_SOURCE_INVALID');};
 function assertSource(ok:unknown):asserts ok{if(!ok)fail();}
 function object(v:unknown):Record<string,unknown>{
