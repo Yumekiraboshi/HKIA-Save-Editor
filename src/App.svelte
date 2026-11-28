@@ -97,17 +97,14 @@ import {verifiedFloorplanName} from './floorplan-names';
  let furnitureDialogEl:HTMLDialogElement|undefined=$state();
  let furnitureDisplay:FurnitureDisplay|null=$state(null);
  let furnitureEdit=$state<{documentId:number;itemId:number;revision:number;before:FurnitureVariant;options:FurnitureVariant[];createOnly:boolean}|null>(null);
- let furnitureSelection=$state(-1);
  let furnitureDraft=$state<FurnitureVariant|null>(null);
  let furnitureDraftCreatable=$state(false);
  let paletteDialogEl:HTMLDialogElement|undefined=$state();
  let paletteEdit=$state<{documentId:number;itemId:number;revision:number;before:PaletteVariant;options:PaletteVariant[]}|null>(null);
  let cafeDialogEl:HTMLDialogElement|undefined=$state();
  let cafeEdit=$state<{documentId:number;itemId:number;revision:number;before:CafeVariant;options:CafeOption[];absent?:boolean}|null>(null);
- let cafeSelection=$state(-1);
  let cafeDraft=$state<CafeVariant|null>(null);
  let cafeDraftCreatable=$state(false);
- let cafeSlot=$state(0);
  let wandDialogEl:HTMLDialogElement|undefined=$state();
  let wandEdit=$state<{documentId:number;itemId:number;revision:number;before:WandVariant;appearance:WandInventoryAppearance;options:WandVariant[];creationOptions:WandVariant[];absent?:boolean;sourceChoices?:number[];beforeSource?:number;nestedBefore?:WandNested;nestedOptions?:FurnitureVariant[];nestedCreationOptions?:FurnitureVariant[];ownedFurnitureChoices?:number[];ownedFurnitureSource?:number;ownedFurnitureWitness?:WandNested}|null>(null);
  let wandSelection=$state(-1);
@@ -903,7 +900,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    if(!snapshot||snapshot.revision!==revision)return;
    furnitureDisplay=display;
    furnitureEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:preview.options,createOnly};
-   furnitureSelection=-1;furnitureDraft=[...before];furnitureDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
+   furnitureDraft=[...before];furnitureDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
    if(furnitureDialogEl&&!furnitureDialogEl.open)furnitureDialogEl.showModal();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -914,7 +911,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   try{
    const preview=await requestCafePreview(row.documentId,before,before);
    if(!snapshot||snapshot.revision!==revision)return;
-   cafeEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:preview.options,absent:row.cafe.creationOnly};cafeSlot=0;cafeSelection=-1;cafeDraft=[...before];cafeDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
+   cafeEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:preview.options,absent:row.cafe.creationOnly};cafeDraft=[...before];cafeDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
    if(cafeDialogEl&&!cafeDialogEl.open)cafeDialogEl.showModal();
   }catch(e){error=describeError(e)}finally{busy=false}
  }
@@ -926,17 +923,16 @@ import {verifiedFloorplanName} from './floorplan-names';
   try{update(await createInventoryCafeVariant(edit.documentId,edit.before,next,quantity));closeCafeEditor();await persistDraft()}
   catch(e){error=describeError(e)}finally{busy=false}
  }
- async function selectCafeSlot(index:number){
+ async function selectCafeSlot(index:number,slot:number){
   const edit=cafeEdit;if(!snapshot||busy||!edit||!cafeDraft||snapshot.revision!==edit.revision)return;
-  const option=edit.options[index];if(!option||option.slot!==cafeSlot){cafeSelection=-1;return}
+  const option=edit.options[index];if(!option||option.slot!==slot){return}
   busy=true;error='';
   try{
    const preview=await requestCafePreview(edit.documentId,edit.before,option.variant);
    if(!snapshot||snapshot.revision!==edit.revision||cafeEdit?.documentId!==edit.documentId)return;
    cafeDraft=[...option.variant];cafeDraftCreatable=preview.creatable;cafeEdit={...edit,options:preview.options};
-  }catch(e){error=describeError(e)}finally{cafeSelection=-1;busy=false}
+  }catch(e){error=describeError(e)}finally{busy=false}
  }
- function openCafeSlot(slot:number){cafeSlot=slot;cafeSelection=-1}
  function closeCafeEditor(){if(cafeDialogEl?.open)cafeDialogEl.close()}
  async function applyInventoryCafeVariant(event:SubmitEvent){
   event.preventDefault();if(inventoryAddMode)return;const edit=cafeEdit;
@@ -1115,7 +1111,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const preview=await requestFurniturePreview(edit.documentId,edit.before,next);
    if(!snapshot||snapshot.revision!==edit.revision||furnitureEdit?.documentId!==edit.documentId)return;
    furnitureDraft=[...next];furnitureDraftCreatable=preview.creatable;furnitureEdit={...edit,options:preview.options};
-  }catch(e){error=describeError(e)}finally{furnitureSelection=-1;busy=false}
+  }catch(e){error=describeError(e)}finally{busy=false}
  }
  async function selectFurniturePart(index:number){
   const option=furnitureEdit?.options[index];if(option)await refreshFurnitureDraft(option)
@@ -2060,7 +2056,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    {/if}
   {/if}
  </main>
- <dialog class="date-dialog" bind:this={cafeDialogEl} aria-labelledby="cafe-editor-title" onclose={()=>{cafeEdit=null;cafeSelection=-1;cafeDraft=null;cafeDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
+ <dialog class="date-dialog" bind:this={cafeDialogEl} aria-labelledby="cafe-editor-title" onclose={()=>{cafeEdit=null;cafeDraft=null;cafeDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if cafeEdit}
    {@const edit=cafeEdit}
    {@const selected=cafeDraft??edit.before}
@@ -2072,21 +2068,18 @@ import {verifiedFloorplanName} from './floorplan-names';
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeCafeEditor}>×</button>
     </div>
     <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'cafe',colors:selected.slice(3).filter(n=>n>0)}} fallback={inventoryOriginalSprite(edit.itemId)}/></div>
-    <div class="date-dialog-field">
-     <div style="display:flex;gap:6px;flex-wrap:wrap">
-      {#each [0,1,2].filter(i=>edit.before[i]>0||edit.options.some(v=>v.slot===i)) as slot}
-       <button type="button" class="inventory-cafe-slot" data-cafe-slot={slot} aria-pressed={cafeSlot===slot} disabled={busy} onclick={()=>openCafeSlot(slot)}>{slot+1} · {cafeSlotLabel(selected,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</button>
-      {/each}
-     </div>
-     <select name="cafe-variant" aria-label={inventoryName(edit.itemId)} bind:value={cafeSelection} onchange={e=>void selectCafeSlot(Number(e.currentTarget.value))} disabled={busy}>
-      <option value={-1}>{cafeSlotLabel(selected,cafeSlot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
-      {#each edit.options as option,i}
-       {#if option.slot===cafeSlot}
-        <option value={i} data-ingredient-id={option.ingredientId}>{option.ingredientId?sourceNames[String(option.ingredientId)]??cafeSlotLabel(option.variant,cafeSlot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??''):cafeSlotLabel(option.variant,cafeSlot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
-       {/if}
-      {/each}
-     </select>
-    </div>
+    {#each [0,1,2].filter(i=>selected[i]>0||edit.before[i]>0||edit.options.some(v=>v.slot===i)) as slot}
+     {@const choices=edit.options.map((option,index)=>({option,index})).filter(({option})=>option.slot===slot)}
+     <label class="date-dialog-field" data-cafe-slot={slot}>
+      <span>{slot+1} · {cafeSlotLabel(selected,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</span>
+      <select name={'cafe-slot-'+slot} aria-label={inventoryName(edit.itemId)+' '+(slot+1)} value={-1} onchange={e=>{const index=Number(e.currentTarget.value);e.currentTarget.value='-1';void selectCafeSlot(index,slot)}} disabled={busy||!choices.length}>
+       <option value={-1} disabled>{cafeSlotLabel(selected,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
+       {#each choices as {option,index} (index)}
+        <option value={index} data-ingredient-id={option.ingredientId}>{option.ingredientId?sourceNames[String(option.ingredientId)]??cafeSlotLabel(option.variant,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??''):cafeSlotLabel(option.variant,slot,snapshot?.cafeWitnesses??[],id=>sourceNames[String(id)]??'')}</option>
+       {/each}
+      </select>
+     </label>
+    {/each}
     {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
     {#if canCreate}
      <label class="date-dialog-field">
@@ -2285,7 +2278,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   {/if}
  </dialog>
 
- <dialog class="date-dialog" bind:this={furnitureDialogEl} aria-labelledby="furniture-editor-title" onclose={()=>{furnitureEdit=null;furnitureSelection=-1;furnitureDraft=null;furnitureDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
+ <dialog class="date-dialog" bind:this={furnitureDialogEl} aria-labelledby="furniture-editor-title" onclose={()=>{furnitureEdit=null;furnitureDraft=null;furnitureDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if furnitureEdit}
    {@const edit=furnitureEdit}
    {@const selected=furnitureDraft??edit.before}
@@ -2296,42 +2289,28 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="furniture-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFurnitureEditor}>×</button>
     </div>
-    <div class="date-dialog-field">
-     <span>{furnitureCopy.title}</span>
-     {#each [0,1,2] as slot}
-      {#if selected[slot]!==0||edit.before[slot]!==0||edit.options.some(v=>v[slot]!==selected[slot])}
-       <div style="display:flex;align-items:center;gap:8px;margin:4px 0">
-        <span>{furnitureCopy.part} {String.fromCharCode(65+slot)}</span>
-        <span style:background={materialSwatch(furnitureDisplay,edit.itemId,slot,selected[slot])} style="width:24px;height:24px;border:1px solid currentColor;border-radius:4px;flex-shrink:0" aria-hidden="true"></span>
-        <span>{materialLabel(furnitureDisplay,selected[slot],furnitureCopy.defaultMaterial)}</span>
-        {#if selected[slot]!==edit.before[slot]}
-         <button type="button" class="inventory-furniture-reset" data-furniture-reset={slot} disabled={busy} aria-label={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} title={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} onclick={()=>void resetFurniturePart(slot)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>
-        {/if}
-       </div>
-      {/if}
-     {/each}
-    </div>
-    {#if edit.options.length}
-     <label class="date-dialog-field">
-      <span>{furnitureCopy.material}</span>
-      <select bind:value={furnitureSelection} onchange={e=>void selectFurniturePart(Number(e.currentTarget.value))} disabled={busy}>
-       <option value={-1} disabled>{furnitureCopy.title}</option>
-       {#each [0,1,2] as slot}
-        {#if edit.options.some(v=>v[slot]!==selected[slot])}
-         <optgroup label={furnitureCopy.part+' '+String.fromCharCode(65+slot)}>
-          {#each edit.options as v,i}
-           {#if v[slot]!==selected[slot]}
-            <option value={i} data-material-index={v[slot]}>{materialLabel(furnitureDisplay,v[slot],furnitureCopy.defaultMaterial)}</option>
-           {/if}
-          {/each}
-         </optgroup>
-        {/if}
-       {/each}
-      </select>
-     </label>
-    {:else}
-     <p class="compact-hint">{iCopy.readonly}</p>
-    {/if}
+    {#each [0,1,2] as slot}
+     {@const choices=edit.options.map((variant,index)=>({variant,index})).filter(({variant})=>variant[slot]!==selected[slot])}
+     {#if selected[slot]!==0||edit.before[slot]!==0||choices.length}
+      <div class="date-dialog-field" data-furniture-part={slot}>
+       <label class="date-dialog-field">
+        <span style="display:flex;align-items:center;gap:8px">{furnitureCopy.part} {String.fromCharCode(65+slot)}
+         <span style:background={materialSwatch(furnitureDisplay,edit.itemId,slot,selected[slot])} style="width:24px;height:24px;border:1px solid currentColor;border-radius:4px;flex-shrink:0" aria-hidden="true"></span>
+        </span>
+        <select name={'furniture-part-'+slot} value={-1} disabled={busy||!choices.length} onchange={e=>{const index=Number(e.currentTarget.value);e.currentTarget.value='-1';void selectFurniturePart(index)}}>
+         <option value={-1} disabled>{materialLabel(furnitureDisplay,selected[slot],furnitureCopy.defaultMaterial)}</option>
+         {#each choices as choice (choice.index)}
+          <option value={choice.index} data-material-index={choice.variant[slot]}>{materialLabel(furnitureDisplay,choice.variant[slot],furnitureCopy.defaultMaterial)}</option>
+         {/each}
+        </select>
+       </label>
+       {#if selected[slot]!==edit.before[slot]}
+        <button type="button" class="inventory-furniture-reset" data-furniture-reset={slot} disabled={busy} aria-label={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} title={materialLabel(furnitureDisplay,edit.before[slot],furnitureCopy.defaultMaterial)} onclick={()=>void resetFurniturePart(slot)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a6 6 0 0 1 0 12M3 10l5-5M3 10l5 5" transform="translate(0 -2)"/></svg></button>
+       {/if}
+      </div>
+     {/if}
+    {/each}
+    {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
     {#if canCreate}
      <label class="date-dialog-field">
       <span>{inventoryAddCopy(locale)} · {iCopy.quantity}</span>
