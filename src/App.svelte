@@ -13,7 +13,7 @@
  import InventoryDecorator from './InventoryDecorator.svelte';
  import {flowerDecorators} from './inventory-flower-display';
  import {inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
- import {loadFlowerDisplayDefinitions,loadFlowerLabels,flowerDisplay,flowerGrowthKind,hasNativeFlowerArt,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
+ import {createFlowerDisplayLoader,flowerDisplay,flowerGrowthKind,hasNativeFlowerArt,type FlowerDisplayDefinitions,type FlowerLabels} from './inventory-flower-display';
  import {loadNativeInventoryIndex,type NativeInventoryIndex} from './inventory-native-data';
  import {initialInventoryNativeArt,createInventoryNativeArtLoader,type InventoryNativeArt} from './inventory-native-art';
  import {nativeInventoryIconScale} from './native-inventory-icon-scale';
@@ -79,6 +79,13 @@ import {verifiedFloorplanName} from './floorplan-names';
  let nativeInventoryIndex:NativeInventoryIndex=$state(new Map());
  let flowerDefinitions:FlowerDisplayDefinitions|null=$state(null);
  let flowerLabels:FlowerLabels=$state({});
+ const flowerDisplayLoader=createFlowerDisplayLoader(import.meta.env.BASE_URL);
+ let flowerDisplayDisposed=false;
+ function refreshFlowerDisplay(){
+  if(flowerDisplayDisposed)return;
+  if(!flowerDefinitions)void flowerDisplayLoader.definitions().then(data=>{if(!flowerDisplayDisposed)flowerDefinitions=data;}).catch(()=>{});
+  if(!Object.keys(flowerLabels).length)void flowerDisplayLoader.labels().then(data=>{if(!flowerDisplayDisposed)flowerLabels=data;}).catch(()=>{});
+ }
  let flowerDialogEl:HTMLDialogElement|undefined=$state();
  let flowerEdit=$state<{documentId:number;itemId:number;revision:number;before:FlowerVariant;options:FlowerVariant[];creationOptions:FlowerVariant[];absent?:boolean}|null>(null);
  let flowerSelection=$state(-1);
@@ -293,8 +300,8 @@ import {verifiedFloorplanName} from './floorplan-names';
 
  onMount(()=>{
   void loadNativeInventoryIndex(import.meta.env.BASE_URL).then(index=>nativeInventoryIndex=index).catch(()=>{});
-  void loadFlowerDisplayDefinitions(import.meta.env.BASE_URL).then(data=>flowerDefinitions=data).catch(()=>{});
-  void loadFlowerLabels(import.meta.env.BASE_URL).then(data=>flowerLabels=data).catch(()=>{});
+  refreshFlowerDisplay();
+  window.addEventListener('online',refreshFlowerDisplay);
   void loadFurnitureDisplay().then(data=>furnitureDisplay=data).catch(()=>{});
   refreshInventoryNativeArt();
   window.addEventListener('online',refreshInventoryNativeArt);
@@ -334,6 +341,8 @@ import {verifiedFloorplanName} from './floorplan-names';
    media.removeEventListener?.('change',listener);
    window.removeEventListener('beforeunload',beforeUnload);
    window.removeEventListener('online',refreshInventoryNativeArt);
+   window.removeEventListener('online',refreshFlowerDisplay);
+   flowerDisplayDisposed=true;
    inventoryNativeArtDisposed=true;
    iconEpoch++;iconLoadingGroup=null;iconPack=null;
    variantArtEpoch++;
@@ -590,6 +599,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   activeTool='inventory';inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;inventoryShowZero=false;
   inventoryLimit=BATCH_SIZE;editingAchievement=null;error='';
   refreshInventoryNativeArt();
+  refreshFlowerDisplay();
   // Retry transient failures only when the user reopens Inventory.
   // Successfully verified original images remain cached and unchanged.
   inventoryIconFailed.clear();inventoryIconPulse++;
