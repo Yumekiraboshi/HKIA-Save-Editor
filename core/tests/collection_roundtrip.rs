@@ -6525,7 +6525,7 @@ fn all_unrestricted_flower_species_can_replace_a_stack_atomically(){
  let before=[6,6,0,0];let after=[7,8,0,0];
  for (i,&item) in species.iter().enumerate(){
   let target=species[(i+1)%species.len()];
-  let mut p=synthetic_payload("3.0.1");p[3]=0x97;
+  let mut p=synthetic_payload("3.0.1");p[2]=6;p[3]=0x97;
   p.extend(doc(1,arr(vec![u(4),u(item as u32),u(21),u(3),plain_flower(6)])));
   p.extend(doc(1,arr(vec![u(5),u(target as u32),u(22),u(2),plain_flower(6)])));
   let raw=slot_from_payload("3.0.1",p);
