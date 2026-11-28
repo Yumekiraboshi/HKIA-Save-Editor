@@ -174,7 +174,6 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryAddMode=$state(false);
  let inventoryBatchMode=$state(false);
  let inventoryPinnedOnly=$state(false);
- const nativePinProtectedIds=$derived(new Set(((snapshot as SaveSnapshot|null)?.inventory??[]).filter(row=>row.nativePinBulkProtected).map(row=>row.documentId)));
  function isInventoryBulkProtected(id:number){return nativePinProtectedIds.has(id)}
  async function toggleInventoryPin(row:InventoryEntry){
   if(busy||!snapshot||pendingRemoval||inventoryAddMode||inventoryBatchMode||!row.nativePinKey||!row.nativePinProjectionKnown||row.nativePinOrder===undefined&&row.quantity<=0)return;
@@ -282,6 +281,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  let sourceNames:SourceItemNames=$state({});
  let sourceNameEpoch=0;
  let snapshot:SaveSnapshot|null=$state(null);
+ const nativePinProtectedIds=$derived(new Set(((snapshot as SaveSnapshot|null)?.inventory??[]).filter(row=>row.nativePinBulkProtected).map(row=>row.documentId)));
  let original:File|null=$state(null);
  let recorded:Record<string,bigint>=$state({});
  let selectedGroup:string|null=$state(null);
