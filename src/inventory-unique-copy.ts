@@ -22,9 +22,10 @@ export function flowerGrowthLabel(locale:Locale,kind:FlowerGrowthKind|null):stri
  return kind?(growth[locale]??(locale==='fr-CA'?growth.fr!:growthEn))[kind]:'';
 }
 type FlowerEditorCopy={title:string;color:string;pattern:string;accent:string};
+const effectCopy:Partial<Record<Locale,string>>={ja:'エフェクト',ar:'تأثير',de:'Effekt',es:'Efecto',fr:'Effet',it:'Effetto',ko:'효과',nl:'Effect','pt-BR':'Efeito',ru:'Эффект',tr:'Efekt','zh-Hans':'特效','zh-Hant':'特效'};
 const en:FlowerEditorCopy={title:'Edit color and pattern',color:'Color',pattern:'Pattern',accent:'Pattern color'};
 const copies:Partial<Record<Locale,FlowerEditorCopy>>={
- ja:{title:'色・柄の編集',color:'色',pattern:'模様・特殊効果',accent:'模様の色'},
+ ja:{title:'花の属性編集',color:'ベースカラー',pattern:'パターン',accent:'パターンカラー'},
  ar:{title:'تعديل اللون والنمط',color:'اللون',pattern:'النمط',accent:'لون النمط'},
  de:{title:'Farbe und Muster bearbeiten',color:'Farbe',pattern:'Muster',accent:'Musterfarbe'},
  es:{title:'Editar color y patrón',color:'Color',pattern:'Patrón',accent:'Color del patrón'},
@@ -38,7 +39,7 @@ const copies:Partial<Record<Locale,FlowerEditorCopy>>={
  'zh-Hans':{title:'编辑颜色和图案',color:'颜色',pattern:'图案',accent:'图案颜色'},
  'zh-Hant':{title:'編輯顏色和圖案',color:'顏色',pattern:'圖案',accent:'圖案顏色'}
 };
-export function flowerEditorCopy(locale:Locale):FlowerEditorCopy{return copies[locale]??(locale==='fr-CA'?copies.fr!:en);}
+export function flowerEditorCopy(locale:Locale):FlowerEditorCopy&{effect:string}{return {...(copies[locale]??(locale==='fr-CA'?copies.fr!:en)),effect:effectCopy[locale]??(locale==='fr-CA'?effectCopy.fr!:'Effect')};}
 
 type FurnitureEditorCopy={title:string;part:string;material:string;defaultMaterial:string};
 const furnitureCopies:Partial<Record<Locale,FurnitureEditorCopy>>={
