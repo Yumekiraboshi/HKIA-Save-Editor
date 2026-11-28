@@ -520,10 +520,10 @@ impl Editor {
   let sole_positive=self.sole_positive_nil_zero_ids();
   let mut rows:Vec<_>=self.slot.index.inventory.iter().filter_map(|r|{
    if self.inventory_removed.contains(&r.id){return None}
-   let quantity_limit=self.inventory_quantity_limit(r);
+   let quantity=self.inventory_changes.get(&r.id).copied().or(r.quantity)?;
+   let quantity_limit=self.inventory_quantity_limit(r).filter(|&cap|cap!=0||quantity>0);
    let quantity_minimum=if self.inventory_can_empty(r)||sole_positive.contains(&r.id){0}else{1};
-   Some(InventoryEntry{document_id:r.id,item_id:r.item_id?,quantity:
-    self.inventory_changes.get(&r.id).copied().or(r.quantity)?,
+   Some(InventoryEntry{document_id:r.id,item_id:r.item_id?,quantity,
     editable:quantity_limit.is_some(),quantity_limit,quantity_minimum})
   }).collect();
   rows.extend(self.pending_inventory_rows());rows
@@ -2821,7 +2821,15 @@ impl Editor {
   Ok(())
  }
  fn inventory_quantity_limit(&self,r:&crate::native::InventoryRow)->Option<i32>{
-  self.structural_quantity_caps.get(&r.id).copied()
+  if let Some(cap)=self.structural_quantity_caps.get(&r.id){return Some(*cap)}
+  // The existing reference-safe nil repair permits emptying a complete
+  // positive record, not synthesizing its missing required payload.
+  // A zero-only bound is not positive quantity or creation authority.
+  let item=r.item_id?;
+  (r.unique_is_nil==Some(true)&&r.unique_id==Some(0)&&r.quantity.is_some_and(|q|q>0)&&
+   crate::inventory_source::definition_requires_unique(item)==Some(true)&&
+   self.inventory_can_empty(r)&&
+   (!crate::inventory_source::wand_output_item(item)||self.structural_wand_zero_context_safe(item))).then_some(0)
  }
  fn inventory_creation_source_valid(&self)->bool{
   !self.slot.index.inventory_item_refs_incomplete&&self.inventory_creation_rows_valid()
@@ -4191,10 +4199,38 @@ mod tests {
   assert_eq!(mp_map_len(16).unwrap(),[0xde,0,16]);
  }
 
+ #[test]
+ fn reference_safe_missing_required_payload_is_zero_only(){
+  // Verified Cafe family with a malformed but complete saved nil record.
+  let original=revision_test_slot_with_repair(Some((203331651,6)));
+  let mut editor=Editor::open(original).unwrap();
+  let row=editor.inventory().into_iter().find(|r|r.document_id==4).unwrap();
+  assert!(editor.inventory_entry_removable(4));
+  assert!(row.editable);
+  assert_eq!(row.quantity_minimum,0);
+  assert_eq!(row.quantity_limit,Some(0));
+  assert!(editor.change_inventory_quantity(4,6,2).is_err());
+  assert!(editor.change_inventory_quantity(4,5,0).is_err());
+  assert!(editor.change_inventory_quantity(4,6,0).is_ok());
+  let empty=editor.inventory().into_iter().find(|r|r.document_id==4).unwrap();
+  assert_eq!(empty.quantity,0);
+  assert!(!empty.editable);
+  assert!(editor.change_inventory_quantity(4,0,1).is_err());
+  let output=editor.export().unwrap();
+  let reopened=Editor::open(output).unwrap();
+  let empty=reopened.inventory().into_iter().find(|r|r.document_id==4).unwrap();
+  assert_eq!(empty.quantity,0);
+  assert!(!empty.editable);
+  assert!(reopened.inventory_entry_removable(4));
+  assert!(editor.undo());
+  assert_eq!(editor.inventory().into_iter().find(|r|r.document_id==4).unwrap().quantity,6);
+ }
+
  // Small *synthetic* HKIA v3.0.1 source-shaped slot. No player save data.
  // An in-module test is needed to put revision at the u32 boundary without
  // changing the public API or introducing a test-only production backdoor.
- fn revision_test_slot()->Vec<u8>{
+ fn revision_test_slot()->Vec<u8>{revision_test_slot_with_repair(None)}
+ fn revision_test_slot_with_repair(repair:Option<(u32,u32)>)->Vec<u8>{
   fn u(n:u32)->Vec<u8>{let mut b=vec![0xce];b.extend(n.to_be_bytes());b}
   fn f(n:f32)->Vec<u8>{let mut b=vec![0xca];b.extend(n.to_be_bytes());b}
   fn i(n:i64)->Vec<u8>{let mut b=vec![0xd3];b.extend(n.to_be_bytes());b}
@@ -4222,9 +4258,9 @@ mod tests {
    map(vec![(vec![2],i(638000000000000001)),(vec![3],i(9))])]));
   let object=document(32,array(vec![vec![3],guid([0,0,0,3]),
    vec![0],array(vec![collection])]));
-  let payload=array(vec![vec![0],vec![4],array(vec![
-   version,achievement_a,achievement_b,counter,object
-  ])]);
+  let mut docs=vec![version,achievement_a,achievement_b,counter,object];
+  if let Some((item,quantity))=repair{docs.push(document(1,array(vec![vec![4],u(item),vec![0],u(quantity),vec![0xc0]])))}
+  let payload=array(vec![vec![0],vec![4],array(docs)]);
   let mut compressed=vec![0xf0];let mut left=payload.len()-15;
   while left>=255{compressed.push(255);left-=255}
   compressed.push(left as u8);compressed.extend(&payload);
