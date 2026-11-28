@@ -1,3 +1,4 @@
+import {ingredientIdentityLabel} from './ingredient-identification';
 /** Presentation of Rust-owned Boba tuples. No save eligibility or recipe planning. */
 export type BobaVariant=[number,number,number,number,number];
 export type InventoryBoba={variant:BobaVariant;editable:boolean;creationOnly?:boolean};
@@ -72,8 +73,7 @@ export function bobaBaseChoices(before:BobaVariant,options:readonly BobaVariant[
 }
 export function bobaBaseLabel(v:BobaVariant,locale:string,witnesses:readonly BobaWitness[],name:(id:number)=>string):string{
  const labels=milkLabels[locale]??milkLabels.en;
- const ingredient=witnesses.find(w=>w[1]===v[1]&&w[2]===v[0]);
- const names=ingredient?name(ingredient[0]):'';
+ const names=ingredientIdentityLabel(v[1],v[0],witnesses,name);
  return [names||'—',v[3]===75?labels[0]:v[3]===78?labels[1]:''].filter(Boolean).join(' · ');
 }
 export function fullBobaLabel(v:BobaVariant,locale:string,witnesses:readonly BobaWitness[],name:(id:number)=>string):string{
@@ -127,7 +127,6 @@ export function bobaFieldValue(v:BobaVariant,current:BobaVariant,field:BobaField
  if(field===2)return v[2]===76?c[0]:v[2]===79?c[1]:'—';
  if(field===3)return v[3]===75?milk[0]:v[3]===78?milk[1]:'—';
  if(field===4)return v[4]>=71&&v[4]<=74?c[v[4]-69]:'—';
- const ingredient=witnesses.find(w=>w[1]===v[1]&&w[2]===v[0]);
- const label=ingredient?name(ingredient[0])||'—':'—';
+ const label=ingredientIdentityLabel(v[1],v[0],witnesses,name)||'—';
  return v[3]!==current[3]?label+' · '+bobaFieldValue(v,current,3,locale,witnesses,name):label;
 }

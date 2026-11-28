@@ -395,5 +395,3 @@
 /* Keep the control lane stable while hiding the apply action for an unchanged owned quantity. */
 .inventory-quantity-form .primary.quantity-unchanged{visibility:hidden;pointer-events:none}
 .inventory-quantity-form.quantity-pending input{border-color:var(--accent)}
-.inventory-quantity-delta{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:10px;line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}
-.inventory-quantity-delta.unapplied{color:var(--accent)}

@@ -37,18 +37,51 @@ function drainArtQueue(){
  * an object URL after the card leaves the viewport or is destroyed.
  * Canceled waiting jobs never load assets or run the renderer; started jobs
  * keep their slot until completion, even if their output is no longer needed. */
-// All failed/partial visible cards share one browser recovery listener.
+// Failed visible art shares one recovery listener AND one bounded retry
+// timer. A transient HTTP/CDN failure need not change navigator.onLine.
 const recoverable=new Set<()=>void>();
+const automaticAttempts=new WeakMap<()=>void,number>();
+const MAX_AUTOMATIC_RETRIES=2;
+let retryTimer:number|undefined;
+function cancelAutomaticRetry(){
+ if(retryTimer!==undefined){window.clearTimeout(retryTimer);retryTimer=undefined;}
+}
+function scheduleAutomaticRetry(){
+ if(retryTimer!==undefined||typeof window==='undefined'||typeof window.setTimeout!=='function'||window.navigator?.onLine===false||
+  ![...recoverable].some(retry=>(automaticAttempts.get(retry)??0)<MAX_AUTOMATIC_RETRIES))return;
+ retryTimer=window.setTimeout(()=>{
+  retryTimer=undefined;
+  if(window.navigator?.onLine===false)return;
+  for(const retry of [...recoverable]){
+   if(!recoverable.has(retry))continue;
+   const attempts=automaticAttempts.get(retry)??0;
+   if(attempts>=MAX_AUTOMATIC_RETRIES)continue;
+   automaticAttempts.set(retry,attempts+1);
+   retry();
+  }
+  scheduleAutomaticRetry();
+ },2000);
+}
 function retryUnavailableArt(){
- for(const retry of [...recoverable])retry();
+ cancelAutomaticRetry();
+ for(const retry of [...recoverable]){
+  if(!recoverable.has(retry))continue;
+  automaticAttempts.delete(retry);
+  retry();
+ }
+ scheduleAutomaticRetry();
 }
 export function trackUnavailableArt(retry:()=>void){
  if(recoverable.size===0&&typeof window!=='undefined')window.addEventListener('online',retryUnavailableArt);
  recoverable.add(retry);
+ scheduleAutomaticRetry();
 }
 export function untrackUnavailableArt(retry:()=>void){
  recoverable.delete(retry);
- if(recoverable.size===0&&typeof window!=='undefined')window.removeEventListener('online',retryUnavailableArt);
+ if(recoverable.size===0&&typeof window!=='undefined'){
+  window.removeEventListener('online',retryUnavailableArt);
+  cancelAutomaticRetry();
+ }
 }
 // Render caches already return the same Blob for the same verified
 // appearance. Share its live URL too, without conflating different Blobs
