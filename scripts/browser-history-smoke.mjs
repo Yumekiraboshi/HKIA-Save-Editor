@@ -1620,6 +1620,34 @@ async function assertNativeFlowerPatternClip(badge){
   },[...saved,original]);
  }
 }
+async function assertStableInventoryArtworkSlot(slot,contentSize=64){
+ const result=await slot.evaluate((el,size)=>{
+  const image=el.querySelector('.item-sprite,.item-art-empty');
+  const badges=el.querySelector('.inventory-native-decorators');
+  const measure=()=>{
+   const a=el.getBoundingClientRect(),b=image.getBoundingClientRect();
+   return {width:a.width,height:a.height,x:b.x+b.width/2-a.x,y:b.y+b.height/2-a.y,
+    imageWidth:b.width,imageHeight:b.height};
+  };
+  if(!image)return null;
+  const before=measure();
+  const gap=badges?el.getBoundingClientRect().top+22-badges.getBoundingClientRect().bottom:0;
+  // Toggle the actual overlay without touching the art element or its source.
+  // The same fixed slot must be used even with no badges.
+  const marker=document.createComment('temporary badge position');
+  if(badges)badges.replaceWith(marker);
+  const without=measure();
+  if(badges)marker.replaceWith(badges);
+  return {before,without,gap,expectedWidth:size,expectedHeight:size+22};
+ },contentSize);
+ assert.ok(result);
+ assert.deepEqual(result.before,result.without,'badge presence must not move or resize main artwork');
+ assert.ok(Math.abs(result.before.width-result.expectedWidth)<.05);
+ assert.ok(Math.abs(result.before.height-result.expectedHeight)<.05);
+ assert.ok(Math.abs(result.before.x-contentSize/2)<.05);
+ assert.ok(Math.abs(result.before.y-(22+contentSize/2))<.05);
+ assert.ok(result.gap>=-.5,'decorators must stay above the main artwork');
+}
 async function inventoryDynamicFlowerArtSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -1644,6 +1672,7 @@ async function inventoryDynamicFlowerArtSmoke(){
   // by that same attribute would disappear after the first replacement.
   const effectIndex=await effectCard.evaluate(el=>Array.from(document.querySelectorAll('.inventory-card')).indexOf(el));
   assert.ok(effectIndex>=0);
+  await assertStableInventoryArtworkSlot(page.locator('.inventory-card').nth(effectIndex).locator('.inventory-item-art'));
   await assertNativeFlowerPatternClip(page.locator('.inventory-card').nth(effectIndex).locator('[data-native-decorator="11"]'));
   await page.locator('.inventory-card [data-native-decorator="12"] img[src$="decorator-12.webp"]').first().waitFor({timeout:30_000});
   const images=await sprites.evaluateAll(async els=>Promise.all(els.map(async el=>{
@@ -2190,6 +2219,7 @@ async function inventoryRareCandleSmoke(){
   await dialog.locator('[data-native-decorator="11"] img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
   await assertNativeFlowerPatternGeometry(dialog.locator('[data-native-decorator="11"]'));
   await dialog.locator('[data-inventory-art="native-static-route"].item-sprite').waitFor({timeout:30_000});
+  await assertStableInventoryArtworkSlot(dialog.locator('.inventory-flower-preview-frame'),96);
   await dialog.locator('input[name="variant-add-quantity"]').fill('3');
   await dialog.locator('.inventory-create-flower:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await page.locator('.inventory-add-toggle:not([disabled])').click();await search.fill('22657460');
@@ -2482,6 +2512,7 @@ async function inventoryFurnitureVariantEditSmoke(){
   await mainIcon.waitFor({timeout:30_000});
   const art=el=>{const c=getComputedStyle(el);return [c.backgroundImage,c.backgroundPosition];};
   const source=await preview.evaluate(art);
+  await assertStableInventoryArtworkSlot(dialog.locator('[data-furniture-icon-preview]'));
   assert.deepEqual(source,await mainIcon.evaluate(art),'furniture preview must retain the same original icon as the card');
   const select=dialog.locator('select[name="furniture-part-0"]');
   const value=await select.locator('option[data-material-index="502"]').getAttribute('value');
@@ -2590,6 +2621,7 @@ async function inventoryIconScaleSmoke(){
    });
    assert.ok(Math.abs(size.width-64*scale)<.05);assert.ok(Math.abs(size.height-64*scale)<.05);
    assert.equal(size.slot,64);
+   await assertStableInventoryArtworkSlot(art);
   }
   console.log('CHROMIUM INVENTORY ICON SCALE PASS: three sizes of original fish and ordinary item');
  }finally{await context.close();}
@@ -2708,6 +2740,7 @@ async function inventoryNativeResultArtSmoke(){
    await grid.waitFor({timeout:30_000});
    const plan=card.locator('[data-native-decorator="8"]');
    await plan.waitFor({timeout:30_000});
+   await assertStableInventoryArtworkSlot(card.locator('.inventory-item-art'));
    assert.equal(await plan.count(),1);
    assert.ok(await plan.evaluate(async el=>{
     const image=el.querySelector('img');if(!image||!image.src.endsWith('/inventory-decorators/decorator-08.webp'))return false;

@@ -1852,7 +1852,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          <button type="button" class="inventory-stack-delete" disabled={busy||!item.removable&&(!item.editable||item.quantityMinimum!==0||item.quantity<=0)} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)+': '+inventoryName(item.itemId)} onclick={e=>requestInventoryDelete([item],false,e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
         {/if}
       <div class="inventory-card-heading" data-flower-growth={growth??undefined}>
-       <span class="inventory-item-art" class:inventory-blueprint={resultId!==undefined} class:flower-variant={customized||flowerBadges.length>0||!!dyeBadge||resultId!==undefined} style:position="relative" style:--inventory-icon-scale={nativeInventoryIconScale(item.itemId,snapshot.version)} aria-hidden="true">
+       <span class="inventory-item-art" class:inventory-blueprint={resultId!==undefined} style:--inventory-icon-scale={nativeInventoryIconScale(item.itemId,snapshot.version)} aria-hidden="true">
         {#if resultId!==undefined}
          <span class="inventory-blueprint-pattern" data-native-blueprint-pattern="bp_grid" style:background-image={'url("'+INVENTORY_UI+'bp-grid.webp")'}></span>
         {/if}
@@ -2356,7 +2356,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFurnitureEditor}>×</button>
     </div>
     <div style="display:flex;justify-content:center" aria-hidden="true">
-     <span class="inventory-item-art" class:flower-variant={customized} style:position="relative" data-furniture-icon-preview>
+     <span class="inventory-item-art" data-furniture-icon-preview>
       {#if originalVariantArt[String(edit.itemId)]||exactVariantArt[String(edit.itemId)]}
        <DyeSprite sprite={original} originalArtUrl={originalVariantArt[String(edit.itemId)]} exactArtUrl={exactVariantArt[String(edit.itemId)]}/>
       {:else if inventoryNativeArt?.placeholders.has(edit.itemId)}
@@ -2423,8 +2423,8 @@ import {verifiedFloorplanName} from './floorplan-names';
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeFlowerEditor}>×</button>
     </div>
     <div class="date-dialog-item">
-     <span class="date-dialog-art" style:height={previewBadges.length?'118px':undefined} aria-hidden="true">
-      <span style:position="relative" style:display="flex" style:padding-top={previewBadges.length?'22px':undefined}>
+     <span class="date-dialog-art inventory-flower-preview" aria-hidden="true">
+      <span class="inventory-flower-preview-frame">
        <DynamicFlowerSprite itemId={displaySpecies} flower={appearance} definitions={flowerDefinitions} fallback={inventoryOriginalSprite(displaySpecies)}/>
        {#if previewBadges.length}
         <span class="inventory-native-decorators">

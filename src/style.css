@@ -304,7 +304,9 @@
 .inventory-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(136px,100%),1fr));gap:6px;align-items:stretch}
 .inventory-card{--inventory-control-size:30px;position:relative;padding:7px;display:flex;flex-direction:column;gap:5px;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px}
 .inventory-card-heading{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;flex:1}
-.inventory-item-art{display:flex;align-items:center;justify-content:center;flex:none;width:64px;height:64px;overflow:hidden}
+/* A fixed 22px badge lane above the 64px artwork cell for every card.
+ * Empty lanes occupy the same space; decorators are overlays, not layout. */
+.inventory-item-art{position:relative;display:flex;align-items:center;justify-content:center;flex:none;width:64px;height:64px;padding-top:22px;box-sizing:content-box;overflow:hidden}
  /* Scale the entire original sprite cell, not its background coordinates. */
 .inventory-item-art .item-sprite{flex:0 0 96px;transform:scale(calc(.6666667 * var(--inventory-icon-scale,1)))}
 .inventory-item-art .item-art-empty{font-size:24px}
@@ -312,7 +314,7 @@
  * pattern is clipped by its 110x144 Pattern parent; normalize the tile
  * width to the compact editor's icon area rather than the game's card. */
 .inventory-item-art.inventory-blueprint{isolation:isolate}
-.inventory-blueprint-pattern{position:absolute;inset:0;z-index:0;pointer-events:none;background-size:136.7965% auto;background-position:left bottom;background-repeat:repeat;opacity:0.392156869}
+.inventory-blueprint-pattern{position:absolute;inset:22px 0 0;z-index:0;pointer-events:none;background-size:136.7965% auto;background-position:left bottom;background-repeat:repeat;opacity:0.392156869}
 .inventory-blueprint>.item-sprite,.inventory-blueprint>.item-art-empty{position:relative;z-index:1}
 .inventory-name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;overflow-wrap:anywhere;text-align:center;font-size:11px;line-height:1.35;min-height:2.7em;width:100%}
 /* All inventory footers use the same border-box height. Explicit tracks
@@ -333,8 +335,9 @@
  .inventory-quantity-form input{padding-inline:3px}
 }
 
-.inventory-item-art.flower-variant{position:relative;padding-top:22px;box-sizing:content-box}
-.inventory-blueprint.flower-variant>.inventory-blueprint-pattern{top:22px}
+/* The larger flower dialog uses the same lane with its existing 96px cell. */
+.date-dialog-art.inventory-flower-preview{height:118px}
+.inventory-flower-preview-frame{position:relative;display:flex;align-items:center;justify-content:center;width:96px;height:96px;padding-top:22px;box-sizing:content-box;flex:none}
 .inventory-native-decorators{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;gap:2px;z-index:1;pointer-events:none}
 .inventory-flower-variant-name{font-size:10px;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
