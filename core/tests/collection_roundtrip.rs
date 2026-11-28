@@ -5436,6 +5436,47 @@ fn legacy_flower_guid_quantity_and_appearance_preserve_tag2(){
 
 
 #[test]
+fn mixed_flower_formats_reach_free_complete_tuple_when_single_field_neighbors_are_reserved(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=43114910u32;let before=[6,2,0,0];
+ let legacy=arr(vec![vec![2],arr(vec![u(6),guid([0x43687091,0x4d69b05b,0x475ed195,0xaec32728]),guid([0;4]),guid([0;4])])]);
+ let encode=|v:[i32;4]|arr(vec![vec![7],arr(v.iter().map(|&n|u(n as u32)).collect())]);
+ let mut seed=synthetic_payload("3.0.1");seed[2]=5;seed[3]=0x96;
+ seed.extend(doc(1,arr(vec![u(4),u(item),u(21),u(3),encode(before)])));
+ let seed=Editor::open(slot_from_payload("3.0.1",seed)).unwrap();
+ let neighbors=seed.inventory_flower_variants(4);assert!(neighbors.len()>30);
+ for legacy_source in [false,true]{
+  let base=synthetic_payload("3.0.1");let mut p=vec![0x93,0];p.extend(u(300));p.push(0xdc);
+  p.extend(((6+neighbors.len()) as u16).to_be_bytes());p.extend(&base[4..]);
+  p.extend(doc(1,arr(vec![u(4),u(item),u(21),u(3),if legacy_source{legacy.clone()}else{encode(before)}])));
+  for (i,&v) in neighbors.iter().enumerate(){
+   p.extend(doc(1,arr(vec![u(5+i as u32),u(item),u(22+i as u32),u(0),encode(v)])));
+  }
+  let raw=slot_from_payload("3.0.1",p);
+  for zipped in [false,true]{
+   let input=if zipped{zip(&raw)}else{raw.clone()};
+   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+   let choices=e.inventory_flower_variants(4);
+   assert_eq!(choices.len(),1,"legacy {legacy_source}");let target=choices[0];
+   assert!(!neighbors.contains(&target));assert_eq!(target[0],6);assert_ne!(target[1],before[1]);assert_ne!(target[2],before[2]);
+   assert!(e.inventory_flower_creation_variants(4).contains(&target));
+   assert!(e.inventory_flower_preview(4,before,target).unwrap().1);
+   assert!(e.change_inventory_flower_variant(4,before,neighbors[0]).is_err());
+   let id=e.create_inventory_flower_variant(4,before,target,2).unwrap();
+   assert!(e.change_inventory_flower_variant(4,before,target).is_err());
+   assert!(e.undo_scope(Inventory));assert_eq!(e.inventory(),original);
+   e.change_inventory_flower_variant(4,before,target).unwrap();
+   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+   assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);assert!(restored.redo_scope(Inventory));
+   let saved=Editor::open(restored.export().unwrap()).unwrap();
+   assert_eq!(saved.inventory_unique_data(4),e.inventory_unique_data(4));
+   assert_eq!(saved.inventory()[0].quantity,3);assert!(e.inventory_unique_data(id).is_none());
+   for (i,&v) in neighbors.iter().enumerate(){assert_eq!(saved.inventory_original_unique_payload(5+i as u32),Some(encode(v).as_slice()));}
+  }
+ }
+}
+
+#[test]
 fn legacy_and_modern_flower_peers_allow_distinct_new_variants_and_reserve_both_formats(){
  use hkia_save_core::{collection::HistoryScope::Inventory,native::InventoryUniqueData as U};
  let coral=[0x43687091,0x4d69b05b,0x475ed195,0xaec32728];
