@@ -1063,6 +1063,67 @@ async function confirmInventoryRemoval(page,accept=true){
  await modal.locator(accept?'.removal-confirm-action':'.removal-cancel').click();
  await modal.waitFor({state:'hidden'});
 }
+async function inventoryCategoryProtectionSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-category-lock.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({batchInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  const search=page.locator('.inventory-controls input[type="search"]'),card=page.locator('.inventory-card');
+  await search.fill('315822');
+  await card.locator('.inventory-lock-button').click();
+  await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').isDisabled(),true);
+  assert.equal(await card.locator('.inventory-stack-delete').isDisabled(),true);
+  await page.locator('.inventory-batch-toggle').click();
+  assert.equal(await card.locator('.inventory-batch-checkbox').count(),0);
+  await page.locator('.inventory-batch-toggle').click();
+  await page.waitForFunction(async()=>new Promise(resolve=>{
+   const req=indexedDB.open('hkia-editor-local-session',1);
+   req.onsuccess=()=>{const db=req.result;const get=db.transaction('unsaved-changes','readonly').objectStore('unsaved-changes').get('current');get.onsuccess=()=>{db.close();resolve(get.result?.ui?.inventoryLocks?.length===1)};get.onerror=()=>{db.close();resolve(false)}};
+   req.onerror=()=>resolve(false);
+  }));
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('315822');
+  await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
+  const modal=page.locator('.removal-confirm-dialog');
+  // Search deliberately hides the only unlocked row. Category operation
+  // still targets it, never the locked visible row.
+  await page.locator('.inventory-category-zero').click();
+  await modal.waitFor({state:'visible'});
+  assert.equal(await modal.locator('.inventory-removal-targets li').count(),1);
+  await modal.locator('.removal-confirm-action').click();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
+  await search.fill('517031');
+  await card.waitFor({state:'hidden'});
+  await page.locator('.inventory-show-zero-toggle').click();
+  await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'0');
+  await card.locator('.inventory-lock-button').click();
+  assert.equal(await page.locator('button[title="Undo"]').isDisabled(),true,'history cannot change a locked row');
+  await card.locator('.inventory-lock-button').click();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  await page.locator('.inventory-show-zero-toggle').click();
+  await search.fill('315822');
+  await page.locator('.inventory-category-remove').click();
+  await modal.waitFor({state:'visible'});
+  assert.equal(await modal.locator('.inventory-removal-targets li').count(),1,'hidden zero row included');
+  await modal.locator('.inventory-remove-entry-action').click();
+  await page.locator('button[title="Undo"]:not([disabled])').waitFor();
+  await page.locator('.inventory-show-zero-toggle').click();
+  await search.fill('517031');await card.waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]').click();
+  await card.locator('input[name="quantity"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'0');
+  await search.fill('315822');await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
+  assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
+  console.log('CHROMIUM CATEGORY PROTECTION PASS: persisted lock, filtered category zero, hidden physical deletion, protected history');
+ }finally{await context.close()}
+}
 async function inventoryBatchQuantitySmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -3696,6 +3757,7 @@ async function run(){
  await wandMipSmoke(browser,origin,base);
  await inventoryEditExportSmoke();
  await inventoryBatchQuantitySmoke();
+ await inventoryCategoryProtectionSmoke();
  await inventoryQuantityBoundsSmoke();
  await inventoryEmptyMaterialSmoke();
  await inventoryEmptyMaterialSmoke(true);
