@@ -150,6 +150,9 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
  pub inventory_ordinary_payload_refs_incomplete:bool,
  /// Exact positive UID references resolved to one complete saved record.
  pub inventory_resolved_positive_item_refs:HashSet<(i32,i32)>,
+ /// Item-wide reference lookup, including unresolved or ambiguous targets.
+ pub(crate) inventory_referenced_items:HashSet<i32>,
+ pub(crate) inventory_unresolved_reference_items:HashSet<i32>,
  /// Bare furniture IDs, excluding exact UniqueItemIdModel pairs.
  pub inventory_furniture_bare_item_refs:HashSet<i32>,
  /// Additional original furniture ID/GUID references in layouts and legacy models.
@@ -837,6 +840,9 @@ pub fn index_native(bytes:&[u8],version:Version)->Result<NativeIndex,Error>{
   }
   w.index.inventory_resolved_positive_item_refs=w.index.inventory_item_refs.iter().copied().filter(|&(item,uid)|uid>0&&targets.get(&uid)==Some(&Some(item))).collect();
  }
+ w.index.inventory_referenced_items=w.index.inventory_item_refs.iter().map(|&(item,_)|item).collect();
+ w.index.inventory_unresolved_reference_items=w.index.inventory_item_refs.iter()
+  .filter(|pair|!w.index.inventory_resolved_positive_item_refs.contains(pair)).map(|&(item,_)|item).collect();
  correlate_source_only(&mut w.index);
  correlate_visitor_manager_source_only(&mut w.index);
  Ok(w.index)
