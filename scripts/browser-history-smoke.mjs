@@ -1066,15 +1066,33 @@ async function activeToolReloadSmoke(){
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   for(const tool of ['inventory','achievements','collections']){
    await chooseTab(page,tool);
+   assert.equal(await page.title(),'HKIA Save Editor','fixed browser title in '+tool);
+   let heading=null;
+   if(tool==='inventory'){
+    await page.locator('[data-inventory-group="flowers"]').click();
+   }else if(tool==='achievements'){
+    await page.locator('.achievement-category-card').first().click();
+    heading=await page.locator('.section-heading h1').innerText();
+   }else{
+    await page.locator('[data-collection-group="collection_group_furniture"]').click();
+    await page.locator('[data-collection-subgroup]').first().click();
+    heading=await page.locator('.section-heading h1').innerText();
+   }
    await page.reload({waitUntil:'networkidle'});
    await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
    assert.equal(await page.locator('.tools-nav button[aria-current="page"]').getAttribute('data-tool'),tool,'restore last active tool without another click');
+   assert.equal(await page.title(),'HKIA Save Editor');
+   if(tool==='inventory')await page.locator('[data-inventory-group="flowers"][aria-pressed="true"]').waitFor();
+   else{
+    await page.locator('.section-heading h1').waitFor();
+    await page.waitForFunction(expected=>document.querySelector('.section-heading h1')?.textContent===expected,heading);
+   }
   }
   await page.evaluate(()=>sessionStorage.setItem('hkia-active-tool','invalid'));
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   assert.equal(await page.locator('.tools-nav button[aria-current="page"]').getAttribute('data-tool'),'collections');
-  console.log('CHROMIUM ACTIVE TOOL RELOAD PASS');
+  console.log('CHROMIUM ACTIVE TOOL RELOAD PASS: fixed title and exact category/subcategory restoration');
  }finally{await context.close()}
 }
 async function inventoryEditExportSmoke(){
