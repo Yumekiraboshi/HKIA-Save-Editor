@@ -9,7 +9,7 @@ import type {InventoryPalette} from './inventory-palette-display';
 import type {WandInventoryAppearance} from './inventory-wand-display';
 import pin from './native-art-release-pin.json';
 export type NativeArtSession={service:ReturnType<typeof createNativeArtService>;version:string};
-export type InstalledNativeArtPin={root:string;pins:Parameters<typeof createNativeArtService>[1];distributionSha256:string};
+export type InstalledNativeArtPin={root:string;pins:Parameters<typeof createNativeArtService>[1];distributionSha256:string;partsFileSha256:string};
 export const installedNativeArt=pin as unknown as InstalledNativeArtPin|null;
 const KEY=Symbol('native-art-session');
 export function provideNativeArt(get:()=>NativeArtSession|null){setContext(KEY,get);}
