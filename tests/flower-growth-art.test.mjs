@@ -45,3 +45,13 @@ test('invalid source and duplicate state rows cannot produce a sprite',()=>{
  changed.rows[1].state=changed.rows[0].state;
  assert.throws(()=>decodeFlowerGrowthCells(changed,'blob:test'),/ROW/);
 });
+
+test('flower growth view retries its verified state sheet and preserves native untinted state routing',()=>{
+ const view=readFileSync(new URL('../src/DynamicFlowerSprite.svelte',import.meta.url),'utf8');
+ assert.ok(view.includes("window.addEventListener('online',load)"));
+ assert.ok(view.includes("window.removeEventListener('online',load)"));
+ assert.ok(view.includes('if(!active||pending||loaded)return'));
+ assert.ok(view.includes('fields.growState!==6&&flowerUsesDefinitionIcon(id,fields)'));
+ assert.ok(view.includes('?renderFlowerOriginalBaseArt(id,fields)'));
+ assert.ok(view.includes(':fields&&defs?renderFlowerArt(id,fields,defs)'));
+});
