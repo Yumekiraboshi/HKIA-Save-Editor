@@ -1793,11 +1793,28 @@ impl Editor {
    !crate::inventory_source::magic_wand_choices(pair)||(creation&&!self.wand_creation_gate(id,item)){return Vec::new()}
   Self::wand_nested_material_options(item,original,current,&reserved,pair,creation)
  }
+ /// Preview another material field from an uncommitted, source-validated
+ /// nested furniture draft. The live native identity and peer reservations
+ /// remain unchanged until the existing CAS edit/create transaction.
+ pub fn inventory_wand_nested_material_draft(&self,id:u32,pair:WandVariant,draft:FurnitureVariant,creation:bool)->Vec<FurnitureVariant>{
+  let Some((item,original,current,reserved))=self.wand_full_context(id)else{return Vec::new()};
+  if Self::wand_materials(current)==WAND_NIL_MATERIALS||!self.wand_source_edit_safe(id,item)||
+   !crate::inventory_source::magic_wand_choices(pair)||(creation&&!self.wand_creation_gate(id,item)){return Vec::new()}
+  let Some(source)=Self::wand_material_source(item,current[0])else{return Vec::new()};
+  let mut target=current;target[1..3].copy_from_slice(&pair);target[3..].copy_from_slice(&draft);
+  let key=Self::wand_key(item,target);
+  if draft!=Self::wand_materials(current)&&(!Self::valid_furniture_target(source,Self::wand_materials(original),draft)||
+   key.is_none_or(|k|reserved.contains(&k))){return Vec::new()}
+  Self::wand_nested_material_options_from(item,original,current,&reserved,pair,draft,creation)
+ }
  fn wand_nested_material_options(item:i32,original:WandData,current:WandData,reserved:&HashSet<WandData>,pair:WandVariant,creation:bool)->Vec<FurnitureVariant>{
+  Self::wand_nested_material_options_from(item,original,current,reserved,pair,Self::wand_materials(current),creation)
+ }
+ fn wand_nested_material_options_from(item:i32,original:WandData,current:WandData,reserved:&HashSet<WandData>,pair:WandVariant,draft:FurnitureVariant,creation:bool)->Vec<FurnitureVariant>{
   let Some(source)=Self::wand_material_source(item,current[0])else{return Vec::new()};
   let mut out=Vec::new();let mut seen=HashSet::new();let old=Self::wand_key(item,current);
   let original_key=Self::wand_key(item,original);
-  let mut target=current;target[1..3].copy_from_slice(&pair);
+  let mut target=current;target[1..3].copy_from_slice(&pair);target[3..].copy_from_slice(&draft);
   let mut offer=|target:WandData|{
    let key=Self::wand_key(item,target);
    if key!=old&&(!creation||key!=original_key)&&key.is_some_and(|k|!reserved.contains(&k))&&
