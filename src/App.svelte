@@ -137,6 +137,24 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryShowZero=$state(false);
  let inventoryAddMode=$state(false);
  let inventoryBatchMode=$state(false);
+ // Quantity input is a UI draft, not a native edit. A changed snapshot
+ // invalidates draft values so Undo/Redo and reload cannot show stale input.
+ let inventoryQuantityDrafts=$state<Record<number,string>>({});
+ function quantityInput(row:InventoryEntry):string{
+  return inventoryQuantityDrafts[row.documentId]??String(inventoryAddMode?1:row.quantity);
+ }
+ function quantityPending(row:InventoryEntry):boolean{
+  const value=quantityInput(row);
+  return inventoryAddMode||value!==String(row.quantity);
+ }
+ function quantityInputValid(row:InventoryEntry):boolean{
+  const value=quantityInput(row),next=Number(value);
+  return /^(0|[1-9][0-9]*)$/.test(value)&&Number.isSafeInteger(next)&&
+   row.quantityLimit!==null&&next>=(inventoryAddMode?Math.max(1,row.quantityMinimum):row.quantityMinimum)&&next<=row.quantityLimit;
+ }
+ function setQuantityInput(row:InventoryEntry,value:string){
+  inventoryQuantityDrafts={...inventoryQuantityDrafts,[row.documentId]:value};
+ }
  let inventoryBatchSelected=$state<Set<number>>(new Set());
  let inventoryBatchQuantity=$state<number|undefined>(undefined);
  // Presentation only: the tightest bound returned by Rust for selected rows.
@@ -159,7 +177,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  $effect(()=>{if(activeTool!=='inventory'){clearInventoryBatch();inventoryAddMode=false}});
  let inventoryLimit=$state(BATCH_SIZE);
  let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
- let inventoryBaseline:InventoryEntry[]=[];
+ let inventoryBaseline:InventoryEntry[]=$state.raw([]);
+ const originalInventoryQuantities=$derived(new Map(inventoryBaseline.map(row=>[row.documentId,row.quantity])));
  // Source-verified game UiIcon ZIP packs are shared by Collection/Inventory.
  // Inventory loads only groups currently needed by visible owned rows.
  const inventoryIconPending=new Set<string>();
@@ -748,6 +767,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   return achievementName(achievementGuid(entry.guid),0);
  }
  function update(s:SaveSnapshot){
+  inventoryQuantityDrafts={};
   const previousGroup=activeInventoryGroup;
   snapshot=s;recorded=Object.fromEntries(s.entries.map(([id,t])=>[String(id),t]));
   // A restored or newly created search match must not remain hidden in a
@@ -1309,7 +1329,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  async function applyInventoryQuantity(row:InventoryEntry,event:SubmitEvent){
   event.preventDefault();
-  if(!snapshot||busy||inventoryBatchMode||!row.editable)return;
+  if(!snapshot||busy||inventoryBatchMode||!row.editable||!quantityPending(row)||!quantityInputValid(row))return;
   const value=new FormData(event.currentTarget as HTMLFormElement).get('quantity');
   if(typeof value!=='string'||!/^(0|[1-9][0-9]*)$/.test(value)){
    error=copy.fileError;return;
@@ -1759,7 +1779,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {/if}
     <button type="button" class="inventory-editable-filter inventory-add-toggle" class:active={inventoryAddMode}
      aria-pressed={inventoryAddMode} disabled={busy||(!inventoryAddMode&&inventoryAvailableToAdd.length===0)}
-     onclick={()=>{clearInventoryBatch();inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;inventoryLimit=BATCH_SIZE}}>
+     onclick={()=>{clearInventoryBatch();inventoryQuantityDrafts={};inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;inventoryLimit=BATCH_SIZE}}>
      {inventoryAddMode?iCopy.tab:'+ '+inventoryAddCopy(locale)}
     </button>
     <button type="button" class="inventory-editable-filter inventory-batch-toggle" class:active={inventoryBatchMode}
@@ -1903,13 +1923,18 @@ import {verifiedFloorplanName} from './floorplan-names';
        {#if variantTitle}<span class="inventory-flower-variant-name" title={variantTitle}>{variantTitle}</span>{/if}
       </div>
       {#if item.editable}
-       <form class="inventory-quantity-form" onsubmit={e=>void applyInventoryQuantity(item,e)}>
+       {@const pending=quantityPending(item)}
+       {@const originalQuantity=originalInventoryQuantities.get(item.documentId)??0}
+       <form class="inventory-quantity-form" class:quantity-pending={pending&&!inventoryAddMode} data-quantity-pending={pending&&!inventoryAddMode} data-quantity-committed={item.quantity} data-quantity-ready={!busy&&!inventoryBatchMode} onsubmit={e=>void applyInventoryQuantity(item,e)}>
         <label>
          <span class="visually-hidden">{iCopy.quantity}</span>
          <input type="number" name="quantity" min={inventoryAddMode?Math.max(1,item.quantityMinimum):item.quantityMinimum} max={item.quantityLimit??1} step="1"
-          value={inventoryAddMode?1:item.quantity} disabled={busy||inventoryBatchMode} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
+          value={quantityInput(item)} oninput={e=>setQuantityInput(item,e.currentTarget.value)} disabled={busy||inventoryBatchMode} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
+         {#if !inventoryAddMode&&(pending||originalQuantity!==item.quantity)}
+          <small class="inventory-quantity-delta" class:unapplied={pending}>{(pending?item.quantity:originalQuantity).toLocaleString(locale)} → {(pending?quantityInput(item):item.quantity.toLocaleString(locale))}</small>
+         {/if}
         </label>
-        <button type="submit" class="primary" disabled={busy||inventoryBatchMode} title={iCopy.apply} aria-label={iCopy.apply}>
+        <button type="submit" class="primary" class:quantity-unchanged={!pending} disabled={busy||inventoryBatchMode||!pending||!quantityInputValid(item)} title={iCopy.apply} aria-label={iCopy.apply}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
         </button>
         {#if canFlower||canFurniture||canPalette||canBoba||canCafe||canWand}
