@@ -343,7 +343,7 @@
 .inventory-batch-checkbox{position:absolute;inset-block-start:6px;inset-inline-start:6px;width:18px;height:18px;z-index:3;accent-color:var(--accent);cursor:pointer}
 .inventory-card.inventory-batch-selected{border-color:var(--accent);background:var(--accent-soft)}
 
-.inventory-quantity-form .inventory-compact-variant{flex:none;display:grid;place-items:center;width:30px;height:30px;min-height:30px;padding:0}
+.inventory-quantity-form .inventory-compact-variant{flex:none;display:grid;place-items:center;place-content:center;width:30px;height:30px;min-height:30px;padding:0}
 @media(max-width:730px){.inventory-quantity-form .inventory-compact-variant{width:34px;height:34px;min-height:34px}}
 .inventory-flower-growth{min-height:34px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
 .inventory-flower-growth[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
