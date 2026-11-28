@@ -2107,7 +2107,7 @@ async function inventoryFlowerCreationSmoke(){
   await added.waitFor();assert.equal(await added.inputValue(),'5');
   assert.equal(await cards.first().locator('input[name="quantity"]').inputValue(),'1');
   await added.fill('7');await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]').click();
-  await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await cards.nth(1).locator('.inventory-quantity-form[data-quantity-ready="true"][data-quantity-committed="7"]').waitFor();
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('43114910');
@@ -2442,7 +2442,7 @@ async function inventoryFurnitureCreationSmoke(){
   await dialog.locator('select').filter({has:page.locator('option[value="'+next+'"]')}).first().selectOption(next);
   await dialog.locator('button[type="submit"]').click();await dialog.waitFor({state:'hidden'});
   await added.fill('7');await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]').click();
-  await cards.nth(1).locator('.inventory-quantity-form button[type="submit"]:not([disabled])').waitFor();
+  await cards.nth(1).locator('.inventory-quantity-form[data-quantity-ready="true"][data-quantity-committed="7"]').waitFor();
   await page.reload({waitUntil:'networkidle'});await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
   await chooseTab(page,'inventory');await search.fill('61381969');
   await added.waitFor();assert.equal(await added.inputValue(),'7');
