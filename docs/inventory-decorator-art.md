@@ -26,3 +26,7 @@ InventoryViewModel.UpdateDecorator (0x2D20340–0x2D20CC0, SHA256 9698b73408d3d9
 ### Dye badge clipping
 
 The original diagonal dye-color Sprite supplies the secondary-color mask, but is not by itself the circular plate silhouette. Clip its tinted layer with the same original plate alpha and centered 18px geometry as the primary-color layer, inside the unchanged 22px outer plate. The white rim, native RGB values and diagonal split remain unchanged. This shared type-14 fix applies to all 5,383 source-verified dye definitions; no source image or save changes. Chromium checks matching mask geometry and actual pixels with a high-contrast temporary test palette.
+
+### Shared foreground clipping for patterns and effects
+
+The previous type-14-only clipping left the ordinary square foreground Sprite path unmasked, which allowed flower Pattern/Effect artwork to cover the rim and escape the circle. All decorator foregrounds now use the same original inner plate alpha, centered 18px inside the unchanged 22px outer plate. The original 16 pattern/effect images, colors, order, selection rules, and main item icon remain unchanged. Inventory cards and the flower editor preview use the same component. The browser regression exercises all 16 original pattern images on the actual card with a high-contrast baseline, checking matching geometry, containment and visible interior. No save or image asset changes.

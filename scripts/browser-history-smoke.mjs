@@ -1522,6 +1522,54 @@ async function inventoryCreateMaterialSmoke(){
   console.log('CHROMIUM INVENTORY CREATE PASS: individual/batch add, local recovery, undo/redo, native ID allocation and export reparse');
  }finally{await context.close()}
 }
+async function assertNativeFlowerPatternClip(badge){
+ const image=badge.locator('img');
+ const original=await image.getAttribute('src');
+ assert.ok(original?.endsWith('.webp'));
+ const geometry=await badge.evaluate(el=>{
+  const primary=el.querySelector('.plate-inner'),clip=el.querySelector('.native-decorator-icon-clip'),img=clip?.querySelector('img');
+  if(!primary||!clip||!img)return null;
+  const a=getComputedStyle(primary),b=getComputedStyle(clip);
+  const bounds=e=>{const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height];};
+  return {mask:a.maskImage===b.maskImage&&a.maskImage.includes('plate.webp'),sameGeometry:JSON.stringify(bounds(primary))===JSON.stringify(bounds(clip))&&JSON.stringify(bounds(clip))===JSON.stringify(bounds(img)),alpha:b.maskMode==='alpha',size:b.width+' '+b.height};
+ });
+ assert.deepEqual(geometry,{mask:true,sameGeometry:true,alpha:true,size:'18px 18px'});
+ const saved=await badge.evaluate(el=>{
+  const img=el.querySelector('img'),saved=[el.getAttribute('style'),img.getAttribute('style')];
+  // A black outside region and a white inner plate make leakage observable.
+  el.style.setProperty('--primary','#ffffff');el.style.setProperty('--accent','transparent');
+  el.style.backgroundColor='#000000';img.style.visibility='hidden';return saved;
+ });
+ try{
+  await badge.page().waitForLoadState('networkidle');
+  const baseline=await badge.screenshot({scale:'css'});
+  for(let id=1;id<=16;id++){
+   await image.evaluate(async (img,src)=>{img.src=src;await img.decode();img.style.visibility='visible';},original.replace(/pattern-\d+\.webp$/,'pattern-'+id+'.webp'));
+   const actual=await badge.screenshot({scale:'css'});
+   const result=await badge.page().evaluate(async ([a,b])=>{
+    async function pixels(s){
+     const img=new Image();img.src='data:image/png;base64,'+s;await img.decode();
+     const canvas=document.createElement('canvas');canvas.width=img.width;canvas.height=img.height;
+     const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0);return ctx.getImageData(0,0,canvas.width,canvas.height).data;
+    }
+    const [before,after]=await Promise.all([pixels(a),pixels(b)]);let outside=0,inside=0;
+    for(let i=0;i<before.length;i+=4){
+     const diff=Math.max(...[0,1,2].map(c=>Math.abs(before[i+c]-after[i+c])));
+     if(before[i]===0&&before[i+1]===0&&before[i+2]===0&&diff>5)outside++;
+     if(before[i]>240&&before[i+1]>240&&before[i+2]>240&&diff>20)inside++;
+    }
+    return {outside,inside};
+   },[baseline.toString('base64'),actual.toString('base64')]);
+   assert.equal(result.outside,0,'pattern '+id+' escapes the inner plate');
+   assert.ok(result.inside>0,'pattern '+id+' must remain visible');
+  }
+ }finally{
+  await badge.evaluate((el,[style,imgStyle,src])=>{
+   const img=el.querySelector('img');el.setAttribute('style',style);img.src=src;
+   if(imgStyle===null)img.removeAttribute('style');else img.setAttribute('style',imgStyle);
+  },[...saved,original]);
+ }
+}
 async function inventoryDynamicFlowerArtSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -1542,6 +1590,7 @@ async function inventoryDynamicFlowerArtSmoke(){
   await page.locator('.inventory-card [data-native-decorator="11"] img[src$="pattern-3.webp"]').waitFor({timeout:30_000});
   const effectCard=page.locator('.inventory-card').filter({has:page.locator('[data-native-decorator="11"] img[src$="pattern-3.webp"]')});
   assert.deepEqual(await effectCard.locator('[data-native-decorator]').evaluateAll(els=>els.map(e=>e.getAttribute('data-native-decorator'))),['12','11']);
+  await assertNativeFlowerPatternClip(effectCard.locator('[data-native-decorator="11"]'));
   await page.locator('.inventory-card [data-native-decorator="12"] img[src$="decorator-12.webp"]').first().waitFor({timeout:30_000});
   const images=await sprites.evaluateAll(async els=>Promise.all(els.map(async el=>{
    const url=getComputedStyle(el).backgroundImage.slice(5,-2);
