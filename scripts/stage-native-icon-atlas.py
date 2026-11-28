@@ -121,16 +121,23 @@ def geometry(sprite, cabs, atlas_cache):
     supported(all(math.isfinite(v) for v in [*rect,*offset]), 'invalid crop coordinates')
     return logical[2:], tuple(rect), tuple(offset), texture, binding
 
+def texture_level_bytes(w,h,fmt):
+    if fmt in (10,12):
+        return ((w+3)//4)*((h+3)//4)*(8 if fmt==10 else 16)
+    return w*h*({3:3,4:4}[fmt])
+
 def texture_data(texture,allowed_color_spaces=(1,)):
     bundle, tid, tree, raw = texture
     f = helpers.fields(tree, raw, mesh)
     w,h,fmt,mips = [mesh.u(f[k]) for k in ('m_Width','m_Height','m_TextureFormat','m_MipCount')]
     supported(0 < min(w,h) <= max(w,h) <= 8192 and mesh.u(f['m_ColorSpace']) in allowed_color_spaces
-              and fmt in (3,4,12) and mips == 1, 'unsupported texture format/mip/color space')
+              and fmt in (3,4,10,12) and 1<=mips<=max(w,h).bit_length(), 'unsupported texture format/mip/color space')
+    # Unity Texture2D stores the largest level first. Validate the whole
+    # mip chain and bind its original bytes, then decode only level zero.
+    expected = sum(texture_level_bytes(max(1,w>>i),max(1,h>>i),fmt) for i in range(mips))
     stream = f['m_StreamData']
     off,z = struct.unpack_from('<QI', stream)
     name,end = mesh.string(stream,12)
-    expected = {3:w*h*3,4:w*h*4,12:((w+3)//4)*((h+3)//4)*16}[fmt]
     if z:
         supported(name == f"archive:/{bundle['cab']}/{bundle['cab']}.resS" and
                   end == len(stream) and z == expected and off+z <= len(bundle['res']),
@@ -141,8 +148,9 @@ def texture_data(texture,allowed_color_spaces=(1,)):
         supported(len(data) == 4+expected and mesh.u(data) == expected, 'unsupported inline texture')
         payload = data[4:]
     from PIL import Image
-    image = (Image.frombytes('RGBA',(w,h),payload,'bcn',3) if fmt == 12 else
-             Image.frombytes('RGB' if fmt == 3 else 'RGBA',(w,h),payload).convert('RGBA'))
+    top=payload[:texture_level_bytes(w,h,fmt)]
+    image = (Image.frombytes('RGBA',(w,h),top,'bcn',1 if fmt==10 else 3) if fmt in (10,12) else
+             Image.frombytes('RGB' if fmt == 3 else 'RGBA',(w,h),top).convert('RGBA'))
     return image.transpose(Image.Transpose.FLIP_TOP_BOTTOM), {'textureCab':bundle['cab'],
             'texturePathId':tid,'textureObjectSha256':sha(raw),'texturePayloadSha256':sha(payload)}
 
@@ -429,6 +437,9 @@ def stage(snapshot, manifest_path, out, prior_dir=None, native_resolution=False)
     return result
 
 def self_test():
+    # Steam anniversary cards: BC1 512px, complete ten-level chain.
+    assert sum(texture_level_bytes(max(1,512>>i),max(1,512>>i),10) for i in range(10))==174776
+    assert texture_level_bytes(512,512,10)==131072
     # No game bundles or Pillow dependency in the CI schema check.
     key=bytes(range(24))
     rd=struct.pack('<iqiq4f2f2f4ffII',0,123,0,0,2,3,10,11,1,2,0,0,0,0,0,0,1,67,0)
