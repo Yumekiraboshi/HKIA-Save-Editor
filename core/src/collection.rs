@@ -684,7 +684,7 @@ impl Editor {
   if !FLOWER_SPECIES.iter().any(|&(id,_)|id==item)||
    !crate::inventory_source::is_uncapped_required_unique_stack(item)||
    !self.inventory_creation_payload_safe(item)||self.slot.index.inventory_payload_item_refs.contains(&item)||
-   self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item){return None}
+   self.slot.index.inventory_referenced_items.contains(&item){return None}
   let v=Self::legacy_flower_variant(&self.slot.envelope.decoded,row)?;
   let mut policy=flower_item_patterns(item,v[0])?;
   if RESTRICTED_FLOWER_EFFECTS.contains(&v[2]){policy.retained_effect=Some(v[2]);}
@@ -846,7 +846,7 @@ impl Editor {
    !row.fields.iter().all(Option::is_some)||
    !(crate::inventory_source::ordinary_creation_item(item)||self.extra_custom_furniture_zero_reference_safe(item))||
    !self.inventory_creation_payload_safe(item)||
-   self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item){return None}
+   self.slot.index.inventory_referenced_items.contains(&item){return None}
   let source=furniture_source::item(item)?;
   if source.is_home_layout||crate::inventory_source::ordinary_quantity_limit(item)!=Some(i32::MAX){return None}
   if self.active_saved_item_count(item)!=1&&self.active_saved_inventory().filter(|r|r.item_id==Some(item)&&r.id!=row.id).any(|r|!self.permits_separate_ordinary_base(r)){return None}
@@ -1020,7 +1020,7 @@ impl Editor {
    (row.item_id?,self.inventory_changes.get(&id).copied().or(row.quantity)?)
   };
   if quantity<=0||!Self::absent_flower_growth_supported(item,0)||!self.inventory_creation_payload_safe(item)||
-   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)||restricted_flower_appearance(draft){return None}
+   self.slot.index.inventory_referenced_items.contains(&item)||restricted_flower_appearance(draft){return None}
   let (_,current,_)=self.flower_context(id)?;
   if expected!=current||
    (draft[0]!=current[0]&&!self.flower_growth_change_allowed(id)){return None}
@@ -1033,7 +1033,7 @@ impl Editor {
    !crate::inventory_source::is_uncapped_required_unique_stack(item)||
    index.inventory_furniture_refs_incomplete||index.inventory_clothing_item_refs_incomplete||
    !self.inventory_creation_payload_safe(item)||index.inventory_furniture_item_refs.contains(&item)||
-   index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
+   index.inventory_referenced_items.contains(&item){return None}
   let key=crate::inventory_source::inventory_item_denial_key(item)?;
   let policy=flower_item_patterns(item,draft[0])?;
   if index.inventory_furniture_guid_refs.contains(&key)||index.inventory_clothing_guid_refs.contains(&key)||
@@ -1077,7 +1077,7 @@ impl Editor {
    .or_else(||self.saved_inventory_row(id).and_then(|r|r.item_id));
   item.is_some_and(|item|Self::absent_flower_growth_supported(item,0)&&
    self.inventory_creation_payload_safe(item)&&
-   !self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item))
+   !self.slot.index.inventory_referenced_items.contains(&item))
  }
  fn flower_growth_options(current:FlowerVariant,reserved:&HashSet<FlowerVariant>,out:&mut Vec<FlowerVariant>){
   for grow in [0,6,7]{let mut next=current;next[0]=grow;
@@ -1226,7 +1226,7 @@ impl Editor {
  fn absent_flower_choices(&self,item_id:i32)->Vec<FlowerVariant>{
   if owned_dlc_flower_output(item_id)||
    !self.inventory_creation_payload_safe(item_id)||
-   self.slot.index.inventory_item_refs.iter().any(|&(id,_)|id==item_id){return Vec::new()}
+   self.slot.index.inventory_referenced_items.contains(&item_id){return Vec::new()}
   if !crate::inventory_source::is_uncapped_required_unique_stack(item_id){return Vec::new()}
   let Some(reserved)=self.absent_flower_reservations(item_id)else{return Vec::new()};
   // Start with original default witnesses; if every default is reserved,
@@ -1436,7 +1436,7 @@ impl Editor {
    index.inventory_ordinary_payload_refs_incomplete||index.inventory_furniture_refs_incomplete||
    index.inventory_clothing_item_refs_incomplete||
    index.inventory_ordinary_payload_item_refs.contains(&item)||index.inventory_furniture_bare_item_refs.contains(&item)||
-   index.inventory_item_refs.iter().any(|&(i,u)|i==item&&!index.inventory_resolved_positive_item_refs.contains(&(i,u)))||
+   index.inventory_unresolved_reference_items.contains(&item)||
    index.inventory_ordinary_furniture_guid_refs.contains(&key)||index.inventory_clothing_guid_refs.contains(&key){return false}
   if !outfit{return true}
   if index.inventory_clothing_avatar_models==0||index.inventory_clothing_general_models!=1||
@@ -1457,7 +1457,7 @@ impl Editor {
    !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_item_refs_incomplete&&
    !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
    !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)&&
-   !index.inventory_item_refs.iter().any(|&(i,_)|i==item)
+   !index.inventory_referenced_items.contains(&item)
  }
  // Saved typed customized furniture outside the ordinary creation slice.
  // The exact original GUID is used only to reject referenced rows.
@@ -1658,7 +1658,7 @@ impl Editor {
    !index.inventory_palette_context_incomplete&&!index.inventory_palette_copies_incomplete&&
    !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)&&
    !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
-   !index.inventory_item_refs.iter().any(|&(id,_)|id==item)
+   !index.inventory_referenced_items.contains(&item)
  }
  fn wand_zero_reference_safe(&self,row:&crate::native::InventoryRow)->bool{
   row.item_id.is_some_and(|item|self.wand_reference_safe(item))&&self.saved_wand_identity(row).is_some()&&
@@ -1741,7 +1741,7 @@ impl Editor {
     !self.pending_wands.iter().any(|(&id,&(i,_))|i==item&&self.inventory_changes.contains_key(&id))
    }else{self.wand_source_reservations(item).is_some()})&&
    !self.slot.index.inventory_wand_copies&&self.inventory_creation_payload_safe(item)&&
-   !self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)&&self.absent_flower_budget_available()
+   !self.slot.index.inventory_referenced_items.contains(&item)&&self.absent_flower_budget_available()
  }
  // Existing positive original ordinary source rows are witnesses only:
  // neither their quantity nor any acquisition/entitlement data is written.
@@ -1889,7 +1889,7 @@ impl Editor {
    !self.legacy_wand_zero_reference_safe(r)){return false}
   let qty=self.inventory_changes.get(&id).copied().or_else(||self.saved_inventory_row(id).and_then(|r|r.quantity));
   qty.is_some_and(|q|q>0)&&self.absent_flower_budget_available()&&
-   self.inventory_creation_payload_safe(item)&&!self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)
+   self.inventory_creation_payload_safe(item)&&!self.slot.index.inventory_referenced_items.contains(&item)
  }
  pub fn inventory_wand_creation_variants(&self,id:u32)->Vec<WandVariant>{
   if id&PENDING_ITEM!=0&&!self.pending_wands.contains_key(&id){return self.absent_wand_choices((id&!PENDING_ITEM) as i32)}
@@ -1932,7 +1932,7 @@ impl Editor {
   }
   if self.wand_source_reservations(item).is_none(){return false}
   if id&PENDING_ITEM!=0{return self.pending_wands.contains_key(&id)&&self.inventory_changes.contains_key(&id)&&
-   self.inventory_creation_payload_safe(item)&&!self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)}
+   self.inventory_creation_payload_safe(item)&&!self.slot.index.inventory_referenced_items.contains(&item)}
   self.saved_inventory_row(id).is_some_and(|r|self.wand_zero_reference_safe(r))
  }
  pub fn inventory_wand_edit_sources(&self,id:u32)->Vec<i32>{
@@ -2133,7 +2133,7 @@ impl Editor {
     self.unique_quantity_ids.contains(&r.id)&&self.inventory_can_empty(r)&&
     self.inventory_changes.get(&r.id).copied().or(r.quantity)==Some(0))&&
    self.absent_flower_budget_available()&&self.inventory_creation_payload_safe(item)&&
-   !self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)
+   !self.slot.index.inventory_referenced_items.contains(&item)
  }
  fn boba_starter_choices(&self)->Vec<BobaVariant>{
   use crate::inventory_source as src;
@@ -2173,7 +2173,7 @@ impl Editor {
   let item=crate::inventory_source::BOBA_ID;
   let quantity=self.inventory_changes.get(&id).copied().or_else(||self.saved_inventory_row(id).and_then(|r|r.quantity));
   if !quantity.is_some_and(|q|q>0)||!self.absent_flower_budget_available()||
-   !self.inventory_creation_payload_safe(item)||self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item){return Vec::new()}
+   !self.inventory_creation_payload_safe(item)||self.slot.index.inventory_referenced_items.contains(&item){return Vec::new()}
   self.inventory_boba_variants(id).into_iter().filter(|&v|v!=original).collect()
  }
  pub fn create_inventory_boba_variant(&mut self,source_id:u32,expected:BobaVariant,next:BobaVariant,quantity:i32)->Result<u32,Error>{
@@ -2347,7 +2347,7 @@ impl Editor {
   let item=context.0;
   let quantity=self.inventory_changes.get(&id).copied().or_else(||self.saved_inventory_row(id).and_then(|r|r.quantity));
   if !quantity.is_some_and(|q|q>0)||!self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
-   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
+   self.slot.index.inventory_referenced_items.contains(&item){return None}
   Some(context)
  }
  fn cafe_starter_reservations(&self,item:i32)->Option<HashSet<CafeVariant>>{
@@ -2557,7 +2557,7 @@ impl Editor {
   if !quantity.is_some_and(|q|q>0){return None}
   let item=crate::inventory_source::CUSTOM_PALETTE_ID;
   if !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
-   self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
+   self.slot.index.inventory_referenced_items.contains(&item){return None}
   self.palette_context(id)
  }
  // A native source-defined starter is independent of a positive saved
@@ -2569,7 +2569,7 @@ impl Editor {
    self.pending_palettes.keys().any(|id|self.inventory_changes.contains_key(id))||
    index.inventory_palette_context_incomplete||index.inventory_palette_copies_incomplete||
    !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
-   index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
+   index.inventory_referenced_items.contains(&item){return None}
   let mut reserved=index.inventory_palette_copies.clone();
   for row in self.active_saved_inventory().filter(|r|r.item_id==Some(item)){
    if !self.unique_quantity_ids.contains(&row.id)||!self.palette_zero_reference_safe(row)||
@@ -2860,7 +2860,7 @@ impl Editor {
    (!self.inventory_item_rows.contains_key(&item_id)||
     self.active_saved_inventory().filter(|r|r.item_id==Some(item_id)).all(|r|self.permits_separate_ordinary_base(r)))&&
    self.ordinary_creation_payload_safe(item_id)&&
-   !self.slot.index.inventory_item_refs.iter().any(|&(item,_)|item==item_id)
+   !self.slot.index.inventory_referenced_items.contains(&item_id)
  }
  fn pending_inventory_rows(&self)->Vec<InventoryEntry>{
   let mut rows:Vec<_>=self.inventory_changes.iter().filter(|(&id,_)|id&PENDING_ITEM!=0)
@@ -2911,7 +2911,7 @@ impl Editor {
  /// Candidate rows are source-checked and absent, not persisted inventory records.
  pub fn inventory_creatable(&self)->Vec<InventoryEntry>{
   if !self.ordinary_inventory_creation_source_valid()||crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
-  let referenced:HashSet<i32>=self.slot.index.inventory_item_refs.iter().map(|&(item,_)|item).collect();
+  let referenced=&self.slot.index.inventory_referenced_items;
   // One pass over saved rows; ordinary/opaque/default rows block their Item
   // ID, while verified nondefault customizable variants do not.
   let blocked:HashSet<i32>=self.active_saved_inventory().filter_map(|r|
@@ -3003,8 +3003,7 @@ impl Editor {
    // A resolved positive UID is an exact reference to another complete row.
    // Do not turn it into an Item-ID-wide denial. Bare, dangling or ambiguous
    // identities still protect the entire family; copied payloads remain separate.
-   index.inventory_item_refs.iter().any(|&(i,u)|i==item&&(u==0||u==uid||
-    !index.inventory_resolved_positive_item_refs.contains(&(i,u))))||
+   (index.inventory_unresolved_reference_items.contains(&item)||index.inventory_item_refs.contains(&(item,uid)))||
    (uid>0&&(index.inventory_legacy_uid_refs.contains(&uid)||
     !uid_unique)){return false}
   let Some(key)=crate::inventory_source::inventory_item_denial_key(item)else{return false};

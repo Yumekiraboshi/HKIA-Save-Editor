@@ -689,3 +689,8 @@ The missing-required-payload regression now enumerates all 138 source definition
 #### Atomic zeroing of existing duplicate ordinary stacks
 
 For complete, source-verified, unreferenced existing UID-zero nil duplicate families, the Rust batch quantity path permits zeroing every positive active same-item row together, including finite-cap families. Individual zeroing and partial family zeroing remain denied; no new duplicate rows or positive finite-cap edits are authorized. Retain all original records and payloads. A later quantity operation cannot leave a newly zeroed duplicate alongside a positive sibling; exact physical removal can resolve the ambiguity. Revalidate the invariant on export and native history replay. WASM advertises separate batch-only zero eligibility; the category and batch-delete confirmation only present complete unlocked positive families. Actual game load behavior for original duplicate records remains unverified.
+
+
+#### Indexed reference authority
+
+Build exact Item ID/UID pair, referenced Item ID and unresolved-reference Item ID lookup sets during the shared native schema walk and rebuild them on independent export reparse. All inventory permissions consume those sets rather than rescanning all saved pairs per row; exact resolved positive UID references protect their own row and unresolved/zero UID references protect the entire Item ID. Existing incomplete-context, GUID, payload, source and entitlement gates remain unchanged. Regression tests preserve exact and unresolved denial behavior. No expansion of editing authority.

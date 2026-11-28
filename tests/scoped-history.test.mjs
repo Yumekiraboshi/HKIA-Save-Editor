@@ -32,7 +32,7 @@ test('active-tab timeline jumps keep other tabs unchanged and are accessible fro
  const translations=read('../src/history-copy.ts');
  assert.match(app,/const tabHistory=\$derived\(\(\(snapshot as SaveSnapshot\|null\)\?\.history\?\?\[\]\)\.filter\(\(entry:HistoryRecord\)=>entry\.scope===activeTool\)\)/);
  assert.match(app,/const tabHistoryCursor=\$derived\(tabHistory\.filter\(entry=>entry\.applied\)\.length\)/);
- assert.match(app,/update\(await jumpHistory\(scope,target\)\)/);
+ assert.match(app,/update\(await jumpHistory\(scope,target\),true\)/);
  assert.match(app,/return goToHistory\(tabHistoryCursor\+\(which==='undo'\?-1:1\)\)/);
  assert.match(app,/\{#each tabHistory as entry,i \(i\)\}/);
  assert.match(app,/\{historyEntryLabel\(entry,i\)\}/);

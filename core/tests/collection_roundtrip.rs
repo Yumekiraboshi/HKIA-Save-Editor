@@ -7061,3 +7061,29 @@ fn exact_referenced_wand_uid_does_not_prevent_zeroing_distinct_saved_peer(){
   assert!(e.change_inventory_quantity(5,3,0).is_err());assert!(!e.dirty());
  }
 }
+
+
+#[test]
+fn indexed_reference_authority_matches_exact_pair_and_unresolved_family(){
+ let item=1429161083u32;
+ let payload=|magic,fleck|arr(vec![vec![9],arr(vec![u(0),vec![0xc0],u(magic),u(fleck),u(118)])]);
+ let make=|uid:u32|{
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x98;
+  p.extend(doc(1,arr(vec![u(4),u(item),u(21),u(2),payload(104,125)])));
+  p.extend(doc(1,arr(vec![u(5),u(item),u(22),u(3),payload(105,126)])));
+  let cafe=arr(vec![vec![0xc2],vec![0x80],u(0),u(0),guid([0;4]),arr(vec![arr(vec![u(item),u(uid)])]),u(0),u(0),u(0),l(0)]);
+  p.extend(doc(32,arr(vec![u(9),guid([7,0,0,0]),u(0),arr(vec![doc(38,cafe)])])));
+  slot_from_payload("3.0.1",p)
+ };
+ for (uid,expected) in [(21,vec![5]),(22,vec![4]),(0,vec![]),(99,vec![])]{
+  let mut e=Editor::open(make(uid)).unwrap();
+  assert_eq!(e.inventory_removable_ids(),expected);
+  for r in e.inventory(){assert_eq!(e.inventory_entry_removable(r.document_id),expected.contains(&r.document_id));}
+  if let Some(&id)=expected.first(){
+   let quantity=e.inventory().iter().find(|r|r.document_id==id).unwrap().quantity;
+   e.remove_inventory_entries(&[(id,quantity)]).unwrap();
+   let saved=Editor::open(e.export().unwrap()).unwrap();
+   assert!(saved.inventory_removable_ids().is_empty());
+  }
+ }
+}
