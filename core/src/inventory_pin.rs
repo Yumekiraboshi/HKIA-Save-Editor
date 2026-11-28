@@ -198,3 +198,31 @@ pub(crate) fn encode_rows(raw:&[u8],source:&crate::native::PinnedItemsSource,row
  }
  Ok(out)
 }
+
+#[cfg(test)]
+mod writer_tests{
+ use super::*;
+ #[test]
+ fn native_global_order_capacity_and_cas(){
+  let rows:Vec<_>=(0..200i16).map(|order|PinRow{set_id:order%2,item_guid:[u32::from(order as u16)+1,2,3,4],order}).rev().collect();
+  let key=[900,2,3,4];
+  let next=plan(&rows,0,key,false,true).unwrap();
+  assert_eq!(next.len(),200);
+  assert_eq!(next[0],PinRow{set_id:0,item_guid:key,order:0});
+  assert!(!next.iter().any(|p|p.item_guid==[200,2,3,4]));
+  for row in rows.iter().filter(|p|p.order!=199){
+   assert!(next.contains(&PinRow{order:row.order+1,..*row}));
+  }
+  assert!(plan(&next,0,key,false,true).is_err());
+  let after=plan(&next,0,key,true,false).unwrap();
+  assert_eq!(after,rows.into_iter().filter(|p|p.order!=199).collect::<Vec<_>>());
+ }
+ #[test]
+ fn same_guid_in_different_sets_is_not_the_same_pin(){
+  let key=[1,2,3,4];
+  let old=[PinRow{set_id:1,item_guid:key,order:0}];
+  let next=plan(&old,0,key,false,true).unwrap();
+  assert_eq!(next,[PinRow{set_id:0,item_guid:key,order:0},PinRow{order:1,..old[0]}]);
+  assert_eq!(plan(&next,0,key,true,false).unwrap(),old);
+ }
+}
