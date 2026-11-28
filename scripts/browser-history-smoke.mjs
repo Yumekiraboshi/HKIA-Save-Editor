@@ -2479,6 +2479,15 @@ async function inventoryNativeResultArtSmoke(){
    await card.locator('[data-result-icon-target="357184380"][data-inventory-art="'+(missing?'native-result-unavailable':'native-result')+'"]').waitFor({timeout:30_000});
    const grid=card.locator('[data-native-blueprint-pattern="bp_grid"]');
    await grid.waitFor({timeout:30_000});
+   const plan=card.locator('[data-native-decorator="8"]');
+   await plan.waitFor({timeout:30_000});
+   assert.equal(await plan.count(),1);
+   assert.ok(await plan.evaluate(async el=>{
+    const image=el.querySelector('img');if(!image||!image.src.endsWith('/inventory-decorators/decorator-08.webp'))return false;
+    await image.decode();
+    const badge=el.getBoundingClientRect(),grid=el.closest('.inventory-item-art').querySelector('.inventory-blueprint-pattern').getBoundingClientRect();
+    return image.naturalWidth===54&&image.naturalHeight===54&&badge.width===22&&badge.height===22&&badge.bottom<=grid.top+0.5;
+   }));
    assert.ok(await grid.evaluate(async el=>{
     const css=getComputedStyle(el),url=css.backgroundImage.match(/^url\("(.+)"\)$/)?.[1];
     if(!url||!url.endsWith('/inventory-ui/bp-grid.webp')||Math.abs(Number(css.opacity)-0.392156869)>0.000001||css.zIndex!=='0'||css.backgroundRepeat!=='repeat')return false;
@@ -2497,9 +2506,10 @@ async function inventoryNativeResultArtSmoke(){
    await search.fill('1217231008');
    await page.locator('.inventory-card .inventory-item-art [data-icon-fidelity="game-original-placeholder"]').waitFor({timeout:30_000});
    await page.locator('.inventory-card [data-native-blueprint-pattern="bp_grid"]').waitFor({timeout:30_000});
+   await page.locator('.inventory-card [data-native-decorator="8"]').waitFor({timeout:30_000});
   }finally{await context.close();}
  }
- console.log('CHROMIUM NATIVE RESULT ICON PASS: original result Sprite, original placeholder, unavailable target does not substitute source art');
+ console.log('CHROMIUM NATIVE RESULT ICON PASS: original result Sprite, original placeholder, Plan decorator independent of target availability');
 }
 async function originalArtIndexRetrySmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});

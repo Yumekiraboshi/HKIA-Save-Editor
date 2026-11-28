@@ -6341,9 +6341,6 @@ fn physical_removal_protects_exact_referenced_uid_not_independent_ordinary_base(
  }
 }
 
-
-
-
 #[test]
 fn furniture_all_native_slots_can_reach_a_free_combination_when_single_slot_neighbors_are_reserved(){
  use hkia_save_core::collection::HistoryScope::Inventory;

@@ -73,3 +73,15 @@ test('original blueprint pattern is used only for version-gated native result ro
  assert.equal(app.match(/data-native-blueprint-pattern=/g)?.length,1);
  assert.match(css,/\.inventory-blueprint-pattern\{[^}]*opacity:0\.392156869/);
 });
+
+ test('both native result Details classes use the same Plan decorator independently of loaded result art',()=>{
+ const app=read('src/App.svelte'),css=read('src/style.css');
+ const art=JSON.parse(read('data/inventory-decorator-art-v3.0.1.json'));
+ const plan=art.rows.find(r=>r.type===8);
+ assert.equal(plan.name,'plan.ItemDecorator');assert.equal(plan.sprite.pathId,'973684600144313423');
+ assert.equal(source.rows.filter(([id])=>nativeResultIconTarget(id,'3.0.1')!==undefined).length,762);
+ assert.ok(app.includes('class:flower-variant={flowerBadges.length>0||!!dyeBadge||resultId!==undefined}'));
+ assert.ok(app.includes('{#if resultId!==undefined}<InventoryDecorator type={8}/>'));
+ assert.equal(app.match(/<InventoryDecorator type=\{8\}/g)?.length,1);
+ assert.ok(css.includes('.inventory-blueprint.flower-variant>.inventory-blueprint-pattern{top:22px}'));
+ });

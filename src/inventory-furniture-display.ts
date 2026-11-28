@@ -35,3 +35,10 @@ export function furnitureVariantTitle(display:FurnitureDisplay|null,itemId:numbe
 export function furnitureHasCustomizedAppearance(display:FurnitureDisplay|null,variant:readonly number[]|null):boolean{
  return !!display&&!!variant&&variant.length===3&&variant.some(index=>Number.isInteger(index)&&index>0&&display.materials.has(index));
 }
+
+/** Label every coupled field in a native-offered tuple. No target is synthesized. */
+export function furnitureChoiceLabel(display:FurnitureDisplay|null,current:readonly number[],target:readonly number[],slot:number,defaultLabel:string,partLabel:string):string{
+ const primary=materialLabel(display,target[slot],defaultLabel);
+ const coupled=target.flatMap((value,index)=>index!==slot&&value!==current[index]?[partLabel+' '+String.fromCharCode(65+index)+': '+materialLabel(display,value,defaultLabel)]:[]);
+ return coupled.length?primary+' · '+coupled.join(' · '):primary;
+}
