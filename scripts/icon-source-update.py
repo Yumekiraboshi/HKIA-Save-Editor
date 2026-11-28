@@ -11,6 +11,7 @@ import collections
 import hashlib
 import json
 import re
+import struct
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -54,7 +55,34 @@ def known_baseline(version, platform):
     return {**dynamic['sourceHashes'],
             **{row['name']: row['sha256'] for row in override['sourceBundles']}}
 
-def scan_rows(objects, externals, helpers, mesh):
+# Managed-reference layout is verified for the pinned 3.0.1 Switch source.
+# A later release must explicitly opt into this adapter after reviewing the
+# native type dump. An unknown/changed layout must not invent an override.
+OUTFIT_LAYOUT = 'outfit-icon-override-v1'
+def outfit_override(fields, mesh):
+    ref = fields['references']
+    if len(ref) < 20:
+        return None
+    if b'OutfitItemDetails' not in ref:
+        return None
+    require(struct.unpack_from('<II', ref) == (2, 1) and
+            ref[8:16] == fields['Details'], 'managed reference identity')
+    cls, p = mesh.string(ref, 16)
+    if cls != 'OutfitItemDetails':
+        return None
+    ns, p = mesh.string(ref, p)
+    asm, p = mesh.string(ref, p)
+    require(ns == 'Sunblink.Game' and asm == 'Assembly-CSharp', 'outfit type identity')
+    guid, p = mesh.string(ref, p + 16)
+    sub, p = mesh.string(ref, p)
+    sub_type, p = mesh.string(ref, p)
+    require(len(ref) - p == 80 and not sub and
+            (not sub_type or sub_type == 'UnityEngine.Sprite, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null'),
+            'unsupported OutfitItemDetails IconOverride layout')
+    require(not guid or re.fullmatch(r'[0-9a-f]{32}', guid), 'invalid IconOverride GUID')
+    return guid or None
+
+def scan_rows(objects, externals, helpers, mesh, outfit_layout=None):
     rows = []
     ids, guids, names = set(), set(), set()
     for pid, (cls, tree, raw) in objects.items():
@@ -85,7 +113,9 @@ def scan_rows(objects, externals, helpers, mesh):
                     'invalid local UiIcon Sprite')
             sprite_hash = digest(objects[sprite][2])
         # A null/external reference is retained as unresolved, not guessed.
+        binding = outfit_override(f, mesh) if outfit_layout == OUTFIT_LAYOUT else None
         rows.append({
+            **({'outfitIconOverrideGuid': binding} if outfit_layout else {}),
             'itemId': item, 'key': name, 'serializedGuidBytes': guid,
             'definitionPathId': pid, 'definitionSha256': digest(raw),
             'schemaSha256': digest(stable(tree)),
@@ -99,7 +129,7 @@ def scan_rows(objects, externals, helpers, mesh):
     require(bool(rows), 'no recognized item definitions; review source schema')
     return sorted(rows, key=lambda row: row['itemId'])
 
-def snapshot(version, platform, definitions, expected, bundles):
+def snapshot(version, platform, definitions, expected, bundles, outfit_layout=None):
     checked_release(version, platform)
     require(bool(SHA.fullmatch(expected)), 'explicit expected definitions SHA-256 required')
     pinned = known_baseline(version, platform)
@@ -122,7 +152,16 @@ def snapshot(version, platform, definitions, expected, bundles):
     require(len(cabs) == 1, 'expected exactly one serialized definitions CAB')
     cab, data = cabs[0]
     objects, externals = typed.load(data, mesh)
-    rows = scan_rows(objects, externals, helpers, mesh)
+    if version == '3.0.1' and platform == 'switch':
+        outfit_layout = OUTFIT_LAYOUT
+    require(outfit_layout in (None, OUTFIT_LAYOUT), 'unrecognized outfit layout')
+    rows = scan_rows(objects, externals, helpers, mesh, outfit_layout)
+    if outfit_layout:
+        bindings = {row['itemId']: row['outfitIconOverrideGuid'] for row in rows if row['outfitIconOverrideGuid']}
+        require(len(set(bindings.values())) == len(bindings), 'ambiguous IconOverride GUIDs')
+        if version == '3.0.1' and platform == 'switch':
+            original = read_json(ROOT / 'data/native-icon-override-source-v3.0.1.json')
+            require(bindings == {row[0]: row[1] for row in original['rows']}, 'baseline IconOverride crosswalk mismatch')
     if pinned:
         require(len(rows) == 12163, 'verified baseline definition count mismatch')
         require(sum(row['dynamicColor'] for row in rows) == 50, 'baseline dynamic census mismatch')
@@ -142,7 +181,8 @@ def snapshot(version, platform, definitions, expected, bundles):
               'approval': 'unverified-candidate', 'unityEditorVersion': header['editorVersion'],
               'definitionsCab': cab, 'definitionsCabSha256': digest(data),
               'sourceBundleSha256': source_hashes, 'locallyObservedBundles': sorted(observed),
-              'definitionCount': len(rows), 'rows': rows}
+              'definitionCount': len(rows), 'rows': rows,
+              **({'outfitIconOverrideLayout': outfit_layout} if outfit_layout else {})}
     result['snapshotSha256'] = digest(stable(result))
     return result
 
@@ -269,6 +309,7 @@ def main():
     s.add_argument('--expected-definitions-sha256', required=True)
     s.add_argument('--bundle', action='append', default=[], metavar='NAME=PATH')
     s.add_argument('--out', type=Path, required=True)
+    s.add_argument('--reviewed-outfit-layout', choices=[OUTFIT_LAYOUT], help='only after native managed-layout review for the candidate release')
     d = sub.add_parser('diff', help='compare two candidate snapshots; never activate a release')
     d.add_argument('--before', type=Path, required=True)
     d.add_argument('--after', type=Path, required=True)
@@ -279,7 +320,7 @@ def main():
         self_test()
     elif args.command == 'snapshot':
         value = snapshot(args.version,args.platform,args.definitions,
-                         args.expected_definitions_sha256,args.bundle)
+                         args.expected_definitions_sha256,args.bundle,args.reviewed_outfit_layout)
         write_new(args.out,value)
         print('HKIA_ICON_SOURCE_SNAPSHOT', value['definitionCount'], value['snapshotSha256'])
     else:
