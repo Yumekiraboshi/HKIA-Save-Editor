@@ -1,4 +1,5 @@
 import {rasterizeDynamicSprite,type PixelBuffer,type RasterInput} from './dynamic-sprite-raster';
+import {encodeDynamicArtPng} from './dynamic-art-png';
 
 export type TextureAsset={file:string;bytes:number;sha256:string;rgbSha256:string;width:number;height:number};
 const digest=async(data:ArrayBuffer)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data)),v=>v.toString(16).padStart(2,'0')).join('');
@@ -48,12 +49,7 @@ export function renderCachedDynamicArt(key:string,input:RasterInput):Promise<Blo
  const old=cache.get(key);if(old){cache.delete(key);cache.set(key,old);return old;}
  const task=(async()=>{
   await new Promise<void>(resolve=>setTimeout(resolve,0));
-  const rgba=rasterizeDynamicSprite(input);
-  const {canvas,ctx}=canvas2d(96,96);
-  try{
-   ctx.putImageData(new ImageData(new Uint8ClampedArray(rgba),96,96),0,0);
-   return await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,'image/png'));
-  }finally{canvas.width=0;canvas.height=0;}
+  return await encodeDynamicArtPng(rasterizeDynamicSprite(input));
  })().catch(()=>null);
  cache.set(key,task);
  if(cache.size>CACHE_LIMIT)cache.delete(cache.keys().next().value!);
