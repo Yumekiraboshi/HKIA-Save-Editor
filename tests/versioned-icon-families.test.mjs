@@ -42,6 +42,14 @@ test('candidate family sources reuse shared shader and original auxiliary image 
  assert.equal(await f.wand(4,version,{magicCharacteristicId:902,fleckCharacteristicId:903,sourceItemId:999}),null);
  assert.equal(calls,3);
 });
+test('unresolved mapped chef swatch never becomes a neutral tint',async()=>{
+ const missing={...defs,chefColors:[]};
+ const load=async(root)=>new TextEncoder().encode(JSON.stringify(root==='/bindings/'?missing:pages(['base:2','mask:'+g('d')]))).buffer;
+ const loadTexture=async(root,a)=>({width:a.width,height:a.height,rgba:new Uint8ClampedArray(a.width*a.height*4).fill(255)});
+ const f=createVersionedFamilyRenderer({bindings:'/bindings/',dynamic:'/dynamic/',auxiliary:'/aux/'},pin,{load,loadTexture});
+ assert.equal(await f.chef(2,version,{kind:'cafe',colors:[901]}),null);
+ assert.ok(await f.chef(2,version,{kind:'cafe',colors:[902]}) instanceof Blob);
+});
 test('compiler keeps unavailable swatch mappings distinct from native neutral colors',()=>{
  const result=spawnSync(process.env.PYTHON??'python3',[fileURLToPath(new URL('../scripts/compile-icon-family-bindings.py',import.meta.url)),'--self-test'],{encoding:'utf8'});
  assert.equal(result.status,0,result.stderr??String(result.error));
