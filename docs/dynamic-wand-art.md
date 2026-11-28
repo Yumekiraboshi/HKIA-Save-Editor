@@ -66,3 +66,7 @@ The remaining non-square definition identities were also independently confirmed
 ## Known missing color mappings (2026-11-28 JST)
 
 The shared original CharacteristicsDatabase census and native white fallback for missing magic/fleck tint mappings are documented in [dynamic-chef-art.md](dynamic-chef-art.md#known-characteristic-missing-map-display-2026-11-28-jst). This supersedes the conservative mapped-only tint limitation above; no change to original sub-icon selection or save rules.
+
+## Progressive recovery of independent artwork layers (2026-11-28 JST)
+
+The shared visible-card renderer now distinguishes a complete composite, a verified tinted base, and an untinted original base. If the original base is displayed while the mask and overlay assets are unavailable, restoring the mask alone upgrades the visible base even while the overlay is still unavailable. Failed later attempts never downgrade or replace an already verified tier. Complete images stop retrying; canceled/offscreen requests cannot install stale object URLs. The existing four-request queue and shared network recovery listener are retained. No source images, tint rules, save payloads or permissions change.

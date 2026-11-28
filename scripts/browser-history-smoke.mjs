@@ -549,6 +549,49 @@ async function inventoryNestedWandSmoke(){
   assert.deepEqual(errors,[]);console.log('CHROMIUM NESTED FURNITURE WAND PASS: material edit, new pair, material-only Add, recovery and reparse');
  }finally{await context.close()}
 }
+async function inventoryWandArtworkRecoverySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  let maskAvailable=false,overlayAvailable=false,maskAttempts=0,overlayAttempts=0;
+  await page.route('**/wand-mask-rgb-v3.0.1.webp',r=>{
+   maskAttempts++;return maskAvailable?r.continue():r.fulfill({status:503,body:'unavailable'});
+  });
+  await page.route('**/wand-magic-overlay-v3.0.1.webp',r=>{
+   overlayAttempts++;return overlayAvailable?r.continue():r.fulfill({status:503,body:'unavailable'});
+  });
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-wand-art-recovery.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({wandEditInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1429161083');
+  const sprite=page.locator('.inventory-card .item-sprite[data-dynamic-art-source="native-wand"]').first();
+  const partial=sprite.and(page.locator('[data-icon-fidelity="source-derived-base-only"]'));
+  await partial.waitFor({timeout:30_000});
+  const background=()=>sprite.evaluate(e=>getComputedStyle(e).backgroundImage);
+  const first=await background();
+  assert.ok(first.includes('blob:'));
+  assert.ok(maskAttempts>=1);
+  await page.waitForLoadState('networkidle');
+  maskAvailable=true;
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForFunction(previous=>{
+   const e=document.querySelector('.inventory-card .item-sprite[data-dynamic-art-source="native-wand"]');
+   return e?.getAttribute('data-icon-fidelity')==='source-derived-base-only'&&getComputedStyle(e).backgroundImage!==previous;
+  },first,{timeout:30_000});
+  const second=await background();
+  assert.notEqual(second,first);assert.ok(overlayAttempts>=1);
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForLoadState('networkidle');
+  assert.equal(await background(),second,'tinted base must remain during another failed overlay attempt');
+  overlayAvailable=true;
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await sprite.and(page.locator('[data-icon-fidelity="source-derived-composite-unverified"]')).waitFor({timeout:30_000});
+  assert.notEqual(await background(),second);
+  assert.deepEqual(errors,[]);
+ }finally{await context.close();}
+ console.log('CHROMIUM WAND ART RECOVERY PASS: original base, recovered tinted base, completed composite');
+}
 async function inventoryWandEditSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -3167,6 +3210,7 @@ async function run(){
  await chefRuntimeSmoke(browser,origin,base);
  await inventoryChefArtSmoke();
  await inventoryBobaEditSmoke();
+ await inventoryWandArtworkRecoverySmoke();
  await inventoryWandEditSmoke();
  await inventoryFirstWandSmoke();
  await inventoryFirstItemWandSmoke();
