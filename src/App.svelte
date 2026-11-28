@@ -42,6 +42,10 @@ import {searchAchievementRows} from './achievement-search';
  import {loadNativeDyePalettes,dyeDecoratorFor,type NativeDyePalettes} from './native-dye-palettes';
  import {createVariantArtSourceLoader} from './variant-art';
  import DyeSprite from './DyeSprite.svelte';
+ import {createNativeArtService} from './native-art-service';
+ import {installedNativeArt,provideNativeArt,inventoryArtworkAppearance,type NativeArtSession} from './native-art-context';
+ import NativeItemArtwork from './NativeItemArtwork.svelte';
+ import NativeViewArtwork from './NativeViewArtwork.svelte';
  import InventoryAtlasSprite from './InventoryAtlasSprite.svelte';
  import DynamicFlowerSprite from './DynamicFlowerSprite.svelte';
  import DynamicPaletteSprite from './DynamicPaletteSprite.svelte';
@@ -212,20 +216,26 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryBatchSelected=$state<Set<number>>(new Set());
  let inventoryBatchQuantity=$state<number|undefined>(undefined);
  // Presentation only: the tightest bound returned by Rust for selected rows.
- const inventoryBatchMinimum=$derived.by(()=>{
-  if(inventoryAddMode||!snapshot||inventoryBatchSelected.size===0)return 1;
-  return inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantityMinimum!==0)?1:0;
- });
  const selectedInventoryRows=$derived.by(()=>inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId)));
- const inventoryBatchCanQuantity=$derived(selectedInventoryRows.length>0&&selectedInventoryRows.every(row=>row.editable));
+ // Reuse the same Rust-issued eligibility projection as the confirmation
+ // dialog, including complete duplicate families. Zero rows are not targets.
+ const inventoryBatchMinimum=$derived.by(()=>{
+  if(inventoryAddMode||!snapshot||selectedInventoryRows.length===0||selectedInventoryRows.length!==inventoryBatchSelected.size)return 1;
+  const positive=selectedInventoryRows.filter(row=>row.quantity>0);
+  return positive.length>0&&inventoryBatchZeroRows(snapshot.inventory,selectedInventoryRows,isInventoryLocked).length===positive.length?0:1;
+ });
+ const inventoryBatchCanPositive=$derived(selectedInventoryRows.length>0&&selectedInventoryRows.length===inventoryBatchSelected.size&&selectedInventoryRows.every(row=>row.editable));
+ const inventoryBatchCanQuantity=$derived(inventoryBatchCanPositive||inventoryBatchMinimum===0);
  const inventoryBatchCanDelete=$derived.by(()=>!inventoryAddMode&&selectedInventoryRows.length>0&&selectedInventoryRows.length===inventoryBatchSelected.size&&(
   (selectedInventoryRows.some(row=>row.quantity>0)&&inventoryBatchZeroRows(snapshot?.inventory??[],selectedInventoryRows,isInventoryLocked).length===selectedInventoryRows.filter(row=>row.quantity>0).length)||selectedInventoryRows.every(row=>row.removable)));
  const inventoryBatchMaximum=$derived.by(()=>{
+  if(!inventoryBatchCanPositive&&inventoryBatchMinimum===0)return 0;
   let cap=2147483647;
   if(snapshot)for(const row of inventoryBrowseRows){
    if(inventoryBatchSelected.has(row.documentId))cap=Math.min(cap,row.quantityLimit??0);
   }
-  return Math.max(1,cap);
+  // A Rust-issued zero-only bound is a real upper bound, not a positive refill.
+  return Math.max(0,cap);
  });
  function resetInventoryBatchSelection(){inventoryBatchSelected=new Set();inventoryBatchQuantity=undefined}
  function clearInventoryBatch(){inventoryBatchMode=false;resetInventoryBatchSelection()}
@@ -251,6 +261,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const achievementImagesFailed=$derived(achievementIndividualFailed||achievementCategoryFailed);
  let achievementIndividualPending=false,achievementCategoryPending=false,achievementImagesDisposed=false;
  function refreshAchievementImages(){
+  if(nativeArtEnabled)return;
   if(achievementImagesDisposed||!snapshot||activeTool!=='achievements'||achievementIndex.size!==820||!achievementGroupHierarchy)return;
   const index=achievementIndex,groups=achievementGroupHierarchy;
   if(!achievementIndividualAtlas&&!achievementIndividualPending){
@@ -288,6 +299,19 @@ import {verifiedFloorplanName} from './floorplan-names';
  let sourceNames:SourceItemNames=$state({});
  let sourceNameEpoch=0;
  let snapshot:SaveSnapshot|null=$state(null);
+ let nativeArtSession=$state.raw<NativeArtSession|null>(null);
+ const nativeArtEnabled=$derived(nativeArtSession!==null&&nativeArtSession.version===snapshot?.version);
+ provideNativeArt(()=>nativeArtEnabled?nativeArtSession:null);
+ $effect(()=>{
+  const pin=installedNativeArt,cat=catalog,index=nativeInventoryIndex,achievements=achievementIndex,hierarchy=achievementGroupHierarchy;
+  if(!pin||!cat||cat.version!==pin.pins.item.version||!index.size||!achievements.size||!hierarchy)return;
+  const service=createNativeArtService(import.meta.env.BASE_URL+pin.root,pin.pins,{
+   achievement:{index:achievements,hierarchy},
+   category:{collectionKeys:new Set(cat.groups.map(g=>g[0])),inventoryKeys:new Set(NATIVE_INVENTORY_TABS.map(t=>t.key)),itemIds:new Set(index.keys())}
+  });
+  nativeArtSession={service,version:pin.pins.item.version};
+  return ()=>{service.dispose();nativeArtSession=null;};
+ });
  let original:File|null=$state(null);
  let recorded:Record<string,bigint>=$state({});
  let selectedGroup:string|null=$state(null);
@@ -589,7 +613,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     If a group cannot be verified, leave its card with the safe placeholder. */
  $effect(()=>{
   inventoryIconPulse;
-  if(activeTool!=='inventory'||!snapshot||!catalog)return;
+  if(nativeArtEnabled||activeTool!=='inventory'||!snapshot||!catalog)return;
   const groups=new Set<string>();
   function addWandSource(id:number|undefined){
    if(!id||id===1185152302||inventoryNativeArt?.entries.has(id)||inventoryNativeArt?.withheld.has(id))return;
@@ -640,7 +664,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  // Global collection results share the original pack cache and its bounded request queue.
  $effect(()=>{
   inventoryIconPulse;
-  if(activeTool!=='collections'||!snapshot||!catalog||!showingGlobalCollectionSearch)return;
+  if(nativeArtEnabled||activeTool!=='collections'||!snapshot||!catalog||!showingGlobalCollectionSearch)return;
   const groups=new Set(collectionSearchResults.slice(0,visibleLimit).map(item=>item[3]));
   for(const group of groups){
    if(inventoryIconPending.size>=3)break;
@@ -829,6 +853,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function askFile(){if(busy||!restored)return;fileMenu&&(fileMenu.open=false);fileInput?.click();}
  async function fetchImages(key:string){
+  if(nativeArtEnabled)return;
   if((iconPack?.group===key||iconLoadingGroup===key)&&!iconError)return;
   const epoch=++iconEpoch;
   iconLoadingGroup=key;iconPack=null;iconError=false;
@@ -1444,9 +1469,10 @@ import {verifiedFloorplanName} from './floorplan-names';
   const next=inventoryBatchQuantity;
   if(next===undefined||!Number.isSafeInteger(next)||next<inventoryBatchMinimum||next>inventoryBatchMaximum)return;
   const rows=inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId));
-  if(rows.length!==inventoryBatchSelected.size||rows.some(row=>!row.editable||isInventoryLocked(row.documentId)))return;
-  if(rows.every(row=>row.quantity===next)){resetInventoryBatchSelection();return}
+  if(rows.length!==inventoryBatchSelected.size||rows.some(row=>isInventoryLocked(row.documentId)))return;
   if(next===0){requestInventoryDelete(rows,true,(event.submitter??event.currentTarget) as HTMLElement,false);return;}
+  if(!inventoryBatchCanPositive)return;
+  if(rows.every(row=>row.quantity===next)){resetInventoryBatchSelection();return}
   const requests:InventoryQuantityRequest[]=rows.map(row=>[row.documentId,row.quantity,next]);
   busy=true;error='';
   try{
@@ -1787,7 +1813,9 @@ import {verifiedFloorplanName} from './floorplan-names';
       {@const art=achievementCategoryAtlas?.bySaveGuid.get(stat.guid)}
       <button type="button" class="category-card achievement-category-card" class:is-recorded={stat.parentComplete===true} onclick={()=>showAchievementGroup(stat.guid)}>
        <span class="category-image achievement-category-art" aria-hidden="true">
-        {#if art}
+        {#if nativeArtEnabled}
+         <NativeViewArtwork domain="achievement" key={stat.guid}/>
+        {:else if art}
          <span class="achievement-category-sprite" style:background-image={`url("${achievementCategoryAtlas?.url}")`} style:background-position={`${art.x} ${art.y}`}></span>
         {:else}
          <span class="achievement-category-placeholder" aria-hidden="true">✧</span>
@@ -1820,7 +1848,9 @@ import {verifiedFloorplanName} from './floorplan-names';
         disabled={busy||(!item.row&&(snapshot.version!=='3.0.1'||!achievementIndex.has(item.guid)))}
         onclick={e=>void quickToggleAchievement(item,e.currentTarget,title)}>
         <span class="item-art achievement-item-art" aria-hidden="true">
-         {#if individualArt}
+         {#if nativeArtEnabled}
+          <NativeViewArtwork domain="achievement" key={item.guid}/>
+         {:else if individualArt}
           <span class="achievement-individual-sprite" style:background-image={`url("${achievementIndividualAtlas?.url}")`} style:background-position={`${individualArt.x} ${individualArt.y}`}></span>
          {:else if art}
           <span class="achievement-category-sprite" style:background-image={`url("${achievementCategoryAtlas?.url}")`} style:background-position={`${art.x} ${art.y}`}></span>
@@ -1871,7 +1901,9 @@ import {verifiedFloorplanName} from './floorplan-names';
       </div>
       <div class="date-dialog-item achievement-dialog-item">
        <span class="date-dialog-art" aria-hidden="true">
-        {#if dialogIndividualArt}
+        {#if nativeArtEnabled}
+         <NativeViewArtwork domain="achievement" key={editingSaveGuid} detail/>
+        {:else if dialogIndividualArt}
          <span class="achievement-individual-sprite" style:background-image={`url("${achievementIndividualAtlas?.url}")`} style:background-position={`${dialogIndividualArt.x} ${dialogIndividualArt.y}`}></span>
         {:else if dialogCategoryArt}
          <span class="achievement-category-sprite" data-icon-source={dialogCategoryArt.saveGuid===editingSaveGuid?'category':'native-parent'} style:background-image={`url("${achievementCategoryAtlas?.url}")`} style:background-position={`${dialogCategoryArt.x} ${dialogCategoryArt.y}`}></span>
@@ -1937,8 +1969,8 @@ import {verifiedFloorplanName} from './floorplan-names';
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 12h10"/></svg>
        </button>
        <span class="inventory-total" aria-live="polite">{inventoryBatchSelected.size.toLocaleString(locale)} / {snapshot.inventoryBatchLimit.toLocaleString(locale)}</span>
-      <input type="number" min={inventoryBatchMinimum} max={inventoryBatchMaximum} step="1" required bind:value={inventoryBatchQuantity} placeholder={iCopy.quantity} aria-label={iCopy.quantity} disabled={busy||!inventoryBatchCanQuantity}/>
-      <button type="submit" class="primary" disabled={busy||!inventoryBatchCanQuantity||inventoryBatchQuantity===undefined}>{iCopy.apply}</button>
+      <input type="number" min={inventoryBatchMinimum} max={inventoryBatchMaximum} step="1" required bind:value={inventoryBatchQuantity} placeholder={iCopy.quantity} aria-label={iCopy.quantity} disabled={busy||!inventoryBatchCanQuantity||inventoryBatchMaximum<inventoryBatchMinimum}/>
+      <button type="submit" class="primary" disabled={busy||!inventoryBatchCanQuantity||inventoryBatchMaximum<inventoryBatchMinimum||inventoryBatchQuantity===undefined}>{iCopy.apply}</button>
       {#if !inventoryAddMode}<button type="button" class="inventory-editable-filter inventory-batch-delete" disabled={busy||!inventoryBatchCanDelete} title={inventoryDeleteCopy(locale)} aria-label={inventoryDeleteCopy(locale)} onclick={e=>requestInventoryBatchDelete(e.currentTarget)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>{/if}
       <button type="button" class="inventory-editable-filter" disabled={busy} onclick={clearInventoryBatch}>{copy.cancel}</button>
      </form>
@@ -1967,6 +1999,9 @@ import {verifiedFloorplanName} from './floorplan-names';
       <button type="button" class="inventory-group-option" data-inventory-group={t.key} class:active={activeInventoryGroup===t.key}
        aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;inventoryLimit=BATCH_SIZE;persistNavigation()}}>
        <span class="inventory-category-representative" aria-hidden="true">
+        {#if nativeArtEnabled}
+         <NativeViewArtwork domain="inventory" key={t.key}/>
+        {:else}
         <img class="inventory-category-fallback" src={t.art?ICONS+t.art:INVENTORY_UI+'category-'+t.key+'.webp'} alt="" loading="lazy"
          onerror={e=>{const image=e.currentTarget as HTMLImageElement,native=INVENTORY_UI+'category-'+t.key+'.webp';if(image.getAttribute('src')!==native)image.src=native;else image.style.visibility='hidden';}}/>
         {#if representative!==undefined&&(representativeSprite||originalVariantArt[String(representative)]||exactVariantArt[String(representative)])}
@@ -1976,6 +2011,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          {:else if representativeSprite}
           <InventoryAtlasSprite sprite={representativeSprite}/>
          {/if}
+        {/if}
         {/if}
        </span>
        <span>{inventoryGroupLabel(locale,t.key)}</span><small>{(inventoryMatchTotals.get(t.key)??0).toLocaleString(locale)}</small>
@@ -2034,7 +2070,9 @@ import {verifiedFloorplanName} from './floorplan-names';
         {#if resultId!==undefined}
          <span class="inventory-blueprint-pattern" data-native-blueprint-pattern="bp_grid" style:background-image={'url("'+INVENTORY_UI+'bp-grid.webp")'}></span>
         {/if}
-        {#if hasNativeWandArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
+        {#if nativeArtEnabled}
+         <NativeItemArtwork itemId={item.itemId} appearance={inventoryArtworkAppearance(hasNativeFlowerArt(item.itemId)?item.flower:undefined,chef,wand,paletteAppearance)}/>
+        {:else if hasNativeWandArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite} originalCell={wand?wandOriginalCell(wand.sourceItemId):undefined}/>
          {:else if snapshot.version==='3.0.1'&&nativeChefInstructionUsesOriginal(item.itemId,item.unique?.tag)&&!originalVariantArt[String(item.itemId)]}
           <DynamicChefSprite itemId={item.itemId} originalOnly={true} fallback={nativeSprite??sprite}/>
@@ -2163,7 +2201,9 @@ import {verifiedFloorplanName} from './floorplan-names';
        {@const sprite=(iconPack?.group===item[3]?iconPack.entries:inventoryIconPacks[item[3]]?.entries)?.[String(item[0])]}
        <button type="button" class="collection-search-result" onclick={()=>jumpToCollectionItem(item)}>
         <span class="collection-search-art" aria-hidden="true">
-         {#if originalVariantArt[String(item[0])]||exactVariantArt[String(item[0])]||(sprite&&nativeDyePalettes[String(item[0])])}
+         {#if nativeArtEnabled}
+          <NativeItemArtwork domain="collection" itemId={item[0]}/>
+         {:else if originalVariantArt[String(item[0])]||exactVariantArt[String(item[0])]||(sprite&&nativeDyePalettes[String(item[0])])}
           <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item[0])]} sourceKey={item[1]} exactArtUrl={exactVariantArt[String(item[0])]} originalArtUrl={originalVariantArt[String(item[0])]}/>
          {:else if sprite}
           <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
@@ -2197,7 +2237,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     <div class="category-grid">
      {#each categories as cat (cat.row[0])}
       <button class="category-card" type="button" onclick={()=>selectCategory(cat.row[0])} data-collection-group={cat.row[0]}>
-       <span class="category-image"><img src={ICONS+cat.row[5]} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/></span>
+       <span class="category-image">{#if nativeArtEnabled}<NativeViewArtwork domain="collection" key={cat.row[0]}/>{:else}<img src={ICONS+cat.row[5]} alt="" loading="lazy" onerror={e=>(e.currentTarget as HTMLImageElement).style.visibility='hidden'}/>{/if}</span>
        <span class="category-label">{titleFor(cat.row)}</span>
        <span class="category-count" title={copy.progressHint}>{cat.count.toLocaleString(locale)} / {cat.total.toLocaleString(locale)}</span>
       </button>
@@ -2217,7 +2257,9 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const sprite=sub.previewId!==null&&iconPack?.group===selectedGroup?iconPack.entries[String(sub.previewId)]:undefined}
      <button type="button" class="subcategory-card" onclick={()=>selectSubcategory(sub.key)} data-collection-subgroup={sub.key}>
       <span class="subcategory-art" aria-hidden="true">
-       {#if sub.previewId!==null&&(originalVariantArt[String(sub.previewId)]||exactVariantArt[String(sub.previewId)]||(sprite&&nativeDyePalettes[String(sub.previewId)]))}
+       {#if nativeArtEnabled&&sub.previewId!==null}
+        <NativeItemArtwork domain="collection" itemId={sub.previewId}/>
+       {:else if sub.previewId!==null&&(originalVariantArt[String(sub.previewId)]||exactVariantArt[String(sub.previewId)]||(sprite&&nativeDyePalettes[String(sub.previewId)]))}
         <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(sub.previewId)]} sourceKey={catalog?.items.find(x=>x[0]===sub.previewId)?.[1]??''} exactArtUrl={exactVariantArt[String(sub.previewId)]} originalArtUrl={originalVariantArt[String(sub.previewId)]}/>
        {:else if sprite}
         <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
@@ -2263,7 +2305,9 @@ import {verifiedFloorplanName} from './floorplan-names';
        title={mayToggle?(has?copy.unsetRecorded:copy.setRecorded):!showVariants&&recordIds.length>0?copy.variantsToEdit:copy.unsafe} disabled={busy||!mayToggle}
        onclick={e=>void toggleCollection(item[0],nameFor(item),e.currentTarget)}>
        <span class="item-art" aria-hidden="true">
-        {#if originalVariantArt[String(item[0])]||exactVariantArt[String(item[0])]||(sprite&&nativeDyePalettes[String(item[0])])}
+        {#if nativeArtEnabled}
+          <NativeItemArtwork domain="collection" itemId={item[0]}/>
+         {:else if originalVariantArt[String(item[0])]||exactVariantArt[String(item[0])]||(sprite&&nativeDyePalettes[String(item[0])])}
          <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(item[0])]} sourceKey={item[1]} exactArtUrl={exactVariantArt[String(item[0])]} originalArtUrl={originalVariantArt[String(item[0])]}/>
         {:else if sprite}
          <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
@@ -2542,7 +2586,9 @@ import {verifiedFloorplanName} from './floorplan-names';
     </div>
     <div style="display:flex;justify-content:center" aria-hidden="true">
      <span class="inventory-item-art" data-furniture-icon-preview>
-      {#if originalVariantArt[String(edit.itemId)]||exactVariantArt[String(edit.itemId)]}
+      {#if nativeArtEnabled}
+       <NativeItemArtwork itemId={edit.itemId}/>
+      {:else if originalVariantArt[String(edit.itemId)]||exactVariantArt[String(edit.itemId)]}
        <DyeSprite sprite={original} originalArtUrl={originalVariantArt[String(edit.itemId)]} exactArtUrl={exactVariantArt[String(edit.itemId)]}/>
       {:else if inventoryNativeArt?.placeholders.has(edit.itemId)}
        <DynamicArtSprite source="native-placeholder" render={renderNativePlaceholderArt}/>
@@ -2681,7 +2727,9 @@ import {verifiedFloorplanName} from './floorplan-names';
     </div>
     <div class="date-dialog-item">
      <span class="date-dialog-art" aria-hidden="true">
-      {#if originalVariantArt[String(dateDialogItem[0])]||exactVariantArt[String(dateDialogItem[0])]||(sprite&&nativeDyePalettes[String(dateDialogItem[0])])}
+      {#if nativeArtEnabled}
+       <NativeItemArtwork domain="collection" itemId={dateDialogItem[0]}/>
+      {:else if originalVariantArt[String(dateDialogItem[0])]||exactVariantArt[String(dateDialogItem[0])]||(sprite&&nativeDyePalettes[String(dateDialogItem[0])])}
        <DyeSprite sprite={sprite} palette={nativeDyePalettes[String(dateDialogItem[0])]} sourceKey={dateDialogItem[1]} exactArtUrl={exactVariantArt[String(dateDialogItem[0])]} originalArtUrl={originalVariantArt[String(dateDialogItem[0])]}/>
       {:else if sprite}
        <span class="item-sprite" style:background-image={'url("'+sprite.url+'")'} style:background-position={'-'+sprite.x+'px -'+sprite.y+'px'}></span>
