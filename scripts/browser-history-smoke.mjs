@@ -1556,7 +1556,7 @@ async function assertNativeFlowerPatternClip(badge){
   if(!primary||!clip||!img)return null;
   const a=getComputedStyle(primary),b=getComputedStyle(clip);
   const bounds=e=>{const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height];};
-  return {mask:a.maskImage===b.maskImage&&a.maskImage.includes('plate.webp'),sameGeometry:JSON.stringify(bounds(primary))===JSON.stringify(bounds(clip))&&JSON.stringify(bounds(clip))===JSON.stringify(bounds(img)),alpha:b.maskMode==='alpha',size:b.width+' '+b.height};
+  return {mask:a.maskImage===b.maskImage&&a.maskImage.includes('plate.webp'),sameGeometry:JSON.stringify(bounds(primary))===JSON.stringify(bounds(clip))&&img.offsetWidth===clip.offsetWidth&&img.offsetHeight===clip.offsetHeight,alpha:b.maskMode==='alpha',size:b.width+' '+b.height};
  });
  assert.deepEqual(geometry,{mask:true,sameGeometry:true,alpha:true,size:'18px 18px'});
  const saved=await badge.evaluate(el=>{
@@ -1570,6 +1570,24 @@ async function assertNativeFlowerPatternClip(badge){
   const baseline=await badge.screenshot({scale:'css'});
   for(let id=1;id<=16;id++){
    await image.evaluate(async (img,src)=>{img.src=src;await img.decode();img.style.visibility='visible';},original.replace(/pattern-\d+\.webp$/,'pattern-'+id+'.webp'));
+   const fit=await image.evaluate(img=>{
+    const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
+    const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0);
+    const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+    let left=canvas.width,top=canvas.height,right=0,bottom=0;
+    for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++){
+     if(!pixels[(y*canvas.width+x)*4+3])continue;
+     left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x+1);bottom=Math.max(bottom,y+1);
+    }
+    const transform=getComputedStyle(img).transform,rect=img.getBoundingClientRect(),clip=img.parentElement.getBoundingClientRect();
+    return {size:[canvas.width,canvas.height],bounds:[left,top,right,bottom],
+     scale:transform==='none'?1:new DOMMatrix(transform).a,
+     centered:Math.abs(rect.x+rect.width/2-clip.x-clip.width/2)<.05&&Math.abs(rect.y+rect.height/2-clip.y-clip.height/2)<.05};
+   });
+   // Bounds measured from original RGBA32 definition textures, not the screenshot.
+   const expected=[[2,2,48,50],[2,2,52,52],[0,0,54,54],[0,0,54,54],[2,2,52,52],[0,0,54,54],[4,4,49,49],[2,2,52,52],[2,2,52,52],[2,2,52,51],[2,2,52,52],[2,2,52,52],[2,2,52,52],[2,2,52,52],[0,0,54,54],[10,10,44,44]];
+   const padded=[1,2,5,8,9,10,11,12,13,14].includes(id);
+   assert.deepEqual(fit,{size:[54,54],bounds:expected[id-1],scale:padded?1.08:1,centered:true},'native pattern padding fit '+id);
    const actual=await badge.screenshot({scale:'css'});
    const result=await badge.page().evaluate(async ([a,b])=>{
     async function pixels(s){

@@ -19,7 +19,7 @@
    {#if dyeTint}
     <span class="native-dye-icon-tint" style:background-color={iconColor} style:mask-image={'url("'+icon+'")' }></span>
    {:else}
-    <img src={icon} alt="" width={art.geometry.inner} height={art.geometry.inner}/>
+    <img class:flower-pattern={type===11} src={icon} alt="" width={art.geometry.inner} height={art.geometry.inner}/>
    {/if}
   </span>
  </span>
@@ -34,4 +34,11 @@
  .plate-inner{background:var(--primary);z-index:-1}
  .native-dye-icon-tint{display:block;width:100%;height:100%;mask-size:100% 100%;mask-position:center;mask-repeat:no-repeat;mask-mode:alpha}
  img{display:block;object-fit:contain}
+ /* Source 54px pattern tiles have a 2px border in these ten cases.
+    Remove that border from the sampling footprint, not from the asset.
+    Keep the central pivot and preserve native intentional transparency
+    (especially Alternate/Ombre). Glow and Trim are small by design. */
+ img.flower-pattern:is([src$="/pattern-1.webp"],[src$="/pattern-2.webp"],[src$="/pattern-5.webp"],[src$="/pattern-8.webp"],[src$="/pattern-9.webp"],[src$="/pattern-10.webp"],[src$="/pattern-11.webp"],[src$="/pattern-12.webp"],[src$="/pattern-13.webp"],[src$="/pattern-14.webp"]){
+  transform:scale(1.08);transform-origin:center;
+ }
 </style>
