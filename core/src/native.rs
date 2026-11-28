@@ -146,6 +146,9 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
  pub inventory_payload_refs_incomplete:bool,
  /// Additional original furniture ID/GUID references in layouts and legacy models.
  pub inventory_furniture_item_refs:HashSet<i32>,
+ /// Bare ItemId references have no variant identity. Keep separate from
+ /// complete UniqueItemIdModel pairs for physical membership validation.
+ pub inventory_furniture_bare_item_refs:HashSet<i32>,
  pub inventory_furniture_guid_refs:HashSet<u32>,
  pub inventory_furniture_refs_incomplete:bool,
  /// Extra clothing reference keys from actual saved avatar/outfit models.
@@ -528,7 +531,10 @@ impl<'a> Walk<'a>{
        }
        if furniture_ref_keys.contains(&i){
         let item=i32::try_from(value.int()?).map_err(|_|Error::Schema)?;
-        if item>0{self.index.inventory_furniture_item_refs.insert(item);}
+        if item>0{
+         self.index.inventory_furniture_item_refs.insert(item);
+         self.index.inventory_furniture_bare_item_refs.insert(item);
+        }
        }
        if clothing_guid_key==Some(i){
         let words=value.guid()?;
