@@ -6694,3 +6694,37 @@ fn all_source_verified_flower_add_families_keep_a_free_starter_after_defaults(){
   assert!(e.create_inventory_flower_variant(candidate,starter,starter,1).is_ok(),"item {item}");
  }
 }
+
+#[test]
+fn palette_free_complete_tuple_after_single_channel_exhaustion(){
+ use hkia_save_core::{collection::{HistoryScope::Inventory,PaletteVariant},inventory_palette_source::palette_output_color as color};
+ let item=1835273963u32;let original=[color(1,0).unwrap();3];
+ let encode=|v:PaletteVariant|arr(vec![vec![6],arr(v.into_iter().map(|c|arr(c.into_iter().map(|w|f(f32::from_bits(w))).collect())).collect())]);
+ let equal=|a:PaletteVariant,b:PaletteVariant|a.iter().zip(b).all(|(a,b)|{
+  let square=|i:usize|{let d=f32::from_bits(a[i])-f32::from_bits(b[i]);d*d};
+  ((square(0)+square(1))+square(2))+square(3)<f32::from_bits(0x2edbe6fe)
+ });
+ let make=|variants:&[PaletteVariant]|{
+  let base=synthetic_payload("3.0.1");let mut p=vec![0x93,0];p.extend(u(1000));p.push(0xdc);p.extend(((base[3]&15) as u16+variants.len() as u16).to_be_bytes());p.extend(&base[4..]);
+  for (i,&v) in variants.iter().enumerate(){p.extend(doc(1,arr(vec![u(4+i as u32),u(item),u(1001+i as u32),u(2),encode(v)])));}
+  slot_from_payload("3.0.1",p)
+ };
+ let source=Editor::open(make(&[original])).unwrap();
+ let mut variants=vec![original];
+ for v in source.inventory_palette_variants(4){if !variants.iter().any(|&p|equal(p,v)){variants.push(v)}}
+ assert!(variants.len()>10);
+ for zipped in [false,true]{
+  let raw=make(&variants);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  let options=e.inventory_palette_variants(4);
+  let next=*options.iter().find(|v|(0..3).filter(|&i|v[i]!=original[i]).count()>1).expect("free complete tuple");
+  assert!(!variants.iter().any(|&p|equal(p,next)));
+  assert!(e.inventory_palette_preview(4,original,next).unwrap().1);
+  e.change_inventory_palette_variant(4,original,next).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  for (i,&peer) in variants.iter().enumerate().skip(1){assert_eq!(saved.inventory_original_unique_payload(4+i as u32),Some(encode(peer).as_slice()));}
+  assert_eq!(saved.inventory_unique_data(4).unwrap().display_words().1,next.into_iter().flatten().collect::<Vec<_>>());
+ }
+}
