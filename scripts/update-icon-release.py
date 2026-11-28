@@ -8,7 +8,6 @@ Originals, current public assets and save compatibility are never modified.
 import argparse
 import importlib.util
 import importlib.metadata
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -346,37 +345,13 @@ def run(input_path,root,previous=None,resume=False,execute=command):
             'categoryArt','stage-category-art.py','HKIA.CategoryArtBundleInput.1',
             ('census','scope'),out))
     def distribution(out):
-        # The final candidate has exactly one copy of each static original
-        # image, even if item, category and achievement routes share it.
-        # Source stages are private checkpoints, never the delivery root.
-        for p in sorted((rel/'output').rglob('*')):
-            if p.is_file():
-                target=out/p.relative_to(rel/'output');target.parent.mkdir(parents=True,exist_ok=True)
-                shutil.copyfile(p,target)
-        shutil.copyfile(f/'family-bindings.json',out/'family-bindings.json')
-        shutil.copytree(x/'output'/'dynamic-source-pages',out/'auxiliary-source-pages')
+        spec=importlib.util.spec_from_file_location('native_distribution',HERE/'assemble-icon-release.py')
+        assembly=importlib.util.module_from_spec(spec);spec.loader.exec_module(assembly)
+        views=[]
         for kind,folder in (('achievementArt',achievement),('categoryArt',category)):
             manifest,_,_=view_art_summary(folder,kind,config)
-            if manifest is None:continue
-            value=source.read_json(manifest)
-            field='icon' if kind=='achievementArt' else 'native'
-            assets={row[field]['asset']['file']:row[field]['asset'] for row in value['rows'] if row[field]['kind']=='sprite'}
-            require(len(assets)==value['uniqueAssetCount'] and sum(a['bytes'] for a in assets.values())==value['imageBytes'],'view artwork asset census')
-            for name,a in assets.items():
-                require(source.SHA.fullmatch(a['sha256']) and name==a['sha256']+'.webp' and a['conversion']==ARTWORK_POLICY,'original view asset policy')
-                raw=manifest.parent/name;target=out/'native-art'/name
-                require(raw.stat().st_size==a['bytes'] and source.file_digest(raw)==a['sha256'],'view artwork bytes')
-                if target.exists():
-                    require(target.stat().st_size==a['bytes'] and source.file_digest(target)==a['sha256'],'conflicting shared image')
-                else:shutil.copyfile(raw,target)
-            shutil.copyfile(manifest,out/manifest.name)
-        files={p.relative_to(out).as_posix():{'bytes':p.stat().st_size,'sha256':source.file_digest(p)}
-               for p in sorted(out.rglob('*')) if p.is_file()}
-        source.write_new(out/'distribution.json',{'schema':'HKIA.NativeArtDistribution.1','version':version,'platform':platform,
-            'artworkPolicy':ARTWORK_POLICY,'files':files,'totalBytes':sum(a['bytes'] for a in files.values()),
-            'staticImageCount':sum(k.startswith('native-art/') and k.endswith('.webp') for k in files),
-            'staticImageBytes':sum(a['bytes'] for k,a in files.items() if k.startswith('native-art/') and k.endswith('.webp')),
-            'automaticReleaseActivationAuthorized':False})
+            if manifest is not None:views.append(manifest)
+        assembly.assemble_native_distribution(out,rel/'output',f/'family-bindings.json',x/'output',views)
     dist=step('distribution',['release','families','auxiliary-assets']+[n for n in ('achievement-art','category-art') if n in done],distribution)
     def summary(out):
         release=checked_record(rel/'output'/'release-candidate.json','HKIA.IconReleaseCandidate.1')
