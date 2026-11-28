@@ -2692,8 +2692,18 @@ impl Editor {
    !row.fields.iter().all(Option::is_some)||index.inventory_item_refs_unscoped||
    index.inventory_partial_item_refs.contains(&item)||index.inventory_payload_refs_incomplete||
    index.inventory_furniture_refs_incomplete||index.inventory_clothing_item_refs_incomplete||
-   index.inventory_payload_item_refs.contains(&item)||index.inventory_furniture_item_refs.contains(&item)||
-   index.inventory_item_refs.iter().any(|&(i,u)|i==item&&(uid==0||u==0||u==uid))||
+   index.inventory_payload_item_refs.contains(&item)||index.inventory_furniture_bare_item_refs.contains(&item)||
+   index.inventory_item_refs.iter().any(|&(i,u)|{
+    if i!=item{return false}
+    if u<=0||u==uid{return true}
+    // A complete reference to a different live positive UID protects
+    // that record, not every variant of its item. Missing/duplicate
+    // UID targets remain ambiguous and continue to protect the family.
+    let mut targets=index.inventory.iter().filter(|r|r.unique_id==Some(u));
+    let resolved=targets.next().is_some_and(|r|r.item_id==Some(i)&&r.unique_is_nil==Some(false)&&
+     r.id>0&&r.id<PENDING_ITEM&&r.quantity.is_some_and(|q|q>=0)&&r.fields.iter().all(Option::is_some));
+    !resolved||targets.next().is_some()
+   })||
    (uid>0&&(index.inventory_legacy_uid_refs.contains(&uid)||
     !uid_unique)){return false}
   let Some(key)=crate::inventory_source::inventory_item_denial_key(item)else{return false};
