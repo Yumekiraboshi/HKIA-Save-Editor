@@ -2761,9 +2761,9 @@ impl Editor {
    if (uid==0)!=r.unique_is_nil?{return None}
    if r.unique_is_nil==Some(true)&&crate::inventory_source::definition_requires_unique(item)?{return None}
    let cap=crate::inventory_source::definition_quantity_limit(item)?;
-   // Keep structural bounds for nil rows even when duplicates temporarily
-   // block quantity editing. The live membership gate below re-evaluates them.
-   if uid!=0&&cap<i32::MAX&&self.inventory_item_rows.get(&item)!=Some(&1){return None}
+   // A finite definition bound is not a reason to hide the quantity
+   // editor on a complete persisted row. The shared aggregate preflight
+   // prevents same-item peers from multiplying a finite cap.
    Some((r.id,cap))
   }).collect()
  }
@@ -2780,8 +2780,10 @@ impl Editor {
   };
   let mut caps=HashMap::<i32,i32>::new();
   for r in &self.slot.index.inventory{
-   if self.unique_quantity_ids.contains(&r.id){continue}
    if let Some(&cap)=self.structural_quantity_caps.get(&r.id){
+    // Finite caps are enforced across the complete family even if a
+    // peer also has semantic appearance-edit authority.
+    if cap==i32::MAX&&self.unique_quantity_ids.contains(&r.id){continue}
     if quantity(r).zip(r.quantity).is_some_and(|(n,old)|n>old){
      caps.insert(r.item_id.ok_or(Error::Schema)?,cap);
     }
@@ -2811,12 +2813,7 @@ impl Editor {
   Ok(())
  }
  fn inventory_quantity_limit(&self,r:&crate::native::InventoryRow)->Option<i32>{
-  let cap=self.structural_quantity_caps.get(&r.id).copied()?;
-  // Finite bounds apply to the active family, not the original count. A
-  // duplicate must be explicitly deleted before the surviving nil row can
-  // be edited, and undoing that deletion restores the restriction.
-  if r.unique_is_nil==Some(true)&&cap<i32::MAX&&self.active_saved_item_count(r.item_id?)!=1{return None}
-  Some(cap)
+  self.structural_quantity_caps.get(&r.id).copied()
  }
  fn inventory_creation_source_valid(&self)->bool{
   !self.slot.index.inventory_item_refs_incomplete&&self.inventory_creation_rows_valid()
