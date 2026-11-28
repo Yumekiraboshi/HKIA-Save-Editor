@@ -20,7 +20,7 @@ export async function verifyIconPackBytes(name:string,data:ArrayBuffer):Promise<
  if(hash!==source.sha)throw Error('ICON_PACK_SOURCE_HASH');
 }
 
-function readStoredZip(data:ArrayBuffer):Map<string,Uint8Array>{
+export function readStoredZip(data:ArrayBuffer,acceptName=NAME):Map<string,Uint8Array>{
  const bytes=new Uint8Array(data);
  const view=new DataView(data);
  const files=new Map<string,Uint8Array>();
@@ -37,7 +37,7 @@ function readStoredZip(data:ArrayBuffer):Map<string,Uint8Array>{
   const end=start+packed;
   if((flags&8)!==0||method!==0||packed!==unpacked||end>bytes.byteLength||nameSize>80)throw Error('ICON_ZIP_INVALID');
   const filename=new TextDecoder().decode(bytes.subarray(position+30,position+30+nameSize));
-  if(!NAME.test(filename)||files.has(filename))throw Error('ICON_ZIP_INVALID');
+  if(!acceptName.test(filename)||files.has(filename))throw Error('ICON_ZIP_INVALID');
   const slice=bytes.slice(start,end);
   if(filename.endsWith('.webp')&&(slice.length<12||new TextDecoder('ascii').decode(slice.subarray(0,4))!=='RIFF'||new TextDecoder('ascii').decode(slice.subarray(8,12))!=='WEBP'))throw Error('ICON_WEBP_INVALID');
   files.set(filename,slice);
