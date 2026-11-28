@@ -3286,8 +3286,16 @@ fn ordinary_furniture_zero_distinguishes_independent_placement_from_defaults_leg
   e.change_inventory_quantity(5,6,0).unwrap();
   assert_eq!(Editor::open(e.export().unwrap()).unwrap().inventory()[0].quantity,6);
  }
+ // Present item/table identities remain protected. Omitted HomeObject
+ // tail fields have native empty defaults, not unknown references.
  let incomplete=home(vec![],vec![arr(vec![u(item),u(0)])],0,0,0);
  let mut e=Editor::open(make(Some(incomplete),false)).unwrap();
+ assert_eq!(e.inventory().iter().map(|r|r.quantity_minimum).collect::<Vec<_>>(),vec![1,0]);
+ assert!(e.change_inventory_quantity(4,6,0).is_err());assert!(!e.dirty());
+ e.change_inventory_quantity(5,6,0).unwrap();
+ assert_eq!(Editor::open(e.export().unwrap()).unwrap().inventory()[1].quantity,0);
+ let unresolved=home(vec![],vec![arr(vec![u(item)])],0,0,0);
+ let mut e=Editor::open(make(Some(unresolved),false)).unwrap();
  assert!(e.inventory().iter().all(|r|r.quantity_minimum==1));
  assert!(e.change_inventory_quantity(5,6,0).is_err());assert!(!e.dirty());
 }
@@ -5594,8 +5602,13 @@ fn all_source_ordinary_bag_definitions_share_native_zero_refill_and_reference_sc
   for (row,&(_,outfit)) in scoped.inventory().iter().zip(batch){
    assert_eq!(row.quantity_minimum,if outfit{1}else{0},"Item ID {}",row.item_id);
   }
-  let unknown=Editor::open(make(batch,2)).unwrap();
-  assert!(unknown.inventory().iter().all(|row|row.quantity_minimum==1));
+  // Native AvatarGeneralSettingsModel.Deserialize leaves omitted trailing
+  // lists at their constructor's empty defaults. No serialized reference is
+  // hidden. Exercise the complete ordinary catalog with that saved shape.
+  let mut defaulted=Editor::open(make(batch,2)).unwrap();
+  assert!(defaulted.inventory().iter().all(|row|row.quantity_minimum==0));
+  defaulted.change_inventory_quantities(&zero).unwrap();
+  assert!(Editor::open(defaulted.export().unwrap()).unwrap().inventory().iter().all(|r|r.quantity==0));
  }
 }
 
@@ -5790,6 +5803,41 @@ fn all_unrestricted_finite_reset_consumables_share_bag_creation_and_cap(){
 }
 
 #[test]
+fn native_defaulted_reference_tails_do_not_disable_unrelated_ordinary_bag_deletion(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let defs:Vec<_>=complete_quantity_source::RULES.iter().zip(complete_bag_source::BAG_FLAGS)
+  .filter_map(|(&(id,_),&flags)|(flags&1!=0).then_some(id)).collect();
+ assert_eq!(defs.len(),9920);
+ let target=427689i32;
+ let make=|batch:&[i32]|{
+  let mut p=vec![0x93,0];p.extend(u(12+batch.len() as u32));p.push(0xdc);p.extend(((8+batch.len()) as u16).to_be_bytes());
+  p.extend_from_slice(&synthetic_payload("3.0.1")[4..]);
+  for (i,&item) in batch.iter().enumerate(){
+   p.extend(doc(1,arr(vec![u(4+i as u32),u(item as u32),u(0),u(1),vec![0xc0]])));
+  }
+  let id=4+batch.len() as u32;
+  p.extend(doc(10,arr(vec![u(id),guid([1,2,3,4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([1,2,3,4]),vec![0xc3],vec![0xc0]])));
+  p.extend(doc(22,arr(vec![u(id+1)])));
+  let home=arr(vec![guid([41,42,43,44]),arr(vec![]),u(target as u32)]);
+  p.extend(doc(32,arr(vec![u(id+2),guid([7,0,0,0]),u(0),arr(vec![doc(8,arr(vec![arr(vec![home])]))])])));
+  slot_from_payload("3.0.1",p)
+ };
+ for batch in defs.chunks(200){
+  let raw=make(batch);let mut e=Editor::open(raw).unwrap();let before=e.inventory();
+  assert_eq!(before.len(),batch.len());
+  for row in &before{assert_eq!(row.quantity_minimum,if row.item_id==target{1}else{0},"Item ID {}",row.item_id);}
+  let zero:Vec<_>=before.iter().filter(|r|r.item_id!=target).map(|r|(r.document_id,1,0)).collect();
+  e.change_inventory_quantities(&zero).unwrap();
+  assert!(e.undo_scope(Inventory));assert_eq!(e.inventory(),before);assert!(e.redo_scope(Inventory));
+  let mut saved=Editor::open(e.export().unwrap()).unwrap();
+  assert!(saved.inventory().iter().all(|r|r.quantity==if r.item_id==target{1}else{0}));
+  let refill:Vec<_>=before.iter().filter(|r|r.item_id!=target).map(|r|(r.document_id,0,1)).collect();
+  saved.change_inventory_quantities(&refill).unwrap();
+  assert_eq!(Editor::open(saved.export().unwrap()).unwrap().inventory(),before);
+ }
+}
+
+#[test]
 fn physical_removal_uses_document_identity_not_appearance_editability(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  let unknown=arr(vec![vec![3],arr(vec![arr(vec![u(99)]),arr(vec![u(6),u(14),u(11),u(999)])])]);
@@ -5977,7 +6025,9 @@ fn all_verified_extra_nil_furniture_can_refill_without_removal_authority(){
  // An unresolved native reference context prevents last-copy removal,
  // but the already persisted complete nil rows can be replenished.
  p.extend(doc(10,arr(vec![u(4+ids.len() as u32),guid([0;4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([0;4]),vec![0xc3],vec![0xc0]])));
- p.extend(doc(22,arr(vec![u(5+ids.len() as u32)])));
+ // A present but truncated Mermaidifier record lacks its source identity;
+ // unlike an omitted general-settings tail it is genuinely unresolved.
+ p.extend(doc(22,arr(vec![u(5+ids.len() as u32),arr(vec![arr(vec![u(0)])]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
  let raw=slot_from_payload("3.0.1",p);
  for zipped in [false,true]{
   let input=if zipped{zip(&raw)}else{raw.clone()};
