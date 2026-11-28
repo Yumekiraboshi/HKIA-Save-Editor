@@ -588,9 +588,9 @@ impl Editor {
  fn unique_row_source(&self,row:&crate::native::InventoryRow,fields:usize)->Option<i32>{
   if self.slot.envelope.version!=Version::V301||row.id==0||row.id>i32::MAX as u32||row.quantity?<0||
    (row.quantity==Some(0)&&!self.is_emptyable_unique_family(row)&&!self.palette_zero_reference_safe(row))||
-   row.unique_is_nil!=Some(false)||row.unique_fields.len()!=fields||self.slot.index.inventory_item_refs_incomplete{return None}
+   row.unique_is_nil!=Some(false)||row.unique_fields.len()!=fields{return None}
   let item=row.item_id?;let uid=row.unique_id?;
-  if item<=0||uid<=0||self.slot.index.inventory_item_refs.contains(&(item,uid))||self.slot.index.inventory_legacy_uid_refs.contains(&uid){return None}
+  if item<=0||uid<=0||!self.item_reference_scope_safe(item)||self.slot.index.inventory_item_refs.contains(&(item,uid))||self.slot.index.inventory_legacy_uid_refs.contains(&uid){return None}
   Some(item)
  }
  fn legacy_flower_variant(decoded:&[u8],row:&crate::native::InventoryRow)->Option<FlowerVariant>{
@@ -1179,7 +1179,7 @@ impl Editor {
  fn furniture_zero_reference_safe(&self,item:i32)->bool{
   crate::inventory_source::ordinary_furniture_guid_fingerprint(item).is_some_and(|key|
    !self.slot.index.inventory_furniture_refs_incomplete&&
-   !self.slot.index.inventory_item_refs_incomplete&&
+   self.item_reference_scope_safe(item)&&
    !self.slot.index.inventory_payload_refs_incomplete&&
    !self.slot.index.inventory_furniture_item_refs.contains(&item)&&
    !self.slot.index.inventory_payload_item_refs.contains(&item)&&
@@ -1228,7 +1228,7 @@ impl Editor {
  }
  fn flower_candle_zero_reference_safe(&self,item:i32,key:u32)->bool{
   let index=&self.slot.index;
-  !index.inventory_furniture_refs_incomplete&&!index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
+  !index.inventory_furniture_refs_incomplete&&self.item_reference_scope_safe(item)&&!index.inventory_payload_refs_incomplete&&
    !index.inventory_furniture_item_refs.contains(&item)&&!index.inventory_payload_item_refs.contains(&item)&&
    !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)
  }
@@ -1257,11 +1257,11 @@ impl Editor {
    std::iter::once(&own).chain(group.iter()).all(|k|!index.inventory_clothing_guid_refs.contains(k)&&
     !index.inventory_ordinary_furniture_guid_refs.contains(k)))
  }
- fn ordinary_item_reference_scope_safe(&self,item:i32)->bool{
+ fn item_reference_scope_safe(&self,item:i32)->bool{
   !self.slot.index.inventory_item_refs_unscoped&&!self.slot.index.inventory_partial_item_refs.contains(&item)
  }
  fn ordinary_nonclothing_reference_safe(&self,item:i32,key:u32)->bool{
-  !self.slot.index.inventory_item_refs_incomplete&&self.nonclothing_reference_context_safe(item,key)
+  self.item_reference_scope_safe(item)&&self.nonclothing_reference_context_safe(item,key)
  }
  fn nonclothing_reference_context_safe(&self,item:i32,key:u32)->bool{
   let index=&self.slot.index;
@@ -1278,7 +1278,7 @@ impl Editor {
   self.ordinary_nonclothing_reference_safe(item,key)
  }
  fn clothing_zero_reference_safe<'a>(&self,item:i32,keys:impl Iterator<Item=&'a u32>)->bool{
-  !self.slot.index.inventory_item_refs_incomplete&&self.clothing_reference_context_safe(item,keys)
+  self.item_reference_scope_safe(item)&&self.clothing_reference_context_safe(item,keys)
  }
  fn clothing_reference_context_safe<'a>(&self,item:i32,mut keys:impl Iterator<Item=&'a u32>)->bool{
   let index=&self.slot.index;
@@ -1453,7 +1453,7 @@ impl Editor {
   let index=&self.slot.index;
   let Some(key)=crate::inventory_source::wand_reference_key(item)else{return false};
   !index.inventory_wand_copies&&
-   !index.inventory_item_refs_incomplete&&!index.inventory_payload_refs_incomplete&&
+   self.item_reference_scope_safe(item)&&!index.inventory_payload_refs_incomplete&&
    !index.inventory_furniture_refs_incomplete&&!index.inventory_clothing_refs_incomplete&&
    !index.inventory_palette_context_incomplete&&!index.inventory_palette_copies_incomplete&&
    !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)&&
@@ -2032,7 +2032,7 @@ impl Editor {
  }
  fn ordinary_quantity_limit_for_cafe(&self,item:i32)->bool{
   self.slot.envelope.version==Version::V301&&crate::inventory_source::ordinary_quantity_limit(item).is_some()&&
-   self.inventory_item_rows.get(&item)==Some(&1)&&!self.slot.index.inventory_item_refs_incomplete&&
+   self.inventory_item_rows.get(&item)==Some(&1)&&self.item_reference_scope_safe(item)&&
    !self.slot.index.inventory_item_refs.contains(&(item,0))
  }
  fn cafe_slot_choices(&self,item:i32,slot:usize)->Vec<(i32,i32,i32)>{
@@ -2232,7 +2232,7 @@ impl Editor {
   let index=&self.slot.index;
   index.inventory_palette_avatar_models>0&&index.inventory_palette_general_models==1&&
    !index.inventory_palette_context_incomplete&&!index.inventory_palette_copies_incomplete&&
-   !index.inventory_payload_refs_incomplete&&!index.inventory_item_refs_incomplete&&
+   !index.inventory_payload_refs_incomplete&&self.item_reference_scope_safe(crate::inventory_source::CUSTOM_PALETTE_ID)&&
    !index.inventory_palette_copies.iter().any(|&copy|Self::palette_equal(copy,original))
  }
  fn palette_equal(a:[[u32;4];3],b:[[u32;4];3])->bool{
@@ -2612,7 +2612,7 @@ impl Editor {
     .all(|r|self.permits_separate_ordinary_base(r))
  }
  fn can_create_inventory_item(&self,item_id:i32)->bool{
-  self.ordinary_inventory_creation_source_valid()&&self.ordinary_item_reference_scope_safe(item_id)&&crate::inventory_source::ordinary_bag_creation_item(item_id)&&
+  self.ordinary_inventory_creation_source_valid()&&self.item_reference_scope_safe(item_id)&&crate::inventory_source::ordinary_bag_creation_item(item_id)&&
    (!self.inventory_item_rows.contains_key(&item_id)||
     self.active_saved_inventory().filter(|r|r.item_id==Some(item_id)).all(|r|self.permits_separate_ordinary_base(r)))&&
    self.ordinary_creation_payload_safe(item_id)&&
@@ -2673,7 +2673,7 @@ impl Editor {
    (!self.permits_separate_ordinary_base(r)).then_some(r.item_id?)).collect();
   crate::inventory_source::ordinary_bag_creation_ids().filter_map(|item_id|{
    let document_id=PENDING_ITEM|item_id as u32;
-   if blocked.contains(&item_id)||referenced.contains(&item_id)||!self.ordinary_item_reference_scope_safe(item_id)||self.inventory_changes.contains_key(&document_id)||!self.ordinary_creation_payload_safe(item_id){return None}
+   if blocked.contains(&item_id)||referenced.contains(&item_id)||!self.item_reference_scope_safe(item_id)||self.inventory_changes.contains_key(&document_id)||!self.ordinary_creation_payload_safe(item_id){return None}
    Some(InventoryEntry{document_id,item_id,quantity:0,editable:true,quantity_limit:Some(crate::inventory_source::ordinary_quantity_limit(item_id)?),quantity_minimum:1})
   }).collect()
  }
