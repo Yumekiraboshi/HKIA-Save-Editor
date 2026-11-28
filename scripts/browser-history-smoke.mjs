@@ -1536,8 +1536,8 @@ async function assertNativeFlowerPatternClip(badge){
  assert.deepEqual(geometry,{mask:true,sameGeometry:true,alpha:true,size:'18px 18px'});
  const saved=await badge.evaluate(el=>{
   const img=el.querySelector('img'),saved=[el.getAttribute('style'),img.getAttribute('style')];
-  // A black outside region and a white inner plate make leakage observable.
-  el.style.setProperty('--primary','#ffffff');el.style.setProperty('--accent','transparent');
+  // A black outside region and a green inner plate make leakage observable.
+  el.style.setProperty('--primary','#00ff00');el.style.setProperty('--accent','transparent');
   el.style.backgroundColor='#000000';img.style.visibility='hidden';return saved;
  });
  try{
@@ -1556,7 +1556,7 @@ async function assertNativeFlowerPatternClip(badge){
     for(let i=0;i<before.length;i+=4){
      const diff=Math.max(...[0,1,2].map(c=>Math.abs(before[i+c]-after[i+c])));
      if(before[i]===0&&before[i+1]===0&&before[i+2]===0&&diff>5)outside++;
-     if(before[i]>240&&before[i+1]>240&&before[i+2]>240&&diff>20)inside++;
+     if(before[i]<5&&before[i+1]>240&&before[i+2]<5&&diff>20)inside++;
     }
     return {outside,inside};
    },[baseline.toString('base64'),actual.toString('base64')]);
