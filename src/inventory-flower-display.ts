@@ -82,3 +82,13 @@ export function flowerDecorators(flower:InventoryFlower|undefined,defs:FlowerDis
  if(flower.pattern!==0)rows.push({type:11,patternUrl:'pattern-'+flower.pattern+'.webp'});
  return rows;
 }
+
+/** Independent immutable source requests. A failed label file never blocks
+ * color rendering, and successful definitions are not fetched again. */
+export function createFlowerDisplayLoader(base:string){
+ function retryable<T>(load:()=>Promise<T>){
+  let pending:Promise<T>|undefined;
+  return ()=>pending??(pending=load().catch(error=>{pending=undefined;throw error;}));
+ }
+ return {definitions:retryable(()=>loadFlowerDisplayDefinitions(base)),labels:retryable(()=>loadFlowerLabels(base))};
+}
