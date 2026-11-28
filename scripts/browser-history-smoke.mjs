@@ -686,6 +686,19 @@ async function inventoryBobaEditSmoke(){
   await honey.locator('.ingredient-count').filter({hasText:'2'}).waitFor();
   assert.equal(await card.locator('[data-ingredient-key="milk"]').getAttribute('data-ingredient-candidates'),'1743974962,619719355');
   await card.locator('[data-ingredient-key="tapioca"]').waitFor();
+  const milkBadge=card.locator('[data-ingredient-key="milk"]');
+  await milkBadge.locator('.ingredient-candidate .item-sprite').nth(1).waitFor({timeout:30_000});
+  assert.equal(await milkBadge.locator('.ingredient-ambiguity').count(),0);
+  assert.equal(await milkBadge.locator('.ingredient-unknown').count(),0);
+  assert.equal(await milkBadge.getAttribute('title'),'Coral Milk / Cactus Cream');
+  const lane=card.locator('.ingredient-badges');
+  for(const width of [1280,390]){
+   await page.setViewportSize({width,height:800});
+   const box=await lane.boundingBox(),del=await card.locator('.inventory-stack-delete').boundingBox();
+   assert.ok(box&&del&&(box.x+box.width<=del.x||del.x+del.width<=box.x||box.y+box.height<=del.y||del.y+del.height<=box.y),'ingredient lane must not cover delete control');
+   assert.equal(await lane.locator('.ingredient-badge').count(),4);
+  }
+  await page.setViewportSize({width:1280,height:800});
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
   await dialog.locator('[data-ingredient-key="honeycomb"] .ingredient-count').filter({hasText:'2'}).waitFor();
   await dialog.locator('select[name="boba-sweetness"]').selectOption({label:'Very sweet'});

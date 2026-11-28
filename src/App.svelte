@@ -523,7 +523,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const item=inventorySourceItems.get(id);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
-  function addIngredientSources(badges:IngredientBadge[]){for(const badge of badges)if(badge.itemIds.length===1)addWandSource(badge.itemIds[0]);}
+  function addIngredientSources(badges:IngredientBadge[]){for(const badge of badges)if(badge.itemIds.length<=2)for(const id of badge.itemIds)addWandSource(id);}
   for(const row of inventoryRows.slice(0,inventoryLimit)){
    addIngredientSources(cafeIngredientBadges(row.cafe?.variant,snapshot.cafeWitnesses??[]));
    addIngredientSources(bobaIngredientBadges(row.boba?.variant,snapshot.bobaWitnesses??[]));
