@@ -53,7 +53,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
   ...(artInventory?[originalArtItem,sourceFitItem,nonCollectionItem]:[]),
   ...(scaleInventory?[2064380032,1806222956,142358610].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
   ...(resultArtInventory?[10455890,1217231008].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
-  ...(ordinaryRecipeInventory?[1878551760,167310698,1882318300].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
+  ...(ordinaryRecipeInventory?[1878551760,167310698,357344998].map((id,i)=>doc(1,arr([5+i],u32(id),[0],u32(3),[0xc0]))):[]),
   ...(paletteRemovalInventory?[doc(10,arr([8],hash(1,2,3,4),arr(),arr(),arr(),hash(1,2,3,4),[0xc3],
    paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
    doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
@@ -2782,8 +2782,8 @@ async function inventoryOrdinaryRecipeBadgeSmoke(){
   await search.fill('167310698');
   await card.locator('[data-result-icon-target="1878551760"]').waitFor({timeout:30_000});
   assert.equal(await card.locator('.ingredient-badges').count(),0);
-  await search.fill('1882318300');
-  await card.locator('.inventory-item-art').waitFor();
+  await search.fill('357344998');
+  await card.locator('.inventory-name').filter({hasText:'Speedy Walking Potion'}).waitFor({timeout:30_000});
   assert.equal(await card.locator('.ingredient-badges').count(),0);
   assert.deepEqual(errors,[]);
  }finally{await context.close();}
