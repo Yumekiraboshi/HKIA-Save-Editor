@@ -178,8 +178,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  });
  const selectedInventoryRows=$derived.by(()=>inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId)));
  const inventoryBatchCanQuantity=$derived(selectedInventoryRows.length>0&&selectedInventoryRows.every(row=>row.editable));
- const inventoryBatchCanDelete=$derived(!inventoryAddMode&&selectedInventoryRows.length>0&&selectedInventoryRows.length===inventoryBatchSelected.size&&(
-  (selectedInventoryRows.some(row=>row.quantity>0)&&inventoryBatchZeroRows((snapshot as SaveSnapshot|null)?.inventory??[],selectedInventoryRows,isInventoryLocked).length===selectedInventoryRows.filter(row=>row.quantity>0).length)||selectedInventoryRows.every(row=>row.removable)));
+ const inventoryBatchCanDelete=$derived.by(()=>!inventoryAddMode&&selectedInventoryRows.length>0&&selectedInventoryRows.length===inventoryBatchSelected.size&&(
+  (selectedInventoryRows.some(row=>row.quantity>0)&&inventoryBatchZeroRows(snapshot?.inventory??[],selectedInventoryRows,isInventoryLocked).length===selectedInventoryRows.filter(row=>row.quantity>0).length)||selectedInventoryRows.every(row=>row.removable)));
  const inventoryBatchMaximum=$derived.by(()=>{
   let cap=2147483647;
   if(snapshot)for(const row of inventoryBrowseRows){
