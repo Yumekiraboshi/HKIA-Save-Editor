@@ -675,3 +675,8 @@ An exact positive UID reference that resolves to a single complete saved row pro
 #### Physical cleanup of existing missing-required-payload rows
 
 A complete saved UID-zero nil record for a source-verified uncapped required-unique flower, cafe/Boba, wand or palette family may be removed by exact document identity if the existing strict unique reference checks pass. The payload is invalid for ordinary addition/refill; do not manufacture a default or grant quantity editing. Preserve bare/dangling references, outfit group guards, copied wand and palette guards (a nil palette cannot establish distinctness from a copy), entitlement-sensitive flower exclusions, and all special service/layout/kit exclusions. This is removal-only cleanup of existing rows, not evidence that a particular GetAll implementation creates them. Raw/ZIP synthetic regressions cover positive and zero quantities, atomic refusal, history replay, export/reparse and retained unrelated records. Actual game acceptance unverified.
+
+
+#### Exact-reference scope for structural wand quantity-zero
+
+For a complete saved wand row already authorized for physical removal and structural quantity editing, reuse exact UID reference authority for quantity-zero. Retain separate wand copy, clothing/palette context, legacy source resolution and exact source GUID denial checks. An independently resolved positive UID reference to another saved row no longer blocks quantity-zero of this row; bare/dangling references remain blocked. This does not authorize changes to wand source, appearance, acquisition or references. Existing semantic identity/creation checks remain unchanged. Synthetic raw/ZIP CAS, checkpoint recovery, deletion and reparse regressions added. Actual game acceptance unverified.

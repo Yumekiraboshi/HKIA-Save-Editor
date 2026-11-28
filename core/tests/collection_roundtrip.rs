@@ -6927,3 +6927,41 @@ fn missing_required_unique_payload_can_only_be_physically_removed_with_complete_
   assert!(!e.inventory_entry_removable(row.document_id));
  }
 }
+
+
+#[test]
+fn exact_referenced_wand_uid_does_not_prevent_zeroing_distinct_saved_peer(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ let item=1429161083u32;
+ let payload=|magic,fleck|arr(vec![vec![9],arr(vec![u(0),vec![0xc0],u(magic),u(fleck),u(118)])]);
+ let first=payload(104,125);let second=payload(105,126);
+ let make=|uid:u32|{
+  let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x98;
+  p.extend(doc(1,arr(vec![u(4),u(item),u(21),u(2),first.clone()])));
+  p.extend(doc(1,arr(vec![u(5),u(item),u(22),u(3),second.clone()])));
+  let cafe=arr(vec![vec![0xc2],vec![0x80],u(0),u(0),guid([0;4]),arr(vec![arr(vec![u(item),u(uid)])]),u(0),u(0),u(0),l(0)]);
+  p.extend(doc(32,arr(vec![u(9),guid([7,0,0,0]),u(0),arr(vec![doc(38,cafe)])])));
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(21);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert_eq!(original.iter().map(|r|r.quantity_minimum).collect::<Vec<_>>(),vec![1,0]);
+  assert!(!e.inventory_entry_removable(4));assert!(e.inventory_entry_removable(5));
+  assert!(e.change_inventory_quantities(&[(4,2,0),(5,3,0)]).is_err());assert!(!e.dirty());
+  assert!(e.inventory_wand_creation_variants(5).is_empty());
+  e.change_inventory_quantity(5,3,0).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);assert!(restored.redo_scope(Inventory));
+  let mut saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory().iter().map(|r|r.quantity).collect::<Vec<_>>(),vec![2,0]);
+  assert_eq!(saved.inventory_original_unique_payload(4),Some(first.as_slice()));assert_eq!(saved.inventory_original_unique_payload(5),Some(second.as_slice()));
+  saved.remove_inventory_entries(&[(5,0)]).unwrap();
+  let saved=Editor::open(saved.export().unwrap()).unwrap();
+  assert_eq!(saved.inventory().len(),1);assert_eq!(saved.inventory_original_unique_payload(4),Some(first.as_slice()));assert!(!saved.inventory_entry_removable(4));
+ }
+ for uid in [0,99]{
+  let mut e=Editor::open(make(uid)).unwrap();assert!(e.inventory().iter().all(|r|r.quantity_minimum==1));
+  assert!(e.change_inventory_quantity(5,3,0).is_err());assert!(!e.dirty());
+ }
+}

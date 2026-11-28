@@ -437,7 +437,7 @@ impl Editor {
    // Last-copy reference completeness is independent from the quantity
    // field. In particular an unresolved legacy source or outfit copy
    // cannot be made safe by merely preserving the outer record.
-   if crate::inventory_source::wand_output_item(item)&&(!editor.wand_reference_safe(item)||!editor.legacy_wand_sources_resolved){return None}
+   if crate::inventory_source::wand_output_item(item)&&!editor.structural_wand_zero_context_safe(item){return None}
    Some(r.id)
   }).collect();
   Ok(editor)
@@ -1609,6 +1609,18 @@ impl Editor {
  fn legacy_wand_zero_reference_safe(&self,row:&crate::native::InventoryRow)->bool{
   row.item_id.is_some_and(|item|self.wand_reference_safe(item))&&
    self.legacy_wand_identity(row).is_some()&&self.legacy_wand_sources_resolved
+ }
+ // Physical-removal authority has already checked this exact saved UID,
+ // bare references, resolved identities, and the catalog GUID. Retain the
+ // extra wand-specific copy/context/legacy checks without rejecting every
+ // sibling merely because another positive UID is referenced.
+ fn structural_wand_zero_context_safe(&self,item:i32)->bool{
+  let index=&self.slot.index;
+  let Some(key)=crate::inventory_source::wand_reference_key(item)else{return false};
+  self.legacy_wand_sources_resolved&&!index.inventory_wand_copies&&
+   !index.inventory_clothing_refs_incomplete&&!index.inventory_palette_context_incomplete&&
+   !index.inventory_palette_copies_incomplete&&
+   !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)
  }
  fn wand_reference_safe(&self,item:i32)->bool{
   let index=&self.slot.index;
