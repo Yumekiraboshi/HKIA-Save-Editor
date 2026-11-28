@@ -74,3 +74,7 @@ Re-disassembled the pinned Switch 3.0.1 main (SHA-256 64bd5fb69239f57eb0578a1897
 ## Progressive recovery of independent artwork layers (2026-11-28 JST)
 
 The shared visible-card renderer now distinguishes a complete composite, a verified tinted base, and an untinted original base. If the original base is displayed while the mask and overlay assets are unavailable, restoring the mask alone upgrades the visible base even while the overlay is still unavailable. Failed later attempts never downgrade or replace an already verified tier. Complete images stop retrying; canceled/offscreen requests cannot install stale object URLs. The existing four-request queue and shared network recovery listener are retained. No source images, tint rules, save payloads or permissions change.
+
+## Neutral wand appearance without mask transfer (2026-11-28 JST)
+
+For source-validated white RGB in all three tint slots, the original shader's sequential RGB interpolation has no dependence on the mask. Reuse the original-base cached Blob for a neutral wand with no sub-icon, and use the shared one-pixel no-tint mask for a neutral wand with a verified source-item overlay. Nonneutral appearances still load the original linear mask. Unknown IDs and missing required overlay assets remain withheld. Browser coverage exercises all nine native wand shapes with independent mask HTTP 503, both original-only and composite outputs, cache identity, unknown ID rejection and nonneutral failure. No new assets or save rules; final game capture parity remains unverified.

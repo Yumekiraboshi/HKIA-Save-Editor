@@ -1354,6 +1354,20 @@ async function ordinaryFurnitureRemovalSmoke(){
   await page.locator('.inventory-card').waitFor({state:'hidden'});
   await page.locator('button[title="Redo"]:not([disabled])').click();
   await input.waitFor();assert.equal(await input.inputValue(),'3');
+  // Newly staged additions expose the same removal action. Cancelling them
+  // never creates a native record and survives history/draft reload.
+  await remove.click();await modal.waitFor({state:'visible'});
+  await modal.locator('.inventory-remove-entry-action').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await input.waitFor();assert.equal(await input.inputValue(),'3');
+  await page.locator('button[title="Redo"]:not([disabled])').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await search.fill('427689');await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await input.waitFor();assert.equal(await input.inputValue(),'3');
   await search.fill('3202680');await input.waitFor();assert.equal(await remove.isDisabled(),true);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: zero, physical removal, re-add, draft reload, undo/redo and placed stack protection');
@@ -2728,7 +2742,7 @@ async function achievementDstFoldExportSmoke(){
  * Achievements, without discarding/re-fetching an already-good category atlas.
  * Synthetic HTTP 503 is deliberately scoped to this isolated browser context.
  */
-async function achievementAtlasRetrySmoke(){
+async function achievementAtlasRetrySmoke(trigger='tab'){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
   const page=await context.newPage(),errors=[];
@@ -2762,17 +2776,25 @@ async function achievementAtlasRetrySmoke(){
   await page.locator('.achievement-item-grid button.achievement-toggle').first().waitFor();
   assert.equal(await page.locator('.achievement-individual-sprite').count(),0,
    'failed native atlas must never be presented as game-original imagery');
-  // A normal tab return retries the missing image only. No extra UI control.
-  await chooseTab(page,'collections');
-  await chooseTab(page,'achievements');
-  await page.locator('.collection-controls input[type="search"]').fill(key);
+  // Recovery never discards the other verified atlas or restarts a pending load.
+  if(trigger==='online'){
+   await page.evaluate(()=>{window.dispatchEvent(new Event('online'));window.dispatchEvent(new Event('online'));});
+  }else{
+   await chooseTab(page,'collections');
+   await chooseTab(page,'achievements');
+   await page.locator('.collection-controls input[type="search"]').fill(key);
+  }
   const recovered=page.locator('.achievement-item-grid .achievement-individual-sprite').first();
   await recovered.waitFor({timeout:30_000});
   assert.match(await recovered.evaluate(el=>getComputedStyle(el).backgroundImage),/blob:/,
    'recovered image must be actual hash-checked game source pixels');
   assert.equal(individualAttempts,2,'exactly one retry for missing individual atlas');
   assert.equal(categoryAttempts,1,'already verified category atlas is retained');
-  assert.equal(await page.locator('.compact-hint[role="status"]').count(),0);
+  await page.locator('.compact-hint[role="status"]').waitFor({state:'detached'});
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForLoadState('networkidle');
+  assert.equal(individualAttempts,2);assert.equal(categoryAttempts,1);
+  assert.equal(await search.inputValue(),key);
   assert.deepEqual(errors,[],'recovered images must not throw browser exceptions');
   console.log('CHROMIUM ACHIEVEMENT ATLAS RETRY PASS: transient failure, verified recovery, retained category art');
  }finally{await context.close();}
@@ -3298,6 +3320,7 @@ async function run(){
  await inventoryDefaultFurnitureCreationSmoke();
  await achievementDstFoldExportSmoke();
  await achievementAtlasRetrySmoke();
+ await achievementAtlasRetrySmoke('online');
 }
 try{await run()}finally{
  await browser?.close();
