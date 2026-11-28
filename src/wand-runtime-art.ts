@@ -10,21 +10,27 @@ import {hasNativePlaceholderArt,loadNativePlaceholderTexture,NATIVE_PLACEHOLDER_
 import {loadChefOriginalOverlay} from './chef-runtime-art';
 import {loadPaletteOriginalOverlay} from './palette-runtime-art';
 import {loadFlowerOriginalOverlay} from './flower-runtime-art';
+import {nativeIconRoute,nativeChefInstructionBase} from './native-icon-route';
 
 const ROOT=import.meta.env.BASE_URL+'dynamic-wand-art/';
 
-/** Exact shared definition UiIcon identities. Ramen Recipe and Ramen
- * both reference Sprite -3674899348677039372; do not use recipe-result
- * substitution or a recolored ramen payload for the native wand source. */
-const originalTemplates=new Map<number,{kind:'chef'|'palette';itemId:number}>([
- [1061947263,{kind:'chef',itemId:1061947263}],
- [964128772,{kind:'chef',itemId:1061947263}],
- [1835273963,{kind:'palette',itemId:1835273963}]
-]);
-export function wandOriginalTemplate(itemId:number){return originalTemplates.get(itemId);}
+/** Every dynamic definition has a source-pinned original base. Reuse the
+ * same family resolver for creation and instruction aliases. The ordinary
+ * Ramen Recipe (not a dynamic flag) shares Ramen's exact original PPtr. */
+export function wandOriginalTemplate(itemId:number):{kind:'chef'|'palette'|'flower'|'wand';itemId:number}|undefined{
+ if(itemId===964128772)return {kind:'chef',itemId:1061947263};
+ const route=nativeIconRoute(itemId);
+ if(route==='cafe'||route==='boba')return {kind:'chef',itemId};
+ if(route==='instruction'){
+  const source=nativeChefInstructionBase(itemId);
+  return source===undefined?undefined:{kind:'chef',itemId:source};
+ }
+ if(route==='palette'||route==='flower'||route==='wand')return {kind:route,itemId};
+ return undefined;
+}
 
 export const WAND_MANIFEST_SHA='5d4d42d95417c8e6222747433b784a32ee9aaebb91216366a70645a33085f0bb';
-type Row={itemId:number;maskGuid:string;base:{spritePathId:string;sampleRect:Rect;trimTopLeft:Rect;logicalSize:number};mask:{spritePathId:string;sampleRect:Rect;colorSpace:number;filterMode:number;mipCount:number}};
+type Row={itemId:number;maskGuid:string;base:{spritePathId:string;sampleRect:Rect;trimTopLeft:Rect;logicalSize:number;guardRect:Rect};mask:{spritePathId:string;sampleRect:Rect;colorSpace:number;filterMode:number;mipCount:number}};
 type Manifest={schema:string;version:string;base:TextureAsset;mask:TextureAsset;alphaOffsetY:number;magic:WandColor[];flecks:WandColor[];rows:Row[]};
 type Source={manifest:Manifest;base:PixelBuffer;mask:PixelBuffer;rows:Map<number,Row>;magic:Map<number,Rgba>;flecks:Map<number,Rgba>};
 type Binding=Omit<Source,'base'|'mask'>;
@@ -103,6 +109,19 @@ export async function renderWandBaseArt(itemId:number,appearance:WandBaseAppeara
  }catch{return null;}
 }
 
+/** A wand used as another wand's source uses only its definition UiIcon,
+ * never its own dynamic tint or nested source. No recursive rendering. */
+export async function loadWandOriginalOverlay(itemId:number,transform:Pick<SpriteOverlay,'scale'|'offsetPercent'|'rotation'>):Promise<{spritePathId:string;sourceHash:string;overlay:SpriteOverlay}|null>{
+ if(nativeIconRoute(itemId)!=='wand')return null;
+ try{
+  const s=await sourceBinding(),row=s.rows.get(itemId);if(!row?.base.guardRect)return null;
+  const [x,y,w,h]=row.base.guardRect;
+  return {spritePathId:row.base.spritePathId,sourceHash:WAND_MANIFEST_SHA,overlay:{
+   texture:await loadOpaqueArtTexture(ROOT,s.manifest.base),sampleRect:row.base.sampleRect,trim:row.base.trimTopLeft,
+   alphaOffsetY:s.manifest.alphaOffsetY,logicalWidth:row.base.logicalSize,logicalHeight:row.base.logicalSize,
+   sampleClamp:[x+.5,y+.5,x+w-.5,y+h-.5],...transform}};
+ }catch{return null;}
+}
 async function guardedItemOverlay(itemId:number,transform:WandTransform):Promise<{spritePathId:string;sourceHash:string;overlay:SpriteOverlay}|null>{
  try{
   const source=await itemSubSources(),icon=source.rows.find(x=>x.itemId===itemId);
@@ -155,14 +174,13 @@ export async function renderWandArt(itemId:number,appearance:WandBaseAppearance&
      logicalWidth:256,logicalHeight:256,sampleClamp:[.5,.5,257.5,257.5],
      scale:transform.scale,offsetPercent:transform.offsetPercent,rotation:transform.rotation};
    }else{
-    // The two source definitions withheld from the static inventory atlas
-    // still have an original UiIcon. Reuse the pinned base texture directly
-    // (not the source item's individually recolored image).
+    // Reuse independently verified original dynamic-family bases before
+    // sampled/cell fallbacks. Never apply the source item's individual tint.
     const template=wandOriginalTemplate(appearance.sourceItemId);
-    const shared=template?.kind==='chef'
-     ?await loadChefOriginalOverlay(template.itemId,transform)
-     :template?.kind==='palette'
-      ?await loadPaletteOriginalOverlay(template.itemId,transform):await loadFlowerOriginalOverlay(appearance.sourceItemId,transform);
+    const shared=template?.kind==='chef'?await loadChefOriginalOverlay(template.itemId,transform)
+     :template?.kind==='palette'?await loadPaletteOriginalOverlay(template.itemId,transform)
+     :template?.kind==='flower'?await loadFlowerOriginalOverlay(template.itemId,transform)
+     :template?.kind==='wand'?await loadWandOriginalOverlay(template.itemId,transform):null;
     if(shared){
      ({spritePathId,sourceHash,overlay}=shared);
     }else{
