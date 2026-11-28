@@ -10,7 +10,7 @@
  import {inventoryCopy,inventoryBatchCopy,inventoryEmptyCopy,inventoryAddCopy,inventorySelectVisibleCopy,inventoryDeselectVisibleCopy,inventoryDeleteCopy,inventoryShowZeroCopy,inventoryZeroStackCopy,inventoryRemoveEntryCopy,inventoryRemoveEntryWarning} from './inventory-copy';
  import {flowerVariantOf,type FlowerVariant,furnitureVariantOf,type FurnitureVariant,inventorySavedHomeName} from './inventory-unique';
  import {flowerEditorCopy,furnitureEditorCopy,flowerGrowthLabel} from './inventory-unique-copy';
- import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,furnitureHasCustomizedAppearance,furnitureChoiceLabel,type FurnitureDisplay} from './inventory-furniture-display';
+ import {loadFurnitureDisplay,materialLabel,materialSwatch,furnitureVariantTitle,furnitureHasCustomizedAppearance,furnitureChoiceLabel,furnitureAppearanceSwatches,type FurnitureDisplay} from './inventory-furniture-display';
  import InventoryDecorator from './InventoryDecorator.svelte';
  import {flowerDecorators} from './inventory-flower-display';
  import {nativeInventoryGroups,inventoryCategoryRepresentative,inventoryAddRows,inventoryDisplayRows,inventoryCustomizationSource,browseInventory,inventoryGroupCounts,inventorySearchGroupCounts,inventorySearchTarget,defaultInventoryGroup,OTHER_INVENTORY_GROUP,NATIVE_INVENTORY_TABS,type InventoryGroupKey} from './inventory-browse';
@@ -53,7 +53,7 @@ import {searchAchievementRows} from './achievement-search';
  import {inventoryWandAppearance,hasNativeWandArt,wandVariantOf,wandVariantLabel,wandMaterialLabel,wandFieldOptions,wandFieldLabels,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
  import {nativeChefInstructionBase} from './native-icon-route';
- import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
+ import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteAppearanceSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
  import IngredientBadges from './IngredientBadges.svelte';
  import {ordinaryRecipeBadges} from './ordinary-recipe-badges';
  import {cafeIngredientBadges,bobaIngredientBadges,type IngredientBadge} from './ingredient-badges';
@@ -198,7 +198,6 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryLimit=$state(BATCH_SIZE);
  let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
  let inventoryBaseline:InventoryEntry[]=$state.raw([]);
- const originalInventoryQuantities=$derived(new Map(inventoryBaseline.map(row=>[row.documentId,row.quantity])));
  // Source-verified game UiIcon ZIP packs are shared by Collection/Inventory.
  // Inventory loads only groups currently needed by visible owned rows.
  const inventoryIconPending=new Set<string>();
@@ -615,10 +614,12 @@ import {verifiedFloorplanName} from './floorplan-names';
   const savedHomeName=inventorySavedHomeName(row.unique);if(savedHomeName!==null)return savedHomeName;
   const w=wandVariantOf(row.unique);if(w){
    const nested=wandNestedOf(row.unique);
-   return nested?[inventoryName(nested[0]),wandName(w),furnitureVariantTitle(furnitureDisplay,nested[0],nested.slice(3),furnitureCopy.defaultMaterial)].filter(Boolean).join(' · '):wandName(w)
+   const source=inventoryWandAppearance(row.itemId,row.unique)?.sourceItemId;
+   return [source&&source>0?inventoryName(source):'',wandName(w),nested?furnitureVariantTitle(furnitureDisplay,nested[0],nested.slice(3),furnitureCopy.defaultMaterial):''].filter(Boolean).join(' · ')
   }
   if(row.boba)return bobaName(row.boba.variant);
   if(row.cafe)return cafeName(row.cafe.variant);
+  if(row.palette)return paletteAppearanceSwatches(row.palette).join(' / ');
   const furniture=furnitureVariantOf(row.unique);
   if(furniture)return furnitureVariantTitle(furnitureDisplay,row.itemId,furniture,furnitureCopy.defaultMaterial);
   return [flowerGrowthLabel(locale,flowerGrowthKind(row.itemId,row.flower)),flowerDisplay(row.flower,flowerDefinitions,flowerLabels[locale]??{})?.title].filter(Boolean).join(' · ');
@@ -1953,6 +1954,8 @@ import {verifiedFloorplanName} from './floorplan-names';
      {@const variantTitle=inventoryVariantSearchName(item)}
      {@const chef=inventoryChefAppearance(item.itemId,item.unique)}
      {@const wand=inventoryWandAppearance(item.itemId,item.unique)}
+     {@const nestedWand=wandNestedOf(item.unique)}
+     {@const uniqueSwatches=item.palette?paletteAppearanceSwatches(item.palette):nestedWand?furnitureAppearanceSwatches(furnitureDisplay,nestedWand[0],nestedWand.slice(3)):furnitureAppearanceSwatches(furnitureDisplay,item.itemId,furnitureVariantOf(item.unique))}
      {@const canFlower=!!item.flower&&!!item.unique?.flowerEditable&&!!flowerDefinitions&&!!flowerLabels[locale]}
      {@const canFurniture=!!item.unique?.furnitureEditable||!!item.furnitureCreatable}
      {@const canPalette=!!item.paletteCreationDefault||!!item.unique?.paletteEditable&&!!item.palette}
@@ -2012,7 +2015,7 @@ import {verifiedFloorplanName} from './floorplan-names';
           {:else if customized}<InventoryDecorator type={9}/>{/if}
           {#if dyeBadge}<InventoryDecorator type={14} primaryColor={dyeBadge.primaryColor} iconColor={dyeBadge.iconColor}/>{/if}
           {#each flowerBadges as badge (badge.type)}
-           {#if badge.type===12}<InventoryDecorator type={12} primaryColor={badge.primaryColor}/>
+           {#if badge.type===12}<InventoryDecorator type={12} primaryColor={badge.primaryColor} secondaryColor={badge.secondaryColor}/>
            {:else}<InventoryDecorator type={11} patternUrl={badge.patternUrl}/>{/if}
           {/each}
          </span>
@@ -2020,19 +2023,20 @@ import {verifiedFloorplanName} from './floorplan-names';
        </span>
        <IngredientBadges rows={inventoryIngredientBadges(item)} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/>
        <strong class="inventory-name" title={inventoryName(item.itemId)}>{inventoryName(item.itemId)}</strong>
-       {#if variantTitle}<span class="inventory-flower-variant-name" title={variantTitle}>{variantTitle}</span>{/if}
+       {#if uniqueSwatches.length}
+        <span class="inventory-appearance-swatches" data-unique-swatches={item.palette?'palette':nestedWand?'wand-furniture':'furniture'} aria-hidden="true">
+         {#each uniqueSwatches as color}<span style:background-color={color}></span>{/each}
+        </span>
+       {/if}
+       {#if variantTitle}<span class="inventory-flower-variant-name" class:inventory-recipe-variant={!!chef||!!wand} title={variantTitle}>{variantTitle}</span>{/if}
       </div>
       {#if item.editable}
        {@const pending=quantityPending(item)}
-       {@const originalQuantity=originalInventoryQuantities.get(item.documentId)??0}
        <form class="inventory-quantity-form" class:quantity-pending={pending&&!inventoryAddMode} data-quantity-pending={pending&&!inventoryAddMode} data-quantity-committed={item.quantity} data-quantity-ready={!busy&&!inventoryBatchMode&&!locked} onsubmit={e=>void applyInventoryQuantity(item,e)}>
         <label>
          <span class="visually-hidden">{iCopy.quantity}</span>
          <input type="number" name="quantity" min={inventoryAddMode?Math.max(1,item.quantityMinimum):item.quantityMinimum} max={item.quantityLimit??1} step="1"
           value={quantityInput(item)} oninput={e=>setQuantityInput(item,e.currentTarget.value)} disabled={busy||inventoryBatchMode||locked} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
-         {#if !inventoryAddMode&&(pending||originalQuantity!==item.quantity)}
-          <small class="inventory-quantity-delta" class:unapplied={pending}>{(pending?item.quantity:originalQuantity).toLocaleString(locale)} → {(pending?quantityInput(item):item.quantity.toLocaleString(locale))}</small>
-         {/if}
         </label>
         <button type="submit" class="primary" class:quantity-unchanged={!pending} disabled={busy||inventoryBatchMode||locked||!pending||!quantityInputValid(item)} title={iCopy.apply} aria-label={iCopy.apply}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
@@ -2554,7 +2558,7 @@ import {verifiedFloorplanName} from './floorplan-names';
        {#if previewBadges.length}
         <span class="inventory-native-decorators">
          {#each previewBadges as badge (badge.type)}
-          {#if badge.type===12}<InventoryDecorator type={12} primaryColor={badge.primaryColor}/>
+          {#if badge.type===12}<InventoryDecorator type={12} primaryColor={badge.primaryColor} secondaryColor={badge.secondaryColor}/>
           {:else}<InventoryDecorator type={11} patternUrl={badge.patternUrl}/>{/if}
          {/each}
         </span>

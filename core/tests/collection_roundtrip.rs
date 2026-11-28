@@ -7075,3 +7075,29 @@ fn indexed_reference_authority_matches_exact_pair_and_unresolved_family(){
   }
  }
 }
+
+#[test]
+fn native_pin_source_joins_exact_screen_and_preserves_other_settings(){
+ use hkia_save_core::native::INVENTORY_PIN_SCREEN;
+ for malformed in [false,true]{
+  let mut payload=synthetic_payload("3.0.1");payload[3]=0x96;
+  let sets=arr(vec![arr(vec![u(0),guid(INVENTORY_PIN_SCREEN)]),arr(vec![u(1),guid([4,5,6,7])])]);
+  let items=arr(vec![arr(vec![u(0),guid([10,20,30,40]),u(0)]),arr(vec![u(if malformed{9}else{1}),guid([10,20,30,40]),u(1)])]);
+  payload.extend(doc(23,arr(vec![u(4),vec![0xc0],vec![0xc0],arr(vec![sets,items])])));
+  let input=slot_from_payload("3.0.1",payload);
+  let slot=read_slot(&input).unwrap();
+  assert_eq!(slot.index.pin_settings_seen,1);
+  assert_eq!(slot.index.pin_settings_incomplete,malformed);
+  if malformed{assert!(slot.index.pinned_items_source.is_none());continue}
+  let pins=slot.index.pinned_items_source.as_ref().unwrap();
+  assert_eq!(pins.document_id,4);
+  assert_eq!(pins.for_screen(INVENTORY_PIN_SCREEN).map(|p|p.item_guid).collect::<Vec<_>>(),vec![[10,20,30,40]]);
+  assert_eq!(pins.for_screen([4,5,6,7]).count(),1);
+  let original=slot.envelope.decoded[pins.whole.clone()].to_vec();
+  let mut e=Editor::open(input).unwrap();
+  e.change(2,Some(638000000000000001),Some(638000000000000002)).unwrap();
+  let reopened=read_slot(&e.export().unwrap()).unwrap();
+  let next=reopened.index.pinned_items_source.unwrap();
+  assert_eq!(reopened.envelope.decoded[next.whole],original);
+ }
+}
