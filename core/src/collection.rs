@@ -1922,7 +1922,7 @@ impl Editor {
    if self.inventory_removed.contains(&r.id){return None}
    if self.slot.envelope.version!=Version::V301{return None}
    let original=Self::boba_words(&self.slot.envelope.decoded,r)?;
-   let editable=self.unique_quantity_ids.contains(&r.id)&&crate::inventory_source::supported_boba_base(original);
+   let editable=self.unique_quantity_ids.contains(&r.id);
    Some((r.id,self.boba_variant_changes.get(&r.id).copied().unwrap_or(original),editable))
   }).chain(self.pending_bobas.iter().filter(|(id,_)|self.inventory_changes.contains_key(*id)).map(|(&id,&v)|
    (id,self.boba_variant_changes.get(&id).copied().unwrap_or(v),true)))
@@ -1933,7 +1933,8 @@ impl Editor {
    if !self.inventory_changes.contains_key(&id){return None}
   }else if !self.unique_quantity_ids.contains(&id){return None}
   let original=self.original_boba_variant(id)?;
-  if !crate::inventory_source::supported_boba_base(original){return None}
+  // A complete distinct saved tuple is an exact identity witness, not a
+  // recipe witness. Only source-valid targets may be written.
   let current=self.boba_variant_changes.get(&id).copied().unwrap_or(original);
   let mut reserved=HashSet::new();
   for other in self.active_saved_inventory(){
@@ -2007,6 +2008,8 @@ impl Editor {
    return self.boba_starter_choices()
   }
   let Some((original,_,_))=self.boba_context(id)else{return Vec::new()};
+  // Repair an existing identity independently of acquisition authority.
+  if !Self::valid_boba_target(original){return Vec::new()}
   let item=crate::inventory_source::BOBA_ID;
   let quantity=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
   if !quantity.is_some_and(|q|q>0)||!self.absent_flower_budget_available()||

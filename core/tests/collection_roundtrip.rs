@@ -2755,7 +2755,40 @@ fn boba_pearls_and_sweetness_preserve_flavor_color_milk_and_uid(){
   assert_eq!(reopened.inventory_unique_rows().next().unwrap().1,Some(24));
  }
  let mut unknown=original;unknown[1]=99;
- let e=Editor::open(make(unknown,peer)).unwrap();assert!(e.inventory_boba_variants(4).is_empty());
+ let e=Editor::open(make(unknown,peer)).unwrap();assert!(e.inventory_boba_variants(4).contains(&original));
+ assert!(e.inventory_boba_creation_variants(4).is_empty());
+}
+
+#[test]
+fn complete_distinct_boba_recipe_can_be_repaired_without_new_acquisition_authority(){
+ use hkia_save_core::collection::{HistoryScope::Inventory,BobaVariant};
+ let original=[6,99,88,77,1000];let peer=[6,44,76,75,73];let target=[6,44,79,75,71];
+ let encode=|v:BobaVariant|arr(vec![vec![4],arr(v.into_iter().map(|w|u(w as u32)).collect())]);
+ for zipped in [false,true]{
+  let mut p=synthetic_payload("3.0.1");p[3]=0x97;
+  for (id,v) in [(4,original),(5,peer)]{p.extend(doc(1,arr(vec![u(id),u(1798633565),u(20+id),u(2),encode(v)])));}
+  let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();
+  assert!(e.inventory_boba_rows().any(|(id,v,editable)|id==4&&v==original&&editable));
+  assert!(e.inventory_boba_variants(4).contains(&target));assert!(!e.inventory_boba_variants(4).contains(&peer));
+  assert!(e.inventory_boba_creation_variants(4).is_empty());
+  assert!(e.change_inventory_boba_variant(4,peer,target).is_err());
+  assert!(e.change_inventory_boba_variant(4,original,peer).is_err());
+  assert!(e.change_inventory_boba_variant(4,original,[6,99,79,75,71]).is_err());
+  assert!(!e.dirty());
+  e.change_inventory_boba_variant(4,original,target).unwrap();
+  assert!(e.inventory_boba_creation_variants(4).is_empty());
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert!(!restored.dirty());
+  assert_eq!(restored.inventory_original_unique_payload(4),Some(encode(original).as_slice()));
+  assert!(restored.inventory_boba_rows().any(|(id,v,_)|id==4&&v==original));
+  assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();
+  assert!(saved.inventory_boba_rows().any(|(id,v,editable)|id==4&&v==target&&editable));
+  assert_eq!(saved.inventory_original_unique_payload(5),Some(encode(peer).as_slice()));
+  assert_eq!(saved.inventory_unique_rows().next().unwrap().1,Some(24));
+  assert_eq!(saved.inventory()[0].quantity,2);
+ }
 }
 
 #[test]
@@ -6425,15 +6458,16 @@ fn large_boba_families_keep_verified_variant_edit_and_creation(){
  let encode=|v:[u32;5]|arr(vec![vec![4],arr(v.into_iter().map(u).collect())]);
  let first=[6,44,76,75,73];let target=[6,44,79,75,71];
  let mut variants=vec![first];
- // The other complete saved identities are unsupported recipe values;
- // preserve their bytes, never offer them for creation or editing.
+ // Other complete saved identities have unsupported recipe values.
+ // They reserve exact keys; only source-valid repair targets are offered.
  for i in 0..256u32{variants.push([6,44,76,75,1000+i]);}
  for zipped in [false,true]{
   let base=synthetic_payload("3.0.1");let mut p=vec![0x93,0];p.extend(u(300));p.push(0xdc);p.extend(262u16.to_be_bytes());p.extend(&base[4..]);
   for (i,&v) in variants.iter().enumerate(){p.extend(doc(1,arr(vec![u(4+i as u32),u(1798633565),u(301+i as u32),u(2),encode(v)])));}
   let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};let mut e=Editor::open(input.clone()).unwrap();
-  let before=e.inventory();assert_eq!(e.inventory_boba_rows().filter(|(_,_,editable)|*editable).count(),1);
-  assert!(e.inventory_boba_variants(5).is_empty());
+  let before=e.inventory();assert_eq!(e.inventory_boba_rows().filter(|(_,_,editable)|*editable).count(),257);
+  assert!(e.inventory_boba_variants(5).contains(&target.map(|x|x as i32)));
+  assert!(e.inventory_boba_creation_variants(5).is_empty());
   assert!(e.inventory_boba_creation_variants(4).contains(&target.map(|x|x as i32)));
   e.create_inventory_boba_variant(4,first.map(|x|x as i32),target.map(|x|x as i32),3).unwrap();
   e.change_inventory_quantity(4,2,0).unwrap();

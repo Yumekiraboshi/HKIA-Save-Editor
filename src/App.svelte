@@ -54,7 +54,7 @@ import {searchAchievementRows} from './achievement-search';
  import {nativeChefInstructionBase} from './native-icon-route';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
  import {cafeSlotLabel,cafeVariantLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
- import {bobaFieldOptions,bobaFieldLabel,bobaFieldValue,fullBobaLabel,type BobaVariant,type BobaField} from './inventory-boba-display';
+ import {bobaFieldOptions,bobaFieldLabel,bobaFieldValue,bobaNeedsTupleChoice,fullBobaLabel,type BobaVariant,type BobaField} from './inventory-boba-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
  import {toAchievementDateTimeValue,fromAchievementDateTimeValue} from './achievement-date';
  import {listSubcategories,subcategoryLabel,recordedFamilies,type CollectionItem} from './subcategories';
@@ -2229,6 +2229,15 @@ import {verifiedFloorplanName} from './floorplan-names';
       </select>
      </label>
     {/each}
+    {#if bobaNeedsTupleChoice(edit.before,edit.options,bobaSelection,edit.absent)}
+     <label class="date-dialog-field">
+      <span>{([1,3,2,4] as BobaField[]).map(field=>bobaFieldLabel(locale,field)).join(' / ')}</span>
+      <select name="boba-full-tuple" value={bobaSelection} disabled={busy} onchange={e=>{bobaSelection=Number(e.currentTarget.value);error=''}}>
+       {#if !edit.absent}<option value={-1}>{bobaName(edit.before)}</option>{/if}
+       {#each edit.options as variant,index}<option value={index}>{bobaName(variant)}</option>{/each}
+      </select>
+     </label>
+    {/if}
     {#if !edit.options.length}<p class="compact-hint">{iCopy.readonly}</p>{/if}
     {#if edit.creationOptions.some(v=>v.every((n,i)=>n===edit.options[bobaSelection]?.[i]))}
      <label class="date-dialog-field">
