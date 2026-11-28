@@ -50,6 +50,7 @@ import {searchAchievementRows} from './achievement-search';
  import {selectWandOriginalCell,selectInventoryWandOriginalCell} from './wand-original-subicon';
  import {inventoryWandAppearance,hasNativeWandArt,wandVariantOf,wandVariantLabel,wandNestedOf,type WandNested,type WandVariant,type WandInventoryAppearance} from './inventory-wand-display';
  import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
+ import {nativeChefInstructionBase} from './native-icon-route';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
  import {cafeSlotLabel,cafeVariantLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
  import {bobaVariantLabel,bobaBaseKey,bobaBaseChoices,bobaBaseLabel,bobaSelectionForBase,fullBobaLabel,type BobaVariant} from './inventory-boba-display';
@@ -1794,6 +1795,8 @@ import {verifiedFloorplanName} from './floorplan-names';
         {/if}
         {#if hasNativeWandArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicWandSprite itemId={item.itemId} appearance={wand} fallback={nativeSprite??sprite} originalCell={wand?wandOriginalCell(wand.sourceItemId):undefined}/>
+         {:else if snapshot.version==='3.0.1'&&nativeChefInstructionBase(item.itemId)!==undefined&&(!item.unique||item.unique.tag===0)&&!originalVariantArt[String(item.itemId)]}
+          <DynamicChefSprite itemId={item.itemId} originalOnly={true} fallback={nativeSprite??sprite}/>
          {:else if hasNativeChefArt(item.itemId)&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
           <DynamicChefSprite itemId={item.itemId} appearance={chef} fallback={nativeSprite??sprite}/>
          {:else if item.itemId===CUSTOM_PALETTE_ITEM_ID&&snapshot.version==='3.0.1'&&!originalVariantArt[String(item.itemId)]}
