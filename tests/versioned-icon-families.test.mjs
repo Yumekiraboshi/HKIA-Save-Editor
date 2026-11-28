@@ -38,6 +38,8 @@ test('candidate family sources reuse shared shader and original auxiliary image 
  assert.equal(await f.chef(2,version,{kind:'cafe',colors:[999]}),null);
  assert.ok(await f.palette(3,version,[[1,0,0,1],[0,1,0,1],[0,0,1,1]]) instanceof Blob);
  assert.ok(await f.wand(4,version,{magicCharacteristicId:902,fleckCharacteristicId:903,sourceItemId:0}) instanceof Blob);
+ assert.ok(await f.wand(4,version,{magicCharacteristicId:901,fleckCharacteristicId:903,sourceItemId:0}) instanceof Blob);
+ assert.equal(await f.wand(4,version,{magicCharacteristicId:999,fleckCharacteristicId:903,sourceItemId:0}),null);
  assert.ok(await f.wand(4,version,{magicCharacteristicId:902,fleckCharacteristicId:903,sourceItemId:1}) instanceof Blob);
  assert.equal(await f.wand(4,version,{magicCharacteristicId:902,fleckCharacteristicId:903,sourceItemId:999}),null);
  assert.equal(calls,3);
@@ -54,4 +56,29 @@ test('compiler keeps unavailable swatch mappings distinct from native neutral co
  const result=spawnSync(process.env.PYTHON??'python3',[fileURLToPath(new URL('../scripts/compile-icon-family-bindings.py',import.meta.url)),'--self-test'],{encoding:'utf8'});
  assert.equal(result.status,0,result.stderr??String(result.error));
  assert.match(result.stdout,/HKIA_ICON_FAMILY_BINDINGS_SELF_TEST_OK/);
+});
+
+test('native absent magic overlay is not a missing mapped sprite',async()=>{
+ const load=async(root)=>new TextEncoder().encode(JSON.stringify(root==='/bindings/'?defs:root==='/dynamic/'?pages(['base:4','mask:'+g('d')]):pages(['growth:1:0']))).buffer;
+ const loadTexture=async(root,a)=>({width:a.width,height:a.height,rgba:new Uint8ClampedArray(a.width*a.height*4).fill(255)});
+ const f=createVersionedFamilyRenderer({bindings:'/bindings/',dynamic:'/dynamic/',auxiliary:'/aux/'},pin,{load,loadTexture});
+ assert.equal(await f.wand(4,version,{magicCharacteristicId:902,fleckCharacteristicId:903,sourceItemId:0}),null);
+ assert.ok(await f.wand(4,version,{magicCharacteristicId:901,fleckCharacteristicId:903,sourceItemId:0}) instanceof Blob);
+});
+test('same-version original source provider is used if a dynamic base is unavailable',async()=>{
+ const load=async(root)=>new TextEncoder().encode(JSON.stringify(root==='/bindings/'?defs:pages(['base:4','mask:'+g('d')]))).buffer;
+ const loadTexture=async(root,a)=>({width:a.width,height:a.height,rgba:new Uint8ClampedArray(a.width*a.height*4).fill(255)});
+ const calls=[];
+ const f=createVersionedFamilyRenderer({bindings:'/bindings/',dynamic:'/dynamic/',auxiliary:'/aux/'},pin,{load,loadTexture,
+  itemOverlay:async(i,v,transform)=>{
+   calls.push([i,v]);
+   if(i!==1&&i!==8)return null;
+   return {version:i===8?'9.2.0':v,sourceHash:h('a'),route:'base:'+i,texture:h('b'),overlay:{
+    texture:{width:2,height:4,rgba:new Uint8ClampedArray(32).fill(255)},sampleRect:[0,0,2,2],trim:[0,0,2,2],alphaOffsetY:2,logicalWidth:2,logicalHeight:2,sampleClamp:[.5,.5,1.5,1.5],...transform
+   }};
+  }});
+ const appearance={magicCharacteristicId:902,fleckCharacteristicId:903};
+ assert.ok(await f.wand(4,version,{...appearance,sourceItemId:1}) instanceof Blob);
+ assert.equal(await f.wand(4,version,{...appearance,sourceItemId:8}),null);
+ assert.deepEqual(calls,[[1,version],[8,version]]);
 });
