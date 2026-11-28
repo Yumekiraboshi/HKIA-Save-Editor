@@ -2152,7 +2152,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          <select name={'wand-nested-part-'+slot} value={-1} disabled={busy||!choices.length} onchange={e=>{const index=Number(e.currentTarget.value);e.currentTarget.value='-1';void chooseWandNestedMaterial(index)}}>
           <option value={-1} disabled>{materialLabel(furnitureDisplay,materials[slot],furnitureCopy.defaultMaterial)}</option>
           {#each choices as choice (choice.index)}
-           <option value={choice.index} data-wand-material={choice.variant.join(':')} data-material-index={choice.variant[slot]}>{materialLabel(furnitureDisplay,choice.variant[slot],furnitureCopy.defaultMaterial)}</option>
+           <option value={choice.index} data-wand-material={choice.variant.join(':')} data-material-index={choice.variant[slot]}>{furnitureChoiceLabel(furnitureDisplay,materials,choice.variant,slot,furnitureCopy.defaultMaterial,furnitureCopy.part)}</option>
           {/each}
          </select>
         </label>
