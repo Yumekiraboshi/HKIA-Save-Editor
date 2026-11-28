@@ -6877,3 +6877,53 @@ fn all_source_verified_flower_add_families_keep_a_free_starter_after_defaults(){
   assert!(e.create_inventory_flower_variant(candidate,starter,starter,1).is_ok(),"item {item}");
  }
 }
+
+
+#[test]
+fn missing_required_unique_payload_can_only_be_physically_removed_with_complete_references(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ // Original required-payload flower species, cafe/Boba outputs, wands and
+ // palette. The finite kit definition is deliberately outside repair scope.
+ let ids=[43114910u32,274491259,2105820233,203331651,406277059,905853141,973085470,
+  1053426049,1061947263,1237708874,1338995084,1932639321,1798633565,
+  1429161083,1835273963,1900000001];
+ let make=|reference:Option<u32>|{
+  let n=7+ids.len()+usize::from(reference.is_some());
+  let mut p=vec![0x93,0];p.extend(u(n as u32+1));p.push(0xdc);p.extend((n as u16).to_be_bytes());
+  p.extend_from_slice(&synthetic_payload("3.0.1")[4..]);
+  for (i,item) in ids.iter().enumerate(){
+   p.extend(doc(1,arr(vec![u(4+i as u32),u(*item),u(0),u(if i%2==0{2}else{0}),vec![0xc0]])));
+  }
+  let tail=4+ids.len() as u32;
+  p.extend(doc(10,arr(vec![u(tail),guid([0;4]),arr(vec![]),arr(vec![]),arr(vec![]),guid([0;4]),vec![0xc3],vec![0xc0]])));
+  p.extend(doc(22,arr(vec![u(tail+1),arr(vec![]),arr(vec![]),vec![0xc0],vec![0xc0],arr(vec![])])));
+  if let Some(uid)=reference{
+   let cafe=arr(vec![vec![0xc2],vec![0x80],u(0),u(0),guid([0;4]),arr(vec![arr(vec![u(203331651),u(uid)])]),u(0),u(0),u(0),l(0)]);
+   p.extend(doc(32,arr(vec![u(tail+2),guid([7,0,0,0]),u(0),arr(vec![doc(38,cafe)])])));
+  }
+  slot_from_payload("3.0.1",p)
+ };
+ for zipped in [false,true]{
+  let raw=make(None);let input=if zipped{zip(&raw)}else{raw};
+  let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
+  assert_eq!(original.len(),ids.len());
+  assert!(original.iter().all(|r|!r.editable));
+  let repair:Vec<_>=original.iter().filter(|r|r.item_id!=1900000001).map(|r|(r.document_id,r.quantity)).collect();
+  assert!(repair.iter().all(|&(id,_)|e.inventory_entry_removable(id)));
+  let kit=original.iter().find(|r|r.item_id==1900000001).unwrap();
+  assert!(!e.inventory_entry_removable(kit.document_id));
+  let mut bad=repair.clone();bad.push((kit.document_id,kit.quantity));
+  assert!(e.remove_inventory_entries(&bad).is_err());assert!(!e.dirty());
+  assert!(e.change_inventory_quantity(4,2,0).is_err());
+  e.remove_inventory_entries(&repair).unwrap();
+  let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
+  assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);assert!(restored.redo_scope(Inventory));
+  let saved=Editor::open(restored.export().unwrap()).unwrap();assert_eq!(saved.inventory(),vec![kit.clone()]);
+  assert_eq!(saved.entries(),restored.entries());assert_eq!(saved.achievements(),restored.achievements());
+ }
+ for uid in [0,99]{
+  let e=Editor::open(make(Some(uid))).unwrap();
+  let row=e.inventory().into_iter().find(|r|r.item_id==203331651).unwrap();
+  assert!(!e.inventory_entry_removable(row.document_id));
+ }
+}
