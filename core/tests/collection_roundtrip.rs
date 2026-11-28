@@ -4335,6 +4335,43 @@ fn duplicate_ordinary_furniture_zero_retains_distinct_custom_variants(){
 }
 
 #[test]
+fn duplicate_missing_required_payloads_share_zero_only_repair(){
+ use hkia_save_core::collection::HistoryScope::Inventory;
+ for item in [203331651u32,1798633565]{
+  let make=|second_quantity:u32|{
+   let mut p=synthetic_payload("3.0.1");p[2]=12;p[3]=0x97;
+   p.extend(doc(1,arr(vec![u(4),u(item),u(0),u(3),vec![0xc0]])));
+   p.extend(doc(1,arr(vec![u(5),u(item),u(0),u(second_quantity),vec![0xc0]])));
+   slot_from_payload("3.0.1",p)
+  };
+  for zipped in [false,true]{
+   let raw=make(2);let input=if zipped{zip(&raw)}else{raw};
+   let mut e=Editor::open(input.clone()).unwrap();
+   let mut ids=e.inventory_batch_zero_only_ids();ids.sort_unstable();assert_eq!(ids,vec![4,5]);
+   assert!(e.inventory().iter().all(|r|!r.editable));
+   assert!(e.change_inventory_quantity(4,3,0).is_err());
+   assert!(e.change_inventory_quantity(4,3,1).is_err());
+   assert!(e.change_inventory_quantities(&[(4,3,0),(5,1,0)]).is_err());
+   assert!(!e.dirty());
+   e.change_inventory_quantities(&[(4,3,0),(5,2,0)]).unwrap();
+   let checkpoint=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();
+   restored.restore_history(&checkpoint).unwrap();
+   assert!(restored.undo_scope(Inventory));assert!(restored.redo_scope(Inventory));
+   let mut reopened=Editor::open(restored.export().unwrap()).unwrap();
+   assert!(reopened.inventory().iter().all(|r|r.quantity==0&&!r.editable));
+   assert!(reopened.change_inventory_quantity(4,0,1).is_err());
+   assert_eq!(reopened.inventory_original_unique_payload(4),Some([0xc0].as_slice()));
+   assert_eq!(reopened.inventory_original_unique_payload(5),Some([0xc0].as_slice()));
+  }
+  let mut sole=Editor::open(make(0)).unwrap();
+  let row=sole.inventory().into_iter().find(|r|r.document_id==4).unwrap();
+  assert_eq!((row.quantity_minimum,row.quantity_limit),(0,Some(0)));
+  sole.change_inventory_quantity(4,3,0).unwrap();
+  assert!(Editor::open(sole.export().unwrap()).unwrap().inventory().iter().all(|r|r.quantity==0));
+ }
+}
+
+#[test]
 fn new_palette_can_be_created_after_all_existing_stacks_are_emptied(){
  use hkia_save_core::{collection::{HistoryScope::Inventory,PaletteVariant},inventory_palette_source::palette_output_color as color};
  let item=1835273963u32;let candidate=(1u32<<31)|item;
