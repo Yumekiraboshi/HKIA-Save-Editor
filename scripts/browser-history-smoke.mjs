@@ -1487,6 +1487,38 @@ async function inventoryDynamicFlowerArtSmoke(){
   console.log('CHROMIUM DYNAMIC FLOWER PASS: original source sampling, distinct same-ID appearances, native effect-mask fallback, unknown pattern refusal, local blob generation');
  }finally{await context.close();}
 }
+async function flowerGrowthSheetRecoverySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  let available=false,attempts=0;
+  await page.route('**/flower-growth-icons-v3.0.1.webp',async route=>{
+   attempts++;
+   if(!available)await route.fulfill({status:503,body:'synthetic temporary source failure'});
+   else await route.continue();
+  });
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-flower-growth-recovery.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({flowerGrowthInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-show-zero-toggle[aria-pressed="false"]').click();
+  await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  const seed=page.locator('[data-flower-growth="seed"]'),uprooted=page.locator('[data-flower-growth="uprooted"]');
+  await seed.waitFor({timeout:30_000});await uprooted.waitFor({timeout:30_000});
+  await page.waitForLoadState('networkidle');
+  assert.ok(attempts>=1);
+  assert.equal(await page.locator('[data-flower-state-art="native-state-sprite"]').count(),0);
+  available=true;const before=attempts;
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await seed.locator('[data-flower-state-art="native-state-sprite"]').waitFor({timeout:30_000});
+  await uprooted.locator('[data-flower-state-art="native-state-sprite"]').waitFor({timeout:30_000});
+  assert.equal(attempts,before+1,'both growth states share one recovered sheet');
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForLoadState('networkidle');
+  assert.equal(attempts,before+1,'verified state sheet is not reloaded');
+ }finally{await context.close();}
+ console.log('CHROMIUM FLOWER GROWTH RECOVERY PASS: shared original state sheet restored in place');
+}
 async function inventoryFlowerGrowthDisplaySmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
  try{
@@ -3130,6 +3162,7 @@ async function run(){
  await inventoryIconScaleSmoke();
  await inventoryDynamicFlowerArtSmoke();
  await inventoryFlowerGrowthDisplaySmoke();
+ await flowerGrowthSheetRecoverySmoke();
  await flowerRuntimeCoverage(browser,origin,base);
  await inventoryFlowerVariantEditSmoke();
  await inventoryOwnedFlowerEffectSmoke();
