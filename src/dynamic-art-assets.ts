@@ -1,4 +1,4 @@
-import {rasterizeDynamicSprite,type PixelBuffer,type RasterInput} from './dynamic-sprite-raster';
+import {rasterGeometry,rasterizeDynamicSprite,type PixelBuffer,type RasterInput} from './dynamic-sprite-raster';
 import {encodeDynamicArtPng} from './dynamic-art-png';
 
 export type TextureAsset={file:string;bytes:number;sha256:string;rgbSha256:string;width:number;height:number};
@@ -55,15 +55,21 @@ async function decodeOpaqueArtTexture(root:string,asset:TextureAsset):Promise<Pi
 // pipeline version and appearance, never the save document identity.
 const cache=new Map<string,Promise<Blob|null>>();
 const CACHE_LIMIT=192;
+const CACHE_BYTES=32*1024*1024;
+const costs=new Map<string,number>();let retainedBytes=0;
+function evict(key:string){cache.delete(key);retainedBytes-=costs.get(key)??0;costs.delete(key);}
 export function renderCachedDynamicArt(key:string,input:RasterInput):Promise<Blob|null>{
+ const geometry=rasterGeometry(input);
+ key=JSON.stringify([key,input.resolution??'legacy',geometry.width,geometry.height,input.logicalSize,geometry.logicalHeight]);
  const old=cache.get(key);if(old){cache.delete(key);cache.set(key,old);return old;}
  const task=(async()=>{
   await new Promise<void>(resolve=>setTimeout(resolve,0));
-  return await encodeDynamicArtPng(rasterizeDynamicSprite(input));
+  return await encodeDynamicArtPng(rasterizeDynamicSprite(input),geometry.width,geometry.height);
  })().catch(()=>null);
  cache.set(key,task);
- if(cache.size>CACHE_LIMIT)cache.delete(cache.keys().next().value!);
- void task.then(value=>{if(!value&&cache.get(key)===task)cache.delete(key);});
+ const cost=geometry.width*geometry.height*4;costs.set(key,cost);retainedBytes+=cost;
+ while(cache.size>CACHE_LIMIT||retainedBytes>CACHE_BYTES)evict(cache.keys().next().value!);
+ void task.then(value=>{if(!value&&cache.get(key)===task)evict(key);});
  return task;
 }
 
@@ -72,6 +78,6 @@ export function renderCachedDynamicArt(key:string,input:RasterInput):Promise<Blo
  * one-pixel mask keeps the existing raster geometry and alpha sampling; no
  * native mask texture is required for the source-only fallback. */
 export const NO_TINT_MASK:PixelBuffer={width:1,height:1,rgba:new Uint8ClampedArray([0,0,0,255])};
-export function renderCachedOriginalBase(key:string,input:Pick<RasterInput,'base'|'baseRect'|'trim'|'alphaOffsetY'|'logicalSize'>):Promise<Blob|null>{
+export function renderCachedOriginalBase(key:string,input:Pick<RasterInput,'base'|'baseRect'|'trim'|'alphaOffsetY'|'logicalSize'|'logicalHeight'|'resolution'>):Promise<Blob|null>{
  return renderCachedDynamicArt(JSON.stringify(['original-base-only',key]),{...input,mask:NO_TINT_MASK,maskRect:[0,0,1,1],tints:[[1,1,1,1],[1,1,1,1],[1,1,1,1]]});
 }
