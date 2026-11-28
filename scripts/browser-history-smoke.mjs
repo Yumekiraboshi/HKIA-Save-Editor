@@ -1695,6 +1695,10 @@ async function flowerGrowthSheetRecoverySmoke(){
  try{
   const page=await context.newPage();
   let available=false,attempts=0;
+  // Independently deny both ordinary icon sources; the guarded definition
+  // base must remain available while the actual state sheet is missing.
+  await page.route('**/item-packs/*.zip',route=>route.fulfill({status:503,body:'missing ordinary pack'}));
+  await page.route('**/inventory-art/**',route=>route.fulfill({status:503,body:'missing inventory atlas'}));
   await page.route('**/flower-growth-icons-v3.0.1.webp',async route=>{
    attempts++;
    if(!available)await route.fulfill({status:503,body:'synthetic temporary source failure'});
@@ -1711,6 +1715,11 @@ async function flowerGrowthSheetRecoverySmoke(){
   await page.waitForLoadState('networkidle');
   assert.ok(attempts>=1);
   assert.equal(await page.locator('[data-flower-state-art="native-state-sprite"]').count(),0);
+  for(const card of [seed,uprooted]){
+   const fallback=card.locator('[data-flower-state-art="species-reference"][data-icon-fidelity="source-derived-base-only"]');
+   await fallback.waitFor({timeout:30_000});
+   assert.match(await fallback.evaluate(e=>getComputedStyle(e).backgroundImage),/blob:/);
+  }
   available=true;const before=attempts;
   await page.evaluate(()=>window.dispatchEvent(new Event('online')));
   await seed.locator('[data-flower-state-art="native-state-sprite"]').waitFor({timeout:30_000});
