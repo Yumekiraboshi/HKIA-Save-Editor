@@ -204,13 +204,16 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryBatchSelected=$state<Set<number>>(new Set());
  let inventoryBatchQuantity=$state<number|undefined>(undefined);
  // Presentation only: the tightest bound returned by Rust for selected rows.
- const inventoryBatchMinimum=$derived.by(()=>{
-  if(inventoryAddMode||!snapshot||inventoryBatchSelected.size===0)return 1;
-  return inventoryBrowseRows.some(row=>inventoryBatchSelected.has(row.documentId)&&row.quantityMinimum!==0)?1:0;
- });
  const selectedInventoryRows=$derived.by(()=>inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId)));
  const inventoryBatchCanQuantity=$derived(selectedInventoryRows.length>0&&selectedInventoryRows.every(row=>row.editable));
  const selectedDestructiveRows=$derived(selectedInventoryRows.filter(row=>!row.nativePinBulkProtected));
+ // Use the confirmation dialog's same Rust-issued candidates and pin
+ // exclusion, not per-row minima or the positive-edit selection.
+ const inventoryBatchMinimum=$derived.by(()=>{
+  if(inventoryAddMode||!snapshot||selectedInventoryRows.length===0||selectedInventoryRows.length!==inventoryBatchSelected.size)return 1;
+  const positive=selectedDestructiveRows.filter(row=>row.quantity>0);
+  return positive.length>0&&inventoryBatchZeroRows(snapshot.inventory,selectedDestructiveRows,isInventoryBulkProtected).length===positive.length?0:1;
+ });
  const inventoryBatchCanDelete=$derived.by(()=>!inventoryAddMode&&selectedDestructiveRows.length>0&&selectedInventoryRows.length===inventoryBatchSelected.size&&(
   (selectedDestructiveRows.some(row=>row.quantity>0)&&inventoryBatchZeroRows(snapshot?.inventory??[],selectedDestructiveRows,isInventoryBulkProtected).length===selectedDestructiveRows.filter(row=>row.quantity>0).length)||selectedDestructiveRows.every(row=>row.removable)));
  const inventoryBatchMaximum=$derived.by(()=>{

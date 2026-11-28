@@ -1238,6 +1238,37 @@ async function inventoryCategoryProtectionSmoke(){
   await page.locator('.inventory-pinned-only').click();
   await search.fill('1877756618');await card.waitFor();
   const modal=page.locator('.removal-confirm-dialog');
+  // Pinning does not prevent a positive quantity batch. A destructive
+  // batch with both rows selected excludes only the pinned row.
+  await page.locator('.inventory-batch-toggle').click();
+  await card.locator('.inventory-batch-checkbox').check();
+  const batchQuantity=page.locator('.inventory-batch-form input[type="number"]');
+  assert.equal(await batchQuantity.getAttribute('min'),'1','only pinned rows cannot be batch-zeroed');
+  await search.fill('627013240');
+  await card.locator('.inventory-batch-checkbox').check();
+  assert.equal(await batchQuantity.getAttribute('min'),'0','unprotected positive row permits batch zero');
+  await batchQuantity.fill('8');
+  await page.locator('.inventory-batch-form button[type="submit"]').click();
+  await card.locator('.inventory-quantity-form[data-quantity-committed="8"]').waitFor();
+  await search.fill('1877756618');
+  await card.locator('.inventory-quantity-form[data-quantity-committed="8"]').waitFor();
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await card.locator('.inventory-quantity-form[data-quantity-committed="6"]').waitFor();
+  // Re-select both and zero through the quantity form. The pin remains.
+  await card.locator('.inventory-batch-checkbox').check();
+  await search.fill('627013240');
+  await card.locator('.inventory-batch-checkbox').check();
+  await batchQuantity.fill('0');
+  await page.locator('.inventory-batch-form button[type="submit"]').click();
+  await modal.locator('.removal-confirm-action').waitFor({state:'visible'});
+  assert.equal(await modal.locator('.inventory-removal-targets li').count(),1);
+  assert.equal(await modal.locator('.inventory-remove-entry-action').count(),0);
+  await modal.locator('.removal-confirm-action').click();
+  await card.waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await card.locator('.inventory-quantity-form[data-quantity-committed="9"]').waitFor();
+  await page.locator('.inventory-batch-toggle').click();
+  await search.fill('1877756618');await card.waitFor();
   // Both ordinary material rows have verified zero/removal eligibility.
   // Search deliberately hides the only unlocked row. Category operation
   // still targets it, never the locked visible row.

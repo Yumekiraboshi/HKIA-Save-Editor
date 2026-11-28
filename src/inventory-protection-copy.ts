@@ -20,7 +20,7 @@ export function inventoryProtectionCopy(locale:string){
  return {categoryZero,categoryRemove,lockAll,unlockAll,locked,lock,unlock,excluded,limit};
 }
 
-// Temporary text controls until the authenticated original pin sprite is available.
+// Localized labels for pin controls; original sprite authentication remains separate.
 export function inventoryPinCopy(locale:string){
  const labels:Record<string,[string,string,string]>={
  ja:['ピン止め','ピン解除','ピン止め済みのみ'],ar:['تثبيت','إلغاء التثبيت','المثبتة فقط'],de:['Anheften','Lösen','Nur angeheftete'],es:['Fijar','Desfijar','Solo fijados'],fr:['Épingler','Désépingler','Épinglés uniquement'],it:['Fissa','Rimuovi fissaggio','Solo fissati'],ko:['고정','고정 해제','고정 항목만'],nl:['Vastzetten','Losmaken','Alleen vastgezet'],'pt-BR':['Fixar','Desafixar','Apenas fixados'],ru:['Закрепить','Открепить','Только закреплённые'],tr:['Sabitle','Sabitlemeyi kaldır','Yalnızca sabitlenenler'],'zh-Hans':['置顶','取消置顶','仅置顶'],'zh-Hant':['置頂','取消置頂','僅置頂']
