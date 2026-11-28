@@ -20,3 +20,27 @@ const copy:Record<Locale,Copy>={
  'zh-Hant':['所有已關聯的小屋記錄','建築記錄','房間記錄','備份名稱','匯出來源資料備份','復原','正在讀取…','未找到已驗證的小屋記錄。','僅限本機檔案。包含私人存檔資料。暫不支援復原。','匯出失敗。']
 };
 export function layoutsCopy(locale:Locale){const [all,building,room,name,exportSource,restore,loading,unavailable,warning,failed]=copy[locale];return {all,building,room,name,exportSource,restore,loading,unavailable,warning,failed};}
+
+ // Provisional translated navigation labels, not verified native terminology.
+ type Nav=readonly [string,string,string,string,string,string,string];
+ const enNav:Nav=['Cabins','Player Home','Character Homes','Open backup','Exact original source','Different or unverified source','Invalid backup file'];
+ const nav:Record<Locale,Nav>={
+ en:enNav,'en-GB':enNav,
+ ja:['キャビン','プレイヤーハウス','キャラクターハウス','バックアップを開く','原本と完全一致','異なる原本または未検証','無効なバックアップファイル'],
+ fr:['Cabanes','Maison du joueur','Maisons des personnages','Ouvrir la copie','Source originale identique','Source différente ou non vérifiée','Fichier de copie invalide'],
+ 'fr-CA':['Cabanes','Maison du joueur','Maisons des personnages','Ouvrir la copie','Source originale identique','Source différente ou non vérifiée','Fichier de copie invalide'],
+ de:['Hütten','Spielerhaus','Charakterhäuser','Sicherung öffnen','Originalquelle identisch','Andere oder ungeprüfte Quelle','Ungültige Sicherungsdatei'],
+ es:['Cabañas','Casa del jugador','Casas de personajes','Abrir copia','Origen original idéntico','Origen diferente o sin verificar','Copia no válida'],
+ it:['Capanne','Casa del giocatore','Case dei personaggi','Apri backup','Origine identica','Origine diversa o non verificata','Backup non valido'],
+ ko:['오두막','플레이어 하우스','캐릭터 하우스','백업 열기','원본과 일치','다른 원본 또는 미확인','잘못된 백업 파일'],
+ nl:['Hutten','Spelershuis','Personagehuizen','Back-up openen','Identieke bron','Andere of ongeverifieerde bron','Ongeldige back-up'],
+ 'pt-BR':['Cabanas','Casa do jogador','Casas dos personagens','Abrir backup','Origem idêntica','Origem diferente ou não verificada','Backup inválido'],
+ ru:['Домики','Дом игрока','Дома персонажей','Открыть копию','Исходник совпадает','Другой или непроверенный исходник','Недопустимая копия'],
+ tr:['Kulübeler','Oyuncu evi','Karakter evleri','Yedeği aç','Orijinal kaynak aynı','Farklı veya doğrulanmamış kaynak','Geçersiz yedek'],
+ ar:['الأكواخ','منزل اللاعب','منازل الشخصيات','فتح النسخة','المصدر الأصلي مطابق','مصدر مختلف أو غير متحقق','ملف نسخة غير صالح'],
+ 'zh-Hans':['小屋','玩家住宅','角色住宅','打开备份','与原始来源完全一致','来源不同或未经验证','无效的备份文件'],
+ 'zh-Hant':['小屋','玩家住宅','角色住宅','開啟備份','與原始來源完全一致','來源不同或未驗證','無效的備份檔案']
+ };
+ export function layoutNavigationCopy(locale:Locale){
+ const [cabins,player,character,open,same,different,invalid]=nav[locale];return {cabins,player,character,open,same,different,invalid};
+ }
