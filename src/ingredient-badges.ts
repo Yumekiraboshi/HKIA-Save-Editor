@@ -2,14 +2,15 @@
  * witnesses supplied by Rust. A witness is not a record of what was consumed. */
 import type {CafeVariant,CafeWitness} from './inventory-cafe-display';
 import type {BobaVariant,BobaWitness} from './inventory-boba-display';
-export type IngredientBadge={key:string;itemIds:number[];slots:number[];count:number};
+import {identifyIngredient} from './ingredient-identification';
+export type IngredientBadge={key:string;itemIds:number[];slots:number[];count:number;flavorOnly?:true};
 /** A saved flavor/color array is an ordered appearance, not a multiset.
  * Keep even equal adjacent or nonadjacent slots distinct. Quantity badges
  * are reserved for independently verified, order-independent material counts. */
 function orderedSlots(slots:readonly {flavor:number;color:number;slot:number}[],witnesses:readonly CafeWitness[]):IngredientBadge[]{
  return slots.filter(({flavor})=>flavor>0).map(({flavor,color,slot})=>({
   key:slot+':'+flavor+':'+color,
-  itemIds:[...new Set(witnesses.filter(w=>w[1]===flavor&&w[2]===color).map(w=>w[0]))],
+  ...identifyIngredient(flavor,color,witnesses),
   slots:[slot],count:1
  }));
 }
