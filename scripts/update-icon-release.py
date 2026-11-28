@@ -272,6 +272,7 @@ def run(input_path,root,previous=None,resume=False,execute=command):
         blockers={'inventorySourceItemIds':release['unresolvedInventorySourceItemIds'],
                   'collectionBaseItemIds':release['missingCollectionBaseItemIds'],
                   'inventoryBaseItemIds':release.get('missingInventoryBaseItemIds',[]),
+                  'originalUiIconItemIds':release['unresolvedOriginalUiIconItemIds'],
                   'auxiliarySpriteRoutes':aux['unresolved'],'chefSwatches':aux['unresolvedSwatches']}
         source.write_new(out/'candidate.json',{'schema':'HKIA.IconUpdateCandidate.1','version':version,'platform':platform,
             'runSha256':identity,'definitionCount':release['definitionCount'],'sourceBlockers':blockers,

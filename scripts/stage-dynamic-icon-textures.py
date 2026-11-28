@@ -134,6 +134,13 @@ def prior_records(folder, platform):
             'invalid previous dynamic stage')
     return receipt['textures']
 
+def definition_source_routes(rows,dynamic_rows):
+    # GetUiIcon is the definition's original PPtr, not the main inventory
+    # icon selector, recipe result, named outfit override or nested tint.
+    routes={'item:'+str(i):r['sprite'] for i,r in rows.items()}
+    routes.update({'base:'+str(i):r['baseSprite'] for i,r in dynamic_rows.items()})
+    return routes
+
 def stage(snapshot, receipt, manifest_path, out, prior_dir=None):
     rows=source.validate_snapshot(snapshot)
     dynamic_rows=dynamic.validate(receipt)
@@ -194,9 +201,9 @@ def stage(snapshot, receipt, manifest_path, out, prior_dir=None):
             jobs[(tb['cab'],tid)].append((label,sprite,logical,rect,offset,texture,binding))
         except (atlas.Unsupported,KeyError,StopIteration,struct.error) as exc:
             unresolved.append({'key':label,'reason':str(exc) or type(exc).__name__})
-    for item,row in sorted(dynamic_rows.items()):
-        s=row['baseSprite']
-        plan('base:'+str(item),definition,[s['fileId'],s['pathId']],s['objectSha256'])
+    item_routes=definition_source_routes(rows,dynamic_rows)
+    for label,s in sorted(item_routes.items()):
+        plan(label,definition,[s['fileId'],s['pathId']],s['objectSha256'])
     for guid,refs in sorted(mask_refs.items()):
         label='mask:'+guid
         # Nonempty subobject selectors need an independently reviewed adapter;
@@ -224,14 +231,17 @@ def stage(snapshot, receipt, manifest_path, out, prior_dir=None):
                     lw,lh=logical
                     ox,oy=offset
                     trim=[ox,lh-oy-rect[3],ox+rect[2],lh-oy]
-                    supported(lw==lh and -.001<=trim[0]<trim[2]<=lw+.001 and
+                    is_item=label.startswith('item:')
+                    supported((is_item or lw==lh) and -.001<=trim[0]<trim[2]<=lw+.001 and
                               -.001<=trim[1]<trim[3]<=lh+.001,'unsupported dynamic logical geometry')
-                    if label.startswith('base:'):
+                    supported(crop.width<=1022 and crop.height<=1022,'original crop exceeds padded page bounds')
+                    if not label.startswith('mask:'):
                         supported(tex['colorSpace']==1,'non-sRGB base texture')
                     ident={'renderer':RENDERER,'spriteCab':sb['cab'],'spritePathId':sid,
                            'spriteSha256':sha(raw),'logicalSize':lw,'sourceRect':rect,
                            'sampleRect':sample,'trimTopLeft':trim,'cropRgbaSha256':sha(crop.tobytes()),
                            **binding,**tex}
+                    if lw!=lh:ident['logicalHeight']=lh
                     # Normalize tuples for exact comparison with JSON receipts.
                     import json
                     ident=json.loads(source.stable(ident))
@@ -242,10 +252,14 @@ def stage(snapshot, receipt, manifest_path, out, prior_dir=None):
                     records[label]={'texture':digest,'sampleRect':sample,'trimTopLeft':trim,
                                     'logicalSize':lw,'alphaOffsetY':crop.height,
                                     'maskColorSpace':'linear' if tex['colorSpace']==0 else 'srgb'}
+                    if is_item:records[label]['logicalHeight']=lh
                 except atlas.Unsupported as exc:
                     unresolved.append({'key':label,'reason':str(exc)})
             del image
-        require(len(records)+len(unresolved)==len(dynamic_rows)+len(mask_refs),'source route closure')
+        missing={r['key'] for r in unresolved}
+        wanted=set(item_routes)|{'mask:'+guid for guid in mask_refs}
+        require(len(missing)==len(unresolved) and not missing&set(records) and
+                missing|set(records)==wanted,'source route closure')
         result={'schema':SCHEMA,'approval':'review-required','renderer':RENDERER,
                 'version':snapshot['version'],'platform':snapshot['platform'],
                 'definitionSnapshotSha256':snapshot['snapshotSha256'],
@@ -260,6 +274,11 @@ def stage(snapshot, receipt, manifest_path, out, prior_dir=None):
     return result
 
 def self_test():
+    a={'fileId':0,'pathId':'1','objectSha256':'a'*64}
+    b={'fileId':0,'pathId':'2','objectSha256':'b'*64}
+    assert definition_source_routes({1:{'sprite':a},2:{'sprite':b},3:{'sprite':a}},
+                                    {2:{'baseSprite':b}})=={
+        'item:1':a,'item:2':b,'item:3':a,'base:2':b}
     assert supported_mask_selector({('',''),('',SPRITE_TYPE)})
     assert supported_mask_selector({('',SPRITE_TYPE)})
     assert not supported_mask_selector({('named',SPRITE_TYPE)})

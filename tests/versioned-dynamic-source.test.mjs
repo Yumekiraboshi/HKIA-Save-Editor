@@ -52,3 +52,19 @@ test('new source page transport uses the actual shared renderer, refuses wrong v
  assert.equal(overlay.sourceHash,p.indexSha256);assert.deepEqual(overlay.overlay.sampleClamp,[.5,.5,3.5,3.5]);assert.ok(loads>=3);
  assert.throws(()=>createVersionedDynamicSourceLoader('/../candidate/',p),/INVALID/);
 });
+
+test('original definition source preserves rectangular geometry and never enters square base renderer',async()=>{
+ const v=fixture();v.records['item:77']={...row(asset('b')),logicalHeight:4,trimTopLeft:[0,1,2,3]};
+ const p=pin(v),b=decodeVersionedDynamicSource(v,p);
+ assert.equal(b.get('item:77').logicalHeight,4);
+ const bad=fixture();bad.records['item:77']={...v.records['item:77'],logicalHeight:2};
+ assert.throws(()=>decodeVersionedDynamicSource(bad,pin(bad)),/INVALID/);
+ const load=async()=>new TextEncoder().encode(JSON.stringify(v)).buffer;
+ const texture=async(root,a)=>({width:a.width,height:a.height,rgba:new Uint8ClampedArray(a.width*a.height*4).fill(255)});
+ const loader=createVersionedDynamicSourceLoader('/candidate/',p,load,texture);
+ const transform={scale:.4,offsetPercent:[0,0],rotation:0};
+ const layer=await loader.originalOverlayRoute('item:77',v.version,transform);
+ assert.equal(layer.overlay.logicalWidth,2);assert.equal(layer.overlay.logicalHeight,4);
+ assert.equal(await loader.originalRoute('item:77',v.version),null);
+ assert.equal(await loader.originalOverlayRoute('item:77','9.2.0',transform),null);
+});

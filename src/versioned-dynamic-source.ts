@@ -13,11 +13,11 @@ export type DynamicSourcePin=Readonly<{
 }>;
 type SourceRow=Readonly<{
  texture:string;asset:TextureAsset;sampleRect:Rect;trimTopLeft:Rect;guardRect:Rect;
- logicalSize:number;alphaOffsetY:number;maskColorSpace:'linear'|'srgb';
+ logicalSize:number;logicalHeight:number;alphaOffsetY:number;maskColorSpace:'linear'|'srgb';
 }>;
 type SourceIndex=ReadonlyMap<string,SourceRow>;
 const SHA=/^[a-f0-9]{64}$/;
-const KEY=/^(?:(?:base|magic):[1-9][0-9]{0,9}|growth:[1-9][0-9]{0,9}:(?:0|7)|mask:[a-f0-9]{32})$/;
+const KEY=/^(?:(?:base|magic|item):[1-9][0-9]{0,9}|growth:[1-9][0-9]{0,9}:(?:0|7)|mask:[a-f0-9]{32})$/;
 const fail=():never=>{throw Error('VERSIONED_DYNAMIC_SOURCE_INVALID');};
 function assertSource(ok:unknown):asserts ok{if(!ok)fail();}
 function object(v:unknown):Record<string,unknown>{
@@ -64,14 +64,14 @@ export function decodeVersionedDynamicSource(value:unknown,pin:DynamicSourcePin)
   assertSource(registered&&sameAsset(a,registered));
   const sampleRect=rect(r.sampleRect),trimTopLeft=rect(r.trimTopLeft),guardRect=rect(r.guardRect);
   const [x,y,w,h]=sampleRect,[gx,gy,gw,gh]=guardRect,[l,t,rr,b]=trimTopLeft;
-  const logicalSize=number(r.logicalSize),alphaOffsetY=integer(r.alphaOffsetY,1,1024);
-  assertSource(alphaOffsetY*2===a.height&&logicalSize>0&&logicalSize<=4096&&
+  const logicalSize=number(r.logicalSize),logicalHeight=key.startsWith('item:')?number(r.logicalHeight):logicalSize,alphaOffsetY=integer(r.alphaOffsetY,1,1024);
+  assertSource(alphaOffsetY*2===a.height&&logicalSize>0&&logicalSize<=4096&&logicalHeight>0&&logicalHeight<=4096&&
    guardRect.every(Number.isSafeInteger)&&gx>=1&&gy>=1&&gw>0&&gh>0&&gx+gw<a.width&&gy+gh<alphaOffsetY&&
    w>0&&h>0&&x>=gx&&y>=gy&&x+w<=gx+gw+.001&&y+h<=gy+gh+.001&&
-   l>=-.001&&t>=-.001&&rr>l&&b>t&&rr<=logicalSize+.001&&b<=logicalSize+.001);
+   l>=-.001&&t>=-.001&&rr>l&&b>t&&rr<=logicalSize+.001&&b<=logicalHeight+.001);
   assertSource(r.maskColorSpace==='linear'||r.maskColorSpace==='srgb');
   if(!key.startsWith('mask:'))assertSource(r.maskColorSpace==='srgb');
-  records.set(key,{texture:hash(r.texture),asset:registered,sampleRect,trimTopLeft,guardRect,logicalSize,alphaOffsetY,maskColorSpace:r.maskColorSpace});
+  records.set(key,{texture:hash(r.texture),asset:registered,sampleRect,trimTopLeft,guardRect,logicalSize,logicalHeight,alphaOffsetY,maskColorSpace:r.maskColorSpace});
   used.add(a.file);
  }
  const missing=new Set<string>();
@@ -103,7 +103,7 @@ export function createVersionedDynamicSourceLoader(root:string,pin:DynamicSource
  }
  async function originalRoute(route:string,version:string):Promise<Blob|null>{
   try{
-   if(version!==pin.version||route.startsWith('mask:'))return null;
+   if(version!==pin.version||route.startsWith('mask:')||route.startsWith('item:'))return null;
    const row=(await index()).get(routeKey(route));if(!row)return null;
    const base=await loadTexture(root,row.asset);
    return await renderCachedOriginalBase(key(route,'original',row.texture),{base,baseRect:row.sampleRect,trim:row.trimTopLeft,alphaOffsetY:row.alphaOffsetY,logicalSize:row.logicalSize});
@@ -141,7 +141,7 @@ export function createVersionedDynamicSourceLoader(root:string,pin:DynamicSource
    const [x,y,w,h]=row.guardRect;
    return {version:pin.version,sourceHash:pin.indexSha256,route,texture:row.texture,overlay:{texture:await loadTexture(root,row.asset),
     sampleRect:row.sampleRect,trim:row.trimTopLeft,alphaOffsetY:row.alphaOffsetY,
-    logicalWidth:row.logicalSize,logicalHeight:row.logicalSize,sampleClamp:[x-.5,y-.5,x+w+.5,y+h+.5],...transform}};
+    logicalWidth:row.logicalSize,logicalHeight:row.logicalHeight,sampleClamp:[x-.5,y-.5,x+w+.5,y+h+.5],...transform}};
   }catch{return null;}
  }
  const originalOverlay=(itemId:number,version:string,transform:Pick<SpriteOverlay,'scale'|'offsetPercent'|'rotation'>)=>originalOverlayRoute('base:'+itemId,version,transform);

@@ -197,7 +197,7 @@ def dynamic_partition(bindings,stage,rows):
     dynamic={r['itemId']:r for r in bindings['rows']}
     require(len(dynamic)==len(bindings['rows']) and
             set(dynamic)=={i for i,r in rows.items() if r['dynamicColor']},'dynamic definition census')
-    wanted=set()
+    wanted={'item:'+str(i) for i in rows}
     for i,row in dynamic.items():
         require(row['baseSprite']==rows[i]['sprite'] and
                 row['definitionSha256']==rows[i]['definitionSha256'],'dynamic source binding')
@@ -213,6 +213,18 @@ def dynamic_partition(bindings,stage,rows):
             (set(unresolved)|set(records))==wanted,'dynamic source route partition')
     require(set(stage['textures'])=={r['texture'] for r in records.values()},
             'orphan/missing dynamic texture')
+    # Bind the original source independently of the main icon route.
+    for i,row in rows.items():
+        route='item:'+str(i)
+        if route not in records:continue
+        rec=records[route]
+        binding=stage['textures'][rec['texture']]['binding']
+        s=row['sprite']
+        require(binding['spritePathId']==s['pathId'] and
+                s['objectSha256'] in (None,binding['spriteSha256']) and
+                rec['logicalSize']==binding['logicalSize'] and
+                rec['logicalHeight']==binding.get('logicalHeight',binding['logicalSize']) and
+                rec['maskColorSpace']=='srgb','original UiIcon source binding')
     return dynamic
 
 def plan_routes(rows,cells,expected,overrides,dynamic,texture_records,results,placeholders):
@@ -423,8 +435,8 @@ def edge_pad(im):
 def pack_dynamic(folder,stage_dir,stage):
     from PIL import Image
     out=folder/'dynamic-source-pages';out.mkdir()
-    images={};sizes=[]
-    for key,m in stage['textures'].items():
+    sizes=[]
+    def read_texture(key,m):
         require(source.SHA.fullmatch(key) and m['file']==key+'.webp' and
                 key==sha(source.stable(m['binding'])),'dynamic texture binding identity')
         raw=checked_file(stage_dir,m['file'],m['sha256'],m['bytes'],MAX_TEXTURE_BYTES)
@@ -434,14 +446,21 @@ def pack_dynamic(folder,stage_dir,stage):
                     'dynamic original texture geometry')
             pixels=im.copy()
         require(sha(pixels.tobytes())==m['rgbSha256'],'dynamic original RGB identity')
-        images[key]=pixels;sizes.append((key,pixels.width+2,pixels.height//2+2))
-    pages=[];placement={}
+        return pixels
+    for key,m in stage['textures'].items():
+        require(source.SHA.fullmatch(key) and m['file']==key+'.webp' and
+                key==sha(source.stable(m['binding'])) and
+                type(m['width']) is int and 0<m['width']<=1022 and
+                type(m['height']) is int and 0<m['height']<=2044 and m['height']%2==0,
+                'dynamic texture packing geometry')
+        sizes.append((key,m['width']+2,m['height']//2+2))
+    pages=[];page_names=set();placement={}
     def emit(group):
         width=max(x+w for _,x,y,w,h in group)
         height=max(y+h for _,x,y,w,h in group)
         im=Image.new('RGB',(width,height*2))
         for key,x,y,w,h in group:
-            src=images[key]
+            src=read_texture(key,stage['textures'][key])
             ow,oh=w-2,h-2
             im.paste(edge_pad(src.crop((0,0,ow,oh))),(x,y))
             im.paste(edge_pad(src.crop((0,oh,ow,oh*2))),(x,y+height))
@@ -460,7 +479,8 @@ def pack_dynamic(folder,stage_dir,stage):
         (out/name).write_bytes(raw)
         meta={'file':name,'bytes':len(raw),'sha256':sha(raw),'rgbSha256':sha(im.tobytes()),
               'width':width,'height':height*2}
-        pages.append(meta)
+        if name not in page_names:
+            pages.append(meta);page_names.add(name)
         for key,x,y,w,h in group:placement[key]=(meta,x+1,y+1,w-2,h-2,height)
     for group in shelf_pages(sizes):emit(group)
     records={}
@@ -522,11 +542,12 @@ def assemble(args):
                 'definitionCount':len(rows),'sourceBundles':known,**static,
                 'completedOverrideCount':override_count,'dynamicSourceCount':texture_count,
                 'dynamicPageCount':page_count,'nativeResultRoutes':sorted([i,t] for i,t in results.items()),
+                'unresolvedOriginalUiIconItemIds':sorted(i for i in rows if 'item:'+str(i) not in dynamic_stage['records']),
                 'nativePlaceholderItemIds':sorted(placeholders),'routes':list(routes.values()),
                 'missingCollectionBaseItemIds':sorted(set(catalog)-set(cells)),
                 'unresolvedInventorySourceItemIds':[i for i,r in routes.items() if r['sourceBlockers']],
                 'remainingReleaseChecks':['verify source image sampling and special native routes',
-                    'extract and verify characteristic/swatch, growth, decorator and wand overlay dependencies',
+                    'verify characteristic/swatch, growth, decorator and original UiIcon overlay dependencies',
                     'generate and verify family runtime manifests and version-bound loader/cache identities',
                     'verify collection/achievement catalogs, save compatibility and actual browser/game display'],
                 'automaticReleaseActivationAuthorized':False}
@@ -540,6 +561,24 @@ def assemble(args):
     return report
 
 def self_test():
+    sprite={'fileId':0,'pathId':'7','objectSha256':'a'*64}
+    rows={1:{'sprite':sprite,'dynamicColor':False},2:{'sprite':sprite,'dynamicColor':False}}
+    bindings={'rows':[],'receiptSha256':'b'*64}
+    texture={'binding':{'spritePathId':'7','spriteSha256':'a'*64,'logicalSize':2,'logicalHeight':4}}
+    rec={'texture':'c'*64,'logicalSize':2,'logicalHeight':4,'maskColorSpace':'srgb'}
+    stage={'dynamicReceiptSha256':'b'*64,'records':{'item:1':rec,'item:2':rec},
+           'unresolved':[],'textures':{'c'*64:texture}}
+    assert dynamic_partition(bindings,stage,rows)=={}
+    for invalid in [
+        {**stage,'records':{'item:1':rec}},
+        {**stage,'records':{'item:1':rec,'item:2':{**rec,'logicalHeight':3}}},
+        {**stage,'unresolved':[{'key':'item:2','reason':'duplicate'}]},
+    ]:
+        try:dynamic_partition(bindings,invalid,rows)
+        except ValueError:pass
+        else:raise AssertionError('accepted incorrect original UiIcon partition')
+    assert dynamic_partition(bindings,{**stage,'records':{'item:1':rec},
+        'unresolved':[{'key':'item:2','reason':'missing source'}]},rows)=={}
     # The original 3.0.1 Moon and Star Octocat has no definition suffix.
     catalog={'schema':'HKIA.CollectionDisplayCatalog.2','version':'3.0.1',
              'groups':[['collections_group_events']],
