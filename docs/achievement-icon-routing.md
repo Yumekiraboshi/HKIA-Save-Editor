@@ -12,3 +12,16 @@ The editor uses its existing source-verified hierarchy and atlases. All 559 null
 ## Independent verified identity and image delivery
 
 The verified individual manifest is sufficient to distinguish the 198 non-null individual source PPtrs from 559 native null leaves. Previously the detail resolver required the individual WebP to be delivered as well, incorrectly withholding parent artwork from all 559 null leaves if only the individual image failed. The individual loader now publishes the validated identity map separately before requesting image bytes; the detail route uses that map and the verified category image. A missing or altered individual manifest still withholds the fallback. A leaf with a non-null individual PPtr never inherits its parent just because its image is unavailable; the list remains unchanged. The test uses the real pinned manifest and synthetic HTTP image failure and verifies all 559/198 cases and corrupt manifest refusal. No new assets or save changes.
+
+
+## Offline staging from a reviewed original pointer census
+
+`scripts/stage-achievement-art.py` reuses the existing UnityFS, typed Sprite, SpriteAtlas, texture and lossless sheet generation implementation. It requires a complete, separately extracted and reviewed `HKIA.AchievementPointerCensus.1` document with version, platform, definitionsSha256, catalogIndexFileSha256, catalogHierarchyFileSha256, reviewedRouting (`native-local-achievement-direct-parent-v1`), definitionCount, and rows containing saveGuid, sourceKey, sourceGuid (asset GUID, not save GUID), parent (direct parent save GUID or null), and the native iconPPtr pair [fileId, decimalPathIdString]. Only [0,"0"] represents a native null reference. A non-null reference that cannot be resolved or decoded remains explicitly unresolved.
+
+The accompanying `HKIA.AchievementArtBundleInput.1` document binds version, platform, censusFileSha256, and the original bundles list (name, file relative to input, SHA-256). Supply the actual definitions bundle and all Sprite/atlas/texture dependencies.
+
+```sh
+python scripts/stage-achievement-art.py --census reviewed-achievement-pointers.json --index candidate-achievement-index.json --hierarchy candidate-achievement-groups.json --bundles achievement-bundles.json --out /staging/achievement-art
+```
+
+The tool verifies original bundle fingerprints, complete catalog/hierarchy identity, resolves actual Sprite pointers, groups shared textures, deduplicates Sprite cells and writes verified lossless pages and the `HKIA.AchievementArtCandidate.1` manifest. The output matches the versioned achievement reader contract; it is not live artwork. This stage trusts the separately reviewed pointer census: it does **not** extract the native managed-reference registry or independently prove its per-record pointer offsets and asset GUID crosswalk. The original extraction adapter and real-source proof remain required; never synthesize the census from icon names or a prior release. No production activation.
