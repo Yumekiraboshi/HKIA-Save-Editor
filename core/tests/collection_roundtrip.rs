@@ -50,10 +50,12 @@ fn slot_from_payload(version:&str,payload:Vec<u8>)->Vec<u8>{
  b.extend([0x92,0xd6,0xff]);b.extend(1_750_000_000u32.to_be_bytes());b.push(0);
  b.push(0);b.push(0x80);b.push(0x90);b.extend([0x91,9]);
  b.extend(magic);
- let compressed=literal(&payload);
- b.extend([0x92,0xc8,0,3,98,0xcd]);
- b.extend((payload.len() as u16).to_be_bytes());
- b.push(0xc6);b.extend((compressed.len() as u32).to_be_bytes());b.extend(compressed);
+ let chunks:Vec<_>=if payload.len()<=u16::MAX as usize{vec![payload.as_slice()]}else{payload.chunks(32768).collect()};
+ let count=chunks.len()+1;
+ if count<16{b.push(0x90|count as u8)}else{b.push(0xdc);b.extend((count as u16).to_be_bytes())}
+ b.push(0xc8);b.extend(((chunks.len()*3) as u16).to_be_bytes());b.push(98);
+ for chunk in &chunks{b.push(0xcd);b.extend((chunk.len() as u16).to_be_bytes());}
+ for chunk in chunks{let compressed=literal(chunk);b.push(0xc6);b.extend((compressed.len() as u32).to_be_bytes());b.extend(compressed);}
  b
 }
 /// Synthetic v3.0.1 source-shaped inventory records: ordinary stack and
@@ -6871,4 +6873,80 @@ fn all_source_verified_flower_add_families_keep_a_free_starter_after_defaults(){
   assert!(e.inventory_flower_preview(candidate,starter,starter).unwrap().1,"item {item}");
   assert!(e.create_inventory_flower_variant(candidate,starter,starter,1).is_ok(),"item {item}");
  }
+}
+
+#[test]
+fn category_batch_above_65536_zero_remove_history_and_roundtrip(){
+ use hkia_save_core::collection::{INVENTORY_BATCH_TEST_TARGET,HistoryScope::Inventory};
+ // Each distinct plucked flower tuple is drawn from the pinned source
+ // species pattern lists. No personal saves and no fabricated item IDs.
+ const SPECIES:&[(u32,&[u32])]=&[
+  (228573412,&[1,2,3,4,5,7,8,9,10,11,12,13,14,16]),
+  (274491259,&[1,2,3,4,5,7,8,9,10,11,12,13,14,16]),
+  (312661096,&[1,2,3,4,5,7,8,9,10,11,12,13,14,16]),
+  (462608550,&[1,2,3,4,5,7,8,9,10,11,12,13,14,16]),
+  (1331175279,&[1,2,3,4,5,7,8,9,10,11,12,13,14,16]),
+  (1466319046,&[1,2,3,4,5,7,8,9,10,11,12,13,14,16]),
+  (1561432864,&[1,2,3,4,5,7,8,9,10,11,12,13,14,16]),
+  (1669522060,&[1,2,3,4,5,7,8,9,10,11,12,13,14,16]),
+  (1934826268,&[1,2,3,4,5,7,8,9,10,11,12,13,14,16]),
+  (183701770,&[2,3,4,5,7,8,9,10,11,12,13,14,16]),
+  (261557677,&[2,3,4,5,7,8,9,10,11,12,13,14,16]),
+  (1968535430,&[2,3,4,5,7,8,9,10,11,12,13,14,16]),
+ ];
+ let target=INVENTORY_BATCH_TEST_TARGET+1;
+ let colors:Vec<_>=(1u32..=30).filter(|c|!matches!(c,14|15)).collect();
+ let mut payload=synthetic_payload("3.0.1");
+ let mut header=vec![0xdd];header.extend(((target+5) as u32).to_be_bytes());
+ payload.splice(3..4,header);
+ payload.splice(2..3,u((target+4) as u32));
+ let mut count=0;
+ 'species:for &(item,patterns) in SPECIES{
+  for pattern in std::iter::once(0).chain(patterns.iter().copied()){
+   for &base in &colors{
+    let accents=if matches!(pattern,0|3|4|5|7|8|9){vec![0]}else{colors.iter().copied().filter(|&c|c!=base).collect()};
+    for accent in accents{
+     let id=(count+4) as u32;
+     let unique=arr(vec![u(7),arr(vec![u(6),u(base),u(pattern),u(accent)])]);
+     payload.extend(doc(1,arr(vec![u(id),u(item),u(id),u(1),unique])));
+     count+=1;if count==target{break 'species}
+    }
+   }
+  }
+ }
+ assert_eq!(count,target);
+ let started=std::time::Instant::now();
+ let input=slot_from_payload("3.0.1",payload);
+ let mut editor=Editor::open(input.clone()).unwrap();
+ let original=editor.inventory();
+ assert_eq!(original.len(),target);
+ assert!(original.iter().all(|r|r.editable&&r.quantity_minimum==0));
+ assert!(editor.inventory_batch_limit()>=target);
+ let requests:Vec<_>=original.iter().map(|r|(r.document_id,1,0)).collect();
+ let mut bad=requests.clone();bad.last_mut().unwrap().1=2;
+ assert!(editor.change_inventory_quantities(&bad).is_err());
+ assert_eq!(editor.revision(),0);
+ let before=std::time::Instant::now();
+ editor.change_inventory_quantities(&requests).unwrap();
+ eprintln!("large quantity batch: {:?}, rows {}",before.elapsed(),target);
+ assert_eq!(editor.history().len(),1);
+ assert!(editor.inventory().iter().all(|r|r.quantity==0));
+ let zero=editor.export().unwrap();
+ let reopened=Editor::open(zero).unwrap();
+ assert!(reopened.inventory().iter().all(|r|r.quantity==0));
+ assert_eq!(reopened.inventory_original_unique_payload(4),editor.inventory_original_unique_payload(4));
+ let removals:Vec<_>=requests.iter().map(|&(id,_,_)|(id,0)).collect();
+ editor.remove_inventory_entries(&removals).unwrap();
+ assert!(editor.inventory().is_empty());
+ let checkpoint=editor.history_checkpoint().unwrap();
+ assert_eq!(checkpoint.len(),16+5+12*target+5+8*target);
+ let mut recovered=Editor::open(input).unwrap();
+ recovered.restore_history(&checkpoint).unwrap();
+ assert!(recovered.inventory().is_empty());
+ assert!(recovered.undo_scope(Inventory));
+ assert!(recovered.inventory().iter().all(|r|r.quantity==0));
+ assert!(recovered.undo_scope(Inventory));assert_eq!(recovered.inventory(),original);
+ assert!(recovered.redo_scope(Inventory));assert!(recovered.redo_scope(Inventory));
+ assert!(Editor::open(recovered.export().unwrap()).unwrap().inventory().is_empty());
+ eprintln!("large batch full roundtrip: {:?}",started.elapsed());
 }
