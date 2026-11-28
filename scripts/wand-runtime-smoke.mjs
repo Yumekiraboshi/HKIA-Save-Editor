@@ -7,7 +7,7 @@ import {build} from 'esbuild';
 export async function wandRuntimeSmoke(browser,origin,base){
  await wandNonSquareSmoke(browser,origin,base);
  const {outputFiles}=await build({
-  stdin:{contents:"export * from './wand-runtime-art'; export * from './wand-original-subicon'; export {initialInventoryNativeArt} from './inventory-native-art'; export {loadChefOriginalOverlay} from './chef-runtime-art'; export {loadPaletteOriginalOverlay} from './palette-runtime-art'; export {loadIconPack} from './icon-packs'; export {loadInventoryNativeArt} from './inventory-native-art';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
+  stdin:{contents:"export * from './wand-runtime-art'; export * from './wand-original-subicon'; export {initialInventoryNativeArt} from './inventory-native-art'; export {loadChefOriginalOverlay} from './chef-runtime-art'; export {loadPaletteOriginalOverlay} from './palette-runtime-art'; export {loadFlowerOriginalOverlay} from './flower-runtime-art'; export {loadIconPack} from './icon-packs'; export {loadInventoryNativeArt} from './inventory-native-art';",resolveDir:fileURLToPath(new URL('../src/',import.meta.url)),loader:'ts'},
   bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env.BASE_URL':JSON.stringify(base)}
  });
  const context=await browser.newContext();
@@ -308,6 +308,37 @@ export async function wandRuntimeSmoke(browser,origin,base){
    assert.deepEqual(results,{chef:'-3674899348677039372',palette:'4281893961233162555',chefRendered:true,paletteRendered:true,wrongChef:true,wrongPalette:true});
    assert.deepEqual(requestedMasks,[]);
   }finally{await templatePage.close();}
+  // All 25 native species have independently verified guarded base crops.
+  // Disable all alternative overlay packs and the flower tint mask to prove
+  // direct source rendering (not a normalized cell or recolored flower).
+  const flowerPage=await context.newPage();
+  try{
+   await flowerPage.route(root+'__wand_runtime_fixture__.html',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html><body></body></html>'}));
+   await flowerPage.route(root+'__wand_runtime_fixture__.mjs',r=>r.fulfill({contentType:'text/javascript',body:outputFiles[0].text}));
+   await flowerPage.route('**/wand-item-subicon-source-v3.0.1.json',r=>r.fulfill({status:503,body:'unavailable'}));
+   await flowerPage.route('**/dynamic-wand-art/candidate-source/index.json',r=>r.fulfill({status:503,body:'unavailable'}));
+   await flowerPage.route('**/dynamic-wand-art/remaining-source/index.json',r=>r.fulfill({status:503,body:'unavailable'}));
+   let flowerMaskRequests=0;
+   await flowerPage.route('**/inventory-flower-art/flower-mask-rgb-v3.0.1.webp',r=>{flowerMaskRequests++;return r.fulfill({status:503,body:'unavailable'});});
+   await flowerPage.goto(root+'__wand_runtime_fixture__.html');
+   const result=await flowerPage.evaluate(async base=>{
+    const {renderWandArt,renderWandBaseArt,loadFlowerOriginalOverlay}=await import(base+'__wand_runtime_fixture__.mjs');
+    const [flowers,wands]=await Promise.all(['inventory-flower-art/flower-runtime-source-v3.0.1.json','dynamic-wand-art/wand-runtime-source-v3.0.1.json'].map(async p=>(await fetch(base+p)).json()));
+    const transform={scale:.4,offsetPercent:[-.25,.25],rotation:0},a={magicCharacteristicId:104,fleckCharacteristicId:125};
+    const sha=async b=>b?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await b.arrayBuffer()))).join(','):null;
+    const rows=[];
+    for(const f of flowers.rows){
+     const source=await loadFlowerOriginalOverlay(f.itemId,transform);
+     if(source?.spritePathId!==f.baseSpritePathId||JSON.stringify(source.overlay.trim)!==JSON.stringify(f.sourceTrimTopLeft)||JSON.stringify(source.overlay.sampleRect)!==JSON.stringify(f.baseSampleRect))throw Error('FLOWER_OVERLAY_SOURCE');
+     for(const w of wands.rows){
+      const fields={...a,sourceItemId:f.itemId},full=await renderWandArt(w.itemId,fields),plain=await renderWandBaseArt(w.itemId,a);
+      rows.push({different:!!full&&!!plain&&await sha(full)!==await sha(plain),cached:!!full&&full===await renderWandArt(w.itemId,{...fields,sourceUnique:{tag:7,words:[6,1,0,0]}})});
+     }
+    }
+    return {rows,unknown:await loadFlowerOriginalOverlay(315823,transform)===null};
+   },base);
+   assert.equal(result.rows.length,225);assert.ok(result.rows.every(r=>r.different&&r.cached));assert.ok(result.unknown);assert.equal(flowerMaskRequests,0);
+  }finally{await flowerPage.close();}
   console.log('CHROMIUM DYNAMIC WAND BASE PASS: 9 native wand base layers, color variants, alpha, shared cache and unknown-ID refusal');
  }finally{await context.close();}
 }
