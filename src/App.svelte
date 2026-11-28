@@ -81,7 +81,6 @@ import {verifiedFloorplanName} from './floorplan-names';
  let flowerLabels:FlowerLabels=$state({});
  let flowerDialogEl:HTMLDialogElement|undefined=$state();
  let flowerEdit=$state<{documentId:number;itemId:number;revision:number;before:FlowerVariant;options:FlowerVariant[];creationOptions:FlowerVariant[];absent?:boolean}|null>(null);
- let flowerSelection=$state(-1);
  let flowerDraft=$state<FlowerVariant|null>(null);
  let flowerDraftCreatable=$state(false);
  let variantAddQuantity=$state<number|undefined>(1);
@@ -543,7 +542,22 @@ import {verifiedFloorplanName} from './floorplan-names';
   return flowerDisplay({growState:v[0],baseColor:v[1],pattern:v[2],patternColor:v[3]},flowerDefinitions,flowerLabels[locale]??{})?.title||'—';
  }
  function flowerOptionGroup(before:FlowerVariant,next:FlowerVariant):number{
-  return next[2]!==before[2]?1:next[1]!==before[1]?0:2;
+  if(next[2]!==before[2]){
+   const index=next[2]||before[2];
+   return flowerDefinitions?.patterns[String(index)]?.effect?3:1;
+  }
+  return next[1]!==before[1]?0:2;
+ }
+ function flowerFieldValue(v:FlowerVariant,group:number):string{
+  const defs=flowerDefinitions,labels=flowerLabels[locale]??{};
+  const pattern=defs?.patterns[String(v[2])];
+  const def=group===0?defs?.colors[String(v[1])]:group===2?defs?.colors[String(v[3])]:
+   ((group===1&&!pattern?.effect)||(group===3&&pattern?.effect))?pattern:undefined;
+  return def?labels[def.labelId]??'—':'—';
+ }
+ function flowerFieldOption(before:FlowerVariant,next:FlowerVariant,group:number):string{
+  const name=flowerFieldValue(next,group);
+  return group!==2&&next[3]!==before[3]?name+' · '+flowerCopy.accent+': '+flowerFieldValue(next,2):name;
  }
  function wandOriginalCell(id:number){
   if(inventoryNativeArt?.withheld.has(id))return undefined;
@@ -842,7 +856,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const [options,creationOptions]=await Promise.all([requestFlowerVariants(row.documentId),requestFlowerCreationVariants(row.documentId)]);
    if(!snapshot||snapshot.revision!==revision)return;
    flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options,creationOptions};
-   flowerSelection=-1;flowerDraft=[...before];flowerDraftCreatable=false;variantAddQuantity=1;await tick();
+   flowerDraft=[...before];flowerDraftCreatable=false;variantAddQuantity=1;await tick();
    if(flowerDialogEl&&!flowerDialogEl.open)flowerDialogEl.showModal();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -858,7 +872,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const preview=await requestFlowerPreview(row.documentId,before,before);
    if(!snapshot||snapshot.revision!==revision)return;
    flowerEdit={documentId:row.documentId,itemId:row.itemId,revision,before,options:preview.options,creationOptions:options,absent:true};
-   flowerSelection=-1;flowerDraft=[...before];flowerDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
+   flowerDraft=[...before];flowerDraftCreatable=preview.creatable;variantAddQuantity=1;await tick();
    if(flowerDialogEl&&!flowerDialogEl.open)flowerDialogEl.showModal();
   }catch(e){error=describeError(e)}
   finally{busy=false}
@@ -1134,8 +1148,8 @@ import {verifiedFloorplanName} from './floorplan-names';
    const preview=await requestFlowerPreview(edit.documentId,edit.before,next);
    if(!snapshot||snapshot.revision!==edit.revision||flowerEdit?.documentId!==edit.documentId)return;
    flowerDraft=[...next];flowerDraftCreatable=preview.creatable;
-   flowerEdit={...edit,options:preview.options};flowerSelection=-1;
-  }catch(e){error=describeError(e);flowerSelection=-1}
+   flowerEdit={...edit,options:preview.options};
+  }catch(e){error=describeError(e)}
   finally{busy=false}
  }
  function closeFlowerEditor(){if(flowerDialogEl?.open)flowerDialogEl.close()}
@@ -1858,17 +1872,13 @@ import {verifiedFloorplanName} from './floorplan-names';
        <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openPaletteEditor(item)}>{inventoryAddCopy(locale)}</button>
       {:else if item.flowerCreatable}
        <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void openAbsentFlowerEditor(item)}>{inventoryAddCopy(locale)}</button>
-      {:else if canFurniture}
-       <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} title={furnitureCopy.title} aria-label={furnitureCopy.title+': '+inventoryName(item.itemId)} onclick={()=>void openFurnitureEditor(item)}>
-        <span>{item.quantity}</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg>
-       </button>
       {:else if item.boba?.creationOnly||item.cafe?.creationOnly}
        <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode} aria-label={inventoryAddCopy(locale)+': '+inventoryName(item.itemId)} onclick={()=>void (item.boba?.creationOnly?openBobaEditor(item):openCafeEditor(item))}>{inventoryAddCopy(locale)}</button>
-      {:else if canFlower}
+      {:else if canFlower||canFurniture||canPalette||canBoba||canCafe||canWand}
        <button class="inventory-unique-edit-button" type="button" disabled={busy||inventoryBatchMode}
-        title={flowerCopy.title} aria-label={flowerCopy.title+': '+inventoryName(item.itemId)} onclick={()=>void openFlowerEditor(item)}>
-        <span>{item.quantity}</span>
+        title={canFurniture?furnitureCopy.title:canFlower?flowerCopy.title:inventoryName(item.itemId)} aria-label={(canFurniture?furnitureCopy.title:canFlower?flowerCopy.title:inventoryName(item.itemId))+': '+inventoryName(item.itemId)}
+        onclick={()=>void (canWand?openWandEditor(item):canCafe?openCafeEditor(item):canBoba?openBobaEditor(item):canPalette?openPaletteEditor(item):canFurniture?openFurnitureEditor(item):openFlowerEditor(item))}>
+        <span>{item.quantity.toLocaleString(locale)}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg>
        </button>
       {:else}
@@ -2314,7 +2324,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   {/if}
  </dialog>
  <dialog class="date-dialog" bind:this={flowerDialogEl} aria-labelledby="flower-editor-title"
-  onclose={()=>{flowerEdit=null;flowerSelection=-1;flowerDraft=null;flowerDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
+  onclose={()=>{flowerEdit=null;flowerDraft=null;flowerDraftCreatable=false}} oncancel={e=>{if(busy)e.preventDefault()}}>
   {#if flowerEdit}
    {@const edit=flowerEdit}
    {@const current=flowerDraft??edit.before}
@@ -2350,27 +2360,20 @@ import {verifiedFloorplanName} from './floorplan-names';
       {/each}
      </div>
     {/if}
-    {#if edit.options.some(v=>v[0]===current[0])}
+    {#each [flowerCopy.color,flowerCopy.pattern,flowerCopy.effect,flowerCopy.accent] as label, index}
+     {@const g=[0,1,3,2][index]}
+     {@const choices=edit.options.map((v,i)=>({v,i})).filter(({v})=>v[0]===current[0]&&flowerOptionGroup(current,v)===g)}
      <label class="date-dialog-field">
-      <span>{flowerCopy.title}</span>
-      <select bind:value={flowerSelection} onchange={e=>void selectFlowerDraft(Number(e.currentTarget.value))} disabled={busy}>
-       <option value={-1} disabled>{flowerVariantName(current)}</option>
-       {#each [flowerCopy.color,flowerCopy.pattern,flowerCopy.accent] as group, g}
-        {#if edit.options.some(v=>v[0]===current[0]&&flowerOptionGroup(current,v)===g)}
-         <optgroup label={group}>
-          {#each edit.options as v,i}
-           {#if v[0]===current[0]&&flowerOptionGroup(current,v)===g}
-            <option value={i} data-flower-variant={v.join(',')}>{flowerVariantName(v)}</option>
-           {/if}
-          {/each}
-         </optgroup>
-        {/if}
+      <span>{label}</span>
+      <select name={['flower-base-color','flower-pattern','flower-effect','flower-pattern-color'][index]} value={-1}
+       onchange={e=>{const i=Number(e.currentTarget.value);e.currentTarget.value='-1';void selectFlowerDraft(i)}} disabled={busy||choices.length===0}>
+       <option value={-1} disabled>{flowerFieldValue(current,g)}</option>
+       {#each choices as {v,i} (i)}
+        <option value={i} data-flower-variant={v.join(',')}>{flowerFieldOption(current,v,g)}</option>
        {/each}
       </select>
      </label>
-    {:else}
-     <p class="compact-hint">{iCopy.readonly}</p>
-    {/if}
+    {/each}
     {#if flowerDraftCreatable}
      <label class="date-dialog-field">
       <span>{inventoryAddCopy(locale)} · {iCopy.quantity}</span>
