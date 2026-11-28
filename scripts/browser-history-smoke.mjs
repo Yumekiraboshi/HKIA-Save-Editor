@@ -682,11 +682,20 @@ async function inventoryBobaEditSmoke(){
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1798633565');
   const card=page.locator('.inventory-card').first(),dialog=page.locator('dialog[aria-labelledby="boba-editor-title"]');
   await assertInventoryControlGeometry(page,card.locator('.inventory-compact-variant'));
+  const honey=card.locator('[data-ingredient-key="honeycomb"]');
+  await honey.locator('.ingredient-count').filter({hasText:'2'}).waitFor();
+  assert.equal(await card.locator('[data-ingredient-key="milk"]').getAttribute('data-ingredient-candidates'),'1743974962,619719355');
+  await card.locator('[data-ingredient-key="tapioca"]').waitFor();
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  await dialog.locator('[data-ingredient-key="honeycomb"] .ingredient-count').filter({hasText:'2'}).waitFor();
+  await dialog.locator('select[name="boba-sweetness"]').selectOption({label:'Very sweet'});
+  await dialog.locator('[data-ingredient-key="honeycomb"] .ingredient-count').filter({hasText:'3'}).waitFor();
   await dialog.locator('select[name="boba-pearls"]').selectOption({label:'Without tapioca'});
   await dialog.locator('select[name="boba-sweetness"]').selectOption({label:'Unsweetened'});
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await card.locator('.inventory-flower-variant-name').filter({hasText:'Without tapioca · Unsweetened'}).waitFor();
+  assert.equal(await honey.count(),0);
+  assert.equal(await card.locator('[data-ingredient-key="tapioca"]').count(),0);
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await card.locator('.inventory-flower-variant-name').filter({hasText:'With tapioca · Sweet'}).waitFor();
   await page.locator('button[title="Redo"]:not([disabled])').click();
@@ -854,6 +863,13 @@ async function inventoryCafeEditSmoke(){
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
   assert.equal(v.getUint32(0,true),1);const final=Array.from({length:6},(_,i)=>v.getInt32(12+i*4,true));
   assert.equal(final[0],48);assert.equal(final[3],9);assert.notDeepEqual([final[1],final[4]],[49,46]);assert.equal(final[2],48);assert.equal(final[5],9);
+  const badges=card.locator('.ingredient-badge');
+  await badges.nth(2).waitFor();
+  assert.deepEqual(await badges.evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-ingredient-slots'))),['1','2','3']);
+  assert.deepEqual(await badges.evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-ingredient-count'))),['1','1','1']);
+  assert.equal(await badges.first().getAttribute('data-ingredient-candidates'),'1622861092');
+  assert.equal(await badges.nth(2).getAttribute('data-ingredient-candidates'),'1622861092');
+  assert.equal(await card.locator('.ingredient-count').count(),0);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM CAFE VARIANT PASS: native ingredient pair, history, recovery and export');
  }finally{await context.close()}

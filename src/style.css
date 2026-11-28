@@ -305,7 +305,7 @@
 .inventory-group-option:hover:not(.active){background:var(--hover)}
 .inventory-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(136px,100%),1fr));gap:6px;align-items:stretch}
 .inventory-card{--inventory-control-size:30px;position:relative;padding:7px;display:flex;flex-direction:column;gap:5px;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px}
-.inventory-card-heading{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;flex:1}
+.inventory-card-heading{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;flex:1}
 /* A fixed 22px badge lane above the 64px artwork cell for every card.
  * Empty lanes occupy the same space; decorators are overlays, not layout. */
 .inventory-item-art{position:relative;display:flex;align-items:center;justify-content:center;flex:none;width:64px;height:64px;padding-top:22px;box-sizing:content-box;overflow:hidden}

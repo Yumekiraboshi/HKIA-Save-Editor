@@ -53,6 +53,8 @@ import {searchAchievementRows} from './achievement-search';
  import {inventoryChefAppearance,hasNativeChefArt} from './inventory-chef-display';
  import {nativeChefInstructionBase} from './native-icon-route';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
+ import IngredientBadges from './IngredientBadges.svelte';
+ import {cafeIngredientBadges,bobaIngredientBadges,type IngredientBadge} from './ingredient-badges';
  import {cafeSlotLabel,cafeVariantLabel,cafeOptionLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
  import {bobaFieldOptions,bobaFieldLabel,bobaFieldValue,bobaNeedsTupleChoice,fullBobaLabel,type BobaVariant,type BobaField} from './inventory-boba-display';
  import {toDateTimeValue,fromDateTimeValue} from './collection-date';
@@ -502,7 +504,10 @@ import {verifiedFloorplanName} from './floorplan-names';
    const item=inventorySourceItems.get(id);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
+  function addIngredientSources(badges:IngredientBadge[]){for(const badge of badges)if(badge.itemIds.length===1)addWandSource(badge.itemIds[0]);}
   for(const row of inventoryRows.slice(0,inventoryLimit)){
+   addIngredientSources(cafeIngredientBadges(row.cafe?.variant,snapshot.cafeWitnesses??[]));
+   addIngredientSources(bobaIngredientBadges(row.boba?.variant,snapshot.bobaWitnesses??[]));
    // Native TryGetSubIcon returns the source item's normal UiIcon, even
    // when the wand itself has a native inventory-art entry.
    if(hasNativeWandArt(row.itemId))addWandSource(inventoryWandAppearance(row.itemId,row.unique)?.sourceItemId);
@@ -518,6 +523,8 @@ import {verifiedFloorplanName} from './floorplan-names';
    const item=inventorySourceItems.get(row.itemId);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
+  if(cafeEdit)addIngredientSources(cafeIngredientBadges(cafeDraft??cafeEdit.before,snapshot.cafeWitnesses??[]));
+  if(bobaEdit)addIngredientSources(bobaIngredientBadges(bobaEdit.options[bobaSelection]??bobaEdit.before,snapshot.bobaWitnesses??[]));
   if(wandEdit&&hasNativeWandArt(wandEdit.itemId))addWandSource(wandEdit.appearance.sourceItemId);
   // A dialog may outlive its visible inventory row or be opened from Add.
   // Load its own original definition group using the same bounded pack queue.
@@ -1899,6 +1906,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          </span>
         {/if}
        </span>
+       <IngredientBadges rows={snapshot.version==='3.0.1'?(item.cafe?cafeIngredientBadges(item.cafe.variant,snapshot.cafeWitnesses??[]):bobaIngredientBadges(item.boba?.variant,snapshot.bobaWitnesses??[])):[]} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/>
        <strong class="inventory-name" title={inventoryName(item.itemId)}>{inventoryName(item.itemId)}</strong>
        {#if variantTitle}<span class="inventory-flower-variant-name" title={variantTitle}>{variantTitle}</span>{/if}
       </div>
@@ -2116,7 +2124,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="cafe-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeCafeEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'cafe',colors:selected.slice(3).filter(n=>n>0)}} fallback={inventoryOriginalSprite(edit.itemId)}/></div>
+    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'cafe',colors:selected.slice(3).filter(n=>n>0)}} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={cafeIngredientBadges(selected,snapshot?.cafeWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/></span></div>
     {#each [0,1,2].filter(i=>selected[i]>0||edit.before[i]>0||edit.options.some(v=>v.slot===i)) as slot}
      {@const choices=edit.options.map((option,index)=>({option,index})).filter(({option})=>option.slot===slot)}
      <label class="date-dialog-field" data-cafe-slot={slot}>
@@ -2249,7 +2257,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      <h2 id="boba-editor-title">{inventoryName(edit.itemId)}</h2>
      <button class="date-dialog-close" type="button" aria-label={copy.cancel} disabled={busy} onclick={closeBobaEditor}>×</button>
     </div>
-    <div style="display:flex;justify-content:center"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}} fallback={inventoryOriginalSprite(edit.itemId)}/></div>
+    <div style="display:flex;justify-content:center"><span class="inventory-flower-preview-frame"><DynamicChefSprite itemId={edit.itemId} appearance={{kind:'boba',colorId:selected[0]}} fallback={inventoryOriginalSprite(edit.itemId)}/><IngredientBadges rows={bobaIngredientBadges(selected,snapshot?.bobaWitnesses??[])} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/></span></div>
     {#each ([1,3,2,4] as BobaField[]) as field}
      {@const choices=bobaFieldOptions(edit.before,edit.options,bobaSelection,field,edit.absent)}
      <label class="date-dialog-field">
