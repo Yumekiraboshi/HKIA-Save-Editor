@@ -2870,8 +2870,14 @@ fn add_custom_palette_variants_from_owned_source_and_cancel_staged(){
   assert_eq!(restored.inventory_unique_data(b),Some(InventoryUniqueData::Palette{rgba_bits:child}));
  }
  let mut invalid=source;invalid[1]=[0,0,0,0x3f800000];invalid[2]=[0,0,0,0x3f800000];
- let e=Editor::open(make(invalid)).unwrap();
- assert!(e.inventory_palette_creation_variants(4).is_empty());
+ let mut e=Editor::open(make(invalid)).unwrap();
+ let choices=e.inventory_palette_creation_variants(4);
+ assert!(!choices.is_empty());
+ for &v in &choices{assert!(e.inventory_palette_preview(4,invalid,v).unwrap().1);}
+ assert!(e.create_inventory_palette_variant(4,invalid,invalid,1).is_err());
+ let new=e.create_inventory_palette_variant(4,invalid,choices[0],1).unwrap();
+ assert_eq!(e.inventory_unique_data(new),Some(InventoryUniqueData::Palette{rgba_bits:choices[0]}));
+ assert_eq!(e.inventory_original_unique_payload(4),Some(encode(invalid).as_slice()));
 }
 
 #[test]
@@ -3905,7 +3911,9 @@ fn palette_preview_composes_source_colors_before_one_atomic_add(){
   let mut p=synthetic_payload("3.0.1");p[2]=8;p[3]=0x96;
   p.extend(doc(1,arr(vec![u(4),u(1835273963),u(21),u(2),encode(original)])));
   let raw=slot_from_payload("3.0.1",p);let input=if zipped{zip(&raw)}else{raw};let mut e=Editor::open(input.clone()).unwrap();
-  assert!(e.inventory_palette_creation_variants(4).is_empty());
+  let complete=e.inventory_palette_creation_variants(4);
+  assert!(!complete.is_empty());
+  assert!(complete.iter().all(|&v|e.inventory_palette_preview(4,original,v).unwrap().1));
   let one=[target[0],original[1],original[2]];let two=[target[0],target[1],original[2]];
   let (options,can)=e.inventory_palette_preview(4,original,original).unwrap();assert!(!can&&options.contains(&one));
   let (options,can)=e.inventory_palette_preview(4,original,one).unwrap();assert!(!can&&options.contains(&two));
