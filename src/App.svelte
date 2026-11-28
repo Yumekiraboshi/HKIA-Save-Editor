@@ -580,7 +580,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function flowerFieldOption(before:FlowerVariant,next:FlowerVariant,group:number):string{
   const name=flowerFieldValue(next,group);
-  return group!==2&&next[3]!==before[3]?name+' · '+flowerCopy.accent+': '+flowerFieldValue(next,2):name;
+  const labels=[name];
+  if(group!==0&&next[1]!==before[1])labels.push(flowerCopy.color+': '+flowerFieldValue(next,0));
+  if(group!==2&&next[3]!==before[3])labels.push(flowerCopy.accent+': '+flowerFieldValue(next,2));
+  return labels.join(' · ');
  }
  function wandOriginalCell(id:number){
   if(inventoryNativeArt?.withheld.has(id))return undefined;

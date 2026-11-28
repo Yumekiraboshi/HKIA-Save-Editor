@@ -1020,6 +1020,11 @@ impl Editor {
   if current[2]!=0&&!FLOWER_EFFECTS.contains(&current[2]){
    for color in FLOWER_COLORS.iter().copied().chain(patterns.retained_colors[1]){let mut v=current;v[3]=color;add(v);}
   }
+  // A complete free tuple can remain when every single-field route is
+  // reserved. Use the same bounded native domain as first-stack starters.
+  if out.is_empty(){
+   if let Some(v)=Self::first_free_flower_tuple(patterns,&[current[0]],|v|v==current||reserved.contains(&v)){out.push(v)}
+  }
   out
  }
  /// On-demand creation choices. Rust alone checks the source species,
@@ -1163,23 +1168,28 @@ impl Editor {
   let defaults:Vec<_>=defaults.into_iter().filter(|&v|valid_flower_variant(policy,v)).collect();
   let free:Vec<_>=defaults.iter().copied().filter(|v|!reserved.contains(v)).collect();
   if !free.is_empty()||defaults.is_empty(){return free}
-  for grow in [6,0,7]{
-   if grow!=6&&!Self::absent_flower_growth_supported(item,grow){continue}
+  let grows:Vec<_>=[6,0,7].into_iter().filter(|&grow|grow==6||Self::absent_flower_growth_supported(item,grow)).collect();
+  Self::first_free_flower_tuple(policy,&grows,|v|reserved.contains(&v)).into_iter().collect()
+ }
+ // All candidate values come from the verified native policy, not saved
+ // peer values or a UI guess. Never introduce restricted acquisition data.
+ fn first_free_flower_tuple(policy:FlowerPolicy,grows:&[i32],mut unavailable:impl FnMut(FlowerVariant)->bool)->Option<FlowerVariant>{
+  for &grow in grows{
    for base in FLOWER_COLORS.iter().copied(){
     for pattern in std::iter::once(0).chain(policy.patterns.iter().copied()){
      if pattern==0||FLOWER_EFFECTS.contains(&pattern){
       let v=[grow,base,pattern,0];
-      if valid_flower_variant(policy,v)&&!reserved.contains(&v){return vec![v]}
+      if !restricted_flower_appearance(v)&&valid_flower_variant(policy,v)&&!unavailable(v){return Some(v)}
      }else{
       for accent in FLOWER_COLORS.iter().copied(){
        let v=[grow,base,pattern,accent];
-       if valid_flower_variant(policy,v)&&!reserved.contains(&v){return vec![v]}
+       if !restricted_flower_appearance(v)&&valid_flower_variant(policy,v)&&!unavailable(v){return Some(v)}
       }
      }
     }
    }
   }
-  Vec::new()
+  None
  }
  pub fn inventory_absent_flower_ids(&self)->Vec<i32>{
   if !self.absent_flower_budget_available(){return Vec::new()}
