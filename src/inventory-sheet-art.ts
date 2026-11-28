@@ -3,13 +3,13 @@ import {loadVerifiedArtAsset} from './dynamic-art-assets';
 import {trackUnavailableArt,untrackUnavailableArt} from './dynamic-art-view';
 
 type DecodedSheet={url:string;height:number};
-/** Only the ten immutable source-pinned inventory sheets are accepted.
+/** Only immutable source-pinned inventory sheet descriptors are accepted.
  * Keep one page-lifetime object URL per successfully decoded sheet; never
  * install an unverified CSS network URL or cache a failed request. */
 export function createInventorySheetLoader(decode=decodeSheet){
  const sheets=new Map<string,Promise<DecodedSheet>>();
  return (asset:NativeSheetAsset)=>{
-  if(!/^sheet-00[0-9]\.webp$/.test(asset.file)||!/^[a-f0-9]{64}$/.test(asset.sha256)||!Number.isSafeInteger(asset.bytes)||asset.bytes<1||asset.bytes>2_000_000)
+  if(!/^sheet-\d{3}\.webp$/.test(asset.file)||!/^[a-f0-9]{64}$/.test(asset.sha256)||!Number.isSafeInteger(asset.bytes)||asset.bytes<1||asset.bytes>2_000_000)
    return Promise.reject(Error('INVENTORY_SHEET_ASSET'));
   const key=JSON.stringify([asset.root,asset.file,asset.sha256,asset.bytes]);
   const cached=sheets.get(key);if(cached)return cached;

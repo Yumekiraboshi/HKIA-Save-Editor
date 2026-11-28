@@ -519,10 +519,11 @@ impl Editor {
  /// Original native inventory records; positive ordinary stack quantity bounds
  /// are source-defined and never inferred from a display category.
  pub fn inventory(&self)->Vec<InventoryEntry>{
+  let sole_positive=self.sole_positive_nil_zero_ids();
   let mut rows:Vec<_>=self.slot.index.inventory.iter().filter_map(|r|{
    if self.inventory_removed.contains(&r.id){return None}
    let quantity_limit=self.inventory_quantity_limit(r);
-   let quantity_minimum=if self.inventory_can_empty(r){0}else{1};
+   let quantity_minimum=if self.inventory_can_empty(r)||sole_positive.contains(&r.id){0}else{1};
    Some(InventoryEntry{document_id:r.id,item_id:r.item_id?,quantity:
     self.inventory_changes.get(&r.id).copied().or(r.quantity)?,
     editable:quantity_limit.is_some(),quantity_limit,quantity_minimum})
@@ -2880,9 +2881,9 @@ impl Editor {
    if (uid==0)!=r.unique_is_nil?{return None}
    if r.unique_is_nil==Some(true)&&crate::inventory_source::definition_requires_unique(item)?{return None}
    let cap=crate::inventory_source::definition_quantity_limit(item)?;
-   // Keep structural bounds for nil rows even when duplicates temporarily
-   // block quantity editing. The live membership gate below re-evaluates them.
-   if uid!=0&&cap<i32::MAX&&self.inventory_item_rows.get(&item)!=Some(&1){return None}
+   // A finite definition bound is not a reason to hide the quantity
+   // editor on a complete persisted row. The shared aggregate preflight
+   // prevents same-item peers from multiplying a finite cap.
    Some((r.id,cap))
   }).collect()
  }
@@ -2899,8 +2900,10 @@ impl Editor {
   };
   let mut caps=HashMap::<i32,i32>::new();
   for r in &self.slot.index.inventory{
-   if self.unique_quantity_ids.contains(&r.id){continue}
    if let Some(&cap)=self.structural_quantity_caps.get(&r.id){
+    // Finite caps are enforced across the complete family even if a
+    // peer also has semantic appearance-edit authority.
+    if cap==i32::MAX&&self.unique_quantity_ids.contains(&r.id){continue}
     if quantity(r).zip(r.quantity).is_some_and(|(n,old)|n>old){
      caps.insert(r.item_id.ok_or(Error::Schema)?,cap);
     }
@@ -2930,12 +2933,7 @@ impl Editor {
   Ok(())
  }
  fn inventory_quantity_limit(&self,r:&crate::native::InventoryRow)->Option<i32>{
-  let cap=self.structural_quantity_caps.get(&r.id).copied()?;
-  // Finite bounds apply to the active family, not the original count. A
-  // duplicate must be explicitly deleted before the surviving nil row can
-  // be edited, and undoing that deletion restores the restriction.
-  if r.unique_is_nil==Some(true)&&cap<i32::MAX&&self.active_saved_item_count(r.item_id?)!=1{return None}
-  Some(cap)
+  self.structural_quantity_caps.get(&r.id).copied()
  }
  fn inventory_creation_source_valid(&self)->bool{
   !self.slot.index.inventory_item_refs_incomplete&&self.inventory_creation_rows_valid()
@@ -3058,7 +3056,26 @@ impl Editor {
    (count>1).then_some(item)
   }).collect()
  }
- /// Batch-only candidates; every positive active peer must reach zero.
+ // A single positive row in an otherwise zero duplicate nil family is
+ // already a complete-family zero operation. Project it as individually
+ // zeroable, using the exact same source and reference gates as batch zero.
+ // Compute once per snapshot, never scan peers for each displayed row.
+ fn sole_positive_nil_zero_ids(&self)->HashSet<u32>{
+  let groups=self.duplicate_nil_zero_groups();
+  groups.into_iter().filter_map(|item|{
+   let mut positive=None;
+   for &id in self.inventory_item_documents.get(&item)?{
+    if self.inventory_removed.contains(&id){continue}
+    let row=self.saved_inventory_row(id)?;
+    if self.inventory_changes.get(&id).copied().or(row.quantity)?>0{
+     if positive.is_some(){return None}
+     positive=Some(id);
+    }
+   }
+   positive
+  }).collect()
+ }
+ /// Batch-capable candidates; every positive active peer must reach zero.
  pub fn inventory_batch_zero_only_ids(&self)->Vec<u32>{
   let groups=self.duplicate_nil_zero_groups();
   self.active_saved_inventory().filter_map(|row|groups.contains(&row.item_id?).then_some(row.id)).collect()
@@ -3204,7 +3221,11 @@ impl Editor {
  /// Persisted document IDs are assigned only by the shared export allocator.
  pub fn change_inventory_quantity(&mut self,id:u32,expected:i32,next:i32)->Result<(),Error>{
   if expected==next{return Err(Error::Schema)}
-  let delta=self.plan_inventory_quantity(id,expected,next,None)?;
+  // A one-row request is sufficient only when its validated nil family
+  // has no other positive active peer. Shared preflight below rejects
+  // partial family zeroing just as it does for a multi-row request.
+  let groups=if next==0{self.duplicate_nil_zero_groups()}else{HashSet::new()};
+  let delta=self.plan_inventory_quantity(id,expected,next,Some(&groups))?;
   self.preflight_inventory_membership(&[delta])?;
   let InventoryQuantityDelta{document_id,before,after}=delta;
   let revision=self.next_edit_revision()?;

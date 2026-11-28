@@ -163,7 +163,7 @@ test('compact inventory keeps quantity controls accessible independently of nati
  assert.doesNotMatch(app,/inventory-quantity-delta|originalInventoryQuantities/);
  assert.doesNotMatch(css,/inventory-quantity-delta/);
  assert.match(app,/disabled=\{busy\|\|inventoryBatchMode\|\|!pending\|\|!quantityInputValid\(item\)\}/);
- assert.match(css,/\.inventory-quantity-form[^{}]*\.quantity-unchanged\{[^}]*visibility:hidden/);
+ assert.match(css,/\.inventory-quantity-form[^{}]*\.quantity-unchanged\{[^}]*display:none/);
  assert.match(app,/aria-label=\{iCopy\.apply\}/);
  assert.match(app,/class="inventory-pin-button" aria-pressed=\{item.nativePinOrder!==undefined\}/);
  assert.doesNotMatch(app,/isInventoryLocked|inventoryLocks|historyBlockedByLocks/);
