@@ -57,6 +57,11 @@ def auxiliary_routes(aux):
         add('growth:%d:7'%i,row['grownTroweled'])
     for row in aux['magic']:
         add('magic:%d'%row['characteristicId'],row['sprite'])
+    for row in aux.get('flowerPatternSprites',[]):
+        i=row['patternIndex'];key='pattern:%d'%i
+        require(type(i) is int and 0<i<=0x7fffffff and key not in entries,'invalid flower pattern route')
+        if row['sprite'] is None:entries[key]=None
+        else:add(key,row['sprite'])
     return entries
 
 def join_swatches(refs,colors):
@@ -97,7 +102,7 @@ def swatch_colors(bundle,layout,aux,atlas):
     field=layout['swatchMapField']
     nodes=[n for n in tree[-1] if n[2]==field]
     require(len(nodes)==1,'reviewed swatch map field missing')
-    values,node=native.map_rows(nodes[0],f[field])
+    values,node=native.map_rows(nodes[0],f[field],('m_Keys','m_Values'))
     colors={}
     for i,v in values:
         parts=atlas.helpers.fields(node,v,atlas.mesh)
@@ -164,6 +169,9 @@ def extract(snapshot,aux,manifest_path,out,previous_dir=None):
         previous=old['textures']
     unresolved=[];jobs=collections.defaultdict(list);atlas_cache={}
     for key,ref in sorted(requested.items()):
+        if ref is None:
+            unresolved.append({'key':key,'reason':'native null FlowerPatternDefinition.Icon'})
+            continue
         try:
             fi,pid=ref['fileId'],ref['pathId']
             require(0<=fi<=len(definition['external']),'auxiliary external reference index')
@@ -191,6 +199,7 @@ def extract(snapshot,aux,manifest_path,out,previous_dir=None):
                 sb,sid,_,raw=sprite
                 try:
                     crop,sample=stage.guarded_crop(image,rect)
+                    atlas.supported(crop.width<=1022 and crop.height<=1022,'auxiliary source exceeds padded page bound')
                     lw,lh=logical;ox,oy=offset
                     trim=[ox,lh-oy-rect[3],ox+rect[2],lh-oy]
                     atlas.supported(lw==lh and tex['colorSpace']==1 and
@@ -240,7 +249,9 @@ def self_test():
     b={'fileId':0,'pathId':'1','external':None,'objectSha256':'a'*64}
     aux={'flowerGrowth':[{'itemId':42,'seed':b,'grownTroweled':{**b,'pathId':'2'}}],
          'magic':[{'characteristicId':104,'sprite':b}]}
-    assert set(auxiliary_routes(aux))=={'growth:42:0','growth:42:7','magic:104'}
+    aux['flowerPatternSprites']=[{'patternIndex':1,'sprite':b},{'patternIndex':2,'sprite':None}]
+    assert set(auxiliary_routes(aux))=={'growth:42:0','growth:42:7','magic:104','pattern:1','pattern:2'}
+    assert auxiliary_routes(aux)['pattern:2'] is None
     aux['magic'].append(aux['magic'][0])
     try:auxiliary_routes(aux)
     except ValueError:pass
