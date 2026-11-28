@@ -36,8 +36,8 @@ def array_rows(node,data,p=0):
         out.append(data[p:q]);p=q
     return out,p
 
-def map_rows(node,data):
-    require([x[2] for x in node[-1]]==['keyData','valueData'],'unsupported typed map')
+def map_rows(node,data,fields=('keyData','valueData')):
+    require(tuple(x[2] for x in node[-1])==fields,'unsupported typed map')
     a,b=node[-1]
     keys,p=array_rows(a,data)
     vals,p=array_rows(b,data,p)
@@ -85,10 +85,18 @@ def extract(snapshot,path,reviewed):
     data=dict(audit.extract_nodes(raw)[1])[snapshot['definitionsCab']]
     require(sha(data)==snapshot['definitionsCabSha256'],'definition CAB fingerprint')
     objects,externals=typed.load(data,mesh)
-    configs={}
+    configs={};patterns={}
     for pid,(cls,tree,blob) in objects.items():
         if cls!=114:continue
         ns={n[2]:n for n in tree[-1]}
+        if {'PatternIndex','IsEffect','SerializedGuid'}<=set(ns):
+            f=helpers.fields(tree,blob,mesh)
+            i=mesh.u(f['PatternIndex'])
+            require(0<i<=0x7fffffff and i not in patterns and 'Icon' in f and len(f['Icon'])==12,
+                    'invalid original FlowerPatternDefinition Icon layout')
+            ref=mesh.ptr(f['Icon'])
+            patterns[i]={'patternIndex':i,'definitionPathId':pid,'definitionSha256':sha(blob),
+                         'sprite':None if ref==[0,'0'] else sprite_binding(ref,objects,externals)}
         role=('characteristics' if {'Characteristics','ColorCharacteristicToSwatchReferenceMapping',
               'FleckCharacteristicToMaterialReferenceMapping'}<=set(ns) else
               'wandDisplay' if {'MagicCharacteristicToDisplay','DefaultGemstone'}<=set(ns) else None)
@@ -184,6 +192,8 @@ def extract(snapshot,path,reviewed):
         require(wands==[{k:r[k] for k in ('itemId','wandType','scale','offsetPercent','rotation')}
                          for r in transforms['wands']], 'baseline wand transforms')
         require(len(known)==132,'baseline characteristic census')
+        require(set(patterns)==set(range(1,17)) and all(r['sprite'] is not None for r in patterns.values()),
+                'baseline flower decorator pattern census')
     result={'schema':'HKIA.IconAuxiliarySourceCandidate.1','approval':'review-required',
             'version':snapshot['version'],'platform':snapshot['platform'],
             'definitionSnapshotSha256':snapshot['snapshotSha256'],'layout':LAYOUT,
@@ -193,6 +203,7 @@ def extract(snapshot,path,reviewed):
             'magic':sorted(magic,key=lambda r:r['characteristicId']),
             'flecks':sorted(flecks,key=lambda r:r['characteristicId']),
             'flowerGrowth':flowers,'wandTransforms':wands,
+            'flowerPatternSprites':sorted(patterns.values(),key=lambda r:r['patternIndex']),
             'unresolvedSwatchIds':sorted({v for _,v in swatches}),
             'automaticReleaseActivationAuthorized':False}
     result['receiptSha256']=sha(source.stable(result))
