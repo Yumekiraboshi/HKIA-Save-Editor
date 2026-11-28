@@ -45,8 +45,8 @@ test('SVG toolbar actions remain keyboard accessible and per-tab history is sele
  assert.match(app,/class="history-menu" bind:this=\{historyMenu\}/);
  assert.match(app,/onclick=\{\(\)=>void goToHistory\(0\)\}/);
  assert.match(app,/onclick=\{\(\)=>void goToHistory\(i\+1\)\}/);
- assert.match(app,/disabled=\{busy\|\|tabHistoryCursor===0\|\|historyBlockedByLocks\(tabHistoryCursor-1\)\}/);
- assert.match(app,/disabled=\{busy\|\|tabHistoryCursor>=tabHistory.length\|\|historyBlockedByLocks\(tabHistoryCursor\+1\)\}/);
+ assert.match(app,/disabled=\{busy\|\|tabHistoryCursor===0\}/);
+ assert.match(app,/disabled=\{busy\|\|tabHistoryCursor>=tabHistory.length\}/);
  assert.match(app,/class="header-icon" viewBox="0 0 24 24"/);
  assert.match(app,/class="select-icon" viewBox="0 0 24 24"/);
  assert.match(app,/class="menu-icon" viewBox="0 0 24 24"/);

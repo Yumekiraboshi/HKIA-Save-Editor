@@ -152,7 +152,7 @@ test('original native flower and furniture images are pinned',()=>{
  assert.equal(createHash('sha256').update(readFileSync(new URL('../public/icons/inventory-category-furniture.png',import.meta.url))).digest('hex'),'f428d50dea3962fae65d6b3ae787aecf4b9ffccca45f86ac1089446e6db3e7ad');
 });
 
-test('compact inventory keeps quantity controls accessible and locks unsupported records',()=>{
+test('compact inventory keeps quantity controls accessible independently of native pins',()=>{
  const app=readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
  const css=readFileSync(new URL('../src/style.css',import.meta.url),'utf8');
  assert.match(css,/\.inventory-grid\{[^}]*minmax\(min\(136px,100%\),1fr\)/);
@@ -162,9 +162,11 @@ test('compact inventory keeps quantity controls accessible and locks unsupported
  assert.match(app,/class:quantity-unchanged=\{!pending\}/);
  assert.doesNotMatch(app,/inventory-quantity-delta|originalInventoryQuantities/);
  assert.doesNotMatch(css,/inventory-quantity-delta/);
- assert.match(app,/disabled=\{busy\|\|inventoryBatchMode\|\|locked\|\|!pending\|\|!quantityInputValid\(item\)\}/);
+ assert.match(app,/disabled=\{busy\|\|inventoryBatchMode\|\|!pending\|\|!quantityInputValid\(item\)\}/);
  assert.match(css,/\.inventory-quantity-form[^{}]*\.quantity-unchanged\{[^}]*visibility:hidden/);
  assert.match(app,/aria-label=\{iCopy\.apply\}/);
+ assert.match(app,/class="inventory-pin-button" aria-pressed=\{item.nativePinOrder!==undefined\}/);
+ assert.doesNotMatch(app,/isInventoryLocked|inventoryLocks|historyBlockedByLocks/);
  assert.match(app,/class="inventory-readonly-quantity" title=\{iCopy\.readonly\}/);
  assert.match(app,/title=\{inventoryName\(item\.itemId\)\}/);
 });
