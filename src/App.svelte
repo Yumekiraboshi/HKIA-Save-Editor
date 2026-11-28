@@ -55,6 +55,7 @@ import {searchAchievementRows} from './achievement-search';
  import {nativeChefInstructionBase} from './native-icon-route';
  import {CUSTOM_PALETTE_ITEM_ID,paletteVariantOf,paletteFromWords,paletteColorHex,paletteRemovalSwatches,paletteSelectChannel,paletteChannelEqual,type PaletteVariant} from './inventory-palette-display';
  import IngredientBadges from './IngredientBadges.svelte';
+ import {ordinaryRecipeBadges} from './ordinary-recipe-badges';
  import {cafeIngredientBadges,bobaIngredientBadges,type IngredientBadge} from './ingredient-badges';
  import {cafeSlotLabel,cafeVariantLabel,cafeOptionLabel,type CafeVariant,type CafeOption} from './inventory-cafe-display';
  import {bobaFieldOptions,bobaFieldLabel,bobaFieldValue,bobaNeedsTupleChoice,fullBobaLabel,type BobaVariant,type BobaField} from './inventory-boba-display';
@@ -540,10 +541,9 @@ import {verifiedFloorplanName} from './floorplan-names';
    const item=inventorySourceItems.get(id);
    if(item&&inventorySourceGroups.has(item[3]))groups.add(item[3]);
   }
-  function addIngredientSources(badges:IngredientBadge[]){for(const badge of badges)if(badge.itemIds.length<=2)for(const id of badge.itemIds)addWandSource(id);}
+  function addIngredientSources(badges:IngredientBadge[]){for(const badge of badges)for(const id of badge.itemIds)addWandSource(id);}
   for(const row of inventoryRows.slice(0,inventoryLimit)){
-   addIngredientSources(cafeIngredientBadges(row.cafe?.variant,snapshot.cafeWitnesses??[]));
-   addIngredientSources(bobaIngredientBadges(row.boba?.variant,snapshot.bobaWitnesses??[]));
+   addIngredientSources(inventoryIngredientBadges(row));
    // Native TryGetSubIcon returns the source item's normal UiIcon, even
    // when the wand itself has a native inventory-art entry.
    if(hasNativeWandArt(row.itemId))addWandSource(inventoryWandAppearance(row.itemId,row.unique)?.sourceItemId);
@@ -646,6 +646,13 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(native)return native;
   const group=inventorySourceItems.get(id)?.[3];
   return selectWandOriginalCell(id,group,group?inventoryIconPacks[group]?.entries:undefined);
+ }
+ function inventoryIngredientBadges(item:InventoryEntry):IngredientBadge[]{
+  if(!snapshot||snapshot.version!=='3.0.1')return [];
+  if(item.cafe)return cafeIngredientBadges(item.cafe.variant,snapshot.cafeWitnesses??[]);
+  if(item.boba)return bobaIngredientBadges(item.boba.variant,snapshot.bobaWitnesses??[]);
+  if((item.unique&&item.unique.tag!==-1)||!nativeInventoryGroups(item.itemId,nativeInventoryIndex).includes('food'))return [];
+  return ordinaryRecipeBadges(item.itemId,snapshot.version);
  }
  function inventoryOriginalSprite(itemId:number){
   if(inventoryNativeArt?.withheld.has(itemId))return undefined;
@@ -1993,7 +2000,7 @@ import {verifiedFloorplanName} from './floorplan-names';
          </span>
         {/if}
        </span>
-       <IngredientBadges rows={snapshot.version==='3.0.1'?(item.cafe?cafeIngredientBadges(item.cafe.variant,snapshot.cafeWitnesses??[]):bobaIngredientBadges(item.boba?.variant,snapshot.bobaWitnesses??[])):[]} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/>
+       <IngredientBadges rows={inventoryIngredientBadges(item)} spriteFor={inventoryOriginalSprite} nameFor={inventoryName}/>
        <strong class="inventory-name" title={inventoryName(item.itemId)}>{inventoryName(item.itemId)}</strong>
        {#if variantTitle}<span class="inventory-flower-variant-name" title={variantTitle}>{variantTitle}</span>{/if}
       </div>

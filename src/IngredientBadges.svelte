@@ -12,6 +12,7 @@
   {#each rows as badge (badge.key)}
    {@const sprites=badge.itemIds.map(spriteFor)}
    {@const sprite=sprites.length===1?sprites[0]:undefined}
+   {@const columns=Math.ceil(Math.sqrt(sprites.length))}
    {@const title=(badge.itemIds.map(nameFor).join(' / ')||'?')+(badge.count>1?' · '+badge.count:'')}
    <span class="ingredient-badge" data-ingredient-candidates={badge.itemIds.join(',')} data-ingredient-count={badge.count} data-ingredient-key={badge.key} data-ingredient-slots={badge.slots.join(',')} role="img" aria-label={title} {title}>
     <span class="ingredient-art" aria-hidden="true">
@@ -20,6 +21,12 @@
       {#each sprites as candidate,i}
        {#if candidate}<span class="ingredient-candidate" class:second={i===1}><InventoryAtlasSprite sprite={candidate}/></span>{/if}
       {/each}
+     {:else if sprites.length>2&&sprites.every(Boolean)}
+      <span class="ingredient-candidate-grid" style:grid-template-columns={`repeat(${columns},minmax(0,1fr))`} style:--candidate-grid-scale={size/columns/96}>
+       {#each sprites as candidate}
+        {#if candidate}<span class="ingredient-grid-cell"><InventoryAtlasSprite sprite={candidate}/></span>{/if}
+       {/each}
+      </span>
      {:else}<span class="ingredient-unknown">{badge.itemIds.length===0?'?':'✧'}</span>{/if}
     </span>
 
@@ -46,5 +53,8 @@
  .ingredient-candidate{position:absolute;top:0;left:0;width:66%;height:66%;overflow:hidden}
  .ingredient-candidate.second{top:auto;left:auto;bottom:0;right:0}
  .ingredient-candidate :global(.item-sprite){transform:scale(var(--ingredient-candidate-scale))}
+ .ingredient-candidate-grid{display:grid;width:100%;height:100%;align-content:center}
+ .ingredient-grid-cell{position:relative;aspect-ratio:1;overflow:hidden}
+ .ingredient-grid-cell :global(.item-sprite){transform:scale(var(--candidate-grid-scale))}
  .ingredient-count{position:absolute;bottom:0;right:0;min-width:10px;height:11px;border-radius:3px;background:var(--panel);color:var(--ink);font-size:9px;font-weight:700;line-height:11px;text-align:center;box-shadow:0 0 0 1px var(--line)}
 </style>
