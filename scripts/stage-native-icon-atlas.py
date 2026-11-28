@@ -168,6 +168,62 @@ def original_canvas(image, logical, rect, offset):
     canvas.paste(crop,(left,upper))
     return canvas
 
+def stage_original_sprites(folder, requests, loaded, cabs, hashes, prior_dir=None, prior=None):
+    """Shared original Sprite extraction for all reviewed view/icon roles.
+    requests: [(route_key, owner_bundle_name, native PPtr)].
+    Identity includes actual Sprite, render data, texture bytes and policy.
+    Unsupported pointers stay absent; caller retains explicit null/unresolved.
+    """
+    jobs=collections.defaultdict(list)
+    cache={}
+    for key,owner,ref in requests:
+        if ref==[0,'0'] or owner not in loaded:continue
+        try:
+            sprite=resolve(loaded[owner],ref,cabs,213)
+            logical,rect,offset,texture,binding=geometry(sprite,cabs,cache)
+            jobs[(texture[0]['cab'],texture[1])].append((key,sprite,logical,rect,offset,texture,binding))
+        except (Unsupported,KeyError,StopIteration,struct.error):continue
+    results={};resolved={}
+    for _,group in sorted(jobs.items()):
+        try:image,tex=texture_data(group[0][5])
+        except (Unsupported,KeyError,StopIteration,struct.error):continue
+        for key,sprite,logical,rect,offset,texture,binding in group:
+            sb,pid,_,raw=sprite;identity=(sb['cab'],pid)
+            if identity not in resolved:
+                proof={'spriteSha256':sha(raw),'logicalSize':logical,'rect':rect,'offset':offset,
+                       **binding,**tex,'renderer':native_webp.POLICY}
+                fingerprint=sha(source.stable(proof))
+                old=(prior or {}).get(fingerprint)
+                try:
+                    if old is not None:
+                        asset=native_webp.reuse(folder,prior_dir,old)
+                        require((asset['width'],asset['height'])==tuple(round(v) for v in logical),
+                                'prior source dimensions mismatch')
+                    else:
+                        asset=native_webp.store(folder,original_canvas(image,logical,rect,offset))
+                except Unsupported:continue
+                resolved[identity]={'kind':'sprite','sourceBundleSha256':hashes[sb['cab']],
+                    'spritePathId':pid,'sourceSha256':fingerprint,'asset':asset}
+            results[key]=resolved[identity]
+        del image
+    return results
+
+def previous_original_sprites(directory,manifest_name,schema,platform,field):
+    if directory is None:return {}
+    value=source.read_json(directory/manifest_name)
+    require(value['schema']==schema and value['platform']==platform and
+            value['artworkPolicy']==native_webp.POLICY and
+            value.get('receiptSha256')==sha(source.stable({k:v for k,v in value.items() if k!='receiptSha256'})),
+            'previous view art requires native-resolution receipt')
+    result={}
+    for row in value['rows']:
+        icon=row[field]
+        if icon['kind']!='sprite':continue
+        key=icon['sourceSha256'];asset=icon['asset']
+        require(source.SHA.fullmatch(key) and (key not in result or result[key]==asset),'conflicting previous source')
+        result[key]=asset
+    return result
+
 def crop_tile(image, logical, rect, offset):
     # Legacy production transport only. New candidates use original_canvas.
     from PIL import Image
