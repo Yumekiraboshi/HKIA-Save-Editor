@@ -7133,7 +7133,8 @@ fn native_pin_projection_distinguishes_empty_screen_from_missing_or_unresolved()
  for mode in 0..4{
   let mut payload=synthetic_payload("3.0.1");payload[2]=9;payload[3]=if mode==0{0x97}else{0x98};
   payload.extend(doc(1,arr(vec![u(4),u(1877756618),u(0),u(6),vec![0xc0]])));
-  payload.extend(doc(1,arr(vec![u(5),u(2147483647),u(0),u(1),vec![0xc0]])));
+  // Item 1 is absent from the authenticated v3.0.1 GUID crosswalk (Int32::MAX is not).
+  payload.extend(doc(1,arr(vec![u(5),u(1),u(0),u(1),vec![0xc0]])));
   if mode!=0{
    let key=if mode==1{[4,5,6,7]}else{INVENTORY_PIN_SCREEN};
    let sets=arr(vec![arr(vec![u(0),guid(key)])]);
