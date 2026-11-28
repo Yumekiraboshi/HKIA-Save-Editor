@@ -104,14 +104,15 @@ def original_routes(snapshot,rows,path,reviewed):
             if mesh.string(helpers.fields(st,sb,mesh)['m_Name'])[0]=='icon_placeholder':
                 placeholder.add(i)
         ref=f['references']
-        # Decode the actual managed class, not a substring in an item name.
-        if len(ref)<=8:
+        # Unrelated managed registries may contain multiple children.
+        # Only the known result classes use the reviewed one-root layout.
+        classes=[c for c in helpers.CLASSES if c.encode() in ref]
+        if not classes:
             continue
-        require(len(ref)>=20 and struct.unpack_from('<II',ref)==(2,1) and
-                ref[8:16]==f['Details'],'unsupported managed definition references')
+        require(len(classes)==1 and len(ref)>=20 and struct.unpack_from('<II',ref)==(2,1) and
+                ref[8:16]==f['Details'],'unsupported result managed references')
         name,p=mesh.string(ref,16)
-        if name not in helpers.CLASSES:
-            continue
+        require(name==classes[0],'native result root class mismatch')
         ns,p=mesh.string(ref,p)
         asm,p=mesh.string(ref,p)
         require(ns=='Sunblink.Game' and asm=='Assembly-CSharp','native result class')
@@ -278,7 +279,7 @@ def split_archives(folder,group,entries):
     require(sum(p['bytes'] for p in parts)<=20*1024*1024,'collection group delivery budget')
     return parts
 
-def pack_static(folder,base_dir,base,cells,sprite_cells,groups,placeholders,dynamic,atlas):
+def pack_static(folder,base_dir,base,cells,sprite_cells,groups,placeholders,dynamic,texture_records,atlas):
     from PIL import Image
     cache={}
     def tile(pos):
@@ -332,16 +333,39 @@ def pack_static(folder,base_dir,base,cells,sprite_cells,groups,placeholders,dyna
             pack_digests.extend([p['file'],p['bytes'],p['gitBlobSha1']] for p in result)
     extra_ids=sorted(set(cells)-set(groups)-set(placeholders))
     metas,records=make_sheets(extra,extra_ids)
+    placeholder_records={}
+    placeholder_dir=folder/'original-placeholder-art';placeholder_dir.mkdir()
+    placeholder_cells={}
+    for i in sorted(set(placeholders)&set(cells)):
+        pos=cells[i][:2]
+        if pos not in placeholder_cells:
+            im=tile(pos)
+            b=io.BytesIO();im.save(b,format='WEBP',lossless=True,method=4,exact=True)
+            raw=b.getvalue()
+            with Image.open(io.BytesIO(raw)) as check:
+                require(atlas.visible_hash(check.convert('RGBA'))==atlas.visible_hash(im),'placeholder pixel readback')
+            name=sha(raw)+'.webp'
+            (placeholder_dir/name).write_bytes(raw)
+            placeholder_cells[pos]={'file':name,'sha256':sha(raw),'spritePathId':cells[i][2]}
+        placeholder_records[str(i)]=placeholder_cells[pos]
+    source.write_new(placeholder_dir/'index.json',{'records':placeholder_records})
     withheld=[[i,cells[i][2],'source-placeholder'] for i in sorted((set(placeholders)&set(cells))-set(groups))]
-    # A missing base is withheld as dynamic only if its true original base
-    # is provided by the separate guarded dynamic stage; caller audits it.
+    # Never fabricate an ordinary base. An actual guarded dynamic base can
+    # cover a missing static cell, but its family manifest still needs review.
+    withheld.extend([i,dynamic[i]['baseSprite']['pathId'],'dynamic-color']
+        for i in sorted(set(dynamic)-set(cells)-set(groups)-set(placeholders))
+        if dynamic[i]['family'] in ('flower','cafe','boba','wand','palette') and 'base:'+str(i) in texture_records)
+    withheld.sort()
+    missing_extra=sorted(set(base_id for base_id in (r['itemId'] for r in base['unresolved']))
+                         -set(groups)-{r[0] for r in withheld})
     source.write_new(extra/'index.json',{'schema':'HKIA.InventoryNativeArt.1',
         'version':base['version'],'definitionsSha256':base['sourceBundles']['definitions'],
         'atlasSha256':base['sourceBundles'].get('atlas_global'),'size':SIDE,'columns':COLS,
         'count':len(records),'withheldCount':len(withheld),'sheets':metas,'records':records,'withheld':withheld})
     return {'collectionPackParts':parts,'collectionPackDigests':sorted(pack_digests),
             'collectionBaseCount':sum(map(len,by_group.values())),
-            'inventoryBaseCount':len(records),'placeholderCount':len(withheld)}
+            'inventoryBaseCount':len(records),'placeholderCount':len(placeholder_records),
+            'missingInventoryBaseItemIds':missing_extra}
 
 def pack_overrides(folder,stage_dir,records):
     from PIL import Image
@@ -379,6 +403,23 @@ def shelf_pages(sizes,limit=1024):
     if page:pages.append(page)
     return pages
 
+def edge_pad(im):
+    # A crop touching the original texture edge has no outside guard texel.
+    # Repeat the original edge so packing beside another crop cannot change
+    # bilinear clamp behavior. No original pixel is resampled.
+    from PIL import Image
+    w,h=im.size
+    out=Image.new('RGB',(w+2,h+2))
+    out.paste(im,(1,1))
+    out.paste(im.crop((0,0,1,h)),(0,1))
+    out.paste(im.crop((w-1,0,w,h)),(w+1,1))
+    out.paste(im.crop((0,0,w,1)),(1,0))
+    out.paste(im.crop((0,h-1,w,h)),(1,h+1))
+    for x,sx in ((0,0),(w+1,w-1)):
+        for y,sy in ((0,0),(h+1,h-1)):
+            out.putpixel((x,y),im.getpixel((sx,sy)))
+    return out
+
 def pack_dynamic(folder,stage_dir,stage):
     from PIL import Image
     out=folder/'dynamic-source-pages';out.mkdir()
@@ -393,7 +434,7 @@ def pack_dynamic(folder,stage_dir,stage):
                     'dynamic original texture geometry')
             pixels=im.copy()
         require(sha(pixels.tobytes())==m['rgbSha256'],'dynamic original RGB identity')
-        images[key]=pixels;sizes.append((key,pixels.width,pixels.height//2))
+        images[key]=pixels;sizes.append((key,pixels.width+2,pixels.height//2+2))
     pages=[];placement={}
     def emit(group):
         width=max(x+w for _,x,y,w,h in group)
@@ -401,8 +442,9 @@ def pack_dynamic(folder,stage_dir,stage):
         im=Image.new('RGB',(width,height*2))
         for key,x,y,w,h in group:
             src=images[key]
-            im.paste(src.crop((0,0,w,h)),(x,y))
-            im.paste(src.crop((0,h,w,h*2)),(x,y+height))
+            ow,oh=w-2,h-2
+            im.paste(edge_pad(src.crop((0,0,ow,oh))),(x,y))
+            im.paste(edge_pad(src.crop((0,oh,ow,oh*2))),(x,y+height))
         b=io.BytesIO();im.save(b,format='WEBP',lossless=True,method=4,exact=True)
         raw=b.getvalue()
         if len(raw)>MAX_TEXTURE_BYTES:
@@ -419,7 +461,7 @@ def pack_dynamic(folder,stage_dir,stage):
         meta={'file':name,'bytes':len(raw),'sha256':sha(raw),'rgbSha256':sha(im.tobytes()),
               'width':width,'height':height*2}
         pages.append(meta)
-        for key,x,y,w,h in group:placement[key]=(meta,x,y,w,h,height)
+        for key,x,y,w,h in group:placement[key]=(meta,x+1,y+1,w-2,h-2,height)
     for group in shelf_pages(sizes):emit(group)
     records={}
     for key,r in sorted(stage['records'].items()):
@@ -468,7 +510,7 @@ def assemble(args):
     args.out.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='hkia-icon-release-',dir=args.out.parent) as tmp:
         folder=Path(tmp)/'candidate';folder.mkdir()
-        static=pack_static(folder,args.base_stage,base,cells,sprite_cells,catalog,placeholders,dynamic,atlas)
+        static=pack_static(folder,args.base_stage,base,cells,sprite_cells,catalog,placeholders,dynamic,dynamic_stage['records'],atlas)
         override_count=pack_overrides(folder,args.override_stage,completed)
         texture_count,page_count=pack_dynamic(folder,args.dynamic_stage,dynamic_stage)
         report={'schema':SCHEMA,'approval':'review-required','version':snapshot['version'],
@@ -520,6 +562,17 @@ def self_test():
     assert a==zip_bytes([('index.json',b'{}'),('sheet-000.webp',b'original')])
     with zipfile.ZipFile(io.BytesIO(a)) as z:
         assert z.namelist()==['index.json','sheet-000.webp'] and all(i.compress_type==0 for i in z.infolist())
+    try:
+        from PIL import Image
+    except ImportError:
+        pass
+    else:
+        im=Image.new('RGB',(2,2))
+        im.putdata([(10,20,30),(40,50,60),(70,80,90),(100,110,120)])
+        padded=edge_pad(im)
+        assert padded.size==(4,4) and padded.crop((1,1,3,3)).tobytes()==im.tobytes()
+        assert padded.getpixel((0,0))==im.getpixel((0,0))
+        assert padded.getpixel((3,3))==im.getpixel((1,1))
     print('HKIA_ICON_RELEASE_ASSEMBLY_SELF_TEST_OK')
 
 if __name__=='__main__':

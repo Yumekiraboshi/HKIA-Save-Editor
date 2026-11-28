@@ -34,3 +34,11 @@ python scripts/stage-icon-overrides.py --snapshot candidate.json --bundles origi
 ```
 
 Requires Pillow for actual decoding, and uses the existing original BC3 decoder. Resolve exact GUID -> AssetBundle container -> local Sprite -> Texture2D, confirm the original definition key and verified 256px Sprite geometry, then produce lossless 96px WebP using the existing layout. No approximate/name-only selection. The previous stage is optional: reuse only if exact Item ID/GUID, original Sprite object, Texture2D object, compressed texture bytes and renderer revision all match, with the previous WebP digest validated. A changed bundle may still contain unchanged individual image dependencies. New or changed bindings are decoded. A missing source is listed explicitly; conflicting/unsupported bindings fail instead of guessing. The output directory is created outside the repository and contains staged original images and one source receipt, not a second production database. Staging is never a publication or release approval. Other native sprite/atlas and dynamic-compositor families still require their existing source-specific extraction steps and candidate closure checks.
+
+## Shared base atlas and dynamic source staging
+
+Use [native icon atlas staging](native-icon-atlas-staging.md) for the normal original UiIcon layer and [dynamic texture staging](dynamic-icon-texture-staging.md) for candidate dynamic masks and original base texels. These reuse the same original SpriteAtlas/Texture2D resolver and decoder; only the transport differs (96px reference cells versus original unresampled RGB/alpha planes). Both preserve unresolved references and remain outside publication until final source route/pack closure.
+
+## Assemble the release candidate
+
+Use [icon release pack assembly](icon-release-pack.md) after the base/override/dynamic stages. Keep the output outside the repository until every required source route and native runtime dependency is verified; the candidate receipt never activates a release.
