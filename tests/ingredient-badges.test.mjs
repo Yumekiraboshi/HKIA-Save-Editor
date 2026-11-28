@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
+import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 const {outputFiles}=await build({entryPoints:[fileURLToPath(new URL('../src/ingredient-badges.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
 const {cafeIngredientBadges,bobaIngredientBadges}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
@@ -32,4 +34,29 @@ test('Boba modifiers use the source processor characteristics and keep milk ambi
  }
  assert.deepEqual(bobaIngredientBadges([6,44,79,78,71],w),[base]);
  assert.deepEqual(bobaIngredientBadges([6,44,0,0,999],w),[base]);
+});
+
+test('all original flavor materials, exact pairs and every source flavor-only mismatch resolve without invented IDs',()=>{
+ const native=readFileSync(new URL('../core/src/inventory_source.rs',import.meta.url),'utf8');
+ const table=native.match(/const CAFE_INGREDIENT_WITNESSES:[\s\S]*?=\s*&\[([\s\S]*?)\];/)[1];
+ const rows=[...table.matchAll(/\((\d+),(\d+),(\d+)\)/g)].map(m=>m.slice(1).map(Number));
+ assert.equal(rows.length,48);
+ assert.equal(createHash('sha256').update(JSON.stringify(rows)+'\n').digest('hex'),'584604fa1159b9aa7f76178c4a4f83352316856d273e27550fb86ef1aab0ddb1');
+ const flavors=[...new Set(rows.map(r=>r[1]))],colors=[...new Set(rows.map(r=>r[2]))];
+ assert.equal(flavors.length,32);
+ assert.equal(new Set(rows.map(r=>r.slice(1).join(':'))).size,47);
+ for(const f of flavors)for(const c of [...colors,0,9999]){
+  const exact=rows.filter(r=>r[1]===f&&r[2]===c).map(r=>r[0]),same=rows.filter(r=>r[1]===f).map(r=>r[0]);
+  const cafe=cafeIngredientBadges([f,0,0,c,0,0],rows)[0];
+  const boba=bobaIngredientBadges([c,f,79,78,71],rows)[0];
+  for(const badge of [cafe,boba]){
+   assert.deepEqual(badge.itemIds,exact.length?exact:same);
+   assert.equal(badge.flavorOnly,exact.length?undefined:true);
+  }
+ }
+ // Two original authored CafeCreationUniqueData definitions use 54/9,
+ // while the sole original cheesy ingredient has 54/25.
+ assert.deepEqual(cafeIngredientBadges([54,0,0,9,0,0],rows)[0],
+  {key:'1:54:9',itemIds:[1002666914],flavorOnly:true,slots:[1],count:1});
+ assert.deepEqual(cafeIngredientBadges([9999,0,0,9,0,0],rows)[0].itemIds,[]);
 });

@@ -1,6 +1,6 @@
 <script lang="ts">
  import type {SpriteCell} from './icon-packs';
- import {flowerGrowthKind,flowerGrowthSpriteState,flowerUsesDefinitionIcon,type InventoryFlower,type FlowerDisplayDefinitions} from './inventory-flower-display';
+ import {flowerGrowthSpriteState,flowerUsesDefinitionIcon,type InventoryFlower,type FlowerDisplayDefinitions} from './inventory-flower-display';
  import {renderFlowerArt,renderFlowerOriginalBaseArt,renderFlowerDefinitionBaseArt} from './flower-runtime-art';
  import {flowerArtKey} from './flower-appearance';
  import {isStaticFlowerCreationIcon} from './flower-icon-route';
@@ -9,7 +9,6 @@
  import DynamicArtSprite from './DynamicArtSprite.svelte';
  import {createVerifiedSpriteView} from './verified-sprite-view.svelte';
  let {itemId,flower,definitions,fallback}:{itemId:number;flower?:InventoryFlower;definitions:FlowerDisplayDefinitions|null;fallback?:SpriteCell}=$props();
- const growth=$derived(flowerGrowthKind(itemId,flower));
  const spriteState=$derived(flowerGrowthSpriteState(itemId,flower));
  let near=$state(false);
  let resolved=$state<{id:number;state:number;cell:SpriteCell|null}|undefined>();
@@ -19,8 +18,7 @@
  const growthResult=$derived(resolved?.id===itemId&&resolved.state===spriteState?resolved:undefined);
  const growthCell=$derived(growthResult?.cell??undefined);
  const staticRoute=$derived(isStaticFlowerCreationIcon(itemId));
- const unknownRoute=$derived(growth==='unknown'&&!flowerUsesDefinitionIcon(itemId,flower));
- const fallbackView=createVerifiedSpriteView(()=>fallback,()=>staticRoute||unknownRoute||near&&spriteState!==undefined&&!growthCell);
+ const fallbackView=createVerifiedSpriteView(()=>fallback,()=>staticRoute||near&&spriteState!==undefined&&!growthCell);
  const visible=$derived(fallbackView.cell);
  const displayed=$derived(growthCell??visible);
  $effect(()=>{
@@ -59,7 +57,8 @@
    ?renderFlowerOriginalBaseArt(id,fields)
    :fields&&defs?renderFlowerArt(id,fields,defs):Promise.resolve(null);
  });
- let renderPartial=$derived.by(()=>{const id=itemId,fields=flower?{...flower}:undefined;return ()=>fields?renderFlowerOriginalBaseArt(id,fields):renderFlowerDefinitionBaseArt(id);});
+ // A known species template remains a reference even for an unknown saved state.
+ let renderPartial=$derived.by(()=>{const id=itemId;return ()=>renderFlowerDefinitionBaseArt(id);});
 </script>
 {#if spriteState!==undefined}
  <span use:watchDynamicArtVisibility={setNear} class:item-sprite={!!displayed||!!baseUrl} class:item-art-empty={!displayed&&!baseUrl}
@@ -72,10 +71,6 @@
   style:background-repeat={!displayed&&baseUrl?'no-repeat':undefined}>{#if !displayed&&!baseUrl}✧{/if}</span>
 {:else if staticRoute}
  <span class:item-sprite={!!visible} class:item-art-empty={!visible} data-inventory-art="native-static-route" style:background-image={visible?'url("'+visible.url+'")':undefined} style:background-position={visible?'-'+visible.x+'px -'+visible.y+'px':undefined}>{#if !visible}✧{/if}</span>
-{:else if unknownRoute}
- <span class:item-sprite={!!visible} class:item-art-empty={!visible} data-flower-state-art={visible?'species-reference':undefined}
-  style:background-image={visible?'url("'+visible.url+'")':undefined}
-  style:background-position={visible?'-'+visible.x+'px -'+visible.y+'px':undefined}>{#if !visible}✧{/if}</span>
 {:else}
  <DynamicArtSprite {renderKey} {render} {renderPartial} source="native-flower" {fallback}/>
 {/if}

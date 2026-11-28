@@ -7076,6 +7076,7 @@ fn indexed_reference_authority_matches_exact_pair_and_unresolved_family(){
  }
 }
 
+
 #[test]
 fn native_pin_source_joins_exact_screen_and_preserves_other_settings(){
  use hkia_save_core::native::INVENTORY_PIN_SCREEN;

@@ -198,6 +198,8 @@ pub struct NativeIndex {pub documents:usize,pub logical_nodes:usize,pub achievem
  pub inventory_wand_copies:bool,
  /// None means absent, unsupported or incomplete, not an empty pin list.
  pub pinned_items_source:Option<PinnedItemsSource>,
+ /// Original record identity only; no mutation or implicit context selection.
+ pub inventory_pin_guids:HashMap<u32,[u32;4]>,
  pub pin_settings_seen:usize,
  pub pin_settings_incomplete:bool,
  pub(crate) document_spans:Vec<DocumentSpan>,
@@ -897,6 +899,9 @@ pub fn index_native(bytes:&[u8],version:Version)->Result<NativeIndex,Error>{
  w.index.inventory_referenced_items=w.index.inventory_item_refs.iter().map(|&(item,_)|item).collect();
  w.index.inventory_unresolved_reference_items=w.index.inventory_item_refs.iter()
   .filter(|pair|!w.index.inventory_resolved_positive_item_refs.contains(pair)).map(|&(item,_)|item).collect();
+ if version==Version::V301&&w.index.pinned_items_source.is_some(){
+  w.index.inventory_pin_guids=crate::inventory_pin::source_identities(&w.index.inventory,bytes);
+ }
  correlate_source_only(&mut w.index);
  correlate_visitor_manager_source_only(&mut w.index);
  Ok(w.index)

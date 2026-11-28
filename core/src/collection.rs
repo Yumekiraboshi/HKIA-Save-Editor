@@ -201,7 +201,7 @@ fn furniture_key(source:&FurnitureItemSource,v:FurnitureVariant)->Option<Furnitu
  Some(key)
 }
 // Exact native GUIDs from Steam v3.0.1 definitions, ColorIndex/PatternIndex.
-const LEGACY_FLOWER_COLOR_GUIDS:&[[u32;4]]=&[
+pub(crate) const LEGACY_FLOWER_COLOR_GUIDS:&[[u32;4]]=&[
  [0;4],
  [0x2aae4095,0xe54cbe9d,0xe64129a2,0xf14c84e7],
  [0x43687091,0x4d69b05b,0x475ed195,0xaec32728],
@@ -234,7 +234,7 @@ const LEGACY_FLOWER_COLOR_GUIDS:&[[u32;4]]=&[
  [0x8516d356,0x440a530c,0x44955594,0x340de234],
  [0xf2971566,0x4629db4c,0xb2f104a6,0xed309b34],
 ];
-const LEGACY_FLOWER_PATTERN_GUIDS:&[[u32;4]]=&[
+pub(crate) const LEGACY_FLOWER_PATTERN_GUIDS:&[[u32;4]]=&[
  [0;4],
  [0xfd26bba7,0x4fee7263,0x1dca7fa1,0x044b5807],
  [0x13b92a2a,0x4eef210a,0xda0896a5,0x69b5343d],
