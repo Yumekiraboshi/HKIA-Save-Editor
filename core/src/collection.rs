@@ -440,7 +440,7 @@ impl Editor {
    // Last-copy reference completeness is independent from the quantity
    // field. In particular an unresolved legacy source or outfit copy
    // cannot be made safe by merely preserving the outer record.
-   if crate::inventory_source::wand_output_item(item)&&(!editor.wand_reference_safe(item)||!editor.legacy_wand_sources_resolved){return None}
+   if crate::inventory_source::wand_output_item(item)&&!editor.structural_wand_zero_context_safe(item){return None}
    Some(r.id)
   }).collect();
   Ok(editor)
@@ -1636,6 +1636,18 @@ impl Editor {
  fn legacy_wand_zero_reference_safe(&self,row:&crate::native::InventoryRow)->bool{
   row.item_id.is_some_and(|item|self.wand_reference_safe(item))&&
    self.legacy_wand_identity(row).is_some()&&self.legacy_wand_sources_resolved
+ }
+ // Physical-removal authority has already checked this exact saved UID,
+ // bare references, resolved identities, and the catalog GUID. Retain the
+ // extra wand-specific copy/context/legacy checks without rejecting every
+ // sibling merely because another positive UID is referenced.
+ fn structural_wand_zero_context_safe(&self,item:i32)->bool{
+  let index=&self.slot.index;
+  let Some(key)=crate::inventory_source::wand_reference_key(item)else{return false};
+  self.legacy_wand_sources_resolved&&!index.inventory_wand_copies&&
+   !index.inventory_clothing_refs_incomplete&&!index.inventory_palette_context_incomplete&&
+   !index.inventory_palette_copies_incomplete&&
+   !index.inventory_furniture_guid_refs.contains(&key)&&!index.inventory_clothing_guid_refs.contains(&key)
  }
  fn wand_reference_safe(&self,item:i32)->bool{
   let index=&self.slot.index;
@@ -2939,13 +2951,19 @@ impl Editor {
   let (Some(item),Some(uid))=(row.item_id,row.unique_id)else{return false};
   if item<=0||uid<0||row.id==0||row.id>=PENDING_ITEM||row.quantity.is_none_or(|q|q<0)||
    !row.fields.iter().all(Option::is_some){return false}
-  if row.unique_is_nil==Some(true){return uid==0&&Self::ordinary_bag_reference_safe(index,item)}
-  if uid==0||row.unique_is_nil!=Some(false){return false}
+  let repair_nil=row.unique_is_nil==Some(true)&&uid==0&&
+   crate::inventory_source::is_uncapped_required_unique_stack(item);
+  if row.unique_is_nil==Some(true)&&!repair_nil{return uid==0&&Self::ordinary_bag_reference_safe(index,item)}
+  if !repair_nil&&(uid==0||row.unique_is_nil!=Some(false)){return false}
   if index.inventory_item_refs_unscoped||
    index.inventory_partial_item_refs.contains(&item)||index.inventory_payload_refs_incomplete||
    index.inventory_furniture_refs_incomplete||index.inventory_clothing_item_refs_incomplete||
-   index.inventory_payload_item_refs.contains(&item)||index.inventory_furniture_item_refs.contains(&item)||
-   index.inventory_item_refs.iter().any(|&(i,u)|i==item&&(uid==0||u==0||u==uid))||
+   index.inventory_payload_item_refs.contains(&item)||index.inventory_furniture_bare_item_refs.contains(&item)||
+   // A resolved positive UID is an exact reference to another complete row.
+   // Do not turn it into an Item-ID-wide denial. Bare, dangling or ambiguous
+   // identities still protect the entire family; copied payloads remain separate.
+   index.inventory_item_refs.iter().any(|&(i,u)|i==item&&(u==0||u==uid||
+    !index.inventory_resolved_positive_item_refs.contains(&(i,u))))||
    (uid>0&&(index.inventory_legacy_uid_refs.contains(&uid)||
     !uid_unique)){return false}
   let Some(key)=crate::inventory_source::inventory_item_denial_key(item)else{return false};
@@ -2959,20 +2977,32 @@ impl Editor {
    if outfit.is_some_and(|(k,group)|blocked(&k)||group.iter().any(blocked))||
     flower_outfit.is_some_and(|keys|keys.iter().any(blocked)){return false}
   }
+  let flower_family=Self::is_flower_quantity_definition(item)&&
+   (!owned_dlc_flower_output(item)||flower_outfit.is_some()||flower_candle_source(item).is_some()||rare_candle_key(item).is_some());
+  let palette_context=item==crate::inventory_source::CUSTOM_PALETTE_ID&&
+   index.inventory_palette_avatar_models>0&&index.inventory_palette_general_models==1&&
+   !index.inventory_palette_context_incomplete&&!index.inventory_palette_copies_incomplete;
+  // Repair an already saved, complete UID-zero row missing a required
+  // payload. It cannot be refilled or synthesized by the ordinary writer.
+  // Only known unique bag families qualify, and the same strict reference
+  // checks above apply. Do not infer a variant or remove service/kit rows.
+  if repair_nil{
+   return flower_family||crate::inventory_source::CAFE_IDS.binary_search(&item).is_ok()||
+    item==crate::inventory_source::BOBA_ID||
+    (crate::inventory_source::wand_output_item(item)&&!index.inventory_wand_copies)||
+    (palette_context&&index.inventory_palette_copies.is_empty())
+  }
   let Some(data)=row.unique_data else{return false};
   let tag=data.display_words().0;
   let count=row.unique_fields.len();
   match tag{
    1|8=>count==3&&furniture_source::item(item).is_some_and(|s|!s.is_home_layout)&&
     (crate::inventory_source::ordinary_bag_definition(item).is_some()||crate::inventory_source::custom_furniture_extra_reference(item).is_some()),
-   2|7=>count==4&&Self::is_flower_quantity_definition(item)&&
-    (!owned_dlc_flower_output(item)||flower_outfit.is_some()||flower_candle_source(item).is_some()||rare_candle_key(item).is_some()),
+   2|7=>count==4&&flower_family,
    3=>count==2&&crate::inventory_source::CAFE_IDS.binary_search(&item).is_ok(),
    4=>count==5&&item==crate::inventory_source::BOBA_ID,
    5|9=>count==5&&crate::inventory_source::wand_output_item(item)&&!index.inventory_wand_copies,
-   6=>count==3&&item==crate::inventory_source::CUSTOM_PALETTE_ID&&
-    index.inventory_palette_avatar_models>0&&index.inventory_palette_general_models==1&&
-    !index.inventory_palette_context_incomplete&&!index.inventory_palette_copies_incomplete&&
+   6=>count==3&&palette_context&&
     (index.inventory_palette_copies.is_empty()||Self::palette_identity(row).is_some_and(|v|
      !index.inventory_palette_copies.iter().any(|&copy|Self::palette_equal(copy,v)))),
    // Schematic, layout and kit payloads may represent service or progression
