@@ -561,6 +561,24 @@ def assemble(args):
     return report
 
 def self_test():
+    sprite={'fileId':0,'pathId':'7','objectSha256':'a'*64}
+    rows={1:{'sprite':sprite,'dynamicColor':False},2:{'sprite':sprite,'dynamicColor':False}}
+    bindings={'rows':[],'receiptSha256':'b'*64}
+    texture={'binding':{'spritePathId':'7','spriteSha256':'a'*64,'logicalSize':2,'logicalHeight':4}}
+    rec={'texture':'c'*64,'logicalSize':2,'logicalHeight':4,'maskColorSpace':'srgb'}
+    stage={'dynamicReceiptSha256':'b'*64,'records':{'item:1':rec,'item:2':rec},
+           'unresolved':[],'textures':{'c'*64:texture}}
+    assert dynamic_partition(bindings,stage,rows)=={}
+    for invalid in [
+        {**stage,'records':{'item:1':rec}},
+        {**stage,'records':{'item:1':rec,'item:2':{**rec,'logicalHeight':3}}},
+        {**stage,'unresolved':[{'key':'item:2','reason':'duplicate'}]},
+    ]:
+        try:dynamic_partition(bindings,invalid,rows)
+        except ValueError:pass
+        else:raise AssertionError('accepted incorrect original UiIcon partition')
+    assert dynamic_partition(bindings,{**stage,'records':{'item:1':rec},
+        'unresolved':[{'key':'item:2','reason':'missing source'}]},rows)=={}
     # The original 3.0.1 Moon and Star Octocat has no definition suffix.
     catalog={'schema':'HKIA.CollectionDisplayCatalog.2','version':'3.0.1',
              'groups':[['collections_group_events']],
