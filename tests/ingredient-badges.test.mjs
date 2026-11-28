@@ -22,6 +22,14 @@ test('unresolved and ambiguous slots do not choose a fabricated material',()=>{
  ]);
  assert.deepEqual(cafeIngredientBadges(undefined,[]),[]);
 });
-test('Boba flavor display never interprets unverified sweetness as an ingredient quantity',()=>{
- assert.deepEqual(bobaIngredientBadges([6,44,76,75,74],[[10,44,6]]),[{key:'1:44:6',itemIds:[10],slots:[1],count:1}]);
+test('Boba modifiers use the source processor characteristics and keep milk ambiguous',()=>{
+ const w=[[10,44,6]];
+ const base={key:'1:44:6',itemIds:[10],slots:[1],count:1};
+ const milk={key:'milk',itemIds:[1743974962,619719355],slots:[],count:1};
+ const pearl={key:'tapioca',itemIds:[1962729997],slots:[],count:1};
+ for(let n=0;n<=3;n++){
+  assert.deepEqual(bobaIngredientBadges([6,44,76,75,71+n],w),[base,milk,pearl,...(n?[{key:'honeycomb',itemIds:[1456512081],slots:[],count:n}]:[])]);
+ }
+ assert.deepEqual(bobaIngredientBadges([6,44,79,78,71],w),[base]);
+ assert.deepEqual(bobaIngredientBadges([6,44,0,0,999],w),[base]);
 });

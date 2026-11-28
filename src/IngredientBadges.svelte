@@ -9,8 +9,8 @@
  <span class="ingredient-badges" data-ingredient-badges style:--ingredient-size={size+'px'} style:--ingredient-scale={size/96}>
   {#each rows as badge (badge.key)}
    {@const sprite=badge.itemIds.length===1?spriteFor(badge.itemIds[0]):undefined}
-   {@const title=(badge.itemIds.map(nameFor).join(' / ')||'?')+' · '+badge.slots.join(', ')}
-   <span class="ingredient-badge" data-ingredient-candidates={badge.itemIds.join(',')} data-ingredient-count={badge.count} data-ingredient-slots={badge.slots.join(',')} role="img" aria-label={title} {title}>
+   {@const title=(badge.itemIds.map(nameFor).join(' / ')||'?')+(badge.count>1?' · '+badge.count:'')}
+   <span class="ingredient-badge" data-ingredient-candidates={badge.itemIds.join(',')} data-ingredient-count={badge.count} data-ingredient-key={badge.key} data-ingredient-slots={badge.slots.join(',')} role="img" aria-label={title} {title}>
     <span class="ingredient-art" aria-hidden="true">
      {#if sprite}<InventoryAtlasSprite {sprite}/>{:else}<span class="ingredient-unknown">?</span>{/if}
     </span>
@@ -20,7 +20,7 @@
  </span>
 {/if}
 <style>
- .ingredient-badges{position:absolute;z-index:1;top:0;left:50%;transform:translateX(-50%);display:flex;justify-content:center;align-items:center;gap:2px;height:22px;width:64px}
+ .ingredient-badges{position:absolute;z-index:1;top:0;left:50%;transform:translateX(-50%);display:flex;justify-content:center;align-items:center;gap:2px;height:22px;width:64px;direction:ltr}
  .ingredient-badge{position:relative;display:block;flex:none;width:var(--ingredient-size);height:var(--ingredient-size)}
  .ingredient-art{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden}
  .ingredient-art :global(.item-sprite){position:absolute;top:0;left:0;width:96px;height:96px;transform:scale(var(--ingredient-scale));transform-origin:top left}
