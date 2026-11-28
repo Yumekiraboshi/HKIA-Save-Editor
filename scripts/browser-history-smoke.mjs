@@ -1058,6 +1058,26 @@ async function inventoryChefQuantitySmoke(){
   console.log('CHROMIUM CHEF ZERO PASS: confirmed zero, draft, history and native export reparse');
  }finally{await context.close();}
 }
+async function activeToolReloadSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-tool-reload.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  for(const tool of ['inventory','achievements','collections']){
+   await chooseTab(page,tool);
+   await page.reload({waitUntil:'networkidle'});
+   await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+   assert.equal(await page.locator('.tools-nav button[aria-current="page"]').getAttribute('data-tool'),tool,'restore last active tool without another click');
+  }
+  await page.evaluate(()=>sessionStorage.setItem('hkia-active-tool','invalid'));
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  assert.equal(await page.locator('.tools-nav button[aria-current="page"]').getAttribute('data-tool'),'collections');
+  console.log('CHROMIUM ACTIVE TOOL RELOAD PASS');
+ }finally{await context.close()}
+}
 async function inventoryEditExportSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800},acceptDownloads:true});
  try{
@@ -3501,6 +3521,34 @@ async function inventoryFullRangeScrollSmoke(){
   console.log('CHROMIUM INVENTORY FULL RANGE PASS: direct end, bounded DOM, stable height, preserved draft and responsive geometry');
  }finally{await context.close()}
 }
+async function commonEditorFullRangeScrollSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-full-editor-scroll.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot())});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  for(const [tool,selector,searchSelector] of [
+   ['collections','.collection-search-results.editor-virtual-grid','.collection-search-controls input[type="search"]'],
+   ['achievements','.achievement-item-grid.editor-virtual-grid','.collection-controls input[type="search"]']
+  ]){
+   await chooseTab(page,tool);
+   await page.locator(searchSelector).fill('a');
+   const grid=page.locator(selector);
+   await page.waitForFunction(s=>{const g=document.querySelector(s);return g&&Number(g.dataset.total)>Number(g.dataset.windowEnd)&&Number(g.dataset.total)>100&&Number(g.dataset.windowStart)===0},selector);
+   const count=Number(await grid.getAttribute('data-total'));
+   const height=await grid.evaluate(el=>el.getBoundingClientRect().height);
+   await page.evaluate(()=>window.scrollTo({top:document.documentElement.scrollHeight,behavior:'instant'}));
+   await page.waitForFunction(s=>{const g=document.querySelector(s);return g&&g.dataset.windowEnd===g.dataset.total&&Number(g.dataset.windowStart)>0},selector);
+   assert.equal(Number(await grid.getAttribute('data-total')),count);
+   assert.equal(await grid.evaluate(el=>el.getBoundingClientRect().height),height,'stable full '+tool+' scroll height');
+   assert.ok(await grid.evaluate(el=>el.children.length<Number(el.dataset.total)));
+   await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
+   await page.waitForFunction(s=>document.querySelector(s)?.dataset.windowStart==='0',selector);
+  }
+  console.log('CHROMIUM COMMON EDITOR FULL RANGE PASS');
+ }finally{await context.close()}
+}
 async function fullWidthWorkspaceSmoke(){
  const context=await browser.newContext({locale:'en-US',viewport:{width:1920,height:900}});
  try{
@@ -3890,6 +3938,8 @@ async function run(){
 
  await page.reload({waitUntil:'networkidle'});
  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+ assert.equal(await page.locator('.tools-nav button[aria-current="page"]').getAttribute('data-tool'),'achievements','reload restores the last tool');
+ await chooseTab(page,'collections');
  steps=await countHistory(page,3);
  assert.match(await steps.nth(0).getAttribute('class')??'',/active/);
  await steps.nth(1).click(); // redo one collection entry after recovery
@@ -4006,6 +4056,7 @@ async function run(){
  await context.close();
  await fullWidthWorkspaceSmoke();
  await inventoryFullRangeScrollSmoke();
+ await commonEditorFullRangeScrollSmoke();
  await achievementExportReopenRoundtrip();
  await inventoryDynamicPaletteArtSmoke();
  await inventoryPaletteCreationSmoke();
@@ -4029,6 +4080,7 @@ async function run(){
  await inventoryChefQuantitySmoke();
  await wandRuntimeSmoke(browser,origin,base);
  await wandMipSmoke(browser,origin,base);
+ await activeToolReloadSmoke();
  await inventoryEditExportSmoke();
  await inventoryBatchQuantitySmoke();
  await inventoryLastPositiveDuplicateZeroSmoke();

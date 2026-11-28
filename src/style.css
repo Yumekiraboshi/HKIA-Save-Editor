@@ -395,3 +395,18 @@
 /* Keep the control lane stable while hiding the apply action for an unchanged owned quantity. */
 .inventory-quantity-form .primary.quantity-unchanged{visibility:hidden;pointer-events:none}
 .inventory-quantity-form.quantity-pending input{border-color:var(--accent)}
+
+/* Shared virtual grids preserve the complete list geometry. */
+.editor-virtual-grid{overflow-anchor:none;align-items:stretch}
+.collection-item-grid{grid-auto-rows:208px}
+.collection-item-grid>.item-tile{height:100%;min-height:0}
+.collection-item-grid .item-toggle{height:100%;min-height:0}
+.achievement-item-grid.editor-virtual-grid{grid-auto-rows:224px}
+.collection-search-results.editor-virtual-grid{grid-auto-rows:108px}
+.collection-search-results.editor-virtual-grid .collection-search-result{height:100%;min-height:0;overflow:hidden}
+.collection-search-result-name,.collection-search-result-context{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+@media(max-width:730px){
+ .collection-item-grid{grid-auto-rows:200px}
+ .achievement-item-grid.editor-virtual-grid{grid-auto-rows:211px}
+ .collection-search-results.editor-virtual-grid{grid-auto-rows:104px}
+}

@@ -143,7 +143,7 @@ test('Inventory UI selects native source definitions, retains original game art 
  assert.match(app,/\{@const canFurniture=!!item.unique\?\.furnitureEditable\|\|!!item.furnitureCreatable\}/);
  assert.match(app,/changeInventoryFlowerVariant\(selected.documentId,selected.before,next\)/);
  assert.match(app,/requestFlowerVariants\(row.documentId\)/);
- assert.match(app,/bind:this=\{inventoryGridEl\}/);
+ assert.match(app,/bind:this=\{editorGridEl\}/);
  assert.match(app,/\{#each inventoryRenderedRows as item \(item.documentId\)\}/);
  assert.match(app,/for\(const row of inventoryRenderedRows\)/);
  assert.doesNotMatch(app,/inventoryLoadMoreSentinel|inventoryLimit/);

@@ -7,14 +7,14 @@ export type ChefAppearance={kind:'cafe';colors:readonly number[]}|{kind:'boba';c
 export type ChefColor={characteristicId:number;swatchId:number;rgba:Rgba};
 export type ChefArtBinding={itemId:number;kind:ChefAppearance['kind']};
 const WHITE:Rgba=[1,1,1,1];
-export function resolveChefTints(binding:ChefArtBinding,appearance:ChefAppearance,colors:ReadonlyMap<number,Rgba>):TintSet|null{
+export function resolveChefTints(binding:ChefArtBinding,appearance:ChefAppearance,colors:ReadonlyMap<number,Rgba>,source?:{known:ReadonlySet<number>;mapped:ReadonlySet<number>}):TintSet|null{
  if(binding.kind!==appearance.kind)return null;
  const ids=appearance.kind==='boba'?[appearance.colorId]:appearance.colors.slice(0,3);
  // Native missing-map tints are white for known characteristics.
  // Unknown IDs and missing required swatches remain withheld.
  const out:Rgba[]=[WHITE,WHITE,WHITE];
  for(let i=0;i<ids.length;i++){
-  const rgba=resolveNativeCharacteristicTint(ids[i],colors,CHEF_MAPPED_IDS);if(!rgba)return null;
+  const rgba=resolveNativeCharacteristicTint(ids[i],colors,source?.mapped??CHEF_MAPPED_IDS,source?.known);if(!rgba)return null;
   out[i]=rgba;
  }
  return [out[0],out[1],out[2]];

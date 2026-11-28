@@ -80,6 +80,18 @@ import {verifiedFloorplanName} from './floorplan-names';
  const ICONS=import.meta.env.BASE_URL+'icons/';
  const INVENTORY_UI=import.meta.env.BASE_URL+'inventory-ui/';
  let activeTool:Tool=$state('collections');
+ // Navigation preference is local to this browser tab, not part of the save
+ // or its asynchronous recovery journal. Persist synchronously before reload.
+ function selectTool(tool:Tool){
+  activeTool=tool;
+  try{sessionStorage.setItem('hkia-active-tool',tool)}catch{}
+ }
+ function restoreActiveTool(){
+  try{
+   const tool=sessionStorage.getItem('hkia-active-tool');
+   if(tool==='collections'||tool==='achievements'||tool==='inventory')activeTool=tool;
+  }catch{}
+ }
  let achievementQuery=$state('');
  let inventoryQuery=$state('');
  let inventoryGroup:InventoryGroupKey|null=$state(null);
@@ -197,11 +209,11 @@ import {verifiedFloorplanName} from './floorplan-names';
  function resetInventoryBatchSelection(){inventoryBatchSelected=new Set();inventoryBatchQuantity=undefined}
  function clearInventoryBatch(){inventoryBatchMode=false;resetInventoryBatchSelection()}
  $effect(()=>{if(activeTool!=='inventory'){clearInventoryBatch();inventoryAddMode=false}});
- let inventoryGridEl=$state<HTMLDivElement|undefined>(undefined);
+ let editorGridEl=$state<HTMLDivElement|undefined>(undefined);
  let inventoryStickyEl=$state<HTMLDivElement|undefined>(undefined);
- let inventoryViewport=$state<InventoryViewport>({columns:8,rowHeight:204,gap:6,top:0,bottom:900});
- function resetInventoryViewport(){
-  inventoryViewport={...inventoryViewport,top:0,bottom:window.innerHeight};
+ let editorViewport=$state<InventoryViewport>({columns:8,rowHeight:204,gap:6,top:0,bottom:900});
+ function resetEditorViewport(){
+  editorViewport={...editorViewport,top:0,bottom:window.innerHeight};
   window.scrollTo({top:0,behavior:'instant'});
  }
  let inventoryBaseline:InventoryEntry[]=$state.raw([]);
@@ -247,8 +259,6 @@ import {verifiedFloorplanName} from './floorplan-names';
  let achievementFactsEpoch=0;
  let achievementTitles:AchievementTitles=$state({});
  let achievementTitleEpoch=0;
- let achievementLimit=$state(BATCH_SIZE);
- let achievementLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
  let editingAchievement:AchievementEntry|null=$state(null);
  let editingAchievementTitle=$state('');
  let achievementDialogEl:HTMLDialogElement|undefined=$state();
@@ -268,7 +278,6 @@ import {verifiedFloorplanName} from './floorplan-names';
  let query=$state('');
  let collectionSearchDrilldown=$state(false);
  let filter:Filter=$state('all');
- let visibleLimit=$state(BATCH_SIZE);
  let editId:number|null=$state(null);
  let dateValue=$state('');
  let dateValidation=$state('');
@@ -301,7 +310,6 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  let iconEpoch=0;
  let iconError=$state(false);
- let loadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
  let languagePref:LanguagePref=$state('auto');
  let browserLanguage:Locale=$state('ja');
  let availableGameLocales:Locale[]=$state([]);
@@ -369,7 +377,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  const inventoryRows=$derived(browseInventory(
   inventoryDisplayedRows,inventoryQuery,activeInventoryGroup,
   inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,locale,inventoryVariantSearchName));
- const inventoryWindow=$derived(inventoryVirtualWindow(inventoryRows.length,inventoryViewport));
+ const inventoryWindow=$derived(inventoryVirtualWindow(inventoryRows.length,editorViewport));
  const inventoryRenderedRows=$derived(inventoryRows.slice(inventoryWindow.start,inventoryWindow.end));
  const achievementRows=$derived(searchAchievementRows(achievementQuery,sourceOrderedAchievementRows,
   groupScopedAchievementRows,achievementName,guid=>achievementIndex.get(guid)?.key??''));
@@ -512,45 +520,33 @@ import {verifiedFloorplanName} from './floorplan-names';
  ));
  const showingGlobalCollectionSearch=$derived(Boolean(query.trim())&&!collectionSearchDrilldown);
  const collectionSearchResults=$derived(searchAllCollectionItems((catalog as Catalog|null)?.items??[],query,locale,nameFor));
- const visibleItems=$derived(matching.slice(0,visibleLimit));
+ const collectionWindow=$derived(inventoryVirtualWindow(matching.length,editorViewport));
+ const visibleItems=$derived(matching.slice(collectionWindow.start,collectionWindow.end));
+ const searchWindow=$derived(inventoryVirtualWindow(collectionSearchResults.length,editorViewport));
+ const renderedCollectionSearch=$derived(collectionSearchResults.slice(searchWindow.start,searchWindow.end));
+ const achievementWindow=$derived(inventoryVirtualWindow(achievementRows.length,editorViewport));
+ const renderedAchievements=$derived(achievementRows.slice(achievementWindow.start,achievementWindow.end));
+ function readEditorViewport(el:HTMLDivElement,coveredTop:number):InventoryViewport{
+  const style=getComputedStyle(el),rect=el.getBoundingClientRect();
+  const columns=Math.max(1,style.gridTemplateColumns.split(/\s+/).filter(x=>x.endsWith('px')).length);
+  const rowHeight=parseFloat(style.gridAutoRows)||204,gap=parseFloat(style.rowGap)||0;
+  const top=Math.max(0,coveredTop-rect.top);
+  return {columns,rowHeight,gap,top,bottom:Math.max(top,window.innerHeight-rect.top)};
+ }
  $effect(()=>{
-  const el=loadMoreSentinel;
-  const count=showingGlobalCollectionSearch?collectionSearchResults.length:matching.length;
-  if(!el||typeof IntersectionObserver==='undefined')return;
-  const observer=new IntersectionObserver(entries=>{
-   if(entries.some(x=>x.isIntersecting))visibleLimit=Math.min(visibleLimit+BATCH_SIZE,count);
-  },{rootMargin:'720px 0px'});
-  observer.observe(el);
-  return ()=>observer.disconnect();
- });
- $effect(()=>{
-  const el=achievementLoadMoreSentinel;
-  if(!el||typeof IntersectionObserver==='undefined')return;
-  const observer=new IntersectionObserver(entries=>{
-   if(entries.some(x=>x.isIntersecting))
-    achievementLimit=Math.min(achievementLimit+BATCH_SIZE,achievementRows.length);
-  },{rootMargin:'720px 0px'});
-  observer.observe(el);
-  return ()=>observer.disconnect();
- });
- $effect(()=>{
-  const el=inventoryGridEl,sticky=inventoryStickyEl;
-  if(!el||!sticky)return;
+  const el=editorGridEl,tool=activeTool,sticky=inventoryStickyEl,header=topbarHeight;
+  if(!el)return;
   let frame=0;
   function measure(){
    frame=0;
-   if(!el||!sticky)return;
-   const style=getComputedStyle(el),rect=el.getBoundingClientRect();
-   const columns=Math.max(1,style.gridTemplateColumns.split(/\s+/).filter(x=>x.endsWith('px')).length);
-   const rowHeight=parseFloat(style.gridAutoRows)||204,gap=parseFloat(style.rowGap)||0;
-   const top=Math.max(0,sticky.getBoundingClientRect().bottom-rect.top);
-   const bottom=Math.max(top,window.innerHeight-rect.top);
-   inventoryViewport={columns,rowHeight,gap,top,bottom};
+   if(!el||!el.isConnected)return;
+   const next=readEditorViewport(el,tool==='inventory'&&sticky?sticky.getBoundingClientRect().bottom:header);
+   untrack(()=>{if(Object.keys(next).some(k=>next[k as keyof InventoryViewport]!==editorViewport[k as keyof InventoryViewport]))editorViewport=next});
   }
   function schedule(){if(!frame)frame=requestAnimationFrame(measure)}
   measure();
   const observer=typeof ResizeObserver==='undefined'?null:new ResizeObserver(schedule);
-  observer?.observe(el);observer?.observe(sticky);
+  observer?.observe(el);if(tool==='inventory'&&sticky)observer?.observe(sticky);
   window.addEventListener('scroll',schedule,{passive:true});
   window.addEventListener('resize',schedule);
   return ()=>{
@@ -616,7 +612,7 @@ import {verifiedFloorplanName} from './floorplan-names';
  $effect(()=>{
   inventoryIconPulse;
   if(activeTool!=='collections'||!snapshot||!catalog||!showingGlobalCollectionSearch)return;
-  const groups=new Set(collectionSearchResults.slice(0,visibleLimit).map(item=>item[3]));
+  const groups=new Set(renderedCollectionSearch.map(item=>item[3]));
   for(const group of groups){
    if(inventoryIconPending.size>=3)break;
    if(iconPack?.group===group||inventoryIconPacks[group]||inventoryIconPending.has(group)||inventoryIconFailed.has(group))continue;
@@ -731,8 +727,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  function openInventoryTab(){
   refreshVariantArtwork();
   clearInventoryBatch();inventoryAddMode=false;
-  activeTool='inventory';inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;inventoryShowZero=false;
-  resetInventoryViewport();editingAchievement=null;error='';
+  selectTool('inventory');inventoryQuery='';inventoryGroup=null;inventoryEditableOnly=false;inventoryShowZero=false;
+  resetEditorViewport();editingAchievement=null;error='';
   refreshInventoryNativeArt();
   refreshFlowerDisplay();
   // Retry transient failures only when the user reopens Inventory.
@@ -741,10 +737,10 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function showAchievementGroup(guid:string|null){
   achievementGroupSelection=guid;achievementQuery='';
-  achievementLimit=BATCH_SIZE;
+  resetEditorViewport();
  }
  function openAchievementsTab(){
-  activeTool='achievements';editingAchievement=null;showAchievementGroup(null);error='';
+  selectTool('achievements');editingAchievement=null;showAchievementGroup(null);error='';
   refreshAchievementImages();
  }
  function achievementName(guid:string,index:number):string{
@@ -770,34 +766,39 @@ import {verifiedFloorplanName} from './floorplan-names';
   selectedGroup=item[3];selectedSubgroup=item[2];
   showVariants=item[0]!==item[7];
   query=nameFor(item);collectionSearchDrilldown=true;
-  filter='all';visibleLimit=BATCH_SIZE;editId=null;error='';
-  // Ensure even a late-ranked homonymous result is actually visible when opened.
-  const position=matching.findIndex(x=>x[0]===item[0]);
-  if(position>=0)visibleLimit=Math.ceil((position+1)/BATCH_SIZE)*BATCH_SIZE;
-  void tick().then(()=>document.getElementById('collection-item-'+item[0])?.scrollIntoView({block:'center'}));
+  filter='all';resetEditorViewport();editId=null;error='';
+  // Scroll to the target virtual row before its card is mounted.
+  void tick().then(()=>{
+   const position=matching.findIndex(x=>x[0]===item[0]),el=editorGridEl;
+   if(position<0||!el||!el.isConnected||activeTool!=='collections'||selectedGroup!==item[3])return;
+   const v=readEditorViewport(el,topbarHeight);
+   const y=window.scrollY+el.getBoundingClientRect().top+Math.floor(position/v.columns)*(v.rowHeight+v.gap);
+   window.scrollTo({top:Math.max(0,y-topbarHeight-(window.innerHeight-topbarHeight-v.rowHeight)/2),behavior:'instant'});
+   editorViewport=readEditorViewport(el,topbarHeight);
+  });
   void fetchImages(item[3]);
   void persistDraft();
  }
  function selectCategory(key:string){
   refreshVariantArtwork();
-  selectedGroup=key;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
+  selectedGroup=key;selectedSubgroup=null;showVariants=false;resetEditorViewport();
   query='';collectionSearchDrilldown=false;filter='all';editId=null;error='';
   void fetchImages(key);
   void persistDraft();
  }
  function selectSubcategory(key:string){
   if(!selectedGroup||!subgroups.some(sub=>sub.key===key))return;
-  selectedSubgroup=key;showVariants=false;visibleLimit=BATCH_SIZE;query='';collectionSearchDrilldown=false;filter='all';editId=null;error='';
+  selectedSubgroup=key;showVariants=false;resetEditorViewport();query='';collectionSearchDrilldown=false;filter='all';editId=null;error='';
   if(iconPack?.group!==selectedGroup&&iconLoadingGroup!==selectedGroup)void fetchImages(selectedGroup);
   void persistDraft();
  }
  function goSubcategories(){
-  selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';collectionSearchDrilldown=false;filter='all';
+  selectedSubgroup=null;showVariants=false;resetEditorViewport();editId=null;query='';collectionSearchDrilldown=false;filter='all';
   if(snapshot)void persistDraft();
  }
  function goHome(){
   refreshVariantArtwork();
-  activeTool='collections';selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;
+  selectTool('collections');selectedGroup=null;selectedSubgroup=null;showVariants=false;resetEditorViewport();
   editId=null;query='';collectionSearchDrilldown=false;filter='all';iconEpoch++;iconLoadingGroup=null;iconPack=null;iconError=false;
   if(snapshot)void persistDraft();
  }
@@ -849,7 +850,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   // different category. Keep the current category whenever it still matches.
   if(activeTool==='inventory'&&inventoryQuery.trim()){
    const target=inventorySearchTarget(previousGroup,inventoryMatchTotals);
-   if(target!==previousGroup){inventoryGroup=target;resetInventoryViewport()}
+   if(target!==previousGroup){inventoryGroup=target;resetEditorViewport()}
   }
  }
  /** Verify a restored native journal reproduces the locally persisted net edits.
@@ -916,6 +917,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     const liveIds=new Set(session.inventory.map(row=>row.documentId));
     inventoryLocks=new Set((draft.ui.inventoryLocks??[]).filter(id=>liveIds.has(id)));
     selectedGroup=draft.ui.group;selectedSubgroup=draft.ui.subgroup;
+    restoreActiveTool();
     if(draft.ui.group)void fetchImages(draft.ui.group);
    }
    draftReady=true;
@@ -949,7 +951,7 @@ import {verifiedFloorplanName} from './floorplan-names';
    const session=await openSave(file);
    clearInventoryBatch();inventoryAddMode=false;inventoryLocks=new Set();
    original=file;baseline=new Map(session.entries);achievementBaseline=session.achievements;inventoryBaseline=session.inventory;update(session,true);
-   selectedGroup=null;selectedSubgroup=null;showVariants=false;visibleLimit=BATCH_SIZE;editId=null;query='';collectionSearchDrilldown=false;filter='all';
+   selectedGroup=null;selectedSubgroup=null;showVariants=false;resetEditorViewport();editId=null;query='';collectionSearchDrilldown=false;filter='all';
    iconEpoch++;iconLoadingGroup=null;iconPack=null;iconError=false;
    try{await saveOriginalLocally(file);draftReady=true;draftWarning=false}
    catch{draftReady=false;draftWarning=true}
@@ -978,7 +980,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      if(!previous)previous=patches.length||decodedAchievements.length||inventoryPatches.length?await applyDraft(patches,decodedAchievements,inventoryPatches):opened;
      inventoryLocks=priorLocks;
      original=priorFile;baseline=priorBaseline;achievementBaseline=priorAchievementBaseline;inventoryBaseline=priorInventoryBaseline;update(previous);
-     selectedGroup=priorGroup;selectedSubgroup=priorSubgroup;showVariants=priorVariants;visibleLimit=BATCH_SIZE;
+     selectedGroup=priorGroup;selectedSubgroup=priorSubgroup;showVariants=priorVariants;resetEditorViewport();
      if(priorGroup&&(!iconPack||iconPack.group!==priorGroup))void fetchImages(priorGroup);
     }catch{
      original=null;snapshot=null;inventoryQuantityDrafts={};inventoryLocks=new Set();recorded={};baseline=new Map();achievementBaseline=[];inventoryBaseline=[];
@@ -1345,14 +1347,14 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function onInventorySearch(event:Event){
   const next=(event.currentTarget as HTMLInputElement).value;
-  resetInventoryViewport();
+  resetEditorViewport();
   if(!next.trim())return;
   const counts=inventorySearchGroupCounts(inventoryDisplayRows(inventoryBrowseRows,inventoryAddMode,inventoryShowZero),next,inventoryEditableOnly,sourceNames,inventorySourceItems,nativeInventoryIndex,inventoryVariantSearchName);
   inventoryGroup=inventorySearchTarget(activeInventoryGroup,counts);
  }
  function toggleInventoryShowZero(){
   const previous=activeInventoryGroup;
-  inventoryShowZero=!inventoryShowZero;resetInventoryViewport();
+  inventoryShowZero=!inventoryShowZero;resetEditorViewport();
   if(!inventoryShowZero){
    const visible=new Set(inventoryDisplayRows(inventoryBrowseRows,false,false).map(row=>row.documentId));
    inventoryBatchSelected=new Set([...inventoryBatchSelected].filter(id=>visible.has(id)));
@@ -1751,7 +1753,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     <div class="section-heading"><h1>{achievementGroupSelection==='__unmapped'?groupCopy.uncategorized:achievementName(achievementGroupSelection,0)}</h1></div>
    {/if}
    <div class="collection-controls">
-    <label class="search-field"><svg class="search-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.75" cy="10.75" r="6.75"/><path d="m16 16 5 5"/></svg><input type="search" bind:value={achievementQuery} oninput={()=>achievementLimit=BATCH_SIZE} placeholder={achCopy.search} aria-label={achCopy.search}/></label>
+    <label class="search-field"><svg class="search-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.75" cy="10.75" r="6.75"/><path d="m16 16 5 5"/></svg><input type="search" bind:value={achievementQuery} oninput={()=>resetEditorViewport()} placeholder={achCopy.search} aria-label={achCopy.search}/></label>
    </div>
    {#if achievementGroupHierarchy && achievementGroupSelection===null && !achievementQuery.trim()}
     <div class="category-grid achievement-category-grid">
@@ -1778,8 +1780,10 @@ import {verifiedFloorplanName} from './floorplan-names';
      {/if}
     </div>
    {:else}
-    <div class="item-grid achievement-grid achievement-item-grid">
-     {#each achievementRows.slice(0,achievementLimit) as item (item.guid)}
+    <div class="item-grid achievement-grid achievement-item-grid editor-virtual-grid" bind:this={editorGridEl}
+     data-total={achievementRows.length} data-window-start={achievementWindow.start} data-window-end={achievementWindow.end}
+     style:padding-block-start={achievementWindow.before+'px'} style:padding-block-end={achievementWindow.after+'px'}>
+     {#each renderedAchievements as item (item.guid)}
       {@const art=achievementCategoryAtlas?.bySaveGuid.get(item.guid)}
       {@const individualArt=achievementIndividualAtlas?.bySaveGuid.get(item.guid)}
       {@const title=achievementName(item.guid,item.index)}
@@ -1823,13 +1827,6 @@ import {verifiedFloorplanName} from './floorplan-names';
      {/each}
     </div>
     {#if achievementRows.length===0}<p class="empty-result">{copy.none}</p>{/if}
-    {#if achievementRows.length>achievementLimit}
-     <div class="load-marker" bind:this={achievementLoadMoreSentinel}>
-      {#if typeof IntersectionObserver==='undefined'}
-       <button type="button" onclick={()=>achievementLimit=Math.min(achievementLimit+BATCH_SIZE,achievementRows.length)}>{copy.moreItems}</button>
-      {/if}
-     </div>
-    {/if}
    {/if}
    <dialog class="achievement-dialog" bind:this={achievementDialogEl} onclose={onAchievementDialogClosed} oncancel={e=>{if(busy)e.preventDefault()}}>
     {#if editingAchievement}
@@ -1883,7 +1880,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     </label>
     <button type="button" class="inventory-editable-filter" class:active={inventoryEditableOnly}
      aria-pressed={inventoryEditableOnly}
-     onclick={()=>{inventoryEditableOnly=!inventoryEditableOnly;resetInventoryViewport()}}>
+     onclick={()=>{inventoryEditableOnly=!inventoryEditableOnly;resetEditorViewport()}}>
      {iCopy.editableOnly}
     </button>
     {#if !inventoryAddMode}
@@ -1892,7 +1889,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     {/if}
     <button type="button" class="inventory-editable-filter inventory-add-toggle" class:active={inventoryAddMode}
      aria-pressed={inventoryAddMode} disabled={busy||(!inventoryAddMode&&inventoryAvailableToAdd.length===0)}
-     onclick={()=>{clearInventoryBatch();inventoryQuantityDrafts={};inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;resetInventoryViewport()}}>
+     onclick={()=>{clearInventoryBatch();inventoryQuantityDrafts={};inventoryAddMode=!inventoryAddMode;inventoryQuery='';inventoryGroup=null;resetEditorViewport()}}>
      {inventoryAddMode?iCopy.tab:'+ '+inventoryAddCopy(locale)}
     </button>
     <button type="button" class="inventory-editable-filter inventory-batch-toggle" class:active={inventoryBatchMode}
@@ -1937,7 +1934,7 @@ import {verifiedFloorplanName} from './floorplan-names';
       {@const representativeNative=representative===undefined?undefined:inventoryNativeArt?.entries.get(representative)}
       {@const representativeSprite=representativeNative??(representativeSource&&representative!==undefined?inventoryIconPacks[representativeSource[3]]?.entries[String(representative)]:undefined)}
       <button type="button" class="inventory-group-option" data-inventory-group={t.key} class:active={activeInventoryGroup===t.key}
-       aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;resetInventoryViewport()}}>
+       aria-pressed={activeInventoryGroup===t.key} onclick={()=>{inventoryGroup=t.key;resetEditorViewport()}}>
        <span class="inventory-category-representative" aria-hidden="true">
         <img class="inventory-category-fallback" src={t.art?ICONS+t.art:INVENTORY_UI+'category-'+t.key+'.webp'} alt="" loading="lazy"
          onerror={e=>{const image=e.currentTarget as HTMLImageElement,native=INVENTORY_UI+'category-'+t.key+'.webp';if(image.getAttribute('src')!==native)image.src=native;else image.style.visibility='hidden';}}/>
@@ -1956,14 +1953,14 @@ import {verifiedFloorplanName} from './floorplan-names';
      {#if inventoryOtherCount>0}
       <button type="button" class="inventory-group-option" class:active={activeInventoryGroup===OTHER_INVENTORY_GROUP}
        aria-pressed={activeInventoryGroup===OTHER_INVENTORY_GROUP}
-       onclick={()=>{inventoryGroup=OTHER_INVENTORY_GROUP;resetInventoryViewport()}}>
+       onclick={()=>{inventoryGroup=OTHER_INVENTORY_GROUP;resetEditorViewport()}}>
        <span>{iCopy.other}</span><small>{(inventoryMatchTotals.get(OTHER_INVENTORY_GROUP)??0).toLocaleString(locale)}</small>
       </button>
      {/if}
     </nav>
    {/if}
    </div>
-   <div class="inventory-grid" bind:this={inventoryGridEl}
+   <div class="inventory-grid" bind:this={editorGridEl}
     data-total={inventoryRows.length} data-window-start={inventoryWindow.start} data-window-end={inventoryWindow.end}
     style:padding-block-start={inventoryWindow.before+'px'} style:padding-block-end={inventoryWindow.after+'px'}>
     {#each inventoryRenderedRows as item (item.documentId)}
@@ -2116,7 +2113,7 @@ import {verifiedFloorplanName} from './floorplan-names';
     <label class="search-field">
      <svg class="search-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.75" cy="10.75" r="6.75"/><path d="m16 16 5 5"/></svg>
      <input type="search" placeholder={copy.search} aria-label={copy.search} bind:value={query}
-      oninput={()=>{collectionSearchDrilldown=false;visibleLimit=BATCH_SIZE}}/>
+      oninput={()=>{collectionSearchDrilldown=false;resetEditorViewport()}}/>
     </label>
    </div>
    {#if showingGlobalCollectionSearch}
@@ -2124,8 +2121,10 @@ import {verifiedFloorplanName} from './floorplan-names';
      <p class="empty-result">{copy.busy}</p>
     {:else}
      <div class="collection-search-result-count" role="status">{collectionSearchResults.length.toLocaleString(locale)} {copy.items}</div>
-     <div class="collection-search-results">
-      {#each collectionSearchResults.slice(0,visibleLimit) as item (item[0])}
+     <div class="collection-search-results editor-virtual-grid" bind:this={editorGridEl}
+      data-total={collectionSearchResults.length} data-window-start={searchWindow.start} data-window-end={searchWindow.end}
+      style:padding-block-start={searchWindow.before+'px'} style:padding-block-end={searchWindow.after+'px'}>
+      {#each renderedCollectionSearch as item (item[0])}
        {@const resultGroup=catalog.groups.find(g=>g[0]===item[3])}
        {@const sprite=(iconPack?.group===item[3]?iconPack.entries:inventoryIconPacks[item[3]]?.entries)?.[String(item[0])]}
        <button type="button" class="collection-search-result" onclick={()=>jumpToCollectionItem(item)}>
@@ -2149,13 +2148,6 @@ import {verifiedFloorplanName} from './floorplan-names';
       {/each}
      </div>
      {#if collectionSearchResults.length===0}<p class="empty-result">{copy.none}</p>{/if}
-     {#if collectionSearchResults.length>visibleLimit}
-      <div class="load-marker" bind:this={loadMoreSentinel}>
-       {#if typeof IntersectionObserver==='undefined'}
-        <button type="button" onclick={()=>visibleLimit=Math.min(visibleLimit+BATCH_SIZE,collectionSearchResults.length)}>{copy.moreItems}</button>
-       {/if}
-      </div>
-     {/if}
     {/if}
    {:else if !selectedGroup}
    {#if !catalog}
@@ -2204,19 +2196,21 @@ import {verifiedFloorplanName} from './floorplan-names';
    </div>
    <div class="collection-controls">
     <div class="status-filter" role="group" aria-label="Status">
-     <button type="button" class:active={filter==='all'} onclick={()=>{filter='all';visibleLimit=BATCH_SIZE}}>{copy.all}</button>
-     <button type="button" class:active={filter==='unrecorded'} onclick={()=>{filter='unrecorded';visibleLimit=BATCH_SIZE}}>{copy.unrecorded}</button>
-     <button type="button" class:active={filter==='recorded'} onclick={()=>{filter='recorded';visibleLimit=BATCH_SIZE}}>{copy.recorded}</button>
+     <button type="button" class:active={filter==='all'} onclick={()=>{filter='all';resetEditorViewport()}}>{copy.all}</button>
+     <button type="button" class:active={filter==='unrecorded'} onclick={()=>{filter='unrecorded';resetEditorViewport()}}>{copy.unrecorded}</button>
+     <button type="button" class:active={filter==='recorded'} onclick={()=>{filter='recorded';resetEditorViewport()}}>{copy.recorded}</button>
     </div>
     {#if hasVariants}
      <button type="button" class="variation-button" class:active={showVariants} aria-pressed={showVariants}
-      onclick={()=>{showVariants=!showVariants;visibleLimit=BATCH_SIZE;editId=null}}>
+      onclick={()=>{showVariants=!showVariants;resetEditorViewport();editId=null}}>
       {showVariants?copy.hideVariants:copy.showVariants}
      </button>
     {/if}
    </div>
    {#if !snapshot.membershipEdit}<div class="compact-hint">{copy.noMembership}</div>{/if}
-   <div class="item-grid">
+   <div class="item-grid editor-virtual-grid collection-item-grid" bind:this={editorGridEl}
+    data-total={matching.length} data-window-start={collectionWindow.start} data-window-end={collectionWindow.end}
+    style:padding-block-start={collectionWindow.before+'px'} style:padding-block-end={collectionWindow.after+'px'}>
     {#each visibleItems as item (item[0])}
      {@const tick=recorded[String(item[0])]}
      {@const direct=tick!==undefined}
@@ -2247,13 +2241,6 @@ import {verifiedFloorplanName} from './floorplan-names';
    </div>
    {#if matching.length===0}<p class="empty-result">{copy.none}</p>{/if}
    {#if iconError}<p class="compact-hint">{copy.imagesUnavailable}</p>{/if}
-   {#if visibleItems.length<matching.length}
-    <div class="load-marker" bind:this={loadMoreSentinel}>
-     {#if typeof IntersectionObserver==='undefined'}
-      <button type="button" onclick={()=>visibleLimit=Math.min(visibleLimit+BATCH_SIZE,matching.length)}>{copy.moreItems}</button>
-     {/if}
-    </div>
-   {/if}
    {/if}
   {/if}
  </main>
