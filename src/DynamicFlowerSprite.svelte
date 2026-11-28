@@ -1,4 +1,8 @@
 <script lang="ts">
+ import {useNativeArt,inventoryArtworkAppearance} from './native-art-context';
+ import NativeItemArtwork from './NativeItemArtwork.svelte';
+ const getNativeSession=useNativeArt();
+ const nativeSession=$derived(getNativeSession());
  import type {SpriteCell} from './icon-packs';
  import {flowerGrowthSpriteState,flowerUsesDefinitionIcon,type InventoryFlower,type FlowerDisplayDefinitions} from './inventory-flower-display';
  import {renderFlowerArt,renderFlowerOriginalBaseArt,renderFlowerDefinitionBaseArt} from './flower-runtime-art';
@@ -18,11 +22,11 @@
  const growthResult=$derived(resolved?.id===itemId&&resolved.state===spriteState?resolved:undefined);
  const growthCell=$derived(growthResult?.cell??undefined);
  const staticRoute=$derived(isStaticFlowerCreationIcon(itemId));
- const fallbackView=createVerifiedSpriteView(()=>fallback,()=>staticRoute||near&&spriteState!==undefined&&!growthCell);
+ const fallbackView=createVerifiedSpriteView(()=>fallback,()=>!nativeSession&&(staticRoute||near&&spriteState!==undefined&&!growthCell));
  const visible=$derived(fallbackView.cell);
  const displayed=$derived(growthCell??visible);
  $effect(()=>{
-  if(!near||spriteState===undefined)return;
+  if(nativeSession||!near||spriteState===undefined)return;
   const id=itemId,state=spriteState;
   // Only the normalized native sprite state affects the finished image.
   // Color, quantity and the equivalent Grown/GrownTroweled state do not.
@@ -45,7 +49,7 @@
  const baseUrl=$derived(near&&growthKey!==null&&baseFallback?.key===growthKey?baseFallback.url:null);
  $effect(()=>{
   const key=growthKey,id=itemId;
-  if(!near||key===null||growthResult?.cell!==null||visible){baseFallback=null;return;}
+  if(nativeSession||!near||key===null||growthResult?.cell!==null||visible){baseFallback=null;return;}
   return startDynamicArtRequest(()=>renderFlowerDefinitionBaseArt(id),value=>{baseFallback=value?{key,url:value}:null;});
  });
  const renderKey=$derived(flowerArtKey(itemId,flower,definitions));
@@ -60,7 +64,9 @@
  // A known species template remains a reference even for an unknown saved state.
  let renderPartial=$derived.by(()=>{const id=itemId;return ()=>renderFlowerDefinitionBaseArt(id);});
 </script>
-{#if spriteState!==undefined}
+{#if nativeSession}
+ <NativeItemArtwork {itemId} appearance={inventoryArtworkAppearance(flower)}/>
+{:else if spriteState!==undefined}
  <span use:watchDynamicArtVisibility={setNear} class:item-sprite={!!displayed||!!baseUrl} class:item-art-empty={!displayed&&!baseUrl}
   data-flower-state-art={growthCell?'native-state-sprite':visible||baseUrl?'species-reference':undefined}
   data-icon-fidelity={!displayed&&baseUrl?'source-derived-base-only':undefined}
