@@ -720,6 +720,24 @@ impl Editor {
     if v!=draft&&furniture_key(source,v)!=draft_key&&allowed(v)&&!out.contains(&v){out.push(v)}
    }
   }
+  // A free combination can exist even if every one-slot neighbor is
+  // reserved. Try the same complete source tuples, without inventing
+  // material indices or accepting a target that fails the commit gate.
+  if out.is_empty(){
+   let values:[Vec<i32>;3]=std::array::from_fn(|i|{
+    let mut v=vec![draft[i],0];
+    if let Some(slot)=source.slots.iter().find(|s|s.slot as usize==i){
+     v.extend(slot.allowed.iter().copied().filter(|&n|furniture_source::material_unlock_item(n).is_none()));
+    }
+    v.sort_unstable();v.dedup();v
+   });
+   'search:for &a in &values[0]{for &b in &values[1]{for &c in &values[2]{
+    let v=[a,b,c];
+    if v!=draft&&furniture_key(source,v)!=draft_key&&allowed(v){
+     out.push(v);break 'search
+    }
+   }}}
+  }
   out
  }
  pub fn inventory_furniture_variants(&self,id:u32)->Vec<FurnitureVariant>{
@@ -766,18 +784,8 @@ impl Editor {
   if crate::inventory_source::ordinary_quantity_limit(item_id)!=Some(i32::MAX){return Vec::new()}
   let Some(source)=furniture_source::item(item_id)else{return Vec::new()};
   if source.is_home_layout{return Vec::new()}
-  let Some(default)=furniture_key(source,[0;3])else{return Vec::new()};
   let Some(reserved)=self.default_furniture_reserved(source)else{return Vec::new()};
-  let mut out=Vec::new();
-  for slot in source.slots{
-   for &n in slot.allowed{
-    let mut v=[0;3];v[slot.slot as usize]=n;
-    if !Self::valid_furniture_target(source,[0;3],v){continue}
-    let Some(key)=furniture_key(source,v)else{continue};
-    if key!=default&&!reserved.contains(&key)&&!out.contains(&v){out.push(v)}
-   }
-  }
-  out
+  Self::furniture_draft_choices(source,[0;3],|v|Self::furniture_creation_target(source,[0;3],[0;3],v,&reserved))
  }
  // Both original and effective identities remain reserved across history.
  fn default_furniture_reserved(&self,source:&FurnitureItemSource)->Option<HashSet<FurnitureVariant>>{
