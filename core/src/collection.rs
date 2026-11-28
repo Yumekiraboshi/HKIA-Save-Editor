@@ -478,6 +478,7 @@ impl Editor {
  /// Shared conservative live capacity: quantity deltas consume 12 bytes
  /// and physical deletion consumes 8. Rust validates exact bytes at commit.
  pub fn inventory_batch_limit(&self)->usize{
+  if self.undo.len()+self.redo.len()>=MAX_UNDO{return 0}
   self.history_remaining_bytes().saturating_sub(5)/12
  }
  fn next_edit_revision(&self)->Result<u32,Error>{self.next_edit_revision_with_cost(128)}
@@ -2996,6 +2997,7 @@ impl Editor {
  /// Exact persisted document removal and cancellation of staged additions in one transaction.
  pub fn remove_inventory_entries(&mut self,requests:&[(u32,i32)])->Result<(),Error>{
   if requests.is_empty(){return Err(Error::Budget)}
+  if self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
   let revision=self.next_edit_revision_with_cost(5usize.saturating_add(requests.len().saturating_mul(8)))?;
   let removable:HashSet<_>=self.inventory_removable_ids().into_iter().collect();
   let mut seen=HashSet::new();
@@ -3028,6 +3030,7 @@ impl Editor {
  pub fn change_inventory_quantities(&mut self,requests:&[(u32,i32,i32)])->Result<(),Error>{
   if requests.is_empty(){return Err(Error::Budget)}
   // Bound request allocation before planning; do not split into transactions.
+  if self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
   let revision=self.next_edit_revision_with_cost(5usize.saturating_add(requests.len().saturating_mul(12)))?;
   let mut seen=HashSet::new();
   let mut deltas=Vec::with_capacity(requests.len());
