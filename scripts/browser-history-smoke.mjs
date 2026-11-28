@@ -1180,11 +1180,12 @@ async function inventoryBatchQuantitySmoke(){
   const limit=Number((await selectedTotal.innerText()).split('/')[1].replace(/[,\s]/g,''));
   assert.ok(limit>=40);
   await page.locator('.inventory-select-visible').click();
-  assert.equal(Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,'')),limit);
+  const selected=Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,''));
+  assert.ok(selected>40&&selected<=limit,'select all matching furniture, not all categories or the journal capacity');
   await page.locator('.inventory-deselect-visible').click();
   assert.equal(Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,'')),0);
   await page.locator('.inventory-select-visible').click();
-  assert.equal(Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,'')),limit);
+  assert.equal(Number((await selectedTotal.innerText()).split('/')[0].replace(/[,\s]/g,'')),selected);
   await page.locator('.inventory-batch-toggle').click();
   assert.equal(await page.locator('.inventory-batch-form').count(),0);
   assert.deepEqual(errors,[]);

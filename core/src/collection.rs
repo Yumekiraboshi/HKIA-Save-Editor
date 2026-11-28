@@ -7,8 +7,8 @@ use std::{collections::{HashMap,HashSet},ops::Range};
 
 const MAX_TICKS:i64=3_155_378_975_999_999_999;
 const MAX_UNDO:usize=256;
-// The compile-time journal capacity assertion below covers every maximum-size batch.
-pub const MAX_INVENTORY_BATCH:usize=256;
+// Performance validation target, not a rejection threshold or a game limit.
+pub const INVENTORY_BATCH_TEST_TARGET:usize=65_536;
 // Session-only handle for an absent ordinary ingredient. Never a saved document ID.
 const PENDING_ITEM:u32=1<<31;
 // Steam 3.0.1 FlowerSettings.AvailableColors (30 entries) minus the
@@ -381,6 +381,7 @@ pub struct Editor {
  pending_wands:HashMap<u32,(i32,WandData)>,
  pending_bobas:HashMap<u32,BobaVariant>,
  inventory_item_rows:HashMap<i32,usize>,
+ inventory_document_index:HashMap<u32,usize>,
  inventory_item_documents:HashMap<i32,Vec<u32>>,
  unique_quantity_ids:HashSet<u32>,
  structural_quantity_caps:HashMap<u32,i32>,
@@ -418,6 +419,8 @@ impl Editor {
    if base.insert(row.id,row.ticks).is_some(){return Err(Error::Duplicate)}
    entries.push(Entry{id:row.id,ticks:row.ticks});
   }
+  let inventory_document_index:HashMap<_,_>=slot.index.inventory.iter().enumerate().map(|(i,r)|(r.id,i)).collect();
+  if inventory_document_index.len()!=slot.index.inventory.len(){return Err(Error::Duplicate)}
   let mut inventory_item_rows=HashMap::new();
   let mut inventory_item_documents:HashMap<i32,Vec<u32>>=HashMap::new();
   for row in &slot.index.inventory{
@@ -427,7 +430,7 @@ impl Editor {
   let legacy_wand_sources_resolved=slot.index.inventory.iter().filter(|r|matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))).all(|r|
    r.id>0&&r.id<PENDING_ITEM&&r.unique_id.is_some_and(|uid|uid>0)&&r.quantity.is_some_and(|q|q>=0)&&
    r.fields.iter().all(Option::is_some)&&Self::legacy_wand_identity_in(&slot.envelope.decoded,r).is_some());
-  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),inventory_removed:HashSet::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),pending_bobas:HashMap::new(),pending_cafes:HashMap::new(),pending_wands:HashMap::new(),inventory_item_rows,inventory_item_documents,unique_quantity_ids:HashSet::new(),structural_quantity_caps:HashMap::new(),structural_zero_ids:HashSet::new(),legacy_wand_sources_resolved,flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),boba_variant_changes:HashMap::new(),wand_variant_changes:HashMap::new(),cafe_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
+  let mut editor=Self{original,zip,slot_raw,slot,base,entries,changes:HashMap::new(),inventory_changes:HashMap::new(),inventory_removed:HashSet::new(),pending_flowers:HashMap::new(),pending_furniture:HashMap::new(),pending_palettes:HashMap::new(),pending_bobas:HashMap::new(),pending_cafes:HashMap::new(),pending_wands:HashMap::new(),inventory_item_rows,inventory_document_index,inventory_item_documents,unique_quantity_ids:HashSet::new(),structural_quantity_caps:HashMap::new(),structural_zero_ids:HashSet::new(),legacy_wand_sources_resolved,flower_variant_changes:HashMap::new(),furniture_variant_changes:HashMap::new(),palette_variant_changes:HashMap::new(),boba_variant_changes:HashMap::new(),wand_variant_changes:HashMap::new(),cafe_variant_changes:HashMap::new(),achievement_changes:HashMap::new(),achievement_created:HashMap::new(),undo:Vec::new(),redo:Vec::new(),revision:0};
   editor.unique_quantity_ids=editor.index_unique_quantity_ids();
   editor.structural_quantity_caps=editor.index_structural_quantity_caps();
   let removable:HashSet<_>=editor.inventory_removable_ids().into_iter().collect();
@@ -456,10 +459,34 @@ impl Editor {
  }
  pub fn version(&self)->String {self.slot.envelope.version.as_str()}
  pub fn source_bytes(&self)->usize {self.original.len()}
- fn next_edit_revision(&self)->Result<u32,Error>{
+ fn saved_inventory_row(&self,id:u32)->Option<&crate::native::InventoryRow>{
+  self.inventory_document_index.get(&id).and_then(|&i|self.slot.index.inventory.get(i))
+ }
+ // Fixed records have at most 109 serialized bytes (palette creation).
+ // Reserve 128 bytes for nonbatch edits without rebuilding the checkpoint.
+ fn history_cost(change:&Change)->usize{
+  match change{
+   Change::InventoryBatch{deltas}=>5usize.saturating_add(deltas.len().saturating_mul(12)),
+   Change::InventoryRemoved{rows}=>5usize.saturating_add(rows.len().saturating_mul(8)),
+   _=>128,
+  }
+ }
+ fn history_remaining_bytes(&self)->usize{
+  HISTORY_MAX_BYTES.saturating_sub(self.undo.iter().chain(&self.redo)
+   .fold(16usize,|n,c|n.saturating_add(Self::history_cost(c))))
+ }
+ /// Shared conservative live capacity: quantity deltas consume 12 bytes
+ /// and physical deletion consumes 8. Rust validates exact bytes at commit.
+ pub fn inventory_batch_limit(&self)->usize{
+  if self.undo.len()+self.redo.len()>=MAX_UNDO{return 0}
+  self.history_remaining_bytes().saturating_sub(5)/12
+ }
+ fn next_edit_revision(&self)->Result<u32,Error>{self.next_edit_revision_with_cost(128)}
+ fn next_edit_revision_with_cost(&self,bytes:usize)->Result<u32,Error>{
+  if bytes>self.history_remaining_bytes(){return Err(Error::Budget)}
   // A staged unique creation must remain replayable. Never evict its
   // creation record or prerequisites from the bounded native journal.
-  if (self.pending_unique_count()>0||self.redo.iter().any(|c|matches!(c,Change::FlowerCreated{..}|Change::FlowerSpeciesReplaced{..}|Change::FurnitureCreated{..}|Change::PaletteCreated{..}|Change::BobaCreated{..}|Change::CafeCreated{..}|Change::WandCreated{..})))&&self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
+  if (self.pending_unique_count()>0||self.undo.iter().chain(&self.redo).any(|c|matches!(c,Change::InventoryBatch{..}|Change::InventoryRemoved{..}|Change::FlowerCreated{..}|Change::FlowerSpeciesReplaced{..}|Change::FurnitureCreated{..}|Change::PaletteCreated{..}|Change::BobaCreated{..}|Change::CafeCreated{..}|Change::WandCreated{..})))&&self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
   self.revision.checked_add(1).ok_or(Error::Overflow)
  }
  pub fn revision(&self)->u32 {self.revision}
@@ -513,13 +540,13 @@ impl Editor {
   if let Some(v)=self.pending_bobas.get(&id){return self.inventory_changes.contains_key(&id).then(||InventoryUniqueData::BobaAppearance{color_id:self.boba_variant_changes.get(&id).copied().unwrap_or(*v)[0]})}
   if let Some(f)=self.pending_flowers.get(&id){return Some(flower_unique(self.flower_variant_changes.get(&id).copied().unwrap_or(f.variant)))}
   if let Some(f)=self.pending_furniture.get(&id){return Some(InventoryUniqueData::Furniture{materials:self.furniture_variant_changes.get(&id).copied().unwrap_or(f.variant)})}
-  let row=self.slot.index.inventory.iter().find(|row|row.id==id)?;
+  let row=self.saved_inventory_row(id)?;
   self.effective_unique(row)
  }
  /// Original, complete schema-validated payload; no caller-supplied parsing or mutation.
  /// Includes historical, nested wand, layout and kit types without flattening.
  pub fn inventory_original_unique_payload(&self,id:u32)->Option<&[u8]>{
-  let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+  let row=self.saved_inventory_row(id)?;
   self.slot.envelope.decoded.get(row.fields[3].clone()?)
  }
  /// Read-only special identity projection from already schema-validated
@@ -709,7 +736,7 @@ impl Editor {
  }
  fn original_furniture_variant(&self,id:u32)->Option<FurnitureVariant>{
   self.pending_furniture.get(&id).map(|f|f.variant)
-   .or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|
+   .or_else(||self.saved_inventory_row(id).and_then(|r|
     r.unique_data.and_then(furniture_variant).or_else(||Self::legacy_furniture_materials(&self.slot.envelope.decoded,r))))
  }
  fn furniture_context(&self,id:u32)->Option<(&'static FurnitureItemSource,FurnitureVariant,FurnitureVariant,HashSet<FurnitureVariant>)>{
@@ -884,7 +911,7 @@ impl Editor {
    if !(self.inventory_changes.get(&id).is_some_and(|&q|q>0)&&self.can_create_inventory_item(item))&&self.absent_furniture_choices(item).is_empty(){return None}
    Some(item)
   }else{
-   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+   let row=self.saved_inventory_row(id)?;
    let item=self.saved_default_furniture_source(row);
    if item.is_none()&&!self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
    item
@@ -948,7 +975,7 @@ impl Editor {
  }
  fn original_flower_variant(&self,id:u32)->Option<FlowerVariant>{
   self.pending_flowers.get(&id).map(|f|f.variant)
-   .or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.unique_data.and_then(flower_variant).or_else(||Self::legacy_flower_variant(&self.slot.envelope.decoded,r))))
+   .or_else(||self.saved_inventory_row(id).and_then(|r|r.unique_data.and_then(flower_variant).or_else(||Self::legacy_flower_variant(&self.slot.envelope.decoded,r))))
  }
  fn flower_context(&self,id:u32)->Option<(FlowerPolicy,FlowerVariant,HashSet<FlowerVariant>)>{
   if self.inventory_removed.contains(&id){return None}
@@ -1047,7 +1074,7 @@ impl Editor {
  }
  fn flower_growth_change_allowed(&self,id:u32)->bool{
   let item=self.pending_flowers.get(&id).map(|f|f.item_id)
-   .or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.item_id));
+   .or_else(||self.saved_inventory_row(id).and_then(|r|r.item_id));
   item.is_some_and(|item|Self::absent_flower_growth_supported(item,0)&&
    self.inventory_creation_payload_safe(item)&&
    !self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item))
@@ -1100,7 +1127,7 @@ impl Editor {
   if !self.inventory_creation_source_valid()||!self.unique_quantity_ids.contains(&id)||self.undo.len()+self.redo.len()>=MAX_UNDO||
    crate::document_membership::allocate_inventory_unique_ids(&self.slot.index,self.slot.envelope.version,self.pending_unique_count()+1).is_err()||
    crate::document_membership::allocate_ids(&self.slot.index,self.pending_inventory_rows().len()+self.reserved_achievement_count()+1).is_err(){return Vec::new()}
-  let Some(row)=self.slot.index.inventory.iter().find(|r|r.id==id)else{return Vec::new()};
+  let Some(row)=self.saved_inventory_row(id)else{return Vec::new()};
   let Some(item)=row.item_id else{return Vec::new()};
   if (crate::inventory_source::flower_clothing_reference_keys(item).is_some()||owned_dlc_flower_output(item))&&
    !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return Vec::new()}
@@ -1133,7 +1160,7 @@ impl Editor {
    return ((next[0]==6||Self::absent_flower_growth_supported(item,next[0]))&&valid_flower_variant(patterns,next)&&!reserved.contains(&next)).then_some(item)
   }
   if !self.unique_quantity_ids.contains(&id){return None}
-  let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+  let row=self.saved_inventory_row(id)?;
   let item=row.item_id?;
   if (crate::inventory_source::flower_clothing_reference_keys(item).is_some()||owned_dlc_flower_output(item))&&
    !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
@@ -1648,7 +1675,7 @@ impl Editor {
  }
  fn original_wand_identity(&self,id:u32)->Option<WandData>{
   self.pending_wands.get(&id).map(|&(_,v)|v).or_else(||{
-   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+   let row=self.saved_inventory_row(id)?;
    Self::wand_identity(row).or_else(||self.legacy_wand_identity(row))
   })
  }
@@ -1776,7 +1803,7 @@ impl Editor {
    if !self.inventory_changes.get(&id).is_some_and(|&q|q>0){return None}
    furniture.item_id
   }else{
-   let row=self.slot.index.inventory.iter().find(|r|r.id==id)?;
+   let row=self.saved_inventory_row(id)?;
    if !self.unique_quantity_ids.contains(&id)||!row.quantity.is_some_and(|q|q>0)||
     !self.inventory_changes.get(&id).copied().or(row.quantity).is_some_and(|q|q>0){return None}
    row.item_id?
@@ -1860,7 +1887,7 @@ impl Editor {
  fn wand_creation_gate(&self,id:u32,item:i32)->bool{
   if self.slot.index.inventory.iter().any(|r|r.id==id&&matches!(r.unique_data,Some(InventoryUniqueData::Opaque{tag:5}))&&
    !self.legacy_wand_zero_reference_safe(r)){return false}
-  let qty=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
+  let qty=self.inventory_changes.get(&id).copied().or_else(||self.saved_inventory_row(id).and_then(|r|r.quantity));
   qty.is_some_and(|q|q>0)&&self.absent_flower_budget_available()&&
    self.inventory_creation_payload_safe(item)&&!self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)
  }
@@ -1906,7 +1933,7 @@ impl Editor {
   if self.wand_source_reservations(item).is_none(){return false}
   if id&PENDING_ITEM!=0{return self.pending_wands.contains_key(&id)&&self.inventory_changes.contains_key(&id)&&
    self.inventory_creation_payload_safe(item)&&!self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item)}
-  self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|self.wand_zero_reference_safe(r))
+  self.saved_inventory_row(id).is_some_and(|r|self.wand_zero_reference_safe(r))
  }
  pub fn inventory_wand_edit_sources(&self,id:u32)->Vec<i32>{
   let Some((item,original,current,reserved))=self.wand_full_context(id)else{return Vec::new()};
@@ -2045,7 +2072,7 @@ impl Editor {
   Some(words)
  }
  fn original_boba_variant(&self,id:u32)->Option<BobaVariant>{
-  self.pending_bobas.get(&id).copied().or_else(||Self::boba_words(&self.slot.envelope.decoded,self.slot.index.inventory.iter().find(|r|r.id==id)?))
+  self.pending_bobas.get(&id).copied().or_else(||Self::boba_words(&self.slot.envelope.decoded,self.saved_inventory_row(id)?))
  }
  pub fn inventory_boba_witnesses(&self)->&'static [(i32,i32,i32)]{
   if self.slot.envelope.version==Version::V301{crate::inventory_source::BOBA_WITNESSES}else{&[]}
@@ -2144,7 +2171,7 @@ impl Editor {
   // Repair an existing identity independently of acquisition authority.
   if !Self::valid_boba_target(original){return Vec::new()}
   let item=crate::inventory_source::BOBA_ID;
-  let quantity=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
+  let quantity=self.inventory_changes.get(&id).copied().or_else(||self.saved_inventory_row(id).and_then(|r|r.quantity));
   if !quantity.is_some_and(|q|q>0)||!self.absent_flower_budget_available()||
    !self.inventory_creation_payload_safe(item)||self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item){return Vec::new()}
   self.inventory_boba_variants(id).into_iter().filter(|&v|v!=original).collect()
@@ -2191,7 +2218,7 @@ impl Editor {
   Some(words)
  }
  fn original_cafe_variant(&self,id:u32)->Option<CafeVariant>{
-  self.pending_cafes.get(&id).map(|&(_,v)|v).or_else(||Self::cafe_words(&self.slot.envelope.decoded,self.slot.index.inventory.iter().find(|r|r.id==id)?))
+  self.pending_cafes.get(&id).map(|&(_,v)|v).or_else(||Self::cafe_words(&self.slot.envelope.decoded,self.saved_inventory_row(id)?))
  }
  fn valid_cafe_saved(item:i32,v:CafeVariant)->bool{
   let n=Self::cafe_count(v);
@@ -2318,7 +2345,7 @@ impl Editor {
   if self.inventory_removed.contains(&id){return None}
   let context=self.cafe_context(id)?;
   let item=context.0;
-  let quantity=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
+  let quantity=self.inventory_changes.get(&id).copied().or_else(||self.saved_inventory_row(id).and_then(|r|r.quantity));
   if !quantity.is_some_and(|q|q>0)||!self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
    self.slot.index.inventory_item_refs.iter().any(|&(i,_)|i==item){return None}
   Some(context)
@@ -2470,7 +2497,7 @@ impl Editor {
    .filter_map(move |slot|crate::inventory_palette_source::palette_output_color(color,slot)))
  }
  fn original_palette_variant(&self,id:u32)->Option<PaletteVariant>{
-  self.pending_palettes.get(&id).copied().or_else(||Self::palette_identity(self.slot.index.inventory.iter().find(|r|r.id==id)?))
+  self.pending_palettes.get(&id).copied().or_else(||Self::palette_identity(self.saved_inventory_row(id)?))
  }
  fn palette_context(&self,id:u32)->Option<(PaletteVariant,PaletteVariant,Vec<PaletteVariant>)>{
   if self.inventory_removed.contains(&id){return None}
@@ -2526,7 +2553,7 @@ impl Editor {
  // arbitrary or event-only color. No acquisition or outfit data is written.
  fn palette_creation_context(&self,id:u32)->Option<(PaletteVariant,PaletteVariant,Vec<PaletteVariant>)>{
   if self.inventory_removed.contains(&id){return None}
-  let quantity=self.inventory_changes.get(&id).copied().or_else(||self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity));
+  let quantity=self.inventory_changes.get(&id).copied().or_else(||self.saved_inventory_row(id).and_then(|r|r.quantity));
   if !quantity.is_some_and(|q|q>0){return None}
   let item=crate::inventory_source::CUSTOM_PALETTE_ID;
   if !self.absent_flower_budget_available()||!self.inventory_creation_payload_safe(item)||
@@ -2908,7 +2935,7 @@ impl Editor {
    if !self.can_create_inventory_item(item_id)||next<0||next>cap||before.unwrap_or(0)!=expected{return Err(Error::Schema)}
    return Ok(InventoryQuantityDelta{document_id:id,before,after:(next>0).then_some(next)})
   }
-  let row=self.slot.index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
+  let row=self.saved_inventory_row(id).ok_or(Error::Schema)?;
   let cap=self.inventory_quantity_limit(row).ok_or(Error::Schema)?;
   let minimum=if self.inventory_can_empty(row){0}else{1};
   if next<minimum||next>cap||
@@ -2987,7 +3014,7 @@ impl Editor {
   if self.slot.envelope.version!=Version::V301{return false}
   if id&PENDING_ITEM!=0{return self.inventory_changes.get(&id).is_some_and(|q|*q>0)}
   !self.inventory_removed.contains(&id)&&
-   self.slot.index.inventory.iter().find(|r|r.id==id).is_some_and(|r|Self::physical_inventory_reference_safe(&self.slot.index,r,self.slot.index.inventory.iter().filter(|p|p.unique_id==r.unique_id).count()==1))
+   self.saved_inventory_row(id).is_some_and(|r|Self::physical_inventory_reference_safe(&self.slot.index,r,self.slot.index.inventory.iter().filter(|p|p.unique_id==r.unique_id).count()==1))
  }
  pub fn inventory_removable_ids(&self)->Vec<u32>{
   if self.slot.envelope.version!=Version::V301{return Vec::new()}
@@ -2999,14 +3026,16 @@ impl Editor {
  }
  /// Exact persisted document removal and cancellation of staged additions in one transaction.
  pub fn remove_inventory_entries(&mut self,requests:&[(u32,i32)])->Result<(),Error>{
-  if requests.is_empty()||requests.len()>MAX_INVENTORY_BATCH{return Err(Error::Budget)}
+  if requests.is_empty(){return Err(Error::Budget)}
+  if self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
+  let revision=self.next_edit_revision_with_cost(5usize.saturating_add(requests.len().saturating_mul(8)))?;
+  let removable:HashSet<_>=self.inventory_removable_ids().into_iter().collect();
   let mut seen=HashSet::new();
   for &(id,expected) in requests{
    if !seen.insert(id){return Err(Error::Duplicate)}
-   if !self.inventory_entry_removable(id)||self.inventory_changes.get(&id).copied().or_else(||
-    self.slot.index.inventory.iter().find(|r|r.id==id).and_then(|r|r.quantity))!=Some(expected){return Err(Error::Schema)}
+   if !removable.contains(&id)||self.inventory_changes.get(&id).copied().or_else(||
+    self.saved_inventory_row(id).and_then(|r|r.quantity))!=Some(expected){return Err(Error::Schema)}
   }
-  let revision=self.next_edit_revision()?;
   let change=Change::InventoryRemoved{rows:requests.to_vec()};
   self.restore_change(&change,false);self.undo.push(change);
   if self.undo.len()>MAX_UNDO{self.undo.remove(0);}
@@ -3029,8 +3058,10 @@ impl Editor {
  /// Validate every existing ordinary stack against the current revision before
  /// changing anything. One native history step covers all selected rows.
  pub fn change_inventory_quantities(&mut self,requests:&[(u32,i32,i32)])->Result<(),Error>{
-  if requests.is_empty()||requests.len()>MAX_INVENTORY_BATCH{return Err(Error::Budget)}
-  let revision=self.next_edit_revision()?;
+  if requests.is_empty(){return Err(Error::Budget)}
+  // Bound request allocation before planning; do not split into transactions.
+  if self.undo.len()+self.redo.len()>=MAX_UNDO{return Err(Error::Budget)}
+  let revision=self.next_edit_revision_with_cost(5usize.saturating_add(requests.len().saturating_mul(12)))?;
   let mut seen=HashSet::new();
   let mut deltas=Vec::with_capacity(requests.len());
   for &(id,expected,next) in requests{
@@ -3774,9 +3805,14 @@ impl Editor {
   let (next_payload,first)=if self.inventory_removed.is_empty(){(next_payload,first)}else{
    let index=crate::native::index_native(&next_payload,self.slot.envelope.version)?;
    let mut keys:Vec<_>=self.inventory_removed.iter().map(|&id|(1,id)).collect();keys.sort_unstable();
+   let mut uids=HashMap::<i32,usize>::new();
+   let rows:HashMap<_,_>=index.inventory.iter().map(|r|{
+    if let Some(uid)=r.unique_id{*uids.entry(uid).or_default()+=1;}
+    (r.id,r)
+   }).collect();
    for &(_,id) in &keys{
-    let row=index.inventory.iter().find(|r|r.id==id).ok_or(Error::Schema)?;
-    if !Self::physical_inventory_reference_safe(&index,row,index.inventory.iter().filter(|p|p.unique_id==row.unique_id).count()==1){return Err(Error::Schema)}
+    let row=rows.get(&id).ok_or(Error::Schema)?;
+    if !Self::physical_inventory_reference_safe(&index,row,row.unique_id.is_some_and(|uid|uids.get(&uid)==Some(&1))){return Err(Error::Schema)}
    }
    let (result,changed_at)=crate::document_membership::rewrite(&next_payload,self.slot.envelope.version,&index,&keys,None)?;
    (result,first.min(changed_at))
@@ -4168,6 +4204,8 @@ mod tests {
    assert!(!editor.unique_quantity_ids.contains(&r.id));
   }
   editor.slot.index.inventory.extend([flower,furniture,wand,unknown,magic,nested]);
+  // This test injects historical rows after open; rebuild the immutable lookup.
+  editor.inventory_document_index=editor.slot.index.inventory.iter().enumerate().map(|(i,r)|(r.id,i)).collect();
   assert_eq!(editor.inventory_flowers().collect::<Vec<_>>(),vec![(100,6,1,0,0)]);
   assert_eq!(editor.inventory_unique_rows().find(|r|r.0==102).unwrap().3.unwrap().display_words().1[0],source_id as u32);
   assert_eq!(editor.inventory_flower_edit_hints().count(),0);
@@ -4217,9 +4255,10 @@ mod tests {
 /// Every edit is reconstructed from the original source using the regular
 /// source-validated CAS APIs before any recovered history is committed.
 const HISTORY_MAGIC:&[u8;8]=b"HKIAHS01";
-// The entire 256-step journal fits even when every step has 256 quantity deltas.
-pub const HISTORY_MAX_BYTES:usize=1024*1024;
-const _:()=assert!(16+MAX_UNDO*(5+MAX_INVENTORY_BATCH*12)<=HISTORY_MAX_BYTES);
+// Initial serialized journal budget. It is shared by all operations and
+// checked before mutation. It is not an inventory count limit. 65,536
+// quantity edits occupy 786,437 bytes plus the 16-byte journal header.
+pub const HISTORY_MAX_BYTES:usize=32*1024*1024;
 
 struct HistoryCursor<'a>{bytes:&'a [u8],pos:usize}
 impl<'a> HistoryCursor<'a>{
@@ -4290,7 +4329,7 @@ impl Editor {
     }
     Change::Inventory{document_id,before,after}=>{
      out.push(6);out.extend(document_id.to_le_bytes());
-     let original=if document_id&PENDING_ITEM!=0{0}else{self.slot.index.inventory.iter().find(|r|r.id==document_id)
+     let original=if document_id&PENDING_ITEM!=0{0}else{self.saved_inventory_row(document_id)
       .and_then(|r|r.quantity).ok_or(Error::Schema)?};
      out.extend(before.unwrap_or(original).to_le_bytes());
      out.extend(after.unwrap_or(original).to_le_bytes());
@@ -4298,7 +4337,7 @@ impl Editor {
     Change::InventoryBatch{ref deltas}=>{
      out.push(10);out.extend((deltas.len() as u32).to_le_bytes());
      for &InventoryQuantityDelta{document_id,before,after} in deltas{
-      let original=if document_id&PENDING_ITEM!=0{0}else{self.slot.index.inventory.iter().find(|r|r.id==document_id)
+      let original=if document_id&PENDING_ITEM!=0{0}else{self.saved_inventory_row(document_id)
        .and_then(|r|r.quantity).ok_or(Error::Schema)?};
       out.extend(document_id.to_le_bytes());
       out.extend(before.unwrap_or(original).to_le_bytes());
@@ -4456,14 +4495,14 @@ impl Editor {
     }
     10=>{
      let n=r.u32()? as usize;
-     if n==0||n>MAX_INVENTORY_BATCH{return Err(Error::Budget)}
+     if n==0||n>(checkpoint.len().saturating_sub(r.pos))/12{return Err(Error::Budget)}
      let mut requests=Vec::with_capacity(n);
      for _ in 0..n{requests.push((r.u32()?,r.i32()?,r.i32()?));}
      candidate.change_inventory_quantities(&requests)?;
      scopes.push(HistoryScope::Inventory);
     }
     24=>{
-     let n=r.u32()? as usize;if n==0||n>MAX_INVENTORY_BATCH{return Err(Error::Budget)}
+     let n=r.u32()? as usize;if n==0||n>(checkpoint.len().saturating_sub(r.pos))/8{return Err(Error::Budget)}
      let mut rows=Vec::with_capacity(n);for _ in 0..n{rows.push((r.u32()?,r.i32()?));}
      candidate.remove_inventory_entries(&rows)?;scopes.push(HistoryScope::Inventory);
     }
