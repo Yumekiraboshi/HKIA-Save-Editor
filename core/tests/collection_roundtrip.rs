@@ -7180,6 +7180,12 @@ fn existing_native_pin_set_cas_history_and_export_preserve_other_sets(){
   e.change_inventory_pin(4,material,false,true).unwrap();
   assert_eq!(e.inventory_pin_orders(),vec![(4,0),(5,0)]);
   assert!(e.change_inventory_pin(5,material,false,true).is_err());
+  assert_eq!(e.inventory_pin_edit_keys(),vec![(4,material),(5,material)]);
+  assert_eq!(e.inventory_pin_bulk_protected_ids(),vec![4,5]);
+  let revision=e.revision();let history=e.history_checkpoint().unwrap();
+  assert!(e.change_inventory_quantities_protected(&[(4,6,0),(5,1,0)]).is_err());
+  assert!(e.remove_inventory_entries_protected(&[(4,6)]).is_err());
+  assert_eq!(e.revision(),revision);assert_eq!(e.history_checkpoint().unwrap(),history);
   let checkpoint=e.history_checkpoint().unwrap();
   let mut restored=Editor::open(input.clone()).unwrap();restored.restore_history(&checkpoint).unwrap();
   assert_eq!(restored.history_checkpoint().unwrap(),checkpoint);

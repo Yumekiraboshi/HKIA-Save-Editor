@@ -143,6 +143,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryBatchMode=$state(false);
  let inventoryLocks=$state<Set<number>>(new Set());
  function isInventoryLocked(id:number){return inventoryLocks.has(id)}
+ const nativePinProtectedIds=$derived(new Set((snapshot?.inventory??[]).filter(row=>row.nativePinBulkProtected).map(row=>row.documentId)));
+ function isInventoryBulkProtected(id:number){return isInventoryLocked(id)||nativePinProtectedIds.has(id)}
  function setInventoryLocks(rows:readonly InventoryEntry[],locked:boolean){
   if(busy||!snapshot||pendingRemoval)return;
   const liveIds=new Set(snapshot.inventory.map(row=>row.documentId));
@@ -184,8 +186,9 @@ import {verifiedFloorplanName} from './floorplan-names';
  });
  const selectedInventoryRows=$derived.by(()=>inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId)));
  const inventoryBatchCanQuantity=$derived(selectedInventoryRows.length>0&&selectedInventoryRows.every(row=>row.editable));
- const inventoryBatchCanDelete=$derived.by(()=>!inventoryAddMode&&selectedInventoryRows.length>0&&selectedInventoryRows.length===inventoryBatchSelected.size&&(
-  (selectedInventoryRows.some(row=>row.quantity>0)&&inventoryBatchZeroRows(snapshot?.inventory??[],selectedInventoryRows,isInventoryLocked).length===selectedInventoryRows.filter(row=>row.quantity>0).length)||selectedInventoryRows.every(row=>row.removable)));
+ const selectedDestructiveRows=$derived(selectedInventoryRows.filter(row=>!row.nativePinBulkProtected));
+ const inventoryBatchCanDelete=$derived.by(()=>!inventoryAddMode&&selectedDestructiveRows.length>0&&selectedInventoryRows.length===inventoryBatchSelected.size&&(
+  (selectedDestructiveRows.some(row=>row.quantity>0)&&inventoryBatchZeroRows(snapshot?.inventory??[],selectedDestructiveRows,isInventoryBulkProtected).length===selectedDestructiveRows.filter(row=>row.quantity>0).length)||selectedDestructiveRows.every(row=>row.removable)));
  const inventoryBatchMaximum=$derived.by(()=>{
   let cap=2147483647;
   if(snapshot)for(const row of inventoryBrowseRows){
@@ -357,8 +360,8 @@ import {verifiedFloorplanName} from './floorplan-names';
  const inventoryVisibleGroups=$derived(nativeInventoryIndex.size?NATIVE_INVENTORY_TABS:[]);
  const activeInventoryGroup=$derived(inventoryGroup===OTHER_INVENTORY_GROUP&&!inventoryOtherCount?defaultInventoryGroup(inventoryGroupTotals):inventoryGroup??defaultInventoryGroup(inventoryGroupTotals));
  const inventoryCategoryRows=$derived(nativeInventoryIndex.size?((snapshot as SaveSnapshot|null)?.inventory??[]).filter(row=>nativeInventoryGroups(row.itemId,nativeInventoryIndex).includes(activeInventoryGroup)):[]);
- const categoryZeroRows=$derived(inventoryBatchZeroRows((snapshot as SaveSnapshot|null)?.inventory??[],inventoryCategoryRows,isInventoryLocked));
- const categoryRemoveRows=$derived(inventoryCategoryRows.filter(row=>!isInventoryLocked(row.documentId)&&row.removable));
+ const categoryZeroRows=$derived(inventoryBatchZeroRows((snapshot as SaveSnapshot|null)?.inventory??[],inventoryCategoryRows,isInventoryBulkProtected));
+ const categoryRemoveRows=$derived(inventoryCategoryRows.filter(row=>!isInventoryBulkProtected(row.documentId)&&row.removable));
  const categoryLockedCount=$derived(inventoryCategoryRows.filter(row=>isInventoryLocked(row.documentId)).length);
  const inventoryRows=$derived(browseInventory(
   inventoryDisplayedRows,inventoryQuery,activeInventoryGroup,
@@ -1361,14 +1364,17 @@ import {verifiedFloorplanName} from './floorplan-names';
  }
  function requestInventoryDelete(rows:InventoryEntry[],batch:boolean,opener:HTMLElement,allowPhysical=true){
   if(!snapshot||busy||inventoryAddMode||!rows.length||rows.some(row=>isInventoryLocked(row.documentId))||rows.length>snapshot.inventoryBatchLimit)return;
+  const excluded=batch?rows.filter(row=>row.nativePinBulkProtected).length:0;
+  if(batch)rows=rows.filter(row=>!row.nativePinBulkProtected);
+  if(!rows.length)return;
   const physical=allowPhysical&&rows.every(row=>row.removable);
-  const zero=inventoryBatchZeroRows(snapshot.inventory,rows,isInventoryLocked).length===rows.filter(row=>row.quantity>0).length&&rows.some(row=>row.quantity>0);
+  const zero=inventoryBatchZeroRows(snapshot.inventory,rows,batch?isInventoryBulkProtected:isInventoryLocked).length===rows.filter(row=>row.quantity>0).length&&rows.some(row=>row.quantity>0);
   if(!physical&&!zero)return;
   const targets=physical?rows:rows.filter(row=>row.quantity>0);
   const requests:InventoryQuantityRequest[]=targets.map(row=>[row.documentId,row.quantity,0]);
   const details=targets.slice(0,BATCH_SIZE).map(row=>({documentId:row.documentId,name:[inventoryName(row.itemId),inventoryVariantSearchName(row)].filter(Boolean).join(' · '),quantity:row.quantity,paletteColors:paletteRemovalSwatches(row.palette)}));
   const name=batch?targets.length.toLocaleString(locale):details[0].name+' × '+details[0].quantity.toLocaleString(locale);
-  void requestRemoval({kind:'inventory',requests,physical,zero,batch,name,targets:details,revision:snapshot.revision},opener);
+  void requestRemoval({kind:'inventory',requests,physical,zero,batch,name,targets:details,revision:snapshot.revision,categoryExcluded:excluded||undefined},opener);
  }
  function requestInventoryCategoryDelete(physical:boolean,opener:HTMLElement){
   if(!snapshot||busy||inventoryAddMode||pendingRemoval)return;
@@ -1451,7 +1457,7 @@ import {verifiedFloorplanName} from './floorplan-names';
   if(!target||!snapshot||busy)return;
   const liveInventory=target.kind==='inventory'?new Map(snapshot.inventory.map(row=>[row.documentId,row])):null;
   const zeroRows=target.kind==='inventory'&&!physical?new Set(inventoryBatchZeroRows(snapshot.inventory,
-   target.requests.flatMap(([id])=>{const row=liveInventory?.get(id);return row?[row]:[]}),isInventoryLocked).map(row=>row.documentId)):null;
+   target.requests.flatMap(([id])=>{const row=liveInventory?.get(id);return row?[row]:[]}),target.batch?isInventoryBulkProtected:isInventoryLocked).map(row=>row.documentId)):null;
   if(snapshot.revision!==target.revision||original!==removalOriginal||
    (target.kind==='collections'
     ?recorded[String(target.id)]!==target.before
@@ -1459,7 +1465,7 @@ import {verifiedFloorplanName} from './floorplan-names';
      ?snapshot.achievements.find(row=>achievementGuid(row.guid)===target.item.guid)?.value.complete!==true
      :((physical?!target.physical:!target.zero)||target.requests.some(([id,before])=>{
       const row=liveInventory?.get(id);
-      return isInventoryLocked(id)||!row||row.quantity!==before||!(physical?row.removable:zeroRows?(before===0||zeroRows.has(id)):row.editable&&row.quantityMinimum===0)
+      return isInventoryLocked(id)||!row||(target.batch&&row.nativePinBulkProtected)||row.quantity!==before||!(physical?row.removable:zeroRows?(before===0||zeroRows.has(id)):row.editable&&row.quantityMinimum===0)
      })))){
    closeRemovalConfirmation();error=removalCopy.stale;return;
   }
@@ -1474,8 +1480,8 @@ import {verifiedFloorplanName} from './floorplan-names';
   else{
    busy=true;error='';
    try{
-    if(physical){update(await removeInventoryEntries(target.requests.map(([id,before])=>[id,before])));resetInventoryBatchSelection()}
-    else if(target.batch||target.requests.some(([id])=>liveInventory?.get(id)?.batchZeroOnly)){update(await changeInventoryQuantities(target.requests.filter(([,before])=>before!==0)));resetInventoryBatchSelection()}
+    if(physical){update(await removeInventoryEntries(target.requests.map(([id,before])=>[id,before]),target.batch));resetInventoryBatchSelection()}
+    else if(target.batch||target.requests.some(([id])=>liveInventory?.get(id)?.batchZeroOnly)){update(await changeInventoryQuantities(target.requests.filter(([,before])=>before!==0),target.batch));resetInventoryBatchSelection()}
     else{const [id,before,next]=target.requests[0];update(await changeInventoryQuantity(id,before,next))}
     await persistDraft();
    }catch(e){error=describeError(e)}

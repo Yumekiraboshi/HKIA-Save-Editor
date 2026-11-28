@@ -551,6 +551,52 @@ impl Editor {
  pub fn inventory_pin_orders(&self)->Vec<(u32,i16)>{
   self.inventory_pin_projection().into_iter().filter_map(|(id,order)|Some((id,order?))).collect()
  }
+ /// Existing-set ordinary write witnesses. No TypeScript hash computation.
+ pub fn inventory_pin_edit_keys(&self)->Vec<(u32,[u32;4])>{
+  let Some(source)=self.slot.index.pinned_items_source.as_ref()else{return Vec::new()};
+  if !source.sets.iter().any(|s|s.key==crate::native::INVENTORY_PIN_SCREEN){return Vec::new()}
+  self.inventory().into_iter().filter_map(|r|{
+   let row=self.saved_inventory_row(r.document_id)?;
+   if row.id==0||row.unique_id!=Some(0)||row.unique_is_nil!=Some(true)||row.fields.iter().any(Option::is_none){return None}
+   let key=*crate::inventory_pin::definitions().get(&r.item_id)?;
+   (self.effective_inventory_pin_guid(r.document_id,r.item_id)==Some(key)).then_some((r.document_id,key))
+  }).collect()
+ }
+ /// Destructive bulk policy, independent from individual edit authority.
+ /// Incomplete captured settings cannot certify any unpinned target. For
+ /// known settings, protect exact matches and unresolved identities where
+ /// an existing default-screen pin could belong to an unverified variant.
+ pub fn inventory_pin_bulk_protected_ids(&self)->Vec<u32>{
+  let rows=self.inventory();
+  if self.slot.index.pin_settings_incomplete{return rows.into_iter().map(|r|r.document_id).collect()}
+  let Some(source)=self.slot.index.pinned_items_source.as_ref()else{return Vec::new()};
+  let Some(set)=source.sets.iter().find(|s|s.key==crate::native::INVENTORY_PIN_SCREEN)else{return Vec::new()};
+  let pins=self.inventory_pin_changes.clone().unwrap_or_else(||crate::inventory_pin::source_rows(source));
+  let keys:HashSet<_>=pins.iter().filter(|p|p.set_id==set.set_id).map(|p|p.item_guid).collect();
+  if keys.is_empty(){return Vec::new()}
+  let ordinary:HashMap<_,_>=self.inventory_pin_edit_keys().into_iter().collect();
+  let known_ordinary:HashSet<_>=ordinary.values().copied().collect();
+  let unmatched=keys.iter().any(|key|!known_ordinary.contains(key));
+  rows.into_iter().filter_map(|r|{
+   let key=self.effective_inventory_pin_guid(r.document_id,r.item_id);
+   (key.is_some_and(|k|keys.contains(&k))||(!ordinary.contains_key(&r.document_id)&&unmatched)).then_some(r.document_id)
+  }).collect()
+ }
+ /// Interactive bulk zero and removal recheck protection before any mutation.
+ /// The original CAS APIs remain available for individual edits and exact
+ /// journal replay, including older checkpoints written before pin support.
+ pub fn change_inventory_quantities_protected(&mut self,requests:&[(u32,i32,i32)])->Result<(),Error>{
+  if requests.iter().any(|&(_,before,next)|before!=next&&next==0){
+   let protected:HashSet<_>=self.inventory_pin_bulk_protected_ids().into_iter().collect();
+   if requests.iter().any(|&(id,before,next)|before!=next&&next==0&&protected.contains(&id)){return Err(Error::Schema)}
+  }
+  self.change_inventory_quantities(requests)
+ }
+ pub fn remove_inventory_entries_protected(&mut self,requests:&[(u32,i32)])->Result<(),Error>{
+  let protected:HashSet<_>=self.inventory_pin_bulk_protected_ids().into_iter().collect();
+  if requests.iter().any(|&(id,_)|protected.contains(&id)){return Err(Error::Schema)}
+  self.remove_inventory_entries(requests)
+ }
  /// Existing-set native CAS. Only saved complete ordinary identities are
  /// authorized for now; dynamic hashes and absent screen contexts are read-only.
  /// Not exposed through the browser until shared draft and bulk policy are integrated.

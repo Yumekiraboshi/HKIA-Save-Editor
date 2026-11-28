@@ -76,7 +76,7 @@ pub extern "C" fn hkia_inventory_batch_limit()->u32{
  STATE.with(|s|s.borrow().editor.as_ref().map_or(0,|e|e.inventory_batch_limit() as u32))
 }
 #[no_mangle]
-pub extern "C" fn hkia_inventory_batch_change()->u32{
+pub extern "C" fn hkia_inventory_batch_change(protect_pins:u32)->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
   let bytes=std::mem::take(&mut a.stage);
@@ -86,12 +86,13 @@ pub extern "C" fn hkia_inventory_batch_change()->u32{
    i32::from_le_bytes(row[4..8].try_into().unwrap()),
    i32::from_le_bytes(row[8..12].try_into().unwrap())
   )).collect::<Vec<_>>();
-  match a.editor.as_mut().map(|e|e.change_inventory_quantities(&requests)){Some(Ok(()))=>0,_=>1}
+  if protect_pins>1{return 1}
+  match a.editor.as_mut().map(|e|if protect_pins==1{e.change_inventory_quantities_protected(&requests)}else{e.change_inventory_quantities(&requests)}){Some(Ok(()))=>0,_=>1}
  })
 }
 /// Remove persisted inventory records and cancel staged additions atomically. Separate from quantity CAS.
 #[no_mangle]
-pub extern "C" fn hkia_inventory_remove_entries()->u32{
+pub extern "C" fn hkia_inventory_remove_entries(protect_pins:u32)->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
   let bytes=std::mem::take(&mut a.stage);
@@ -100,7 +101,8 @@ pub extern "C" fn hkia_inventory_remove_entries()->u32{
    u32::from_le_bytes(row[0..4].try_into().unwrap()),
    i32::from_le_bytes(row[4..8].try_into().unwrap())
   )).collect::<Vec<_>>();
-  match a.editor.as_mut().map(|e|e.remove_inventory_entries(&requests)){Some(Ok(()))=>0,_=>1}
+  if protect_pins>1{return 1}
+  match a.editor.as_mut().map(|e|if protect_pins==1{e.remove_inventory_entries_protected(&requests)}else{e.remove_inventory_entries(&requests)}){Some(Ok(()))=>0,_=>1}
  })
 }
 #[no_mangle]
@@ -164,6 +166,39 @@ pub extern "C" fn hkia_inventory_pin_orders()->u32{
  })
 }
 
+#[no_mangle]
+pub extern "C" fn hkia_inventory_pin_edit_keys()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let rows=editor.inventory_pin_edit_keys();
+  if rows.len()>1_000_000{return 1}
+  let mut b=Vec::with_capacity(4+20*rows.len());b.extend((rows.len() as u32).to_le_bytes());
+  for (id,key) in rows{b.extend(id.to_le_bytes());for word in key{b.extend(word.to_le_bytes());}}
+  a.reply=b;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_pin_bulk_protected()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let ids=editor.inventory_pin_bulk_protected_ids();
+  if ids.len()>1_000_000{return 1}
+  let mut b=Vec::with_capacity(4+4*ids.len());b.extend((ids.len() as u32).to_le_bytes());for id in ids{b.extend(id.to_le_bytes());}
+  a.reply=b;0
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_pin_change(id:u32,k0:u32,k1:u32,k2:u32,k3:u32,before:u32,after:u32,revision:u32)->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  if before>1||after>1{return 1}
+  let Some(e)=a.editor.as_mut()else{return 1};
+  if e.revision()!=revision{return 1}
+  match e.change_inventory_pin(id,[k0,k1,k2,k3],before==1,after==1){Ok(())=>0,_=>1}
+ })
+}
 /// Source-checked absent ordinary ingredients; session-only handles, not native IDs.
 #[no_mangle]
 pub extern "C" fn hkia_inventory_creatable_snapshot()->u32{
