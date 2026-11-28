@@ -58,7 +58,7 @@ function createSyntheticSlot({childCompleted=null,artInventory=false,scaleInvent
   ...(paletteRemovalInventory?[doc(10,arr([8],hash(1,2,3,4),arr(),arr(),arr(),hash(1,2,3,4),[0xc3],
    paletteRemovalInventory==='copied'?arr([6],arr(color(1,0,0),color(0,1,0),color(0,0,1))):[0xc0])),
    doc(22,arr([9],arr(),arr(),[0xc0],[0xc0],arr()))]:[]),
-  ...(batchInventory?[doc(1,arr([8],u32(517031),[0],u32(9),[0xc0]))]:[]),
+  ...(batchInventory?[doc(1,arr([8],u32(batchInventory==='repair'?203331651:517031),[0],u32(9),[0xc0]))]:[]),
   ...(categoryProtectionInventory?[doc(1,arr([8],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([9],u32(627013240),[0],u32(9),[0xc0]))]:[]),
   ...(duplicateZeroInventory?[doc(1,arr([8],u32(1877756618),[0],u32(6),[0xc0])),doc(1,arr([9],u32(1877756618),[0],u32(duplicatePeerQuantity),[0xc0]))]:[]),
   ...(quantityBounds?[doc(1,arr([9],u32(413462588),[0],u32(2),[0xc0]))]:[]),
@@ -1269,6 +1269,52 @@ async function inventoryCategoryProtectionSmoke(){
   await search.fill('1877756618');await card.locator('.inventory-lock-button[aria-pressed="true"]').waitFor();
   assert.equal(await card.locator('input[name="quantity"]').inputValue(),'6');
   console.log('CHROMIUM CATEGORY PROTECTION PASS: persisted lock, filtered category zero, hidden physical deletion, protected history');
+ }finally{await context.close()}
+}
+async function inventoryRepairZeroOnlySmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:800}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-repair-zero.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({batchInventory:'repair'}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');
+  await page.locator('.inventory-controls input[type="search"]').fill('203331651');
+  const card=page.locator('.inventory-card'),modal=page.locator('.removal-confirm-dialog');
+  const field=card.locator('input[name="quantity"]');
+  await field.waitFor();
+  assert.equal(await field.inputValue(),'9');
+  assert.equal(await field.getAttribute('min'),'0');
+  assert.equal(await field.getAttribute('max'),'0');
+  await field.fill('1');
+  assert.equal(await card.locator('.inventory-quantity-form button[type="submit"]').isDisabled(),true);
+  await field.fill('0');
+  await card.locator('.inventory-quantity-form button[type="submit"]').click();
+  await modal.locator('.removal-confirm-action').waitFor({state:'visible'});
+  assert.equal(await modal.locator('.inventory-remove-entry-action').count(),0);
+  await modal.locator('.removal-confirm-action').click();
+  await card.waitFor({state:'hidden'});
+  await page.locator('.inventory-show-zero-toggle').click();
+  await card.waitFor();
+  assert.equal(await field.count(),0,'empty missing payload cannot be refilled');
+  assert.equal(await card.locator('.inventory-stack-delete').isDisabled(),false);
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await field.waitFor();
+  assert.equal(await field.inputValue(),'9');
+  await page.locator('.inventory-batch-toggle').click();
+  await card.locator('.inventory-batch-checkbox').check();
+  const batch=page.locator('.inventory-batch-form input[type="number"]');
+  assert.equal(await batch.getAttribute('min'),'0');
+  assert.equal(await batch.getAttribute('max'),'0');
+  await batch.fill('0');
+  await page.locator('.inventory-batch-form button[type="submit"]').click();
+  await modal.locator('.removal-confirm-action').waitFor({state:'visible'});
+  await modal.locator('.removal-confirm-action').click();
+  await page.locator('.inventory-batch-form .inventory-total').filter({hasText:/^0\s*\//}).waitFor();
+  await page.locator('.inventory-batch-toggle').click();
+  await card.waitFor();
+  assert.equal(await field.count(),0);
+  console.log('CHROMIUM REPAIR ZERO-ONLY QUANTITY PASS');
  }finally{await context.close()}
 }
 async function inventoryLastPositiveDuplicateZeroSmoke(){
@@ -4078,6 +4124,7 @@ async function run(){
  await activeToolReloadSmoke();
  await inventoryEditExportSmoke();
  await inventoryBatchQuantitySmoke();
+ await inventoryRepairZeroOnlySmoke();
  await inventoryLastPositiveDuplicateZeroSmoke();
  await inventoryDuplicateBatchZeroInputSmoke();
  await inventoryCategoryProtectionSmoke();
