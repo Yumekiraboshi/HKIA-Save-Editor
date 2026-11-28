@@ -7062,7 +7062,7 @@ fn category_batch_above_65536_zero_remove_history_and_roundtrip(){
 
 
 #[test]
-fn missing_required_unique_payload_can_only_be_physically_removed_with_complete_references(){
+fn missing_required_unique_payload_zero_and_physical_removal_require_complete_references(){
  use hkia_save_core::collection::HistoryScope::Inventory;
  // Every source definition requiring a unique payload, not handpicked examples.
  let ids:Vec<u32>=complete_quantity_source::RULES.iter().filter_map(|&(id,flags)|(flags&2!=0).then_some(id as u32)).collect();
@@ -7092,17 +7092,34 @@ fn missing_required_unique_payload_can_only_be_physically_removed_with_complete_
   let raw=make(None);let input=if zipped{zip(&raw)}else{raw};
   let mut e=Editor::open(input.clone()).unwrap();let original=e.inventory();
   assert_eq!(original.len(),2*ids.len());
-  assert!(original.iter().all(|r|!r.editable));
+  let mut zero_ids=e.inventory_batch_zero_only_ids();zero_ids.sort_unstable();
+  let expected_ids:Vec<_>=original.iter().filter(|r|!protected.contains(&r.item_id)).map(|r|r.document_id).collect();
+  assert_eq!(zero_ids,expected_ids,"all 136 bag definitions share the same repair");
   for row in &original{
-   assert_eq!(e.inventory_entry_removable(row.document_id),!protected.contains(&row.item_id),"item {}, quantity {}",row.item_id,row.quantity);
+   let safe=!protected.contains(&row.item_id);
+   assert_eq!(e.inventory_entry_removable(row.document_id),safe,"item {}, quantity {}",row.item_id,row.quantity);
+   assert_eq!(row.editable,safe&&row.quantity>0,"item {}, quantity {}",row.item_id,row.quantity);
+   assert_eq!(row.quantity_limit,if safe&&row.quantity>0{Some(0)}else{None});
+   assert!(e.change_inventory_quantity(row.document_id,row.quantity,3).is_err());
   }
+  assert!(!e.dirty());
   let repair:Vec<_>=original.iter().filter(|r|!protected.contains(&r.item_id)).map(|r|(r.document_id,r.quantity)).collect();
   assert_eq!(repair.len(),272);
   let retained:Vec<_>=original.iter().filter(|r|protected.contains(&r.item_id)).cloned().collect();
   assert_eq!(retained.len(),4);
   let mut bad=repair.clone();bad.push((retained[0].document_id,retained[0].quantity));
   assert!(e.remove_inventory_entries(&bad).is_err());assert!(!e.dirty());
-  assert!(e.change_inventory_quantity(4,2,0).is_err());
+  let zero:Vec<_>=original.iter().filter(|r|!protected.contains(&r.item_id)&&r.quantity>0).map(|r|(r.document_id,r.quantity,0)).collect();
+  assert_eq!(zero.len(),136);
+  let mut bad_zero=zero.clone();bad_zero.push((retained[0].document_id,retained[0].quantity,0));
+  assert!(e.change_inventory_quantities(&bad_zero).is_err());assert!(!e.dirty());
+  e.change_inventory_quantities(&zero).unwrap();
+  let empty=Editor::open(e.export().unwrap()).unwrap();
+  for row in empty.inventory().iter().filter(|r|!protected.contains(&r.item_id)){
+   assert_eq!(row.quantity,0);assert!(!row.editable);
+   assert_eq!(empty.inventory_original_unique_payload(row.document_id),Some([0xc0].as_slice()));
+  }
+  assert!(e.undo_scope(Inventory));assert_eq!(e.inventory(),original);
   e.remove_inventory_entries(&repair).unwrap();
   let cp=e.history_checkpoint().unwrap();let mut restored=Editor::open(input).unwrap();restored.restore_history(&cp).unwrap();
   assert!(restored.undo_scope(Inventory));assert_eq!(restored.inventory(),original);assert!(restored.redo_scope(Inventory));
@@ -7112,7 +7129,8 @@ fn missing_required_unique_payload_can_only_be_physically_removed_with_complete_
  for uid in [0,99]{
   let e=Editor::open(make(Some(uid))).unwrap();
   let rows:Vec<_>=e.inventory().into_iter().filter(|r|r.item_id==203331651).collect();
-  assert_eq!(rows.len(),2);assert!(rows.iter().all(|r|!e.inventory_entry_removable(r.document_id)));
+  assert_eq!(rows.len(),2);assert!(rows.iter().all(|r|!e.inventory_entry_removable(r.document_id)&&!r.editable));
+  assert!(rows.iter().all(|r|!e.inventory_batch_zero_only_ids().contains(&r.document_id)));
  }
 }
 
