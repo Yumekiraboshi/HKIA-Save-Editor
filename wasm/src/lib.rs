@@ -136,17 +136,18 @@ pub extern "C" fn hkia_inventory_snapshot()->u32{
  })
 }
 
-/// Display-only default inventory-screen pin order; count + (document ID, order).
+/// Display-only default inventory-screen projection; count + (document ID, order).
+/// -1 denotes no match in a resolved screen set; unresolved identities are omitted.
 #[no_mangle]
 pub extern "C" fn hkia_inventory_pin_orders()->u32{
  STATE.with(|s|{
   let mut a=s.borrow_mut();a.reply.clear();
   let Some(editor)=a.editor.as_ref()else{return 1};
-  let rows=editor.inventory_pin_orders();
+  let rows=editor.inventory_pin_projection();
   if rows.len()>1_000_000{return 1}
   let mut b=Vec::with_capacity(4+rows.len()*8);
   b.extend((rows.len() as u32).to_le_bytes());
-  for (id,order) in rows{b.extend(id.to_le_bytes());b.extend(i32::from(order).to_le_bytes());}
+  for (id,order) in rows{b.extend(id.to_le_bytes());b.extend(order.map(i32::from).unwrap_or(-1).to_le_bytes());}
   a.reply=b;0
  })
 }
