@@ -434,12 +434,14 @@ def edge_pad(im):
 
 def pack_dynamic(folder,stage_dir,stage):
     from PIL import Image
+    native=module('native-raster-webp')
     out=folder/'dynamic-source-pages';out.mkdir()
     sizes=[]
     def read_texture(key,m):
         require(source.SHA.fullmatch(key) and m['file']==key+'.webp' and
                 key==sha(source.stable(m['binding'])),'dynamic texture binding identity')
         raw=checked_file(stage_dir,m['file'],m['sha256'],m['bytes'],MAX_TEXTURE_BYTES)
+        native.lossless_container(raw)
         with Image.open(io.BytesIO(raw)) as im:
             require(im.format=='WEBP' and im.mode=='RGB' and im.size==(m['width'],m['height']) and
                     im.height%2==0 and 0<im.width<=1024 and 0<im.height<=2048,
@@ -464,21 +466,19 @@ def pack_dynamic(folder,stage_dir,stage):
             ow,oh=w-2,h-2
             im.paste(edge_pad(src.crop((0,0,ow,oh))),(x,y))
             im.paste(edge_pad(src.crop((0,oh,ow,oh*2))),(x,y+height))
-        b=io.BytesIO();im.save(b,format='WEBP',lossless=True,method=4,exact=True)
-        raw=b.getvalue()
+        raw,encoded=native.encode(im)
         if len(raw)>MAX_TEXTURE_BYTES:
             require(len(group)>1,'individual dynamic crop exceeds delivery bound')
             mid=len(group)//2
             for sub in (group[:mid],group[mid:]):
                 for p in shelf_pages([(k,w,h) for k,_,_,w,h in sub]):emit(p)
             return
-        with Image.open(io.BytesIO(raw)) as check:
-            require(check.mode=='RGB' and check.size==im.size and check.tobytes()==im.tobytes(),
-                    'packed source RGB/alpha readback')
-        name='source-%s.webp'%sha(raw)
+        # The shared encoder has already checked VP8L, original dimensions
+        # and every RGB/alpha plane byte on readback.
+        name='source-%s.webp'%encoded['sha256']
         (out/name).write_bytes(raw)
         meta={'file':name,'bytes':len(raw),'sha256':sha(raw),'rgbSha256':sha(im.tobytes()),
-              'width':width,'height':height*2}
+              'width':width,'height':height*2,'conversion':native.POLICY,'encodingMethod':encoded['encodingMethod']}
         if name not in page_names:
             pages.append(meta);page_names.add(name)
         for key,x,y,w,h in group:placement[key]=(meta,x+1,y+1,w-2,h-2,height)
