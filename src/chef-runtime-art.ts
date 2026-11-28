@@ -61,7 +61,7 @@ export async function renderChefBaseArt(itemId:number):Promise<Blob|null>{
 /** Original definition UiIcon, without individual recipe colors or mask. */
 export async function loadChefOriginalOverlay(itemId:number,transform:Pick<SpriteOverlay,'scale'|'offsetPercent'|'rotation'>):Promise<{spritePathId:string;sourceHash:string;overlay:SpriteOverlay}|null>{
  try{
-  const s=await sourceBinding(),row=s.rows.get(itemId);
+  const s=await sourceBinding(),row=s.rows.get(nativeChefInstructionBase(itemId)??itemId);
   if(!row||!row.base.guardRect)return null;
   const [x,y,w,h]=row.base.guardRect;
   return {spritePathId:row.base.spritePathId,sourceHash:CHEF_MANIFEST_SHA,overlay:{

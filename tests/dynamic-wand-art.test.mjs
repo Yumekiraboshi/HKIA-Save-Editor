@@ -176,7 +176,16 @@ test('all 12163 native Item IDs resolve a source Sprite for all wand shapes, inc
  assert.deepEqual(wandOriginalTemplate(964128772),wandOriginalTemplate(1061947263));
  assert.equal(wandOriginalTemplate(315823),undefined);
  const templateIds=[...originalIds].filter(id=>wandOriginalTemplate(id));
- assert.deepEqual(templateIds.sort((a,b)=>a-b),[964128772,1061947263,1835273963]);
+ const audit=JSON.parse(readFileSync(new URL('../data/unityfs-audit/dynamic-uiicons.v3.0.1.json',import.meta.url)));
+ const flowers=JSON.parse(readFileSync(new URL('../public/inventory-flower-art/flower-runtime-source-v3.0.1.json',import.meta.url)));
+ const originalWands=JSON.parse(read('wand-runtime-source-v3.0.1.json'));
+ assert.deepEqual(templateIds.sort((a,b)=>a-b),[...audit.rows.map(r=>r.itemId),964128772].sort((a,b)=>a-b));
+ const sourcePid=route=>route.kind==='chef'?chef.rows.find(r=>r.itemId===route.itemId)?.base.spritePathId:
+  route.kind==='flower'?flowers.rows.find(r=>r.itemId===route.itemId)?.baseSpritePathId:
+  route.kind==='wand'?originalWands.rows.find(r=>r.itemId===route.itemId)?.base.spritePathId:
+  route.itemId===palette.itemId?palette.rows.find(r=>r.kind==='base')?.spritePathId:undefined;
+ for(const row of audit.rows)assert.equal(sourcePid(wandOriginalTemplate(row.itemId)),row.baseSpritePathId,row.key);
+ assert.equal(new Set(templateIds.map(id=>sourcePid(wandOriginalTemplate(id)))).size,45);
  const covered=new Set([...Object.keys(candidate.items).map(Number),...Object.keys(remaining.items).map(Number),...mip.rows.map(r=>r.itemId),...nonSquare.rows.map(r=>r.itemId),...aliases.rows.map(r=>r[0]),...placeholders.ids,...templateIds]);
  assert.deepEqual(covered,originalIds);
  const sprites=new Set([...candidate.sprites.map(r=>r[0]),...remaining.sprites.map(r=>r[0]),...mip.rows.map(r=>r.spritePathId),...nonSquare.rows.map(r=>r.spritePathId),ramen.base.spritePathId,palette.rows.find(r=>r.kind==='base').spritePathId]);
