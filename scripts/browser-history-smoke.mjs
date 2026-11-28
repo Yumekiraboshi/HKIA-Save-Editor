@@ -1041,7 +1041,7 @@ async function inventoryEditExportSmoke(){
   assert.equal(await apply.isVisible(),false,'unchanged owned quantity has no visible apply action');
   await quantity.fill('25');
   await apply.waitFor({state:'visible'});
-  assert.equal(await card.locator('.inventory-quantity-delta').innerText(),'6 → 25');
+  assert.equal(await card.locator('.inventory-quantity-delta').count(),0,'pending quantity uses only the apply control, not a delta label');
   await quantity.fill('6');
   await apply.waitFor({state:'hidden'});
   await quantity.fill('25');
@@ -1053,7 +1053,7 @@ async function inventoryEditExportSmoke(){
   await page.locator('.inventory-card .inventory-quantity-form[data-quantity-ready="true"]').first().waitFor();
   await page.locator('.state-dot.changed').waitFor();
   await apply.waitFor({state:'hidden'});
-  assert.equal(await card.locator('.inventory-quantity-delta').innerText(),'6 → 25');
+  assert.equal(await card.locator('.inventory-quantity-delta').count(),0,'committed quantity has no persistent delta label');
   assert.equal(await card.locator('.inventory-quantity-form').getAttribute('data-quantity-committed'),'25');
   const storedInventory=await page.evaluate(()=>new Promise((resolve,reject)=>{
    const open=indexedDB.open('hkia-editor-local-session',1);

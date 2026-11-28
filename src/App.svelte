@@ -198,7 +198,6 @@ import {verifiedFloorplanName} from './floorplan-names';
  let inventoryLimit=$state(BATCH_SIZE);
  let inventoryLoadMoreSentinel=$state<HTMLDivElement|undefined>(undefined);
  let inventoryBaseline:InventoryEntry[]=$state.raw([]);
- const originalInventoryQuantities=$derived(new Map(inventoryBaseline.map(row=>[row.documentId,row.quantity])));
  // Source-verified game UiIcon ZIP packs are shared by Collection/Inventory.
  // Inventory loads only groups currently needed by visible owned rows.
  const inventoryIconPending=new Set<string>();
@@ -2024,15 +2023,11 @@ import {verifiedFloorplanName} from './floorplan-names';
       </div>
       {#if item.editable}
        {@const pending=quantityPending(item)}
-       {@const originalQuantity=originalInventoryQuantities.get(item.documentId)??0}
        <form class="inventory-quantity-form" class:quantity-pending={pending&&!inventoryAddMode} data-quantity-pending={pending&&!inventoryAddMode} data-quantity-committed={item.quantity} data-quantity-ready={!busy&&!inventoryBatchMode&&!locked} onsubmit={e=>void applyInventoryQuantity(item,e)}>
         <label>
          <span class="visually-hidden">{iCopy.quantity}</span>
          <input type="number" name="quantity" min={inventoryAddMode?Math.max(1,item.quantityMinimum):item.quantityMinimum} max={item.quantityLimit??1} step="1"
           value={quantityInput(item)} oninput={e=>setQuantityInput(item,e.currentTarget.value)} disabled={busy||inventoryBatchMode||locked} aria-label={iCopy.quantity+': '+inventoryName(item.itemId)}/>
-         {#if !inventoryAddMode&&(pending||originalQuantity!==item.quantity)}
-          <small class="inventory-quantity-delta" class:unapplied={pending}>{(pending?item.quantity:originalQuantity).toLocaleString(locale)} → {(pending?quantityInput(item):item.quantity.toLocaleString(locale))}</small>
-         {/if}
         </label>
         <button type="submit" class="primary" class:quantity-unchanged={!pending} disabled={busy||inventoryBatchMode||locked||!pending||!quantityInputValid(item)} title={iCopy.apply} aria-label={iCopy.apply}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
