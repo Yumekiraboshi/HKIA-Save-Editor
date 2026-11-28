@@ -221,10 +221,12 @@ import {verifiedFloorplanName} from './floorplan-names';
   const positive=selectedInventoryRows.filter(row=>row.quantity>0);
   return positive.length>0&&inventoryBatchZeroRows(snapshot.inventory,selectedInventoryRows,isInventoryLocked).length===positive.length?0:1;
  });
- const inventoryBatchCanQuantity=$derived(selectedInventoryRows.length>0&&selectedInventoryRows.every(row=>row.editable));
+ const inventoryBatchCanPositive=$derived(selectedInventoryRows.length>0&&selectedInventoryRows.length===inventoryBatchSelected.size&&selectedInventoryRows.every(row=>row.editable));
+ const inventoryBatchCanQuantity=$derived(inventoryBatchCanPositive||inventoryBatchMinimum===0);
  const inventoryBatchCanDelete=$derived.by(()=>!inventoryAddMode&&selectedInventoryRows.length>0&&selectedInventoryRows.length===inventoryBatchSelected.size&&(
   (selectedInventoryRows.some(row=>row.quantity>0)&&inventoryBatchZeroRows(snapshot?.inventory??[],selectedInventoryRows,isInventoryLocked).length===selectedInventoryRows.filter(row=>row.quantity>0).length)||selectedInventoryRows.every(row=>row.removable)));
  const inventoryBatchMaximum=$derived.by(()=>{
+  if(!inventoryBatchCanPositive&&inventoryBatchMinimum===0)return 0;
   let cap=2147483647;
   if(snapshot)for(const row of inventoryBrowseRows){
    if(inventoryBatchSelected.has(row.documentId))cap=Math.min(cap,row.quantityLimit??0);
@@ -1459,9 +1461,10 @@ import {verifiedFloorplanName} from './floorplan-names';
   const next=inventoryBatchQuantity;
   if(next===undefined||!Number.isSafeInteger(next)||next<inventoryBatchMinimum||next>inventoryBatchMaximum)return;
   const rows=inventoryBrowseRows.filter(row=>inventoryBatchSelected.has(row.documentId));
-  if(rows.length!==inventoryBatchSelected.size||rows.some(row=>!row.editable||isInventoryLocked(row.documentId)))return;
-  if(rows.every(row=>row.quantity===next)){resetInventoryBatchSelection();return}
+  if(rows.length!==inventoryBatchSelected.size||rows.some(row=>isInventoryLocked(row.documentId)))return;
   if(next===0){requestInventoryDelete(rows,true,(event.submitter??event.currentTarget) as HTMLElement,false);return;}
+  if(!inventoryBatchCanPositive)return;
+  if(rows.every(row=>row.quantity===next)){resetInventoryBatchSelection();return}
   const requests:InventoryQuantityRequest[]=rows.map(row=>[row.documentId,row.quantity,next]);
   busy=true;error='';
   try{
