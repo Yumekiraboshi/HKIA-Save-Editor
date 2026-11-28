@@ -70,7 +70,10 @@ test('all native colorway UI views use original game-icon assets and keep per-it
  assert.match(app,/<DyeSprite sprite=\{resultSprite\}[^>]*originalArtUrl=\{resultOriginal\}/);
  assert.equal((app.match(/originalArtUrl=\{/g)||[]).length,7);
  assert.match(sprite,/imageSource='game-source-sprite'/);
- assert.match(sprite,/showExact\(exact,showSharedReference\)/);
+ assert.match(sprite,/return startOriginalArtRequest\(original,exact,/);
+ const view=readFileSync(new URL('../src/original-art-view.ts',import.meta.url),'utf8');
+ assert.match(view,/if\(original&&exact!==primary\)await attempt\(exact,2\)/);
+ assert.doesNotMatch(view,/renderDyeSprite|renderApproximation|source-fit|createObjectURL/);
  assert.doesNotMatch(sprite,/renderDyeSprite|renderApproximation|source-fit|native-icon|createObjectURL/);
  assert.match(generator,/collectNativeSprites/);
  assert.match(generator,/sourceIconDyeRegions/);
