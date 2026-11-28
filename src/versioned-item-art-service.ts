@@ -59,7 +59,7 @@ export function decodeCollectionOwnRoutes(receipt:unknown,catalog:unknown,pin:In
 }
 export function createVersionedItemArtService(
  roots:{release:string;bindings:string;auxiliary:string},pin:ItemArtServicePin,
- options:{load?:typeof loadVerifiedArtAsset;loadTexture?:Parameters<typeof createVersionedFamilyRenderer>[2]['loadTexture'];resolveSheet?:typeof resolveVerifiedInventorySprite}={}
+ options:{load?:typeof loadVerifiedArtAsset;loadTexture?:NonNullable<Parameters<typeof createVersionedFamilyRenderer>[2]>['loadTexture'];resolveSheet?:typeof resolveVerifiedInventorySprite}={}
 ){
  for(const root of Object.values(roots))rootCheck(root);
  check(/^\d+\.\d+\.\d+$/.test(pin.version)&&SHA.test(pin.receiptFileSha256)&&pin.family.version===pin.version);
@@ -89,7 +89,7 @@ export function createVersionedItemArtService(
   check(dynamic.sha256===pin.family.dynamic.indexSha256&&typeof bundles.definitions==='string'&&SHA.test(bundles.definitions));
   const atlas=bundles.atlas_global??null;check(atlas===null||typeof atlas==='string'&&SHA.test(atlas));
   const bindings=obj(json(await load(roots.bindings,'family-bindings.json',pin.family.bindingsSha256,8*1024*1024)));
-  check(bindings.definitionSnapshotSha256===receipt.snapshotSha256&&bindings.platform===receipt.platform&&bindings.version===pin.version);
+  check(typeof receipt.snapshotSha256==='string'&&SHA.test(receipt.snapshotSha256)&&(receipt.platform==='steam'||receipt.platform==='switch')&&bindings.definitionSnapshotSha256===receipt.snapshotSha256&&bindings.platform===receipt.platform&&bindings.version===pin.version);
   const catalogData=decodeCollectionOwnRoutes(receipt,json(await load(roots.release,'collection-catalog.json',catalog.sha256,16*1024*1024,catalog.bytes)),pin);
   const native=createVersionedInventoryNativeArtLoader(roots.release,{version:pin.version,indexFileSha256:inventory.sha256,definitionsSha256:bundles.definitions,atlasSha256:atlas},load);
   const family=createVersionedFamilyRenderer({bindings:roots.bindings,dynamic:roots.release+'dynamic-source-pages/',auxiliary:roots.auxiliary},pin.family,{load,loadTexture:options.loadTexture});
