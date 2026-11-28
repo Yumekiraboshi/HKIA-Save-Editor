@@ -73,7 +73,7 @@ test('progress footers render Rust/WASM snapshot goals, not TypeScript game-spec
  assert.match(app,/class="item-status achievement-compact-status"/);
  assert.match(app,/\{achCopy\.progress\}: \{\(item\.row\?\.value\.current\?\?0\)\.toLocaleString\(locale\)\} \/ \{progressGoal\.toLocaleString\(locale\)\}/);
  assert.equal(existsSync(new URL('../src/achievement-progress.ts',import.meta.url)),false);
- const content=app.slice(app.indexOf('class="item-grid achievement-grid achievement-item-grid"'),app.indexOf('<dialog class="achievement-dialog"'));
+ const content=app.slice(app.indexOf('class="item-grid achievement-grid achievement-item-grid editor-virtual-grid"'),app.indexOf('<dialog class="achievement-dialog"'));
  assert.doesNotMatch(content,/achievement-compact-progress|\{achCopy\.incomplete\}[\s\S]*<span class="achievement-compact-progress"/);
  assert.match(content,/\{#if item\.row\?\.value\.complete\}/);
  assert.match(content,/\{\(item\.row\?\.value\.current\?\?0\)\.toLocaleString\(locale\)\}/);

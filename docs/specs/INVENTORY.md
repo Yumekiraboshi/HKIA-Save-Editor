@@ -713,3 +713,8 @@ Build exact Item ID/UID pair, referenced Item ID and unresolved-reference Item I
 #### Existing quantity operations first; finite-cap peers
 
 Owner priority: quantity change, zero and physical entry removal across every existing inventory structure before new entry/appearance/linkage work. The common structural quantity index retains complete persisted rows even when the definition has a finite cap and same-item peers. Validate positive changes against both the native per-row bound and the conservative existing family-total bound in the shared CAS/export preflight, without requiring semantic appearance eligibility. The previously verified whole-family duplicate nil zero rule and exact-reference physical removal gates remain in force. No special service/quest/entitlement deletion authority is inferred. Regression coverage includes all finite ordinary source definitions with positive quantity headroom, including batch redistribution, zero, physical removal, recovery and raw/ZIP reparse. Actual game acceptance remains unverified.
+
+
+### Full-range inventory scrolling
+
+The filtered, ordered inventory rows determine the full grid height immediately; the scrollbar must reach the final row without incremental 40-card paging. Reuse the common editor fixed-row geometry, responsive column measurement and viewport/overscan window to mount only nearby cards and request their artwork. Existing category counts, search, batch selection, quantity draft state and Rust-issued edit permissions use the complete row set, not the mounted window. Category/search/filter changes reset scroll position; scrolling itself does not clear drafts or selection. This is a presentation-only change, without native save mutations.
