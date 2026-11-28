@@ -1,0 +1,5 @@
+# Versioned dynamic source page adapter
+
+The release candidate pack assembler supplies an index with schema HKIA.DynamicSourcePageCandidate.1, version, renderer guarded-native-rgb-alpha-v1, pages, records and unresolved entries. The browser adapter in src/versioned-dynamic-source.ts consumes this transport using the existing hash-verified texture loader, original source renderer, tint rasterizer, overlay representation and bounded output cache. It checks page identity, source geometry, edge guards and alpha plane bounds and separates cache entries by source version and pinned index hash.
+
+A reviewed release must explicitly bundle the expected version/index SHA-256 and provide its verified family-specific mask and tint resolution. The adapter never derives a mask from a save or accepts a remote version as authority. Existing 3.0.1 family manifests and activation are unchanged. No new version is enabled. Family binding adapters, magic overlay routes, growth/decorator and characteristic source dependencies still require source verification and actual candidate browser testing.
