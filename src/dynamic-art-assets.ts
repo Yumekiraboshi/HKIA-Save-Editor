@@ -17,17 +17,27 @@ function canvas2d(width:number,height:number){
 }
 /** Opaque source planes retain RGB at original alpha=0. Verify the
  * exact decoded texels, not only the compressed WebP bytes. */
-const textures=new Map<string,Promise<PixelBuffer>>();
-export function loadOpaqueArtTexture(root:string,asset:TextureAsset):Promise<PixelBuffer>{
- // Identical verified texture bytes are shared by all runtime art families.
- const key=JSON.stringify([root,asset.file,asset.sha256,asset.rgbSha256,asset.width,asset.height,asset.bytes]);
- const cached=textures.get(key);if(cached)return cached;
- const task=decodeOpaqueArtTexture(root,asset).catch(error=>{if(textures.get(key)===task)textures.delete(key);throw error;});
- textures.set(key,task);
- // Source packs are few and version-pinned. Bound the reference cache.
- if(textures.size>8)textures.delete(textures.keys().next().value!);
- return task;
+export function createOpaqueArtTextureLoader(decode=decodeOpaqueArtTexture){
+ const pending=new Map<string,Promise<PixelBuffer>>();
+ const ready=new Map<string,Promise<PixelBuffer>>();
+ return (root:string,asset:TextureAsset):Promise<PixelBuffer>=>{
+  // Identical verified texture bytes are shared by all runtime art families.
+  const key=JSON.stringify([root,asset.file,asset.sha256,asset.rgbSha256,asset.width,asset.height,asset.bytes]);
+  const cached=ready.get(key);
+  if(cached){ready.delete(key);ready.set(key,cached);return cached;}
+  const existing=pending.get(key);if(existing)return existing;
+  const task=Promise.resolve().then(()=>decode(root,asset)).then(value=>{
+   pending.delete(key);ready.set(key,task);
+   // Bound only completed retained textures. An in-flight source is never
+   // evicted and downloaded/decoded a second time by a concurrent card.
+   if(ready.size>8)ready.delete(ready.keys().next().value!);
+   return value;
+  },error=>{pending.delete(key);throw error;});
+  pending.set(key,task);
+  return task;
+ };
 }
+export const loadOpaqueArtTexture=createOpaqueArtTextureLoader();
 async function decodeOpaqueArtTexture(root:string,asset:TextureAsset):Promise<PixelBuffer>{
  const bytes=await loadVerifiedArtAsset(root,asset.file,asset.sha256,1024*1024,asset.bytes);
  const image=await createImageBitmap(new Blob([bytes],{type:'image/webp'}),{premultiplyAlpha:'none',colorSpaceConversion:'none'});
