@@ -3,7 +3,7 @@
 *{box-sizing:border-box}html{background:var(--bg);scroll-behavior:smooth}body{margin:0;color:var(--ink);background:var(--bg);min-width:300px}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.44;cursor:not-allowed}button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}button,select,input{transition:background .12s ease,border-color .12s ease}button{border:0}h1,h2,p{margin:0}
 .visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 .topbar{height:64px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
-.bar-inner{max-width:1300px;padding:0 24px;height:100%;margin:0 auto;display:flex;align-items:center;gap:25px}
+.bar-inner{width:100%;padding:0 24px;height:100%;margin:0 auto;display:flex;align-items:center;gap:25px}
 .brand{display:flex;align-items:center;gap:9px;padding:0;flex-shrink:0;background:transparent;color:var(--ink)}.brand:hover .brand-mark{transform:rotate(45deg)}.brand-mark{color:var(--accent);font-size:24px;transition:transform .2s}.brand-name{font-size:16px;font-weight:800;letter-spacing:.025em;white-space:nowrap}
 .tools-nav{height:100%;display:flex;align-items:stretch;gap:4px}.tool-tab{height:100%;background:none;color:var(--muted);padding:2px 15px 0;border-bottom:3px solid transparent;font-weight:700;font-size:13px;white-space:nowrap}.tool-tab.active{color:var(--accent);border-bottom-color:var(--accent)}.tool-tab:hover{background:var(--hover)}
 .bar-actions{display:flex;gap:7px;align-items:center;justify-content:flex-end;margin-left:auto;min-width:0}
@@ -12,6 +12,8 @@
 .file-menu{position:relative}.file-menu>summary{list-style:none;cursor:pointer;user-select:none;gap:6px}.file-menu>summary::-webkit-details-marker{display:none}.chevron{display:block;width:12px;height:12px;flex:none;color:var(--muted);pointer-events:none}.menu-popover{position:absolute;right:0;top:calc(100% + 9px);background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:13px;min-width:220px;padding:7px;box-shadow:0 15px 44px #0002;display:grid;gap:2px;z-index:40}.menu-popover button{display:block;width:100%;text-align:left;background:transparent;color:var(--ink);font-size:12px;border-radius:8px;padding:11px 12px}.menu-popover button:hover:not(:disabled){background:var(--hover)}.menu-popover hr{height:1px;width:100%;border:0;background:var(--line);margin:3px 0}
 .header-select select{appearance:none;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 21px 8px 10px;font-size:12px;max-width:115px;cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 12px) 50%,calc(100% - 8px) 50%;background-size:4px 4px,4px 4px;background-repeat:no-repeat}.theme-select select{max-width:106px}
 .content{max-width:1300px;padding:29px 24px 60px;margin:0 auto;min-height:calc(100vh - 64px)}
+.content.workspace-wide{width:100%;max-width:none}
+.empty-workspace{max-width:640px;margin-inline:auto}
 .section-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:0 0 23px}.section-heading h1{font-size:22px;font-weight:800;letter-spacing:-.025em}.section-heading.with-back{display:block}.back-link{padding:0 0 14px;color:var(--accent);background:transparent;font-size:12px;font-weight:600}.back-link:hover{text-decoration:underline}.section-heading.with-back h1{font-size:23px}
 .empty-workspace{min-height:440px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:15px;text-align:center;padding:45px 14px}.empty-workspace h1{font-size:22px;font-weight:700}.empty-decoration{font-size:55px;color:var(--accent);opacity:.7}.empty-workspace p{font-size:12px;color:var(--muted);line-height:1.6}
 .primary{background:var(--accent);color:var(--bg);padding:9px 16px;font-weight:700;border-radius:9px}.primary:hover:not(:disabled){filter:brightness(.93)}.primary.big{background:#7865b2;color:white;font-size:14px;padding:12px 24px}
@@ -303,7 +305,7 @@
 .inventory-group-option:hover:not(.active){background:var(--hover)}
 .inventory-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(136px,100%),1fr));gap:6px;align-items:stretch}
 .inventory-card{--inventory-control-size:30px;position:relative;padding:7px;display:flex;flex-direction:column;gap:5px;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px}
-.inventory-card-heading{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;flex:1}
+.inventory-card-heading{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;flex:1}
 /* A fixed 22px badge lane above the 64px artwork cell for every card.
  * Empty lanes occupy the same space; decorators are overlays, not layout. */
 .inventory-item-art{position:relative;display:flex;align-items:center;justify-content:center;flex:none;width:64px;height:64px;padding-top:22px;box-sizing:content-box;overflow:hidden}
@@ -367,6 +369,13 @@
 
 .inventory-removal-palette{display:flex;gap:4px;margin-top:3px;align-items:center}
 .inventory-removal-swatch{width:19px;height:19px;border:1px solid var(--line);border-radius:4px;flex:none}
+
+/* Wide workspaces increase the number of columns, not artwork sizes.
+   Keep narrow layout and focused modal widths unchanged. */
+@media(min-width:1301px){
+ .workspace-wide .category-grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+ .workspace-wide .collection-search-results{grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
+}
 
 /* Keep search, edit actions and category navigation reachable during long
    inventory lists. The measured global header height also covers wrapping

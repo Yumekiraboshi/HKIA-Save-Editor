@@ -682,11 +682,20 @@ async function inventoryBobaEditSmoke(){
   await chooseTab(page,'inventory');await page.locator('.inventory-controls input[type="search"]').fill('1798633565');
   const card=page.locator('.inventory-card').first(),dialog=page.locator('dialog[aria-labelledby="boba-editor-title"]');
   await assertInventoryControlGeometry(page,card.locator('.inventory-compact-variant'));
+  const honey=card.locator('[data-ingredient-key="honeycomb"]');
+  await honey.locator('.ingredient-count').filter({hasText:'2'}).waitFor();
+  assert.equal(await card.locator('[data-ingredient-key="milk"]').getAttribute('data-ingredient-candidates'),'1743974962,619719355');
+  await card.locator('[data-ingredient-key="tapioca"]').waitFor();
   await card.locator('.inventory-unique-edit-button').click();await dialog.waitFor();
+  await dialog.locator('[data-ingredient-key="honeycomb"] .ingredient-count').filter({hasText:'2'}).waitFor();
+  await dialog.locator('select[name="boba-sweetness"]').selectOption({label:'Very sweet'});
+  await dialog.locator('[data-ingredient-key="honeycomb"] .ingredient-count').filter({hasText:'3'}).waitFor();
   await dialog.locator('select[name="boba-pearls"]').selectOption({label:'Without tapioca'});
   await dialog.locator('select[name="boba-sweetness"]').selectOption({label:'Unsweetened'});
   await dialog.locator('button[type="submit"]:not([disabled])').click();await dialog.waitFor({state:'hidden'});
   await card.locator('.inventory-flower-variant-name').filter({hasText:'Without tapioca · Unsweetened'}).waitFor();
+  assert.equal(await honey.count(),0);
+  assert.equal(await card.locator('[data-ingredient-key="tapioca"]').count(),0);
   await page.locator('button[title="Undo"]:not([disabled])').click();
   await card.locator('.inventory-flower-variant-name').filter({hasText:'With tapioca · Sweet'}).waitFor();
   await page.locator('button[title="Redo"]:not([disabled])').click();
@@ -854,6 +863,13 @@ async function inventoryCafeEditSmoke(){
   const v=new DataView(e.memory.buffer,e.hkia_reply_ptr(),e.hkia_reply_len());
   assert.equal(v.getUint32(0,true),1);const final=Array.from({length:6},(_,i)=>v.getInt32(12+i*4,true));
   assert.equal(final[0],48);assert.equal(final[3],9);assert.notDeepEqual([final[1],final[4]],[49,46]);assert.equal(final[2],48);assert.equal(final[5],9);
+  const badges=card.locator('.ingredient-badge');
+  await badges.nth(2).waitFor();
+  assert.deepEqual(await badges.evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-ingredient-slots'))),['1','2','3']);
+  assert.deepEqual(await badges.evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-ingredient-count'))),['1','1','1']);
+  assert.equal(await badges.first().getAttribute('data-ingredient-candidates'),'1622861092');
+  assert.equal(await badges.nth(2).getAttribute('data-ingredient-candidates'),'1622861092');
+  assert.equal(await card.locator('.ingredient-count').count(),0);
   assert.deepEqual(errors,[]);
   console.log('CHROMIUM CAFE VARIANT PASS: native ingredient pair, history, recovery and export');
  }finally{await context.close()}
@@ -3217,6 +3233,43 @@ async function achievementAtlasRetrySmoke(trigger='tab'){
  }finally{await context.close();}
 }
 
+async function fullWidthWorkspaceSmoke(){
+ const context=await browser.newContext({locale:'en-US',viewport:{width:1920,height:900}});
+ try{
+  const page=await context.newPage();
+  await page.goto(origin+base,{waitUntil:'networkidle'});
+  const empty=page.locator('.empty-workspace');
+  await empty.waitFor();
+  const center=await empty.boundingBox();
+  assert.ok(center&&center.width<=640&&Math.abs(center.x+center.width/2-960)<2,'unloaded screen remains centered');
+  await page.locator('input[type="file"]').setInputFiles({name:'synthetic-wide-workspace.save',mimeType:'application/octet-stream',buffer:Buffer.from(createSyntheticSlot({flowerInventory:true}))});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  const width=async locator=>locator.evaluate(el=>el.getBoundingClientRect().width);
+  for(const tool of ['collections','achievements','inventory']){
+   await chooseTab(page,tool);
+   assert.ok(await width(page.locator('main.content.workspace-wide'))>1880,tool+' uses the wide viewport');
+   assert.ok(await width(page.locator('.bar-inner'))>1880,'header uses wide viewport');
+  }
+  await page.locator('.inventory-controls input[type="search"]').fill('43114910');
+  await page.locator('.inventory-card').first().waitFor({timeout:30_000});
+  const columns=()=>page.locator('.inventory-grid').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length);
+  const wide=await columns();
+  await page.setViewportSize({width:1280,height:900});
+  const narrow=await columns();
+  assert.ok(wide>narrow,'wide inventory increases the number of columns');
+  await page.setViewportSize({width:1920,height:900});
+  await page.locator('.inventory-card .inventory-unique-edit-button:not([disabled])').first().click();
+  const dialog=page.locator('dialog[aria-labelledby="flower-editor-title"]');
+  await dialog.waitFor();
+  const bounds=await dialog.boundingBox();
+  assert.ok(bounds&&bounds.width<=450&&Math.abs(bounds.x+bounds.width/2-960)<2,'focused editor stays centered and bounded');
+  await dialog.locator('.date-dialog-close').click();
+  await page.setViewportSize({width:390,height:844});
+  const mobile=await page.locator('main.content.workspace-wide').boundingBox();
+  assert.ok(mobile&&mobile.x>=-1&&mobile.x+mobile.width<=391,'narrow workspace remains within viewport');
+  console.log('CHROMIUM FULL WIDTH WORKSPACE PASS: centered start/dialog, all three full-width tools, responsive inventory columns');
+ }finally{await context.close()}
+}
 async function run(){
  await waitForServer();
  browser=await chromium.launch({headless:true,executablePath:installedChrome(),args:['--no-sandbox','--disable-dev-shm-usage']});
@@ -3683,6 +3736,7 @@ async function run(){
  assert.deepEqual(errors,[],'no console exceptions or 5xx during browser replay');
  console.log('CHROMIUM UI HISTORY SMOKE PASS: guarded collection and achievement removals, timestamp dialog, history, IndexedDB reload, mobile menu');
  await context.close();
+ await fullWidthWorkspaceSmoke();
  await achievementExportReopenRoundtrip();
  await inventoryDynamicPaletteArtSmoke();
  await inventoryPaletteCreationSmoke();
