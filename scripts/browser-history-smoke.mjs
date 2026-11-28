@@ -1282,7 +1282,26 @@ async function ordinaryFurnitureRemovalSmoke(){
   await page.locator('.inventory-empty-stack').waitFor({state:'hidden'});
   assert.equal(await input.inputValue(),'5');
   assert.deepEqual(errors,[]);
-  console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: unreferenced stack zero/undo; placed stack protected');
+  // A persisted zero record still exists. Physical removal must remove it
+  // even with Show zero enabled, and survive native history/draft replay.
+  await remove.click();await modal.waitFor({state:'visible'});
+  await modal.locator('.removal-confirm-action').click();
+  await page.locator('.inventory-empty-stack').waitFor();
+  await remove.click();await modal.waitFor({state:'visible'});
+  assert.equal(await modal.locator('.removal-confirm-action').count(),0);
+  await modal.locator('.inventory-remove-entry-action').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('.tools-nav button.tool-tab').first().waitFor({timeout:30_000});
+  await chooseTab(page,'inventory');await page.locator('.inventory-show-zero-toggle[aria-pressed="false"]').click();
+  await search.fill('427689');await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await page.locator('button[title="Undo"]:not([disabled])').click();
+  await page.locator('.inventory-empty-stack').waitFor();assert.equal(await input.inputValue(),'0');
+  await page.locator('button[title="Redo"]:not([disabled])').click();
+  await page.locator('.inventory-card').waitFor({state:'hidden'});
+  await search.fill('3202680');await input.waitFor();assert.equal(await remove.isDisabled(),true);
+  assert.deepEqual(errors,[]);
+  console.log('CHROMIUM ORDINARY FURNITURE REMOVAL PASS: zero, physical removal, draft reload, undo/redo and placed stack protection');
  }finally{await context.close()}
 }
 async function inventoryEmptyBrowseSmoke(){

@@ -277,6 +277,8 @@
 .removal-confirm-inner .date-dialog-actions button{padding:10px 14px;border-radius:9px;font-size:12px;font-weight:700}
 .removal-confirm-action{background:var(--danger);color:white}
 .removal-confirm-action:hover:not(:disabled){filter:brightness(.94)}
+.inventory-remove-entry-action{background:var(--danger);color:white}
+.inventory-remove-entry-action:hover:not(:disabled){filter:brightness(.94)}
 @media(max-width:730px){.removal-confirm-inner{padding:17px;gap:13px}}
 
 

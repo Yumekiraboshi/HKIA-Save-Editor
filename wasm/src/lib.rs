@@ -89,6 +89,32 @@ pub extern "C" fn hkia_inventory_batch_change()->u32{
   match a.editor.as_mut().map(|e|e.change_inventory_quantities(&requests)){Some(Ok(()))=>0,_=>1}
  })
 }
+/// Physically remove persisted inventory records. Separate from quantity CAS.
+#[no_mangle]
+pub extern "C" fn hkia_inventory_remove_entries()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();a.output.clear();
+  let bytes=std::mem::take(&mut a.stage);
+  if bytes.is_empty()||bytes.len()%8!=0||bytes.len()/8>hkia_save_core::collection::MAX_INVENTORY_BATCH{return 1}
+  let requests=bytes.chunks_exact(8).map(|row|(
+   u32::from_le_bytes(row[0..4].try_into().unwrap()),
+   i32::from_le_bytes(row[4..8].try_into().unwrap())
+  )).collect::<Vec<_>>();
+  match a.editor.as_mut().map(|e|e.remove_inventory_entries(&requests)){Some(Ok(()))=>0,_=>1}
+ })
+}
+#[no_mangle]
+pub extern "C" fn hkia_inventory_removable_snapshot()->u32{
+ STATE.with(|s|{
+  let mut a=s.borrow_mut();a.reply.clear();
+  let Some(editor)=a.editor.as_ref()else{return 1};
+  let ids=editor.inventory_removable_ids();
+  let mut b=Vec::with_capacity(4+ids.len()*4);
+  b.extend((ids.len() as u32).to_le_bytes());for id in ids{b.extend(id.to_le_bytes());}
+  a.reply=b;0
+ })
+}
+
 /// 4-byte count + N rows of (document id u32, item id i32, quantity i32,
 /// editable u32). Pending ingredient creation uses session-only handles.
 #[no_mangle]

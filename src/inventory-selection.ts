@@ -4,12 +4,12 @@ import type {InventoryEntry} from './worker-client';
  * is eligible; Rust still provides the limit and validates every CAS.
  */
 export function selectMatchingInventoryRows(
- rows:readonly InventoryEntry[],selected:ReadonlySet<number>,limit:number
+ rows:readonly InventoryEntry[],selected:ReadonlySet<number>,limit:number,includeRemovable=false
 ):Set<number>{
  const next=new Set(selected);
  for(const row of rows){
   if(next.size>=limit)break;
-  if(row.editable)next.add(row.documentId);
+  if(row.editable||includeRemovable&&row.removable)next.add(row.documentId);
  }
  return next;
 }

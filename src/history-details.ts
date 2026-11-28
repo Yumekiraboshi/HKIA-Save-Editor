@@ -9,7 +9,7 @@ import {toDateTimeValue} from './collection-date';
 
 export type InventoryBatchDetail={documentId:number;before:number;after:number};
 export type HistoryDetail =
- | {scope:'inventory';documentId:number;batch:InventoryBatchDetail[]}
+ | {scope:'inventory';documentId:number;batch:InventoryBatchDetail[];physical?:true}
  | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FlowerVariant;quantity:number;furnitureCreated?:false;paletteCreated?:false;bobaCreated?:false;cafeCreated?:false;wandCreated?:false}
  | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:FurnitureVariant;quantity:number;furnitureCreated:true;paletteCreated?:false;bobaCreated?:false;cafeCreated?:false;wandCreated?:false}
  | {scope:'inventory';documentId:number;createdHandle:number;itemId:number;variant:PaletteVariant;quantity:number;furnitureCreated?:false;paletteCreated:true;bobaCreated?:false;cafeCreated?:false;wandCreated?:false}
@@ -96,6 +96,15 @@ export function decodeHistoryDetails(
      seen.add(documentId);batch.push({documentId,before,after});
     }
     result.push({scope:'inventory',documentId:batch[0].documentId,batch});
+   }else if(kind===24){
+    const n=u32();if(n<1||n>HISTORY_MAX_BATCH_ROWS)return [];
+    const batch:InventoryBatchDetail[]=[],seen=new Set<number>();
+    for(let j=0;j<n;j++){
+     const documentId=u32(),before=i32();
+     if(documentId<=0||documentId>2147483647||before<0||seen.has(documentId))return [];
+     seen.add(documentId);batch.push({documentId,before,after:0});
+    }
+    result.push({scope:'inventory',documentId:batch[0].documentId,batch,physical:true});
    }else if(kind===11){
     const createdHandle=u32(),documentId=u32(),itemId=i32();
     const before:FlowerVariant=[i32(),i32(),i32(),i32()],variant:FlowerVariant=[i32(),i32(),i32(),i32()];
@@ -239,7 +248,7 @@ export function formatHistoryChange(
  const wandLabel=(pair:WandVariant,source?:number,materials?:FurnitureVariant)=>[
   source?wandSourceName?.(source)??String(source):'',wandVariantName?.(pair)??'—',materials?furnitureVariantName?.(materials)??materials.join(' / '):''
  ].filter(Boolean).join(' · ');
- if(detail.scope==='inventory'&&'batch' in detail)return detail.batch.map(row=>(inventoryBatchName?.(row.documentId)??String(row.documentId))+': '+row.before+' → '+row.after).join(' · ');
+ if(detail.scope==='inventory'&&'batch' in detail)return detail.batch.map(row=>(inventoryBatchName?.(row.documentId)??String(row.documentId))+': '+(detail.physical?row.before+' → '+copy.removed:row.before+' → '+row.after)).join(' · ');
  if(detail.scope==='inventory'&&'createdHandle' in detail)return copy.added+' · '+(detail.wandCreated?wandLabel(detail.variant,detail.sourceItemId,detail.nestedMaterials):detail.cafeCreated?(cafeVariantName?.(detail.variant)??'—'):detail.bobaCreated?(bobaVariantName?.(detail.variant)??bobaVariantLabel(detail.variant,locale)):detail.paletteCreated?[0,1,2].map(i=>paletteColorHex(detail.variant,i)).join(' / '):detail.furnitureCreated?(furnitureVariantName?.(detail.variant)??String(detail.variant)):(flowerVariantName?.(detail.variant)??String(detail.variant)))+' · '+quantityLabel+': '+detail.quantity;
  if(detail.scope==='inventory'&&detail.cafeVariant)return (cafeVariantName?.(detail.before)??'—')+' → '+(cafeVariantName?.(detail.after)??'—');
  if(detail.scope==='inventory'&&detail.wandVariant)return wandLabel(detail.before,detail.beforeSource,detail.beforeMaterials)+' → '+wandLabel(detail.after,detail.afterSource,detail.afterMaterials);
