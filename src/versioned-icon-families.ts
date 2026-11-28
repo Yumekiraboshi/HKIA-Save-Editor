@@ -141,10 +141,15 @@ export function createVersionedFamilyRenderer(
    if(row?.family!=='wand'||!row.maskGuid||!transform||!Number.isSafeInteger(value.sourceItemId)||value.sourceItemId<0||value.sourceItemId>0x7fffffff)return null;
    const t=resolveWandBaseTints(value,b.magic,b.flecks,{known:b.known,magic:new Set(b.magic.keys()),flecks:new Set(b.flecks.keys())});
    if(!t)return null;
-   const layer=value.sourceItemId===0?(b.magic.has(value.magicCharacteristicId)?
-    await auxiliary.originalOverlayRoute('magic:'+value.magicCharacteristicId,version,transform):null):
-    (b.rows.has(value.sourceItemId)?await dynamic.originalOverlay(value.sourceItemId,version,transform):
-     await options.itemOverlay?.(value.sourceItemId,version,transform));
+   // Native TryGetSubIcon hides the overlay for a known characteristic
+   // with no MagicDisplay entry. A mapped but unavailable Sprite is not
+   // the same state. The tint resolver above rejects unknown IDs.
+   if(value.sourceItemId===0&&!b.magic.has(value.magicCharacteristicId))
+    return dynamic.render(itemId,version,row.maskGuid,t);
+   const layer=value.sourceItemId===0?
+    await auxiliary.originalOverlayRoute('magic:'+value.magicCharacteristicId,version,transform):
+    ((b.rows.has(value.sourceItemId)?await dynamic.originalOverlay(value.sourceItemId,version,transform):null)
+     ??await options.itemOverlay?.(value.sourceItemId,version,transform));
    if(!layer||layer.version!==version)return null;
    return dynamic.render(itemId,version,row.maskGuid,t,layer);
   }catch{return null;}
